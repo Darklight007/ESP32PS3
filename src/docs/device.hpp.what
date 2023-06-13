@@ -1,0 +1,39 @@
+
+class Device
+{
+
+public:
+    DEVICE getStatus(void)
+    {
+        return status;
+    };
+
+    void setStatus(DEVICE status_)
+    {
+
+        // 1st:  Set Colors
+        Voltage.setMeasureColor(stateColor[status_].measured);
+        Current.setMeasureColor(stateColor[status_].measured);
+        Voltage.setStatsColor(stateColor[status_].plotColor1);
+        Current.setStatsColor(stateColor[status_].plotColor2);
+
+        // Chart color
+        lv_chart_set_series_color(chart, serV, stateColor[status_].plotColor1);
+        lv_chart_set_series_color(chart, serI, stateColor[status_].plotColor2);
+
+        // Pages color
+        lv_obj_set_style_bg_color(page1, stateColor[status_].pageColor, 0);
+        lv_obj_set_style_bg_color(page2, stateColor[status_].pageColor, 0);
+        lv_obj_set_style_bg_color(page3, stateColor[status_].pageColor, 0);
+        lv_obj_set_style_bg_color(page4, stateColor[status_].pageColor, 0);
+        lv_obj_set_style_bg_color(page5, stateColor[status_].pageColor, 0);
+
+        // Chart legend color
+        // Chart.setLegendColot(color1,color2);
+        // legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V", lv_palette_main(LV_PALETTE_AMBER), "A");
+        status = status_;
+    };
+
+private:
+    DEVICE status;
+};

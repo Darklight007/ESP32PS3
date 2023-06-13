@@ -1,0 +1,380 @@
+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
+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
+
+
+Ok I found the trick
+
+The R8 s3 wroom (8MB PSRAM) use Octal SPI
+This takes up gpio35 36 and 37
+
+So if you have one of these don't connect those pins and ensure you choose Octal in the S3 PSRAM section
+
+The R2 modules 2 MB PSRAM use Quad SPI
+
+and the pins are available.
+
+But ensure you choose QUAD SPI in the PSRAM   / OCTAL?
+
+Do not use: 26 27 28 29 30 31 32 33 34 35 36 37  => PSRAM
+            pin 0 is not work for TOUCH_CS
+
+
+vTaskSuspend(Task1);
+vTaskResume(Task1);
+Current.SetUpdate(Current.adjValue+.0001);
+  
+lock_trim_free: Asserted at expression: block_is_free(block) && "block must be free" 
+ tone(NOTE_A5, 200);
+ 
+----------------------------------------------------------------------
+
+2470 High Voltage SourceMeter® Instrument
+https://download.tek.com/manual/2470-900-01B_Aug_2019_User.pdf
+
+
+Series 2280 Precision Measurement DC Power Supplies
+https://download.tek.com/manual/077085503_2280_Ref_Mar_20191.pdf
+
+
+[Device] => [ON, OFF, CV, CC, Info, Warning , ..., ]
+            [pages] 
+
+                [class DispObject]
+            / 3] [Voltage] => [measured, set, bar, min-max markers, stats[min, max, std, mean]]
+            | 3] [Current]
+            | 3] [Power]
+            \ 3] setting average numbers
+            
+              2] [Chart] => [plot v, plot c, show stats[min, max, std, mean]]
+            [Memories [10] ] => voltage, current lock status
+            [List > creating  PWM, sin, pulse, ]
+
+Device.setState(ON|OFF|Warning| Failure| CC/CV mode)
+  => set color for each item, change items (on|off switch text| on time: )
+
+code structure
+1) create 5 tabs
+2) create Voltage object* & attach it to tab 3 at x1, y1
+3) create Current object & attach it to tab 3 at x1, y2
+4) create Power object & attach it to tab 3 at x3, y3
+
+Tabs  pages;
+page1=pages.addPage(tabs,"Stat");
+page2=pages.addPage(tabs,"Graph");
+page3=pages.addPage(tabs,"Main");
+
+Display object should have:
+Display Voltage
+
+Voltage.setup(page3,  "V-Set", pos(x1,y1), "V",32.768,5[major tick])
+
+----------------------> Done!
+
+----New Design
+4 pin for rotaries
+1 for CC/CV
+1 for buzzer
+1 for Temperature sensors
+5 for LCD
+
+-> ------- 10 pin budget 
+https://github.com/joeyoung/arduino_keypads
+https://github.com/adafruit/Adafruit-MCP23017-Arduino-Library
+
+
+[    ][PIN   ] 1* for LCD touch IRQ
+[done][PIN 25] * for LCD touch CS 
+[done][PIN 26] 1* for LCD LED backlight
+[    ][PIN 32] 1* For keypad IRQ
+
+[    ][PIN   ]1* For current range enable
+[    ][PIN   ]1* OUTPUT on/off led blue=> yellow => off
+[done][PIN 33] 1* for ADC ready pin
+
+----OLD Design
+Used 10 pin for keyboard
+
+
+Panel available dimension 97mm -> 73.6mm x 225 -> 205
+
+add vertical grid for bar 
+add hi light for set values 
+add CC and CV on the high bar
+
+
+
+  PowerSupply_device
+/-----------------------------------------------------------------\
+|                                                                 |
+|   Voltage {encoder, dac, adc}                                   |
+|   Current                                                       |
+|   adc                                                           |
+|   dac                                                           |
+|                                                                 |
+|                                                                 |
+|                                                                 |
+|                                                                 |
+\-----------------------------------------------------------------/
+
+--- +5   reference to -gnd
+--- -5   reference to -gnd
+--- +gnd for +current sense PS com port
+--- -gnd for -current sense
+
+
+---  + Current set -> R18 -> pin3 U2 , this voltage is referenced to +gnd!!!
+---  - Current set -> reference to +gnd ?!??
+
+
+---  + Current sense -> +gnd
+---  - Current sense -> -gnd
+
+
+ TODO
+/-----------------------------------------------------------------
+|   [    ] min max code marker should be revised
+|   [    ] A schottky diode added to the negative rail to make sure that during turn off transition the rail won't go positive more that .3v
+|   [    ] Add full detailed starting up process and possible error log    
+|   [    ] Add last power status (on/off) option             
+|   [    ] Add Graph pause button for a full window
+|   [    ] Sometimes adj is not the same as DAC set !!!!!             
+|   [    ] Save setting with 1 byte / bit?
+|   [    ] Add deletable and creatable for seething menu (it use a lot of memory)
+|           done but it makes power supply to crash 
+|   [    ] avoid activation of Textarea where it shouldn't
+|   [    ] Add wifi gui setting
+|   [    ] buzzer does not work all the time
+|   [    ] Install USB Charging bracket
+|   [    ] Install MCU USB port bracket
+|                                                                 
+|   [done] Read back is wrong!        
+|   [Nope] ground pin of R32 should be disconnected from GND pin of U3 and connected to GND_I+Meas, the GND pin should be connected to GND_I-Meas
+|   [done] Diode D9 shows some kind of a drifts which is fixed buy adding two diode in series, the reason ?
+|   [done] Current control op-amp should be LTC2057 because of the stability 
+|   [done] Voltage control op-amp can not be OPA189, it must beLTC2057 because of the Enable pin which has been has been used
+|   [done] Add extra power for control module
+|   [done] Fix problem with USB communication error 
+|   [done] Add terminal block for cables 
+|   [done] calibrate the output voltage and current   
+|   [done] Add Graph pause button
+|   [done] a lot of random resets when switch to utility and Setting tabs!!! 
+|   [done] round enter value for Voltage and current?                                                              
+|   [done] value in Stats window has wrong style                                  
+|   [done] Sliders handle in Window 2 is missing
+|   [done] Calibration save/load for current? Current does not SetUpdate
+|   [done] change uint16_t => uint32_t => kept uint16_t with range 0 to 65535
+|   [done] Install AC power indicator                                                          
+|                                                                 
+|   'Droid Sans Mono', 'monospace', monospace
+|                                                                 
+\-----------------------------------------------------------------
+
+Settings:
+
+Slider Base
+TextText          127
+|=============O=====|
+
+Switch Base     
+TextText        
+         (  |)      
+
+Push Button Bas  
+Start stuff    
+         ( O )      
+
+
+
+
+/--------------------------------------> brain storming
+Voltage{setup{max,min,size,location, fonts}, 
+{setValue,getValue,enable}, 
+measureValue{setMeasuredValue, getMeasuredValue}, }
+
+
+  // lv_example_chart_3();
+  // lv_example_chart_2();
+  // lv_example_btn_2();
+  //  lv_obj_remove_style_all(btn2);
+
+  // lv_obj_add_style(btn2, &style, LV_STATE_PRESSED);
+  // lv_obj_add_style(btn2, &style, LV_STATE_DEFAULT);
+
+  // lv_label_set_long_mode
+  // lv_obj_remove_style(label, &style_cv, LV_STATE_PRESSED);
+
+  // lv_example_line_1();
+  // lv_example_meter_1();
+
+  // lv_draw_line_dsc_init
+
+  // lv_render(Voltage);
+
+  //  lv_demo_widgets();
+  // lv_demo_benchmark();
+  // lv_demo_keypad_encoder();
+  // lv_demo_music();
+  // lv_demo_stress();
+
+
+    // // Current.measureUpdate(56.789);
+  // if (abs(scale) < .02)
+  // {
+  //   Voltage.measured.ResetStats();
+  //   Current.measured.ResetStats();
+  // }
+
+  // if (Voltage.measured.history.size()==800)
+  // {
+  //   for (int i = 0; i < 800; i++)
+  //   {
+  //     ecg_sample[i] = Voltage.measured.history.at(i) * 30.0 - 450.0;
+  //   }
+  //   static int zoom = 800;
+  //   if (zoom == 800)
+  //   {
+  //     lv_chart_set_zoom_x(chart,  lv_chart_get_zoom_x(chart)-1);
+  //     zoom = 799;
+  //   }
+
+  //   else
+  //   {
+  //     lv_chart_set_zoom_x(chart, lv_chart_get_zoom_x(chart)+1);
+  //     zoom = 800;
+  //   }
+  //   // lv_obj_refresh_self_size(chart);
+  // }
+  // lv_timer_handler_run_in_period(1);
+
+
+
+
+  // lv_style_set_bg_grad_color(&style, lv_palette_darken(LV_PALETTE_BLUE, 2));
+  // lv_style_set_bg_grad_dir(&style, LV_GRAD_DIR_VER);
+
+  // lv_style_set_border_opa(&style, LV_OPA_40);
+  // lv_style_set_border_width(&style, 2);
+  // lv_style_set_border_color(&style, lv_palette_main(LV_PALETTE_GREY));
+
+  // lv_style_set_shadow_width(&style, 8);
+  // lv_style_set_shadow_color(&style, lv_palette_main(LV_PALETTE_GREY));
+  // lv_style_set_shadow_ofs_y(&style, 8);
+
+  // lv_style_set_outline_opa(&style, LV_OPA_COVER);
+  // lv_style_set_outline_color(&style, lv_palette_main(LV_PALETTE_BLUE));
+
+
+  
+
+    /*Add a large outline when pressed*/
+  // lv_style_set_outline_width(&style_pr, 30);
+  // lv_style_set_outline_opa(&style_pr, LV_OPA_TRANSP);
+
+  // lv_style_set_translate_y(&style_pr, 5);
+  // lv_style_set_shadow_ofs_y(&style_pr, 3);
+  // lv_style_set_bg_color(&style_pr, lv_palette_darken(LV_PALETTE_BLUE, 2));
+  // lv_style_set_bg_grad_color(&style_pr, lv_palette_darken(LV_PALETTE_BLUE, 4));
+
+  /*Add a transition to the outline*/
+  // static lv_style_transition_dsc_t trans;
+  // static lv_style_prop_t props[] = {LV_STYLE_OUTLINE_WIDTH, LV_STYLE_OUTLINE_OPA, (lv_style_prop_t) 0};
+  // lv_style_transition_dsc_init(&trans, props, lv_anim_path_linear, 300, 0, NULL);
+
+  // lv_style_set_transition(&style_pr, &trans);
+
+
+  echo "# ESP32PS2" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/Darklight007/ESP32PS2.git
+git push -u origin main
+  
+
+lv_indev_drv_init(&indev_drv);          /*Basic initialization*/
+indev_drv.type = LV_INDEV_TYPE_ENCODER; /*See below.*/
+indev_drv.read_cb = encoder_read;       /*See below.*/
+/*Register the driver in LVGL and save the created input device object*/
+my_indev = lv_indev_drv_register(&indev_drv);
+void encoder_read(lv_indev_drv_t *drv, lv_indev_data_t *data)
+{
+  static int timer = millis();
+  static int32_t rotaryOldValue = 0;
+
+  if (encoder2Flag && (Tabs::getCurrentPage() == 4))
+  {
+    data->state = LV_INDEV_STATE_RELEASED;
+    int64_t count = PowerSupply.Current.encoder.getCount() / 4;
+
+    if ((count - rotaryOldValue) > 0)
+    {
+      // lastEncoder++;
+      data->enc_diff = LV_KEY_PREV;
+      myTone(NOTE_A4, 5);
+      //  data->state = LV_INDEV_STATE_PRESSED;
+      timer = millis();
+      // lv_obj_add_state(cont3, LV_STATE_CHECKED);
+    }
+
+    else if ((count - rotaryOldValue) < 0)
+    {
+      // lastEncoder--;
+      data->enc_diff = LV_KEY_RIGHT;
+      myTone(NOTE_A4, 5);
+      //  data->state = LV_INDEV_STATE_PRESSED;
+      timer = millis();
+    }
+
+    rotaryOldValue = count;
+    // data->enc_diff = count;
+    encoder2Flag = (encoder2Flag > 10) ? 10 : encoder2Flag - 1;
+
+    // if (enc_pressed())
+  }
+
+  if (PowerSupply.Voltage.getLock())
+    data->state = LV_INDEV_STATE_PRESSED;
+  else
+    data->state = LV_INDEV_STATE_RELEASED;
+
+  if ((millis() - timer > 10) && (millis() - timer < 110))
+  {
+    data->state = LV_INDEV_STATE_PRESSED;
+  }
+
+  if ((millis() - timer > 110) && (millis() - timer < 140))
+  {
+    data->state = LV_INDEV_STATE_RELEASED;
+  }
+
+  // Serial.printf("%ll %i %i enc_diff:%i data->state:%i\n",
+  // millis() - timer,
+  //               encoder2Flag,
+  //               PowerSupply.Voltage.getLock(),
+  //               data->enc_diff,
+  //               data->state);
+  static int interval = 1000;
+
+  static unsigned long loopCount = 0;
+  static unsigned long startTime = millis();
+
+  loopCount++;
+  if ((millis() - startTime) > interval)
+  {
+    Serial.printf("IRQ Loop Count:%5i at time %07.2f \n", loopCount, millis() / 1000.0);
+    startTime = millis();
+    loopCount = 0;
+  }
+}
+
+g = lv_group_create();
+
+    lv_group_add_obj(g, cont0);
+    lv_group_add_obj(g, cont1);
+    lv_group_add_obj(g, cont2);
+    lv_group_add_obj(g, cont3);
+    lv_group_add_obj(g, cont4);
+    lv_group_add_obj(g, cont);
+
+    lv_indev_set_group(my_indev, g);

@@ -1,0 +1,54 @@
+// static lv_style_t style_shadow1, style_shadow2, style_shadow3, style_shadow4, style_shadow5;
+// pages.addPanel(page1, &style_shadow1, lv_palette_main(LV_PALETTE_NONE));
+// pages.addPanel(page2, &style_shadow2, lv_palette_main(LV_PALETTE_BLUE));
+// pages.addPanel(page3, &style_shadow3, lv_palette_main(LV_PALETTE_GREEN));
+// pages.addPanel(page4, &style_shadow4, lv_palette_main(LV_PALETTE_BLUE_GREY));
+// pages.addPanel(page5, &style_shadow5, lv_palette_main(LV_PALETTE_CYAN));
+
+// toggleButton(page3, 0, 254, -3, btn_event_cb);
+
+static void toggleButton(lv_obj_t *parent, lv_align_t align, lv_coord_t x_ofs, lv_coord_t y_ofs, lv_event_cb_t event_cb)
+{
+    lv_obj_t *label;
+    lv_obj_t *btn2 = lv_btn_create(parent);
+
+    lv_obj_add_event_cb(btn2, btn_event_cb, LV_EVENT_ALL, NULL);
+    lv_obj_align(btn2, align, x_ofs, y_ofs);
+    lv_obj_add_flag(btn2, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_style_radius(btn2, 2, LV_PART_MAIN);
+    lv_obj_set_size(btn2, 40, 22);
+
+    label = lv_label_create(btn2);
+    lv_label_set_text(label, "OFF");
+    lv_obj_center(label);
+    // lv_obj_add_state(btn2, LV_STATE_CHECKED);
+
+    static lv_style_t style_btn_toggled;
+    lv_style_init(&style_btn_toggled);
+    lv_style_set_text_font(&style_btn_toggled, &lv_font_montserrat_12);
+    lv_style_set_text_color(&style_btn_toggled, lv_palette_lighten(LV_PALETTE_RED, 4));
+
+    // lv_obj_add_style(btn2, &style_btn, LV_STATE_DEFAULT);
+
+    // static lv_style_t style_shadow;
+    // lv_style_init(&style_shadow);
+    lv_style_set_bg_color(&style_btn_toggled, lv_palette_main(LV_PALETTE_BLUE));
+    lv_style_set_shadow_width(&style_btn_toggled, 20);
+    lv_style_set_shadow_spread(&style_btn_toggled, 3);
+    lv_style_set_shadow_color(&style_btn_toggled, lv_palette_main(LV_PALETTE_BLUE));
+    lv_style_set_border_width(&style_btn_toggled, 3);
+    lv_obj_add_style(btn2, &style_btn_toggled, LV_STATE_CHECKED);
+
+    static lv_style_t style_btn_toggledOff;
+    lv_style_init(&style_btn_toggledOff);
+    lv_style_set_bg_color(&style_btn_toggledOff, lv_palette_darken(LV_PALETTE_GREY, 4));
+
+    lv_style_set_shadow_width(&style_btn_toggledOff, 0);
+    lv_style_set_shadow_spread(&style_btn_toggledOff, 0);
+    lv_style_set_text_font(&style_btn_toggledOff, &lv_font_montserrat_12);
+    lv_style_set_text_color(&style_btn_toggledOff, lv_palette_darken(LV_PALETTE_GREY, 1));
+    // lv_style_set_border_width(&style_btn_toggledOff, 3);
+    // lv_style_set_border_color(&style_btn_toggledOff, lv_palette_darken(LV_PALETTE_GREY, 3));
+    lv_obj_add_style(btn2, &style_btn_toggledOff, LV_STATE_DEFAULT);
+}
+
