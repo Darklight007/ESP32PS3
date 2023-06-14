@@ -152,6 +152,33 @@ static void legend(lv_obj_t *parent, lv_color16_t c1, const char *ser1, lv_color
     lv_obj_add_style(label_legend2, &PowerSupply.graph.style_legend2, LV_STATE_DEFAULT);
 }
 
+static void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_color16_t c1, int x, int y)
+{
+    lv_style_init(style);
+    lv_style_set_text_letter_space(style, -2);
+    lv_style_set_text_color(style, c1);
+    lv_style_set_text_font(style, &lv_font_unscii_8);
+    lv_style_set_bg_color(style, lv_palette_darken(LV_PALETTE_GREY, 255));
+    lv_style_set_bg_opa(style, LV_OPA_50);
+    lv_style_set_border_opa(style, LV_OPA_50);
+    lv_style_set_border_width(style, 4);
+
+    lv_label_set_text(label, text);
+    lv_obj_align(label, LV_ALIGN_DEFAULT, x, y);
+    lv_obj_remove_style(label, style, LV_STATE_DEFAULT);
+    lv_obj_add_style(label, style, LV_STATE_DEFAULT);
+}
+
+lv_obj_t *label_graphMenu_Vset;
+lv_obj_t *label_graphMenu_Iset;
+lv_obj_t *label_graphMenu_VFFT;
+lv_obj_t *label_graphMenu_IFFT;
+
+lv_obj_t *label_statMenu_Vset;
+lv_obj_t *label_statMenu_Iset;
+lv_obj_t *label_statMenu_VFFT;
+lv_obj_t *label_statMenu_IFFT;
+
 void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 { /*Create a chart*/
 
@@ -244,7 +271,21 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     // lv_obj_add_style(PowerSupply.graph.chart, &style, LV_PART_SCROLLBAR);
     // lv_obj_add_style(PowerSupply.graph.chart, &style_scrolled, LV_PART_SCROLLBAR | LV_STATE_SCROLLED);
 
-    legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V", lv_palette_main(LV_PALETTE_AMBER), "A", 30, 0);
+    // legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V", lv_palette_main(LV_PALETTE_AMBER), "A", 30, 0);
+
+    label_graphMenu_Vset = lv_label_create(parent);
+    label_graphMenu_Iset = lv_label_create(parent);
+    label_graphMenu_VFFT = lv_label_create(parent);
+
+    // legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V-Set", lv_palette_main(LV_PALETTE_AMBER), "I-set", 170, 0);
+
+    static lv_style_t style_V;
+    static lv_style_t style_I;
+    static lv_style_t style_FFT;
+
+    overlay(label_graphMenu_Vset, "", &style_V, lv_palette_main(LV_PALETTE_LIGHT_BLUE), 160, -7);
+    overlay(label_graphMenu_Iset, "", &style_I, lv_palette_main(LV_PALETTE_AMBER), 160, 14 - 7);
+    overlay(label_graphMenu_VFFT, "", &style_FFT, lv_palette_main(LV_PALETTE_DEEP_PURPLE), 160, 28 - 7);
 
     /******************************
      **   Stats
@@ -423,6 +464,21 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     PowerSupply.stats.serV->y_points = PowerSupply.Voltage.hist.data;
 
     // legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V", lv_palette_main(LV_PALETTE_AMBER), "A", 245, 0);
+
+    label_statMenu_Vset = lv_label_create(parent);
+    label_statMenu_Iset = lv_label_create(parent);
+    label_statMenu_VFFT = lv_label_create(parent);
+    label_statMenu_IFFT = lv_label_create(parent);
+
+    static lv_style_t style_V;
+    static lv_style_t style_I;
+    static lv_style_t style_FFT;
+    static lv_style_t style_FFTi;
+
+    overlay(label_statMenu_Vset, "", &style_V, lv_palette_main(LV_PALETTE_LIGHT_BLUE), 160, -7);
+    overlay(label_statMenu_Iset, "", &style_I, lv_palette_main(LV_PALETTE_AMBER), 160, 14 - 7);
+    overlay(label_statMenu_VFFT, "", &style_FFT, lv_palette_main(LV_PALETTE_DEEP_PURPLE), 160, 28 - 7);
+    overlay(label_statMenu_IFFT, "", &style_FFTi, lv_palette_main(LV_PALETTE_DEEP_PURPLE), 160, 42 - 7);
 
     auto stat_ = [](lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     {
@@ -895,6 +951,16 @@ void Task_ADC(void *pvParameters)
                 }
                 FFTSample = true;
             }
+            if ((adcDataReady) && (PowerSupply.adc.busyChannel == CURRENT))
+            {
+                /* Slide the window */
+                for (int i = 0; i < samples - 1; i++)
+                {
+                    vReal_i[i] = vReal[i + 1];
+                    vImag_i[i] = 0;
+                }
+                FFTSample_i = true;
+            }
 
             PowerSupply.readVoltage();
             PowerSupply.readCurrent();
@@ -922,7 +988,12 @@ void Task_ADC(void *pvParameters)
             FFTSample = false;
         }
 
-
+        if (FFTSample_i)
+        {
+            vReal_i[samples - 1] = (PowerSupply.Current.measured.value * 1);
+            vImag_i[samples - 1] = 0;
+            FFTSample_i = false;
+        }
     }
 }
 

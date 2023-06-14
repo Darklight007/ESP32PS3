@@ -26,11 +26,16 @@
 #include <arduinoFFT.h>
 
 arduinoFFT FFT = arduinoFFT();
+arduinoFFT FFT_i = arduinoFFT();
 
 const uint16_t samples = 128; // This value MUST ALWAYS be a power of 2
 double vReal[samples];
-double vImag[samples]; 
+double vImag[samples];
 bool FFTSample = false;
+
+double vReal_i[samples];
+double vImag_i[samples];
+bool FFTSample_i = false;
 
 // #define CONFIG_ESP32S3_SPIRAM_SUPPORT 1
 
@@ -329,7 +334,6 @@ void setup()
   // fmemory.putUShort("pi", 314);
   Serial.printf("\nPreferences Memory test get:%i", fmemory.getUShort("pi", 0));
   fmemory.end();
-
 }
 static unsigned long t = 0;
 static int priorityFlag = 1;
@@ -396,6 +400,14 @@ void loop()
   schedule([]
            { PowerSupply.FlushSettings(); },
            0, timer_[4]);
+
+  schedule([]
+           { 
+               lv_label_set_text_fmt(label_graphMenu_Vset, "V-Set:%+08.4fV", PowerSupply.Voltage.adjValue +PowerSupply.Voltage.adjOffset);
+                lv_label_set_text_fmt(label_graphMenu_Iset, "I-Set:%+08.4fA", PowerSupply.Current.adjValue +PowerSupply.Current.adjOffset); 
+                lv_label_set_text_fmt(label_statMenu_Vset, "V-Set:%+08.4fV", PowerSupply.Voltage.adjValue +PowerSupply.Voltage.adjOffset);
+                lv_label_set_text_fmt(label_statMenu_Iset, "I-Set:%+08.4fA", PowerSupply.Current.adjValue +PowerSupply.Current.adjOffset); },
+           1000, timer_[6]);
 
   // schedule([]
   //          {
@@ -663,14 +675,24 @@ void loop()
     loopCount = 0;
     // Tabs::previousPage();
 
- 
     /*FFT*/
     FFT.Windowing(vReal, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
     FFT.Compute(vReal, vImag, samples, FFT_FORWARD);
     FFT.ComplexToMagnitude(vReal, vImag, samples);
-    double peak = FFT.MajorPeak(vReal, samples,PowerSupply.adc.realADCSpeed / 2); // samplingFrequency  0.911854103*
+    double peak = FFT.MajorPeak(vReal, samples, PowerSupply.adc.realADCSpeed / 2); // samplingFrequency  0.911854103*
 
     Serial.printf("\nFFT MajorPeak:%5.1f Hz", peak);
+
+    lv_label_set_text_fmt(label_graphMenu_VFFT, "V-FFT:%5.1f Hz", peak);
+
+    FFT_i.Windowing(vReal_i, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+    FFT_i.Compute(vReal_i, vImag_i, samples, FFT_FORWARD);
+    FFT_i.ComplexToMagnitude(vReal_i, vImag_i, samples);
+    double peak_i = FFT_i.MajorPeak(vReal_i, samples, PowerSupply.adc.realADCSpeed / 2); // samplingFrequency  0.911854103*
+
+
+ lv_label_set_text_fmt(label_statMenu_VFFT, "V-FFT:%5.1f Hz", peak);
+    lv_label_set_text_fmt(label_statMenu_IFFT, "I-FFT:%5.1f Hz", peak_i);
   }
   // if (g_wifiConnection)
   // ArduinoOTA.handle();
