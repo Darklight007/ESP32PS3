@@ -140,6 +140,7 @@ class MovingStats
 {
 public:
     double value;
+    double mean;
     double absMin = +INFINITY, absMax = -INFINITY;
     bool enable = false;
     uint8_t NofAvgs = 128;
@@ -239,12 +240,9 @@ public:
 
     void ResetStats()
     {
-        SetWindowSize(NofAvgs);
-
-        
+        SetWindowSize(NofAvgs);        
         absMin = INFINITY;
         absMax = -INFINITY;
-
         // for (int i = 0; i < 128; i++)
         //     samples_[i] = 0;
     }
@@ -274,6 +272,7 @@ public:
     lv_obj_t *label_setValue;
     lv_obj_t *label_measureValue;
     lv_obj_t *label_unit;
+    lv_obj_t *label_setSmallFont;    
     lv_obj_t *label_value;
     lv_obj_t *label_mean;
     lv_obj_t *label_std;
@@ -340,6 +339,7 @@ public:
 
     void measureUpdate(double value);
     void displayUpdate(void);
+    void statUpdate(void);
     void barUpdate(void);
 
     void enableSetting(bool onOff);

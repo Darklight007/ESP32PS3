@@ -1,0 +1,6 @@
+{
+    "cmake.sourceDirectory": "/home/hjamshid/Documents/PlatformIO/Projects/S3_PS/lib/TFT_eSPI",
+    "files.associations": {
+        "random": "cpp"
+    }
+}

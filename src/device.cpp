@@ -164,6 +164,7 @@ void Device::LoadCalibrationData()
 
         //  Voltage.SetUpdate(5.0);
         //  Current.SetUpdate(.1);
+        SaveCalibrationData();
     }
 
     // CalBank[bankCalibId].vCal.value_1 = vCalvalue_1;
@@ -185,7 +186,7 @@ void Device::LoadSetting(void)
     Serial.print("done.");
 
     // Make sure loaded data is not out of range
-    settingParameters.adcRate = std::clamp((int)settingParameters.adcRate, 0, 2);
+    settingParameters.adcRate = std::clamp((int)settingParameters.adcRate, 0, 3);
     settingParameters.adcNumberOfAvgs = std::clamp((int)settingParameters.adcNumberOfAvgs, 0, 7);
     settingParameters.adcNumberOfDigits = std::clamp((int)settingParameters.adcNumberOfDigits, 1, 4);
     Voltage.adjValue = settingParameters.SetVoltage;
@@ -270,8 +271,8 @@ void Device::LoadSetting(void)
     // EEPROMread(Voltage.adjEEPROMAddress + 8 * 0, Voltage.adjValue); // PowerSupply.Voltage.adjValue
     // EEPROMread(Current.adjEEPROMAddress + 8 * 1, Current.adjValue); // PowerSupply.Voltage.adjValue
 
-    Serial.printf("\nLast Voltage Value:% +8.4f", Voltage.adjValue);
-    Serial.printf("\nLast Current Value:% +8.4f", Current.adjValue);
+    Serial.printf("\nLast Voltage Value:% +8.4f", Voltage.adjValue+Voltage.adjOffset);
+    Serial.printf("\nLast Current Value:% +8.4f", Current.adjValue+Current.adjOffset);
 };
 
 void Device::SaveSetting(void)

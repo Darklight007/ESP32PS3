@@ -331,7 +331,7 @@ void setup()
 
   Preferences fmemory;
   fmemory.begin("param", false);
-  // fmemory.putUShort("pi", 314);
+  fmemory.putUShort("pi", 314);
   Serial.printf("\nPreferences Memory test get:%i", fmemory.getUShort("pi", 0));
   fmemory.end();
 }
@@ -379,7 +379,7 @@ void loop()
   // if (millis() > 1600 && millis() < 1800 && !PowerSupply.settingParameters.isPowerSupplyOn) //&& PowerSupply.settingParameters.isPowerSupplyOn
   // PowerSupply.turn(SWITCH::ON);
 
-  static unsigned long timer_[8] = {0};
+  static unsigned long timer_[10] = {0};
   // schedule(&keyCheckLoop, 1, timer_[0]);
   // lv_timer_handler();
   // Serial.printf("0 ");
@@ -402,12 +402,31 @@ void loop()
            0, timer_[4]);
 
   schedule([]
-           { 
-               lv_label_set_text_fmt(label_graphMenu_Vset, "V-Set:%+08.4fV", PowerSupply.Voltage.adjValue +PowerSupply.Voltage.adjOffset);
-                lv_label_set_text_fmt(label_graphMenu_Iset, "I-Set:%+08.4fA", PowerSupply.Current.adjValue +PowerSupply.Current.adjOffset); 
-                lv_label_set_text_fmt(label_statMenu_Vset, "V-Set:%+08.4fV", PowerSupply.Voltage.adjValue +PowerSupply.Voltage.adjOffset);
-                lv_label_set_text_fmt(label_statMenu_Iset, "I-Set:%+08.4fA", PowerSupply.Current.adjValue +PowerSupply.Current.adjOffset); },
-           1000, timer_[6]);
+           {
+             PowerSupply.Voltage.statUpdate();
+             PowerSupply.Current.statUpdate(); },
+           100, timer_[6]);
+
+  schedule([]
+           {
+              /*FFT*/
+              FFT.Windowing(vReal, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+              FFT.Compute(vReal, vImag, samples, FFT_FORWARD);
+              FFT.ComplexToMagnitude(vReal, vImag, samples);
+              double peak = FFT.MajorPeak(vReal, samples, PowerSupply.adc.realADCSpeed / 2.0); // samplingFrequency  0.911854103*
+
+              Serial.printf("\nFFT MajorPeak:%5.1f Hz", peak);
+
+              lv_label_set_text_fmt(label_graphMenu_VFFT, "V-FFT:%5.1f Hz", peak);
+
+              FFT_i.Windowing(vReal_i, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+              FFT_i.Compute(vReal_i, vImag_i, samples, FFT_FORWARD);
+              FFT_i.ComplexToMagnitude(vReal_i, vImag_i, samples);
+              double peak_i = FFT_i.MajorPeak(vReal_i, samples, PowerSupply.adc.realADCSpeed / 2.0); // samplingFrequency  0.911854103*
+
+              lv_label_set_text_fmt(label_statMenu_VFFT, "V-FFT:%5.1f Hz", peak);
+              lv_label_set_text_fmt(label_statMenu_IFFT, "I-FFT:%5.1f Hz", peak_i); },
+           1000, timer_[7]);
 
   // schedule([]
   //          {
@@ -674,25 +693,6 @@ void loop()
     startTime = millis();
     loopCount = 0;
     // Tabs::previousPage();
-
-    /*FFT*/
-    FFT.Windowing(vReal, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-    FFT.Compute(vReal, vImag, samples, FFT_FORWARD);
-    FFT.ComplexToMagnitude(vReal, vImag, samples);
-    double peak = FFT.MajorPeak(vReal, samples, PowerSupply.adc.realADCSpeed / 2); // samplingFrequency  0.911854103*
-
-    Serial.printf("\nFFT MajorPeak:%5.1f Hz", peak);
-
-    lv_label_set_text_fmt(label_graphMenu_VFFT, "V-FFT:%5.1f Hz", peak);
-
-    FFT_i.Windowing(vReal_i, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-    FFT_i.Compute(vReal_i, vImag_i, samples, FFT_FORWARD);
-    FFT_i.ComplexToMagnitude(vReal_i, vImag_i, samples);
-    double peak_i = FFT_i.MajorPeak(vReal_i, samples, PowerSupply.adc.realADCSpeed / 2); // samplingFrequency  0.911854103*
-
-
- lv_label_set_text_fmt(label_statMenu_VFFT, "V-FFT:%5.1f Hz", peak);
-    lv_label_set_text_fmt(label_statMenu_IFFT, "I-FFT:%5.1f Hz", peak_i);
   }
   // if (g_wifiConnection)
   // ArduinoOTA.handle();

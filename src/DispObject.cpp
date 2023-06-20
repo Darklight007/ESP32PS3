@@ -46,16 +46,28 @@ void DispObjects::displayUpdate(void)
         oldValue = mean;
     }
 
-    if ((millis() - timeKeeper) >= 250)
-    {
-        timeKeeper = millis();
+    // if ((millis() - timeKeeper) >= 250)
+    // {
+        // timeKeeper = millis();
 
-        lv_label_set_text_fmt(label_value, "%+08.4f", measured.value);
-        lv_label_set_text_fmt(label_mean, "%+08.4f", mean);
-        lv_label_set_text_fmt(label_std, "%07.4f", measured.StandardDeviation());
-        lv_label_set_text_fmt(label_max, "%+08.4f", measured.absMax);
-        lv_label_set_text_fmt(label_min, "%+08.4f", measured.absMin);
-    }
+        // lv_label_set_text_fmt(label_setSmallFont, "%+08.4f", adjValue+adjOffset);
+        //     lv_label_set_text_fmt(label_value, "%+08.4f", measured.value);
+        //     lv_label_set_text_fmt(label_mean, "%+08.4f", mean);
+        //     lv_label_set_text_fmt(label_std, "%07.4f", measured.StandardDeviation());
+        //     lv_label_set_text_fmt(label_max, "%+08.4f", measured.absMax);
+        //     lv_label_set_text_fmt(label_min, "%+08.4f", measured.absMin);
+    // }
+}
+
+void DispObjects::statUpdate(void)
+{
+
+    lv_label_set_text_fmt(label_setSmallFont, "%+08.4f", adjValue + adjOffset);
+    lv_label_set_text_fmt(label_value, "%+08.4f", measured.value);
+    lv_label_set_text_fmt(label_mean, "%+08.4f",  measured.Mean());
+    lv_label_set_text_fmt(label_std, "%07.4f", measured.StandardDeviation());
+    lv_label_set_text_fmt(label_max, "%+08.4f", measured.absMax);
+    lv_label_set_text_fmt(label_min, "%+08.4f", measured.absMin);
 }
 
 void DispObjects::barUpdate(void)
@@ -72,7 +84,7 @@ void DispObjects::barUpdate(void)
 
         static double oldMaxValue{0};
 
-        if (measured.absMax != oldMaxValue)  
+        if (measured.absMax != oldMaxValue)
         {
             lv_obj_set_x(Bar.bar_maxMarker, lv_obj_get_x(Bar.bar) + int(measured.absMax * lv_obj_get_width(Bar.bar) / maxValue) - 3);
             oldMaxValue = measured.absMax;
@@ -87,7 +99,6 @@ void DispObjects::barUpdate(void)
         // Bar.changed = false;
         // oldMaxValue=-INFINITY;
         // oldMinValue = INFINITY;
- 
     }
 }
 
@@ -359,6 +370,8 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     /******************************
      **   Stats
      ******************************/
+
+    label_setSmallFont = lv_label_create(label_set);
 
     label_value = lv_label_create(label_set);
     label_mean = lv_label_create(label_set);

@@ -152,6 +152,21 @@ static void legend(lv_obj_t *parent, lv_color16_t c1, const char *ser1, lv_color
     lv_obj_add_style(label_legend2, &PowerSupply.graph.style_legend2, LV_STATE_DEFAULT);
 }
 
+static void drag_event_handler(lv_event_t * e)
+{
+    lv_obj_t * obj = lv_event_get_target(e);
+
+    lv_indev_t * indev = lv_indev_get_act();
+    if(indev == NULL)  return;
+
+    lv_point_t vect;
+    lv_indev_get_vect(indev, &vect);
+
+    lv_coord_t x = lv_obj_get_x(obj) + vect.x;
+    lv_coord_t y = lv_obj_get_y(obj) + vect.y;
+    lv_obj_set_pos(obj, x, y);
+}
+
 static void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_color16_t c1, int x, int y)
 {
     lv_style_init(style);
@@ -169,13 +184,11 @@ static void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_col
     lv_obj_add_style(label, style, LV_STATE_DEFAULT);
 }
 
-lv_obj_t *label_graphMenu_Vset;
-lv_obj_t *label_graphMenu_Iset;
+
 lv_obj_t *label_graphMenu_VFFT;
 lv_obj_t *label_graphMenu_IFFT;
 
-lv_obj_t *label_statMenu_Vset;
-lv_obj_t *label_statMenu_Iset;
+
 lv_obj_t *label_statMenu_VFFT;
 lv_obj_t *label_statMenu_IFFT;
 
@@ -273,19 +286,18 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 
     // legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V", lv_palette_main(LV_PALETTE_AMBER), "A", 30, 0);
 
-    label_graphMenu_Vset = lv_label_create(parent);
-    label_graphMenu_Iset = lv_label_create(parent);
+    // lv_obj_t * bed;
+    // bed = lv_obj_create(parent);
+    // lv_obj_set_size(bed, 100, 30);
+    // lv_obj_add_event_cb(bed, drag_event_handler, LV_EVENT_PRESSING, NULL);
+
     label_graphMenu_VFFT = lv_label_create(parent);
 
     // legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V-Set", lv_palette_main(LV_PALETTE_AMBER), "I-set", 170, 0);
-
-    static lv_style_t style_V;
-    static lv_style_t style_I;
     static lv_style_t style_FFT;
+    overlay(label_graphMenu_VFFT, "", &style_FFT, lv_palette_lighten(LV_PALETTE_AMBER,4), 160, 0);
 
-    overlay(label_graphMenu_Vset, "", &style_V, lv_palette_main(LV_PALETTE_LIGHT_BLUE), 160, -7);
-    overlay(label_graphMenu_Iset, "", &style_I, lv_palette_main(LV_PALETTE_AMBER), 160, 14 - 7);
-    overlay(label_graphMenu_VFFT, "", &style_FFT, lv_palette_main(LV_PALETTE_DEEP_PURPLE), 160, 28 - 7);
+
 
     /******************************
      **   Stats
@@ -300,7 +312,7 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
         lv_style_set_text_letter_space(&style_stats, -1);
 
         lv_obj_t *label_stats = lv_label_create(parent);
-        lv_label_set_text(label_stats, "   Mean       STD       Max       Min");
+        lv_label_set_text(label_stats, " Set      Mean     STD      Max      Min");
         //   "+00.0000 +00.0000 +00.0000                              |+00.0000 |
         lv_obj_align(label_stats, LV_ALIGN_DEFAULT, x, y);
         lv_obj_remove_style(label_stats, &style_stats, LV_STATE_DEFAULT);
@@ -321,37 +333,49 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
             lv_style_set_text_letter_space(style_, 1);
             lv_style_set_text_letter_space(style_, -1);
 
-            int space = 70;
-
+            int space = 61;
+        
             lv_obj_remove_style_all(label_statUnit);
             lv_label_set_text(label_statUnit, lv_label_get_text(dObj.label_unit));
             lv_obj_align(label_statUnit, LV_ALIGN_DEFAULT, x + -10, y);
             lv_obj_add_style(label_statUnit, style_, LV_STATE_DEFAULT);
 
+            lv_obj_remove_style_all(dObj.label_value);
+            lv_obj_set_parent(dObj.label_value, parent);
+            lv_obj_align(dObj.label_value, LV_ALIGN_DEFAULT, 0, -500);
+            lv_obj_add_style(dObj.label_value, style_, LV_STATE_DEFAULT);
+    
+
+            lv_obj_remove_style_all(dObj.label_setSmallFont);
+            lv_obj_set_parent(dObj.label_setSmallFont, parent);
+            lv_obj_align(dObj.label_setSmallFont, LV_ALIGN_DEFAULT, x+ space * 0,y);
+            lv_obj_add_style(dObj.label_setSmallFont, style_, LV_STATE_DEFAULT);
+
             lv_obj_remove_style_all(dObj.label_mean);
             lv_obj_set_parent(dObj.label_mean, parent);
-            lv_obj_align(dObj.label_mean, LV_ALIGN_DEFAULT, x, y);
+            lv_obj_align(dObj.label_mean, LV_ALIGN_DEFAULT, x+ space * 1,y);
             lv_obj_add_style(dObj.label_mean, style_, LV_STATE_DEFAULT);
 
             lv_obj_remove_style_all(dObj.label_std);
             lv_obj_set_parent(dObj.label_std, parent);
-            lv_obj_align(dObj.label_std, LV_ALIGN_DEFAULT, x + space * 1, y);
+            lv_obj_align(dObj.label_std, LV_ALIGN_DEFAULT, x + space * 2+4, y);
             lv_obj_add_style(dObj.label_std, style_, LV_STATE_DEFAULT);
 
             lv_obj_remove_style_all(dObj.label_max);
             lv_obj_set_parent(dObj.label_max, parent);
-            lv_obj_align(dObj.label_max, LV_ALIGN_DEFAULT, x + space * 2, y);
+            lv_obj_align(dObj.label_max, LV_ALIGN_DEFAULT, x + space * 3, y);
             lv_obj_add_style(dObj.label_max, style_, LV_STATE_DEFAULT);
 
             lv_obj_remove_style_all(dObj.label_min);
             lv_obj_set_parent(dObj.label_min, parent);
-            lv_obj_align(dObj.label_min, LV_ALIGN_DEFAULT, x + space * 3, y);
+            lv_obj_align(dObj.label_min, LV_ALIGN_DEFAULT, x + space * 4, y);
             lv_obj_add_style(dObj.label_min, style_, LV_STATE_DEFAULT);
         };
+
         lv_obj_t *label_stat_V = lv_label_create(parent);
-        stat_obj(parent, label_stat_V, PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, x + 10, offsetY);
+        stat_obj(parent, label_stat_V, PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, x -8, offsetY);
         lv_obj_t *label_stat_A = lv_label_create(parent);
-        stat_obj(parent, label_stat_A, PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, x + 10, offsetY + 10);
+        stat_obj(parent, label_stat_A, PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, x -8, offsetY + 10);
     };
     stat_(parent, 10, 167);
 }
@@ -465,20 +489,14 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 
     // legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V", lv_palette_main(LV_PALETTE_AMBER), "A", 245, 0);
 
-    label_statMenu_Vset = lv_label_create(parent);
-    label_statMenu_Iset = lv_label_create(parent);
     label_statMenu_VFFT = lv_label_create(parent);
     label_statMenu_IFFT = lv_label_create(parent);
 
-    static lv_style_t style_V;
-    static lv_style_t style_I;
     static lv_style_t style_FFT;
     static lv_style_t style_FFTi;
 
-    overlay(label_statMenu_Vset, "", &style_V, lv_palette_main(LV_PALETTE_LIGHT_BLUE), 160, -7);
-    overlay(label_statMenu_Iset, "", &style_I, lv_palette_main(LV_PALETTE_AMBER), 160, 14 - 7);
-    overlay(label_statMenu_VFFT, "", &style_FFT, lv_palette_main(LV_PALETTE_DEEP_PURPLE), 160, 28 - 7);
-    overlay(label_statMenu_IFFT, "", &style_FFTi, lv_palette_main(LV_PALETTE_DEEP_PURPLE), 160, 42 - 7);
+    overlay(label_statMenu_VFFT, "", &style_FFT, lv_palette_lighten(LV_PALETTE_DEEP_PURPLE,2 ), 180, 8 - 7);
+    overlay(label_statMenu_IFFT, "", &style_FFTi, lv_palette_lighten(LV_PALETTE_DEEP_PURPLE,2), 180, 22 - 7);
 
     auto stat_ = [](lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     {
@@ -545,7 +563,7 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
         stat_obj(parent, PowerSupply.Voltage, &PowerSupply.stats.style_statsVolt, x + 10, offsetY);
         stat_obj(parent, PowerSupply.Current, &PowerSupply.stats.style_statsCurrent, x + 10, offsetY + 10);
     };
-    stat_(parent, 10, 167);
+    // stat_(parent, 10, 167);
 }
 /*
 static void draw_event_cb(lv_event_t *e)
@@ -983,14 +1001,14 @@ void Task_ADC(void *pvParameters)
         }
         if (FFTSample)
         {
-            vReal[samples - 1] = (PowerSupply.Voltage.measured.value * 1);
+            vReal[samples - 1] = (PowerSupply.Voltage.measured.Mean() * 1);
             vImag[samples - 1] = 0;
             FFTSample = false;
         }
 
         if (FFTSample_i)
         {
-            vReal_i[samples - 1] = (PowerSupply.Current.measured.value * 1);
+            vReal_i[samples - 1] = (PowerSupply.Current.measured.Mean() * 1);
             vImag_i[samples - 1] = 0;
             FFTSample_i = false;
         }
@@ -1950,14 +1968,14 @@ void StatusBar()
 
     switch (Tabs::getCurrentPage())
     {
-    case 0:
-        StatsPosion(PowerSupply.page[0], PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, 20, 177);
-        StatsPosion(PowerSupply.page[0], PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, 20, 187);
-        break;
-    case 1:
-        GraphPosion(PowerSupply.page[1], PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, 20, 177);
-        GraphPosion(PowerSupply.page[1], PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, 20, 187);
-        break;
+    // case 0:
+    //     StatsPosion(PowerSupply.page[0], PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, 20, 177);
+    //     StatsPosion(PowerSupply.page[0], PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, 20, 187);
+    //     break;
+    // case 1:
+    //     GraphPosion(PowerSupply.page[1], PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, 20, 177);
+    //     GraphPosion(PowerSupply.page[1], PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, 20, 187);
+    //     break;
     case 4:
         PowerSupply.SaveSetting();
         break;
