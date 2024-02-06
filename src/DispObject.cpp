@@ -76,7 +76,8 @@ void DispObjects::barUpdate(void)
     if (Bar.changed)
     {
         lv_bar_set_value(Bar.bar, measured.value / maxValue * lv_bar_get_max_value(Bar.bar), LV_ANIM_OFF);
-        lv_obj_invalidate(Bar.bar);
+        lv_obj_invalidate(Bar.bar); // it will update only when lv_timer_handler is called so no matter how offen this is called
+        
         // lv_obj_set_width(Bar.bar_adjValue, adjValue / maxValue * lv_bar_get_max_value(Bar.bar));
 
         // lv_obj_align(Bar.bar_minMarker, LV_ALIGN_TOP_LEFT, lv_obj_get_x(Bar.bar) + int(measured.absMin / denum) - 3, lv_obj_get_y(Bar.bar) + 4);

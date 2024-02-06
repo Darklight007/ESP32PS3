@@ -292,7 +292,7 @@ void Device::SaveSetting(void)
 void Device::readVoltage()
 {
 
-    if ((adcDataReady) && (adc.busyChannel == VOLTAGE) /*&& ads.checkDataReady()*/) // ||  adc.checkDataReady()
+    if ((adcDataReady || false) && (adc.busyChannel == VOLTAGE) /*&& ads.checkDataReady()*/) // ||  adc.checkDataReady()
     {
 
         static double v;
@@ -316,7 +316,7 @@ void Device::readVoltage()
 double internalCurrentConsumption;
 void Device::readCurrent()
 {
-    if ((adcDataReady) && (adc.busyChannel == CURRENT) /* && ads.checkDataReady() */)
+    if ((adcDataReady || false) && (adc.busyChannel == CURRENT) /* && ads.checkDataReady() */)
     {
         static double c;
         Current.rawValue = adc.readConversion();
@@ -352,7 +352,7 @@ void Device::readCurrent()
         if ((startTime + 1000) <= millis())
         {
             adc.realADCSpeed = adc.ADC_loopCounter;
-            // Serial.printf("ADC real SPS for 1 ch:%4i \n",  adc.ADC_loopCounter);
+            // Serial.printf("\nDC real SPS for 1 ch:%4i ",  adc.ADC_loopCounter);
             adc.ADC_loopCounter = 0;
             startTime = millis();
         }

@@ -46,6 +46,7 @@ public:
         int index = round((value - histWinMin) / (histWinMax - histWinMin) * length_);
 
         // index = std::clamp(index, 0, length_);
+        // Serial.printf("\n%i",index);
 
         if (index < 0 || index >= length_)
             return;
@@ -58,11 +59,12 @@ public:
         if (index > binMax)
             binMax = index;
 
+ 
         if (data[index] > (cap + 2))
         {
             maxHist = *std::max_element(data, data + length_);
-            binMax = -INFINITY;
-            binMin = 0;
+            binMax = -100;
+            binMin = 1000;
             for (auto &val : data)
             {
                 val *= cap / maxHist;
