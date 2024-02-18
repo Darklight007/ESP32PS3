@@ -130,7 +130,7 @@ void setup()
   // Serial.printf("\n sizeof(float):%i\n", sizeof(float));
 
   tft.init();         /* TFT init */
-  tft.setRotation(1); /* Landscape orientation, flipped */
+  tft.setRotation(3); /* Landscape orientation, flipped */
 
   lv_init();
   init_display();
@@ -153,7 +153,8 @@ void setup()
   // uint16_t calData[5] = {379, 3377, 388, 3191, 7};
   // uint16_t calData[5] = {332, 3452, 240, 3553, 7};
   // pinMode(TOUCH_CS, INPUT);
-  uint16_t calData[5] = {330, 3475, 216, 3605, 7};
+  // uint16_t calData[5] = {330, 3475, 216, 3605, 7};
+    uint16_t calData[5] = { 366, 3445, 310, 3406, 1 }; //Rotation {3}
   tft.setTouch(calData);
 
   Serial.print("Touch Screen Calibrated.");
@@ -175,7 +176,7 @@ void setup()
 
   // To use SPI DMA you must call initDMA() to setup the DMA engine
   tft.initDMA();
-  lv_disp_draw_buf_init(&draw_buf, buf[0], buf[1], IWIDTH * IHEIGHT / 1);
+  lv_disp_draw_buf_init(&draw_buf, buf[0], buf[1], IWIDTH * IHEIGHT  / 1);
 
 #else
   // Initialize `disp_buf` display buffer with the buffer(s).
