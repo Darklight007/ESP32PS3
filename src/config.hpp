@@ -45,9 +45,10 @@ lv_obj_t *Utility;
 // digitalRead_19 = true;
 
 extern bool buzzerSound;
-static TaskHandle_t Task_adc,Task1;
+static TaskHandle_t Task_adc,Task1, LVGL;
 bool ismyTextHiddenChange = false;
- 
+
+bool interupt_flag;
 
 
 // #include "myMenu.h"
@@ -77,7 +78,7 @@ static Keypad_MC17 kpd(makeKeymap(keys), rowPins, colPins, ROWS, COLS, I2CADDR);
 #define COLOR_DEPTH 16
 
 // Maximum is 181x181 (64Kbytes) for DMA -  restricted by processor design
-#define IWIDTH 320  
+#define IWIDTH 320
 #define IHEIGHT 240
 
 #define LV_USE_LOG 1

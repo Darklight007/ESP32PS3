@@ -17,6 +17,8 @@ void keyCheckLoop();
 
 extern volatile unsigned long encoder1Flag;
 extern volatile unsigned long encoder2Flag;
+ 
+
 
 static pthread_mutex_t lvgl_mutex;
 // volatile long chartInterruptCounter;
@@ -99,7 +101,7 @@ static void slider_x_event_cb(lv_event_t *e)
     // Serial.println(int((l+r)/2));
 
     // lv_obj_scroll_to_x(PowerSupply.graph.chart, 1 + x * v / v0, LV_ANIM_OFF);
-    // lv_obj_scroll_to_x(PowerSupply.graph.chart, 32000, LV_ANIM_OFF);
+    lv_obj_scroll_to_x(PowerSupply.graph.chart, 32000, LV_ANIM_OFF);
 }
 
 static void slider_y_event_cb(lv_event_t *e)
@@ -110,7 +112,7 @@ static void slider_y_event_cb(lv_event_t *e)
     lv_chart_set_zoom_y(PowerSupply.graph.chart, (uint16_t)v);
     lv_coord_t y = lv_obj_get_scroll_y(PowerSupply.graph.chart);
     // lv_obj_scroll_to_y(PowerSupply.graph.chart, y * v / v0 + 1, LV_ANIM_OFF);
-    // lv_obj_scroll_to_y(PowerSupply.graph.chart, 32000, LV_ANIM_OFF);
+    lv_obj_scroll_to_y(PowerSupply.graph.chart, 32000, LV_ANIM_OFF);
 }
 
 static void legend(lv_obj_t *parent, lv_color16_t c1, const char *ser1, lv_color16_t c2, const char *ser2, int x, int y)
@@ -922,8 +924,12 @@ void Task1code(void *pvParameters)
             //     PowerSupply.Current.measureUpdate(0);
             //     f = true;
             // }
+            if(!interupt_flag)
             PowerSupply.Voltage.barUpdate();
+            if(!interupt_flag)
             PowerSupply.Current.barUpdate();
+            // static unsigned long NoAvgTime;
+            // schedule(&ChartUpdate, PowerSupply.Voltage.measured.NofAvgs * 1000.0 / 5 /*pixels per point*/ / ((double)PowerSupply.adc.realADCSpeed), NoAvgTime);
 
             //   lv_refr_now(NULL);
             // PowerSupply.FlushMeasures();
@@ -984,8 +990,6 @@ void Task_ADC(void *pvParameters)
                 FFTSample_i = true;
             }
 
-
-
             PowerSupply.readVoltage();
             PowerSupply.readCurrent();
 
@@ -1000,10 +1004,16 @@ void Task_ADC(void *pvParameters)
             // PowerSupply.Voltage.Flush();
             // PowerSupply.Current.Flush();
             // PowerSupply.FlushSettings();
+            if(!interupt_flag)
             PowerSupply.Voltage.barUpdate();
+            if(!interupt_flag)
             PowerSupply.Current.barUpdate();
+
+            // interupt_flag=1;
             static unsigned long NoAvgTime;
+              if(!interupt_flag)
             schedule(&ChartUpdate, PowerSupply.Voltage.measured.NofAvgs * 1000.0 / 5 /*pixels per point*/ / ((double)PowerSupply.adc.realADCSpeed), NoAvgTime);
+            // interupt_flag=0;
         }
         if (FFTSample)
         {
@@ -1019,6 +1029,12 @@ void Task_ADC(void *pvParameters)
             FFTSample_i = false;
         }
     }
+}
+
+void lvgl_update(void *pvParameters)
+{
+    static unsigned long timer_[10] = {0};
+    schedule(&lv_timer_handler, 50, timer_[1]);
 }
 
 //*******************

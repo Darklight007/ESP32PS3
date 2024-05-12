@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <vector>
 #include <lvgl.h>
+#include "myFonts.h"
 #include "ESP32Encoder.h"
 #include "buzzer.h"
 

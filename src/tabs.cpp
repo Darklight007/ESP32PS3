@@ -35,7 +35,7 @@ void Tabs::setup_(lv_obj_t *parent)
     // lv_obj_set_style_border_color (tab_btns, lv_palette_lighten(LV_PALETTE_GREY, 3), 0);
 
     lv_style_set_bg_opa(&style_tabview_df_btn, LV_OPA_100);
-    lv_style_set_bg_color(&style_tabview_df_btn, lv_palette_darken(LV_PALETTE_YELLOW, 5));
+    lv_style_set_bg_color(&style_tabview_df_btn, lv_palette_darken(LV_PALETTE_YELLOW, 4));
     lv_style_set_text_color(&style_tabview_df_btn, lv_palette_main(LV_PALETTE_YELLOW));
     
 

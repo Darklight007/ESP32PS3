@@ -1,6 +1,10 @@
 
 /*Declare the custom (user defined) fonts*/
 // #ifdef LV_FONT_CUSTOM_DECLARE
+#ifndef MYFONT_H
+#define MYFONT_H
+
+
 LV_FONT_DECLARE(myfont)
 LV_FONT_DECLARE(FiraMono_R_56)
 LV_FONT_DECLARE(IBMPlexMono_R_56)
@@ -133,4 +137,4 @@ LV_FONT_DECLARE(Undertale_32b)
 LV_FONT_DECLARE(unscii_14)
 
     // LV_FONT_CUSTOM_DECLARE
-// #endif
+#endif

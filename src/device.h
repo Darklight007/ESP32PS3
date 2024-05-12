@@ -131,7 +131,7 @@ public:
         lv_style_set_shadow_spread(&style_btn_toggled, 2);
         lv_style_set_shadow_color(&style_btn_toggled, lv_palette_main(LV_PALETTE_BLUE));
         lv_style_set_border_width(&style_btn_toggled, 2);
-        lv_style_set_border_color(&style_btn_toggled, lv_palette_darken(LV_PALETTE_GREY, 5));
+        lv_style_set_border_color(&style_btn_toggled, lv_palette_darken(LV_PALETTE_GREY, 4));
 
         lv_obj_remove_style(btn, &style_btn_toggled, LV_STATE_DEFAULT);
 

@@ -7,6 +7,7 @@
 #include "myFonts.h"
 #include <TFT_eSPI.h>
 #include "demos/lv_demos.h"
+#include "demos/music/lv_demo_music.h"
 #include "examples/lv_examples.h"
 #include "OTA.h"
 #include <limits.h>
@@ -25,8 +26,10 @@
 #include <complex>
 #include <arduinoFFT.h>
 
-arduinoFFT FFT = arduinoFFT();
-arduinoFFT FFT_i = arduinoFFT();
+// ArduinoFFT FFT = ArduinoFFT();
+ArduinoFFT FFT = ArduinoFFT<double>();
+ArduinoFFT FFT_i = ArduinoFFT<double>();
+// ArduinoFFT FFT_i = ArduinoFFT();
 
 const uint16_t samples = 128; // This value MUST ALWAYS be a power of 2
 double vReal[samples];
@@ -101,9 +104,7 @@ void setup()
 
   Serial.begin(115200); /* prepare for possible serial debug */
 
-  while (!Serial)
-  { /*wait*/
-  } // for USB serial switching boards
+ 
 
   Serial.printf("\nTotal heap: %d", ESP.getHeapSize());
   Serial.printf("\nFree heap: %d", ESP.getFreeHeap());
@@ -154,7 +155,7 @@ void setup()
   // uint16_t calData[5] = {332, 3452, 240, 3553, 7};
   // pinMode(TOUCH_CS, INPUT);
   // uint16_t calData[5] = {330, 3475, 216, 3605, 7};
-    uint16_t calData[5] = { 366, 3445, 310, 3406, 1 }; //Rotation {3}
+  uint16_t calData[5] = {366, 3445, 310, 3406, 1}; // Rotation {3}
   tft.setTouch(calData);
 
   Serial.print("Touch Screen Calibrated.");
@@ -176,7 +177,7 @@ void setup()
 
   // To use SPI DMA you must call initDMA() to setup the DMA engine
   tft.initDMA();
-  lv_disp_draw_buf_init(&draw_buf, buf[0], buf[1], IWIDTH * IHEIGHT  / 1);
+  lv_disp_draw_buf_init(&draw_buf, buf[0], buf[1], IWIDTH * IHEIGHT / 1);
 
 #else
   // Initialize `disp_buf` display buffer with the buffer(s).
@@ -185,6 +186,12 @@ void setup()
 
   Serial.print("\nSetup() run on core: ");
   Serial.print(xPortGetCoreID());
+
+  // lv_demo_music();
+  // lv_demo_benchmark();
+  // lv_demo_stress();
+  // return;
+
   /**************************************************************************/
   // lv_style_t style_unit;
   // lv_style_init(&style_set);
@@ -274,29 +281,36 @@ void setup()
   // timerAlarmEnable(timerADC);
   // timerStart(timerADC);
 
-  // create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
-  xTaskCreatePinnedToCore(
-      Task1code,   /* Task function. */
-      "Task1",     /* name of task. */
-      4000 + 4500, /* Stack size of task */
-      NULL,        /* parameter of the task */
-      0,           /* priority of the task */
-      &Task1,      /* Task handle to keep track of created task */
-      0);          /* pin task to core 0 */
-
   if (1)
   {
+    // create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
+    xTaskCreatePinnedToCore(
+        Task1code,   /* Task function. */
+        "Task1",     /* name of task. */
+        4000 + 4500, /* Stack size of task */
+        NULL,        /* parameter of the task */
+        0,           /* priority of the task */
+        &Task1,      /* Task handle to keep track of created task */
+        0);          /* pin task to core 0 */
+
     xTaskCreatePinnedToCore(
         Task_ADC,                         /* Task function. */
         "Voltage & Current ADC",          /* name of task. */
-         2600,                             /* Stack size of task */
+        2600,                             /* Stack size of task */
         NULL, /* parameter of the task */ /* (void *)&adcDataReady */
         1,                                /* priority of the task */
         &Task_adc,                        /* Task handle to keep track of created task */
         0);                               /* pin task to core 0 */
   }
 
-
+  // xTaskCreatePinnedToCore(
+  //     lvgl_update,                         /* Task function. */
+  //     "VLVGL update",          /* name of task. */
+  //     22600,                             /* Stack size of task */
+  //     NULL, /* parameter of the task */ /* (void *)&adcDataReady */
+  //     1,                                /* priority of the task */
+  //     &LVGL,                        /* Task handle to keep track of created task */
+  //     0);
   // static mutex_t lvgl_mutex;
   // void lvgl_thread(void)
   // {
@@ -340,33 +354,41 @@ void setup()
 }
 static unsigned long t = 0;
 static int priorityFlag = 1;
+//  bool interupt_flag=0;
 
 void loop()
 {
-static unsigned long timer_[10] = {0};
-  schedule(&lv_timer_handler, 10, timer_[1]);
+  static unsigned long timer_[10] = {0};
+  // if(!interupt_flag)
 
-      int interval = 1000;
-    static unsigned long loopCount = 0;
-    static unsigned long startTime = 0;
-    loopCount++;
-    if (true && (millis() - startTime) >= interval)
-    {
+  schedule([]
+           {interupt_flag=1;
+            lv_timer_handler();
+            interupt_flag=0; }, 
+            50, timer_[1]);
 
-      Serial.printf("Loop Count:%5.0f at time %07.2f \n", loopCount * 1000.0 / interval, millis() / 1000.0);
-      startTime = millis();
-      loopCount = 0;
-      // Tabs::previousPage();
-    }
+  // lv_timer_handler();
+  // delay(1);
+  // return;
 
-    
+  int interval = 1000;
+  static unsigned long loopCount = 0;
+  static unsigned long startTime = 0;
+  loopCount++;
+  if (true && (millis() - startTime) >= interval)
+  {
+
+    Serial.printf("Loop Count:%5.0f at time %07.2f \n", loopCount * 1000.0 / interval, millis() / 1000.0);
+    startTime = millis();
+    loopCount = 0;
+    // Tabs::previousPage();
+  }
+
   // Serial.println(digitalRead(TOUCH_CS));
   // uint16_t x = 0, y = 0; // To store the touch coordinates
 
-
   // @format
   schedule(&StatusBar, 250, timer_[2]);
-
 
   // // Draw a white spot at the detected coordinates
   // if (pressed)
@@ -378,6 +400,7 @@ static unsigned long timer_[10] = {0};
   //   Serial.println(y);
   // }
   // Serial.printf("Loop check points:");
+
   if (ismyTextHiddenChange)
   {
 
@@ -404,15 +427,14 @@ static unsigned long timer_[10] = {0};
   // lv_timer_handler();
   // Serial.printf("0 ");
 
-    schedule([]
-             { PowerSupply.FlushMeasures(); },
-             4*22 * PowerSupply.Voltage.measured.NofAvgs, timer_[3]); // 2*1000 /(90) SPS = 22.22 / 2*1000 /(80) SPS = 25
+  schedule([]
+           { PowerSupply.FlushMeasures(); },
+           4 * 22 * PowerSupply.Voltage.measured.NofAvgs, timer_[3]); // 2*1000 /(90) SPS = 22.22 / 2*1000 /(80) SPS = 25
 
-    PowerSupply.getPower();
+  PowerSupply.getPower();
 
-    
-
-  if (1)  {
+  if (1)
+  {
 
     // schedule([]
     //          { PowerSupply.FlushMeasures(); },
@@ -432,19 +454,19 @@ static unsigned long timer_[10] = {0};
     schedule([]
              {
               /*FFT*/
-              FFT.Windowing(vReal, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-              FFT.Compute(vReal, vImag, samples, FFT_FORWARD);
-              FFT.ComplexToMagnitude(vReal, vImag, samples);
-              double peak = FFT.MajorPeak(vReal, samples, PowerSupply.adc.realADCSpeed / 2.0); // samplingFrequency  0.911854103*
+              FFT.windowing(vReal, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+              FFT.compute(vReal, vImag, samples, FFT_FORWARD);
+              FFT.complexToMagnitude(vReal, vImag, samples);
+              double peak = FFT.majorPeak(vReal, samples, PowerSupply.adc.realADCSpeed / 2.0); // samplingFrequency  0.911854103*
 
               // Serial.printf("\nFFT MajorPeak:%5.1f Hz", peak);
 
               lv_label_set_text_fmt(label_graphMenu_VFFT, "V-FFT:%5.1f Hz", peak);
 
-              FFT_i.Windowing(vReal_i, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-              FFT_i.Compute(vReal_i, vImag_i, samples, FFT_FORWARD);
-              FFT_i.ComplexToMagnitude(vReal_i, vImag_i, samples);
-              double peak_i = FFT_i.MajorPeak(vReal_i, samples, PowerSupply.adc.realADCSpeed / 2.0); // samplingFrequency  0.911854103*
+              FFT_i.windowing(vReal_i, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+              FFT_i.compute(vReal_i, vImag_i, samples, FFT_FORWARD);
+              FFT_i.complexToMagnitude(vReal_i, vImag_i, samples);
+              double peak_i = FFT_i.majorPeak(vReal_i, samples, PowerSupply.adc.realADCSpeed / 2.0); // samplingFrequency  0.911854103*
 
               lv_label_set_text_fmt(label_statMenu_VFFT, "V-FFT:%5.1f Hz", peak);
               lv_label_set_text_fmt(label_statMenu_IFFT, "I-FFT:%5.1f Hz", peak_i); },
@@ -703,13 +725,11 @@ static unsigned long timer_[10] = {0};
 
       break;
     }
-
-
   }
   // if (g_wifiConnection)
   // ArduinoOTA.handle();
   // Serial.printf("3 \n");
-  }
+}
 
 /* Display flushing */
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p)
