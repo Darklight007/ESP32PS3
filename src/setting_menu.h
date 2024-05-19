@@ -7,6 +7,12 @@
  *
  ******************************************/
 extern Device PowerSupply;
+extern bool buzzerSound;
+extern TFT_eSPI tft;
+
+lv_obj_t *menu;
+lv_obj_t *voltageCurrentCalibration;
+lv_obj_t *myTextBox;
 enum
 {
     LV_MENU_ITEM_BUILDER_VARIANT_1,
@@ -125,7 +131,7 @@ static void trackChild(lv_event_t *e)
 {
     lv_obj_t *obj = lv_event_get_target(e);
 
-    spinboxes.current_index = lv_obj_get_child_id(obj);
+    spinboxes.current_index = lv_obj_get_index(obj);
 
     static bool flag = true;
 
@@ -341,7 +347,7 @@ void voltage_current_calibration(void)
         lv_spinbox_set_cursor_pos(spinbox, 0);
 
         spinboxes.digit_count[spinboxes.count] = digit_count;
-        spinboxes.ids[spinboxes.count] = lv_obj_get_child_id(spinbox);
+        spinboxes.ids[spinboxes.count] = lv_obj_get_index(spinbox);
 
         lv_coord_t h = lv_obj_get_height(spinbox);
 
@@ -356,7 +362,7 @@ void voltage_current_calibration(void)
         lv_obj_add_event_cb(spinboxes.btn_plus[spinboxes.count], RELEASED_event_cb, LV_EVENT_CLICKED, NULL);
 
         lv_obj_add_flag(spinboxes.btn_plus[spinboxes.count], LV_OBJ_FLAG_HIDDEN);
-        // Serial.printf("\n btn_plus:%i", lv_obj_get_child_id(spinboxes.btn_plus[spinboxes.count]));
+        // Serial.printf("\n btn_plus:%i", lv_obj_get_index(spinboxes.btn_plus[spinboxes.count]));
 
         // btn_minus = lv_btn_create(spinbox);
         spinboxes.btn_minus[spinboxes.count] = lv_btn_create(spinbox);
@@ -369,7 +375,7 @@ void voltage_current_calibration(void)
         lv_obj_add_event_cb(spinboxes.btn_minus[spinboxes.count], RELEASED_event_cb, LV_EVENT_CLICKED, NULL);
 
         lv_obj_add_flag(spinboxes.btn_minus[spinboxes.count], LV_OBJ_FLAG_HIDDEN);
-        // Serial.printf("\n btn_minus:%i", lv_obj_get_child_id(spinboxes.btn_minus[spinboxes.count] ));
+        // Serial.printf("\n btn_minus:%i", lv_obj_get_index(spinboxes.btn_minus[spinboxes.count] ));
 
         lv_obj_add_event_cb(spinbox, trackChild, LV_EVENT_PRESSED, NULL);
         // lv_obj_add_event_cb(spinbox, trackChild, LV_EVENT_VALUE_CHANGED, NULL);
@@ -543,7 +549,6 @@ void voltage_current_calibration(void)
         lv_label_set_text(_label, labelText);
         lv_obj_align_to(_label, parent, align, x_ofs, y_ofs);
         // lv_obj_add_style(_label, &style_lbl, LV_STATE_DEFAULT);
-        // lv_group_add_obj(labelGroup, _label);
         // return _label;
     };
 
@@ -624,7 +629,7 @@ int8_t lastButton = 0;
 static void trackPress(lv_event_t *e)
 {
     lv_obj_t *obj = lv_event_get_target(e);
-    lastButton = lv_obj_get_child_id(obj);
+    lastButton = lv_obj_get_index(obj);
     // Serial.println("Pressed");
 }
 

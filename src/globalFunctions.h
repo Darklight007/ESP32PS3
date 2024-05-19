@@ -1,6 +1,13 @@
+#pragma once
+
+#ifndef GLOBAL_FUNCTION_H
+#define GLOBAL_FUNCTION_H
+
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include "FFTHandler.h"
+
 /**********************
  *   PROTOTYPES
  **********************/
@@ -15,12 +22,11 @@ void keyCheckLoop();
  **********************/
 // extern Tabs pages;
 
-extern volatile unsigned long encoder1Flag;
-extern volatile unsigned long encoder2Flag;
- 
+// extern volatile unsigned long encoder1Flag;
+// extern volatile unsigned long encoder2Flag;
+// extern FFTHandler V, I;
+FFTHandler V, I;
 
-
-static pthread_mutex_t lvgl_mutex;
 // volatile long chartInterruptCounter;
 
 int32_t encoder1_value = 0, encoder2_value = 0;
@@ -47,7 +53,7 @@ bool chartPause = false;
  */
 
 /********************************************************/
-static void btn_event_cb(lv_event_t *e)
+void btn_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t *btn = lv_event_get_target(e);
@@ -293,10 +299,12 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     // lv_obj_add_event_cb(bed, drag_event_handler, LV_EVENT_PRESSING, NULL);
 
     label_graphMenu_VFFT = lv_label_create(parent);
+    label_graphMenu_IFFT = lv_label_create(parent);
 
     // legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V-Set", lv_palette_main(LV_PALETTE_AMBER), "I-set", 170, 0);
     static lv_style_t style_FFT;
     overlay(label_graphMenu_VFFT, "", &style_FFT, lv_palette_lighten(LV_PALETTE_AMBER, 4), 160, 0);
+    overlay(label_graphMenu_IFFT, "", &style_FFT, lv_palette_lighten(LV_PALETTE_AMBER, 4), 160, 14);
 
     /******************************
      **   Stats
@@ -614,9 +622,7 @@ static void draw_event_cb(lv_event_t *e)
 
 static void draw_event_cb2(lv_event_t *e)
 {
-
     // lv_obj_t *obj = lv_event_get_target(e);
-
     /*Hook the division lines too*/
     lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
     // if (!lv_obj_draw_part_check_type(dsc, &lv_chart_class, LV_CHART_DRAW_PART_TICK_LABEL))
@@ -877,68 +883,24 @@ void init_touch()
 
 void Task1code(void *pvParameters)
 {
-    // Serial.print("\nTask1 running on core ");
-    // Serial.println(xPortGetCoreID());
-
-    // ************************ Temperature DS18B20 Sensor ********************************************************
     for (;;)
     {
-        // delay(1);
-        vTaskDelay(1);
-
-        // toneOff();
-        // keyCheckLoop();
-        // PowerSupply.Voltage.measureUpdate((double)rand() / RAND_MAX * 32.768);
-        // PowerSupply.Voltage.measureUpdate(abs(sin(2 * PI * ((double)millis() / 500.0)) * 32.768));
-        // PowerSupply.Current.measureUpdate(abs(cos(2 * PI * ((double)millis() / 1000.0)) * 6.5536));
-
-        static bool f = false;
-
-        // if (PowerSupply.Voltage.Bar.changed || PowerSupply.Current.Bar.changed) //|| Power.Bar.changed)
-        // {
-        //     // lv_refr_now(NULL);
-        //     PowerSupply.Voltage.Bar.changed = false;
-        //     PowerSupply.Current.Bar.changed = false;
-        // }
-
-        // lv_obj_invalidate(PowerSupply.Voltage.Bar.bar);
-        // lv_refr_now(NULL);
-
-        static int interval = 2;
-        static unsigned long loopCount = 0;
-        static unsigned long startTime = 0;
-        loopCount++;
-        if ((millis() - startTime) >= interval)
-        {
-
-            // if (f)
-            // {
-            //     PowerSupply.Voltage.measureUpdate(32.265 + (double)rand() / 2 / RAND_MAX);
-            //     PowerSupply.Current.measureUpdate((double)rand() / RAND_MAX * 6.5536);
-
-            //     f = false;
-            // }
-            // else
-            // {
-            //     PowerSupply.Voltage.measureUpdate(0);
-            //     PowerSupply.Current.measureUpdate(0);
-            //     f = true;
-            // }
-            if(!interupt_flag)
-            PowerSupply.Voltage.barUpdate();
-            if(!interupt_flag)
-            PowerSupply.Current.barUpdate();
-            // static unsigned long NoAvgTime;
-            // schedule(&ChartUpdate, PowerSupply.Voltage.measured.NofAvgs * 1000.0 / 5 /*pixels per point*/ / ((double)PowerSupply.adc.realADCSpeed), NoAvgTime);
-
-            //   lv_refr_now(NULL);
-            // PowerSupply.FlushMeasures();
-            // Serial.printf("Loop Count Task1:%5.0f at time %07.2f \n", loopCount * 1000.0 / interval, millis() / 1000.0);
-
-            startTime = millis();
-            loopCount = 0;
+         if (lvglIsBusy)
+         {
+            vTaskDelay(1);
+            continue;
         }
-        // ChartUpdate();
+        // toneOff();
+
+        // if (!lvglIsBusy)
+            PowerSupply.Voltage.barUpdate();
+        // else
+        //     vTaskDelay(1);
+
+        // if (!lvglIsBusy)
+            PowerSupply.Current.barUpdate();
+        // else
+        //     vTaskDelay(1);
     }
 }
 
@@ -953,88 +915,59 @@ void Task_ADC(void *pvParameters)
     // ************************ Temperature DS18B20 Sensor ********************************************************
     for (;;)
     {
-        // delay(2000);
+        
+        // toneOff();
 
-        // xTicksToDelay(1);
-        if (1)
-        {
+        
+        if (!lvglIsBusy)
             getSettingEncoder(NULL, NULL);
-            toneOff();
 
-            if (!adcDataReady)
-            {
-                vTaskDelay(1);
-                continue;
-            }
-            // Serial.println(*((bool *)pvParameters));
-            // New ADC sample is ready
-            if ((adcDataReady) && (PowerSupply.adc.busyChannel == VOLTAGE))
-            {
-                /* Slide the window */
-                for (int i = 0; i < samples - 1; i++)
-                {
-                    vReal[i] = vReal[i + 1];
-                    vImag[i] = 0;
-                }
-                FFTSample = true;
-            }
+        if (!adcDataReady)
+        {
+            vTaskDelay(1);
+            continue;
+        }
 
-            if ((adcDataReady) && (PowerSupply.adc.busyChannel == CURRENT))
-            {
-                /* Slide the window */
-                for (int i = 0; i < samples - 1; i++)
-                {
-                    vReal_i[i] = vReal[i + 1];
-                    vImag_i[i] = 0;
-                }
-                FFTSample_i = true;
-            }
+        // if (xSemaphoreTake(timerSemaphore, portMAX_DELAY) != pdTRUE)
+        // {
+        //     vTaskDelay(1);
+        //     continue;
+        // }
 
-            PowerSupply.readVoltage();
-            PowerSupply.readCurrent();
+        // New ADC sample is ready
+        if (adcDataReady && PowerSupply.adc.busyChannel == VOLTAGE)
+            V.shift(); // Shift for new sample
 
-            static bool lastCCCVStatus = false;
+        if (adcDataReady && PowerSupply.adc.busyChannel == CURRENT)
+            I.shift(); // Shift for new sample
 
-            if (lastCCCVStatus != digitalRead(PowerSupply.CCCVPin))
-            {
-                lastCCCVStatus = digitalRead(PowerSupply.CCCVPin);
-                myTone(NOTE_A4, 50);
-            }
+        PowerSupply.readVoltage();
+        PowerSupply.readCurrent();
 
-            // PowerSupply.Voltage.Flush();
-            // PowerSupply.Current.Flush();
-            // PowerSupply.FlushSettings();
-            if(!interupt_flag)
-            PowerSupply.Voltage.barUpdate();
-            if(!interupt_flag)
-            PowerSupply.Current.barUpdate();
+        static bool lastCCCVStatus = false;
 
-            // interupt_flag=1;
-            static unsigned long NoAvgTime;
-              if(!interupt_flag)
+        if (lastCCCVStatus != digitalRead(PowerSupply.CCCVPin))
+        {
+            lastCCCVStatus = digitalRead(PowerSupply.CCCVPin);
+            myTone(NOTE_A4, 50);
+        }
+
+        static unsigned long NoAvgTime;
+        if (!lvglIsBusy)
             schedule(&ChartUpdate, PowerSupply.Voltage.measured.NofAvgs * 1000.0 / 5 /*pixels per point*/ / ((double)PowerSupply.adc.realADCSpeed), NoAvgTime);
-            // interupt_flag=0;
-        }
-        if (FFTSample)
+
+        if (V.sampleReady)
         {
-            vReal[samples - 1] = (PowerSupply.Voltage.measured.Mean() * 1);
-            vImag[samples - 1] = 0;
-            FFTSample = false;
+            V.push(PowerSupply.Voltage.measured.Mean());
+            V.sampleReady = false;
         }
 
-        if (FFTSample_i)
+        if (I.sampleReady)
         {
-            vReal_i[samples - 1] = (PowerSupply.Current.measured.Mean() * 1);
-            vImag_i[samples - 1] = 0;
-            FFTSample_i = false;
+            I.push(PowerSupply.Current.measured.Mean());
+            I.sampleReady = false;
         }
     }
-}
-
-void lvgl_update(void *pvParameters)
-{
-    static unsigned long timer_[10] = {0};
-    schedule(&lv_timer_handler, 50, timer_[1]);
 }
 
 //*******************
@@ -2284,3 +2217,4 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
 //     break;
 //   }
 // }
+#endif

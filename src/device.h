@@ -5,12 +5,12 @@
 #include <vector>
 #include <lvgl.h>
 #include <map>
-#include "DispObject.h"
-#include "tabs.h"
+#include <DispObject.h>
+#include <tabs.h>
 #include <ADS1219.h>
 #include <WiFi.h>
 #include <functional>
-#include "Preferences.h"
+#include <Preferences.h>
 #include <EEPROM.h>
 #include "LTC2655.h"
 

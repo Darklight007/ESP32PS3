@@ -1,5 +1,7 @@
-// #ifndef CONFIG_H
-// #define CONFIG_H
+
+#ifndef CONFIG_HPP
+
+#define CONFIG_HPP
 
 #include <Arduino.h>
 #include <Keypad.h>
@@ -10,15 +12,27 @@
 #include <ADS1219.h>
 #include "device.h"
 
-static void IRAM_ATTR VoltageEnc();
-static void IRAM_ATTR CurrentEnc();
-static void IRAM_ATTR ADCPinISR();
+void IRAM_ATTR VoltageEnc(void* arg);
+void IRAM_ATTR CurrentEnc(void* arg);
+void IRAM_ATTR ADCPinISR(void* arg);
 
+// Global variable to manage the timer
+// hw_timer_t *timer = NULL;
+// volatile SemaphoreHandle_t timerSemaphore;
+
+// // Interrupt Service Routine (ISR) called by the timer
+// void IRAM_ATTR onTimer() {
+//     // Give the semaphore to unblock the loop task
+//     xSemaphoreGiveFromISR(timerSemaphore, NULL);
+// }
+
+
+static int memory;
 volatile bool adcDataReady{false};
+
 
 Calibration StoreData("", {0}, {0});
  
-
 extern Device PowerSupply;
 
 TFT_eSPI tft = TFT_eSPI();
@@ -43,12 +57,23 @@ lv_obj_t *Utility;
 // calMode = true,
 // toneIsOn = true;
 // digitalRead_19 = true;
+  // void *buffer = ps_malloc(BUFFER_SIZE);
+ 
+  // configure LED PWM functionalities
+  // ledcSetup(lcdBacklightChannel, freq, resolution);
+  // attach the channel to the GPIO to be controlled
+  // ledcAttachPin(lcdBacklightPin, lcdBacklightChannel);
+  // ledcWrite(lcdBacklightChannel, 255);
 
+  // ledcSetup(SOUND_PWM_CHANNEL, 1000, SOUND_RESOLUTION); // Set up PWM channel
+  // ledcAttachPin(BUZZER_PIN, SOUND_PWM_CHANNEL);
+
+  
 extern bool buzzerSound;
 static TaskHandle_t Task_adc,Task1, LVGL;
 bool ismyTextHiddenChange = false;
 
-bool interupt_flag;
+bool lvglIsBusy;
 
 
 // #include "myMenu.h"
@@ -72,9 +97,24 @@ static byte rowPins[ROWS] = {0, 1, 2, 3, 4, 5};     // connect to the row pinout
 static byte colPins[COLS] = {8, 9, 10, 11, 12, 13}; // connect to the column pinouts of the kpd
 
 // modify constructor for I2C i/o
-static Keypad_MC17 kpd(makeKeymap(keys), rowPins, colPins, ROWS, COLS, I2CADDR);
+Keypad_MC17 kpd(makeKeymap(keys), rowPins, colPins, ROWS, COLS, I2CADDR);
 
 #define DMA true
+
+#if DMA == 1
+// Create two sprites for a DMA toggle buffer
+TFT_eSprite spr[2] = {TFT_eSprite(&tft), TFT_eSprite(&tft)};
+
+// Toggle buffer selection
+bool sprSel{0};
+
+// Pointers to start of Sprites in RAM
+static lv_color_t *buf[2];
+#else
+
+static lv_color_t buf[2][screenWidth * 10];
+#endif
+
 #define COLOR_DEPTH 16
 
 // Maximum is 181x181 (64Kbytes) for DMA -  restricted by processor design
@@ -84,40 +124,16 @@ static Keypad_MC17 kpd(makeKeymap(keys), rowPins, colPins, ROWS, COLS, I2CADDR);
 #define LV_USE_LOG 1
 #if LV_USE_LOG != 0
 
+
+static lv_disp_draw_buf_t draw_buf;
+
 /* Serial debugging */
 void my_print(const char *buf)
 {
   Serial.printf(buf);
   Serial.flush();
 }
+
 #endif
 
-/*Initialize the display*/
-// static lv_disp_drv_t disp_drv;
-static lv_disp_draw_buf_t draw_buf;
-
-// lv_style_t style_unit;
-//  lv_style_t style_set;
-
-// static void IRAM_ATTR ADCPinISR()
-// {
-//     adcDataReady = true;
-
-//     if (PowerSupply.adc.busyChannel == VOLTAGE) /*&& ads.checkDataReady()*/
-//         {
-//             static double v;
-//             PowerSupply.Voltage.rawValue = PowerSupply.adc.readConversion();
-//             adcDataReady = false;
-//             PowerSupply.adc.startConversion(CURRENT);
-//             // Reference:https://training.ti.com/ti-precision-labs-adcs-understanding-and-calibrating-offset-and-gain-adc-systems
-//             //  Time @ 05:41
-//             v = (PowerSupply.Voltage.rawValue - PowerSupply.Voltage.calib_b) / PowerSupply.Voltage.calib_m;
-//             PowerSupply.Voltage.measureUpdate(v); //  enob(rs[0].StandardDeviation())
-
-//             // PowerSupply.Voltage.hist[v];
-
-//             // lv_chart_set_next_value(graph.chart, graph.serV, PowerSupply.Voltage.measured.value * 1000.0);
-//         }
-
-// }
- 
+#endif // CONFIG_HPP

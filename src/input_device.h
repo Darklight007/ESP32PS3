@@ -26,14 +26,14 @@
 volatile unsigned long encoder1Flag;
 volatile unsigned long encoder2Flag;
 
-static void IRAM_ATTR VoltageEnc(void *)
+ void IRAM_ATTR VoltageEnc(void *)
 {
     // ESP32Encoder *enc = (ESP32Encoder *)arg;
     // Serial.printf("VoltageEnc cb at: %d\n", millis());
     encoder1Flag++;
 }
 
-static void IRAM_ATTR CurrentEnc(void *)
+void IRAM_ATTR CurrentEnc(void *)
 {
     // ESP32Encoder *enc = (ESP32Encoder *)arg;
     // Serial.printf("CurrentEnc cb: count: %d\n", enc->getCount());

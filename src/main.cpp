@@ -1,164 +1,64 @@
-
-// FreeRTOS includes
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include <EEPROM.h>
-#include <lvgl.h>
-#include "myFonts.h"
-#include <TFT_eSPI.h>
-#include "demos/lv_demos.h"
-#include "demos/music/lv_demo_music.h"
-#include "examples/lv_examples.h"
-#include "OTA.h"
+// Standard libraries
+#include <map>
+#include <mutex>
+#include <complex>
 #include <limits.h>
 #include <float.h>
-#include <map>
+#include <time.h>
+
+// FreeRTOS includes
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+// EEPROM and Device configurations
+#include <Preferences.h>
+
+// Hardware specific
+#include <HardwareSerial.h>
+
+// TFT & LVGL includes
+#include <lvgl.h>
+// #include "demos/lv_demos.h"
+// #include <../lib/TFT_eSPI/Processors/TFT_eSPI_ESP32_S3.h>
+#include <TFT_eSPI.h>
+
+// Custom components
+#include "myFonts.h"
+#include "OTA.h"
 #include "buzzer.h"
 #include "config.hpp"
 #include "tabs.h"
-#include "Preferences.h"
 #include "DispObject.h"
 #include "device.h"
-#include "time.h"
 #include "input_device.h"
-#include <mutex>
-#include <HardwareSerial.h>
-#include <complex>
-#include <arduinoFFT.h>
-
-// ArduinoFFT FFT = ArduinoFFT();
-ArduinoFFT FFT = ArduinoFFT<double>();
-ArduinoFFT FFT_i = ArduinoFFT<double>();
-// ArduinoFFT FFT_i = ArduinoFFT();
-
-const uint16_t samples = 128; // This value MUST ALWAYS be a power of 2
-double vReal[samples];
-double vImag[samples];
-bool FFTSample = false;
-
-double vReal_i[samples];
-double vImag_i[samples];
-bool FFTSample_i = false;
-
-// #define CONFIG_ESP32S3_SPIRAM_SUPPORT 1
-
-#define EEPROM_SIZE 140
-// double GlobalMemoryTest [10000];
-static lv_indev_drv_t indev_drv_rotary;
-lv_indev_t *my_indev;
-lv_group_t *g, *labelGroup;
-lv_obj_t *menu;
-
-int8_t pos_index = 0;
-
-lv_obj_t *voltageCurrentCalibration;
-lv_obj_t *myTextBox;
-
-static int memory;
-
+#include <Keypad_MC17.h> 
+#include "FFTHandler.h"
 #include "setting_menu.h"
-
-Device PowerSupply;
-lv_disp_t *lv_disp;
-
 #include "globalFunctions.h"
+#include "SetupHandlers.h"
 
-/* Had to copy lvgl.h into multiple places to make compiling work
-=> side by lvgl folder
-=> side by root folder */
+lv_disp_t *lv_disp;
+Device PowerSupply;
 
-#if DMA == 1
-// Create two sprites for a DMA toggle buffer
-TFT_eSprite spr[2] = {TFT_eSprite(&tft), TFT_eSprite(&tft)};
-
-// Toggle buffer selection
-bool sprSel{0};
-
-// Pointers to start of Sprites in RAM
-static lv_color_t *buf[2];
-#else
-
-static lv_color_t buf[2][screenWidth * 10];
-#endif
-
-void encoder_read(lv_indev_drv_t *drv, lv_indev_data_t *data);
-#define BUFFER_SIZE 655360
+// FFTHandler V, I; // Signal Processing
 
 void setup()
 {
   memory = ESP.getFreeHeap();
-  void *buffer = ps_malloc(BUFFER_SIZE);
-  // g = lv_group_create();
-  // g2 = lv_group_create();
 
-  // configure LED PWM functionalities
-  // ledcSetup(lcdBacklightChannel, freq, resolution);
-  // attach the channel to the GPIO to be controlled
-  // ledcAttachPin(lcdBacklightPin, lcdBacklightChannel);
-  // ledcWrite(lcdBacklightChannel, 255);
-
-  // ledcSetup(SOUND_PWM_CHANNEL, 1000, SOUND_RESOLUTION); // Set up PWM channel
-  // ledcAttachPin(BUZZER_PIN, SOUND_PWM_CHANNEL);
-
-  // pinMode(PowerSupply.CCCVPin, INPUT);
-
-  Serial.begin(115200); /* prepare for possible serial debug */
-
- 
-
-  Serial.printf("\nTotal heap: %d", ESP.getHeapSize());
-  Serial.printf("\nFree heap: %d", ESP.getFreeHeap());
-  Serial.printf("\nTotal PSRAM: %d", ESP.getPsramSize());
-  Serial.printf("\nFree PSRAM: %d", ESP.getFreePsram());
-
-  if (1)
-  {
-    // setupOTA("Power Supply");
-    Wire.begin(18, 15, 1000000UL);
-
-    // Wire.setClock(1250000);
-  }
-  if (0)
-  {
-    kpd.begin(); // now does not starts wire library
-    kpd.setDebounceTime(30);
-    kpd.setHoldTime(700);
-  }
-
+  initializeSerial();
+  initialMemory();
+  initializeI2C();
+  initializeDisplay();
+  initializeTouch();
+  
   String LVGL_Arduino = "Hello ESP32! ";
   LVGL_Arduino += String('V') + lv_version_major() + "." + lv_version_minor() + "." + lv_version_patch();
-
-  // Serial.printf("\n sizeof(float):%i\n", sizeof(float));
-
-  tft.init();         /* TFT init */
-  tft.setRotation(3); /* Landscape orientation, flipped */
+  Serial.println(LVGL_Arduino);
 
   lv_init();
   init_display();
   init_touch();
-
-  Serial.println(LVGL_Arduino);
-
-  //  Serial.print("Initializing EEPROM ... ");
-  // while (!EEPROM.begin(EEPROM_SIZE))
-  // {
-  //   Serial.print(".");
-  //   delay(1000);
-  // }
-  // Serial.println("done.");
-
-  /*Set the touchscreen calibration data*/
-  // For rotation(1)
-  // touch_calibrate();
-  // uint16_t calData[5] = {444, 3403, 285, 3436, 7};
-  // uint16_t calData[5] = {379, 3377, 388, 3191, 7};
-  // uint16_t calData[5] = {332, 3452, 240, 3553, 7};
-  // pinMode(TOUCH_CS, INPUT);
-  // uint16_t calData[5] = {330, 3475, 216, 3605, 7};
-  uint16_t calData[5] = {366, 3445, 310, 3406, 1}; // Rotation {3}
-  tft.setTouch(calData);
-
-  Serial.print("Touch Screen Calibrated.");
 
 #if DMA
   // Define sprite colour depth
@@ -193,148 +93,45 @@ void setup()
   // return;
 
   /**************************************************************************/
-  // lv_style_t style_unit;
-  // lv_style_init(&style_set);
-  // Set default screen for PowerSupply object
+setupPowerSupply();
+setupADC();
+setupDAC();
 
-  PowerSupply.setupDisplay(lv_scr_act());
-  PowerSupply.setupPages("Stats", "Graph", "Main", "Utility", "Setting");
-
-  // Setup up on/off touch switch on page 3
-  PowerSupply.setupSwitch(PowerSupply.page[2], 0, 240, 160, btn_event_cb);
-
-  // Setup voltage,current and power for page 3
-  PowerSupply.Voltage.setup(PowerSupply.page[2], "V-Set:", -14, -8, "V", 32.7675, 5.0, -12, 2000);
-  PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", 6.5535, 1.0, -5.5 /*miliampere*/, 2000);
-  PowerSupply.Power.setup(PowerSupply.page[2], "", -14, 144, "W", 0, 0, 0, 0, &dseg_b_24, &Tauri_R_28);
-
-  /*******************************************************************
-   * GPIOs 34 to 39 are GPIs for ESP32 – input only pins.
-   * These pins don’t have internal pull-up or pull-down resistors.
-   * They can’t be used as outputs, so use these pins only as inputs:
-   * ESP32Encoder::useInternalWeakPullResistors = UP;
-   *******************************************************************/
-  // Setup voltage and current's encoder pins
-  PowerSupply.Voltage.SetEncoderPins(4, 5, VoltageEnc);
-  PowerSupply.Voltage.setLock(false);
-  PowerSupply.Voltage.restrict = "%+07.3f";
-
-  // PowerSupply.Voltage.adjValue
-
-  PowerSupply.Current.SetEncoderPins(6, 7, CurrentEnc);
-  PowerSupply.Current.setLock(false);
-  PowerSupply.Current.restrict = "%+07.3f";
-
-  // Remove setting for power and setup fonts & ...
-  PowerSupply.Power.enableSetting(false);
-  PowerSupply.Power.restrict = "%+08.3f";
-
-  lv_obj_align(PowerSupply.Power.label_measureValue, LV_ALIGN_DEFAULT, -10, 161);
-  lv_obj_align(PowerSupply.Power.label_unit, LV_ALIGN_DEFAULT, -10 + 140, 144 + 15);
-
-  // Create Chart on page2
-  GraphChart(PowerSupply.page[1], 22, -6);
-
-  // Create Histogram on page1
-  StatsChart(PowerSupply.page[0], 22, -6);
-
-  // Turn off power supply initially
-  PowerSupply.turn(SWITCH::ON);
-
-  /************************************************************
-   *  ADC Settings
-   *  When DRDY falls low, new conversion data are ready(page 23).
-   *  https://www.ti.com/lit/ds/symlink/ads1219.pdf?ts=1668300375705&ref_url=https%253A%252F%252Fwww.google.com%252F
-   ************************************************************/
-
-  // Bank of calibration data for differecnt devices based on Mac address
-  PowerSupply.CalBank = {
-      // {"7C:9E:BD:F3:11:B4", {0.005000, 121.4, 32.7503, 3353431}, {0.0000, 124955, 3.000, 1746856}},  // v1.6
-      // {"30:AE:A4:97:D1:84", {1.000153, 101997, 32.7535, 3353951}, {0.0000, 124972, 4.000, 2386066}}, // v1.6
-      // {"0C:B8:15:C1:21:08", {1.000153, 101997, 32.7535, 3353951}, {0.0000, 124972, 4.000, 2386066}}, // v1.6
-      // {"30:AE:A4:97:59:58", {1.000153, 101997, 32.7535, 3353951}, {0.0000, 124972, 4.000, 2386066}}, // v1.6
-      {"7C:9E:BD:4D:C7:08", {0.005000, 121, 32.7503, 3353431}, {0.0000, 124955, 3.000, 1746856}}, // v1.6
-                                                                                                  // {"7C:9E:BD:39:28:10", {0.099900, 10108, 32.7500, 3354461}, {0.0000, 126945, 3.000, 1667719}},
-                                                                                                  //  {"94:B9:7E:D3:01:CC", {0.099009, 10108, 32.7500, 3354461}, {0.0000, 126945, 3.000, 1667719}}
-  };
-
-  PowerSupply.setupADC(9, ADCPinISR);
-  PowerSupply.setupDAC(0x41);
-
-  // LTC2655 Device::DAC(0x41);
-
-  // PowerSupply.LoadCalibrationData();
-  // Create OVP/OCP protection
+   // Create OVP/OCP protection
   // SetupOVP();
 
-  // Timer for chart update
-  // timerChart = timerBegin(1, 80, true);
-  // timerAttachInterrupt(timerChart, &ChartUpdate, true);
-  // timerAlarmWrite(timerChart, 10000, true);
-  // timerAlarmEnable(timerChart);
-  // timerStart(timerChart);
 
-  // timer for adc update?
-  // timerADC = timerBegin(0, 80, true);
-  // timerAttachInterrupt(timerADC, &ADCinterrupt, true);
-  // timerAlarmWrite(timerADC, 50000, true);
-  // timerAlarmEnable(timerADC);
-  // timerStart(timerADC);
+  // create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
+  xTaskCreatePinnedToCore(
+      Task1code, /* Task function. */
+      "Task1",   /* name of task. */
+      4000,      /* Stack size of task */
+      NULL,      /* parameter of the task */
+      0,         /* priority of the task */
+      &Task1,    /* Task handle to keep track of created task */
+      0);        /* pin task to core 0 */
 
-  if (1)
-  {
-    // create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
-    xTaskCreatePinnedToCore(
-        Task1code,   /* Task function. */
-        "Task1",     /* name of task. */
-        4000 + 4500, /* Stack size of task */
-        NULL,        /* parameter of the task */
-        0,           /* priority of the task */
-        &Task1,      /* Task handle to keep track of created task */
-        0);          /* pin task to core 0 */
-
-    xTaskCreatePinnedToCore(
-        Task_ADC,                         /* Task function. */
-        "Voltage & Current ADC",          /* name of task. */
-        2600,                             /* Stack size of task */
-        NULL, /* parameter of the task */ /* (void *)&adcDataReady */
-        1,                                /* priority of the task */
-        &Task_adc,                        /* Task handle to keep track of created task */
-        0);                               /* pin task to core 0 */
-  }
-
-  // xTaskCreatePinnedToCore(
-  //     lvgl_update,                         /* Task function. */
-  //     "VLVGL update",          /* name of task. */
-  //     22600,                             /* Stack size of task */
-  //     NULL, /* parameter of the task */ /* (void *)&adcDataReady */
-  //     1,                                /* priority of the task */
-  //     &LVGL,                        /* Task handle to keep track of created task */
-  //     0);
-  // static mutex_t lvgl_mutex;
-  // void lvgl_thread(void)
-  // {
-  //   while (1)
-  //   {
-  //     mutex_lock(&lvgl_mutex);
-  //     lv_task_handler();
-  //     mutex_unlock(&lvgl_mutex);
-  //     thread_sleep(10); /* sleep for 10 ms */
-  //   }
-  // }
+  xTaskCreatePinnedToCore(
+      Task_ADC,                         /* Task function. */
+      "Voltage & Current ADC",          /* name of task. */
+      2600,                             /* Stack size of task */
+      NULL, /* parameter of the task */ /* (void *)&adcDataReady */
+      1,                                /* priority of the task */
+      &Task_adc,                        /* Task handle to keep track of created task */
+      0);                               /* pin task to core 0 */
 
   // Set default tab
-  Tabs::setDefaultPage(2);
-  textarea(PowerSupply.page[2]);
-  Tabs::setCurrentPage(2);
+  // Tabs::setDefaultPage(2);
+  // textarea(PowerSupply.page[2]);
+  // Tabs::setCurrentPage(2);
 
-  Utility_tabview(PowerSupply.page[3]);
+  // Utility_tabview(PowerSupply.page[3]);
 
   // load setting parameters for page 4
-  PowerSupply.LoadSetting();
+  // PowerSupply.LoadSetting();
 
   // Setting menu on page 4
-  SettingMenu(PowerSupply.page[4]);
+  // SettingMenu(PowerSupply.page[4]);
 
   // Create Calibration page
   voltage_current_calibration();
@@ -342,30 +139,32 @@ void setup()
   lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
 
-  myTone(NOTE_A4, 100);
-  Serial.println("\nSetup done");
-  PowerSupply.turn(SWITCH::ON);
+  // myTone(NOTE_A4, 100);
+  // Serial.println("\nSetup done");
+  // PowerSupply.turn(SWITCH::ON);
 
-  Preferences fmemory;
-  fmemory.begin("param", false);
-  fmemory.putUShort("pi", 314);
-  Serial.printf("\nPreferences Memory test get:%i", fmemory.getUShort("pi", 0));
-  fmemory.end();
+
+  // Preferences fmemory;
+  // fmemory.begin("param", false);
+  // fmemory.putUShort("pi", 314);
+  // Serial.printf("\nPreferences Memory test get:%i", fmemory.getUShort("pi", 0));
+  // fmemory.end();
 }
+
 static unsigned long t = 0;
 static int priorityFlag = 1;
-//  bool interupt_flag=0;
+//  bool lvglIsBusy=0;
 
 void loop()
 {
   static unsigned long timer_[10] = {0};
-  // if(!interupt_flag)
+  // if(!lvglIsBusy)
 
   schedule([]
-           {interupt_flag=1;
+           {lvglIsBusy=1;
             lv_timer_handler();
-            interupt_flag=0; }, 
-            50, timer_[1]);
+            lvglIsBusy=0; },
+           50, timer_[1]);
 
   // lv_timer_handler();
   // delay(1);
@@ -377,8 +176,8 @@ void loop()
   loopCount++;
   if (true && (millis() - startTime) >= interval)
   {
-
     Serial.printf("Loop Count:%5.0f at time %07.2f \n", loopCount * 1000.0 / interval, millis() / 1000.0);
+    // Serial.printf("DMA: %i",tft.DMA_Enabled);
     startTime = millis();
     loopCount = 0;
     // Tabs::previousPage();
@@ -390,18 +189,7 @@ void loop()
   // @format
   schedule(&StatusBar, 250, timer_[2]);
 
-  // // Draw a white spot at the detected coordinates
-  // if (pressed)
-  // {
-  //   tft.fillCircle(x, y, 2, TFT_WHITE);
-  //   Serial.print("x,y = ");
-  //   Serial.print(x);
-  //   Serial.print(",");
-  //   Serial.println(y);
-  // }
-  // Serial.printf("Loop check points:");
-
-  if (ismyTextHiddenChange)
+  if (ismyTextHiddenChange && false)
   {
 
     if (priorityFlag != 1 && lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN)) // lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN) || !
@@ -447,30 +235,25 @@ void loop()
     schedule([]
              {
 //  lv_chart_refresh(PowerSupply.stats.chart);
+
+
              PowerSupply.Voltage.statUpdate();
              PowerSupply.Current.statUpdate(); },
              100, timer_[6]);
 
     schedule([]
              {
-              /*FFT*/
-              FFT.windowing(vReal, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-              FFT.compute(vReal, vImag, samples, FFT_FORWARD);
-              FFT.complexToMagnitude(vReal, vImag, samples);
-              double peak = FFT.majorPeak(vReal, samples, PowerSupply.adc.realADCSpeed / 2.0); // samplingFrequency  0.911854103*
+              /*FFT_v*/
 
-              // Serial.printf("\nFFT MajorPeak:%5.1f Hz", peak);
+              V.computeFFT( PowerSupply.adc.realADCSpeed / 2.0);
+              I.computeFFT( PowerSupply.adc.realADCSpeed / 2.0);
 
-              lv_label_set_text_fmt(label_graphMenu_VFFT, "V-FFT:%5.1f Hz", peak);
 
-              FFT_i.windowing(vReal_i, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-              FFT_i.compute(vReal_i, vImag_i, samples, FFT_FORWARD);
-              FFT_i.complexToMagnitude(vReal_i, vImag_i, samples);
-              double peak_i = FFT_i.majorPeak(vReal_i, samples, PowerSupply.adc.realADCSpeed / 2.0); // samplingFrequency  0.911854103*
+              lv_label_set_text_fmt(label_graphMenu_VFFT, "V-FFT_v:%5.1f Hz",V.peak);
+              lv_label_set_text_fmt(label_graphMenu_IFFT, "I-FFT_v:%5.1f Hz",I.peak);
 
-              lv_label_set_text_fmt(label_statMenu_VFFT, "V-FFT:%5.1f Hz", peak);
-              lv_label_set_text_fmt(label_statMenu_IFFT, "I-FFT:%5.1f Hz", peak_i); },
-             1000, timer_[7]);
+              lv_label_set_text_fmt(label_statMenu_VFFT, "V-FFT_v:%5.1f Hz", V.peak);
+              lv_label_set_text_fmt(label_statMenu_IFFT, "I-FFT_i:%5.1f Hz", I.peak); }, 1000, timer_[7]);
 
     // schedule([]
     //          {
@@ -739,7 +522,7 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
 
 #if DMA
   tft.pushImageDMA(area->x1, area->y1, area->x2 - area->x1 + 1, area->y2 - area->y1 + 1, (uint16_t *)&color_p->full);
-  sprSel = !sprSel;
+  // sprSel = !sprSel;
   // tft.dmaWait();
 
 #else
