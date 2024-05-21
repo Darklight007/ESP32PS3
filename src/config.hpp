@@ -1,7 +1,4 @@
-
-#ifndef CONFIG_HPP
-
-#define CONFIG_HPP
+#pragma once
 
 #include <Arduino.h>
 #include <Keypad.h>
@@ -11,6 +8,7 @@
 // #include "ADC.h"
 #include <ADS1219.h>
 #include "device.h"
+#include "FFTHandler.h"
 
 void IRAM_ATTR VoltageEnc(void* arg);
 void IRAM_ATTR CurrentEnc(void* arg);
@@ -26,14 +24,21 @@ void IRAM_ATTR ADCPinISR(void* arg);
 //     xSemaphoreGiveFromISR(timerSemaphore, NULL);
 // }
 
+// /*Change to your screen resolution*/
+ uint16_t screenWidth{320};
+ uint16_t screenHeight{240};
 
-static int memory;
+lv_disp_t *lv_disp;
+Device PowerSupply;
+FFTHandler V, I;
+int priorityFlag = 1;
+int memory;
 volatile bool adcDataReady{false};
 
 
 Calibration StoreData("", {0}, {0});
  
-extern Device PowerSupply;
+// extern Device PowerSupply;
 
 TFT_eSPI tft = TFT_eSPI();
 
@@ -70,16 +75,14 @@ lv_obj_t *Utility;
 
   
 extern bool buzzerSound;
-static TaskHandle_t Task_adc,Task1, LVGL;
+TaskHandle_t Task_adc,Task1, LVGL;
 bool ismyTextHiddenChange = false;
 
 bool lvglIsBusy;
 
 
 // #include "myMenu.h"
-// /*Change to your screen resolution*/
-static const uint16_t screenWidth{320};
-static const uint16_t screenHeight{240};
+
 
 #define I2CADDR 0x20 // address of MCP23017 chip on I2C bus
 
@@ -109,7 +112,7 @@ TFT_eSprite spr[2] = {TFT_eSprite(&tft), TFT_eSprite(&tft)};
 bool sprSel{0};
 
 // Pointers to start of Sprites in RAM
-static lv_color_t *buf[2];
+lv_color_t *buf[2];
 #else
 
 static lv_color_t buf[2][screenWidth * 10];
@@ -125,7 +128,7 @@ static lv_color_t buf[2][screenWidth * 10];
 #if LV_USE_LOG != 0
 
 
-static lv_disp_draw_buf_t draw_buf;
+lv_disp_draw_buf_t draw_buf;
 
 /* Serial debugging */
 void my_print(const char *buf)
@@ -136,4 +139,4 @@ void my_print(const char *buf)
 
 #endif
 
-#endif // CONFIG_HPP
+

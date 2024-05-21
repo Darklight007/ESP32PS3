@@ -1,12 +1,11 @@
 #pragma once
 
-#ifndef GLOBAL_FUNCTION_H
-#define GLOBAL_FUNCTION_H
-
 #include <iostream>
 #include <chrono>
 #include <thread>
-#include "FFTHandler.h"
+// #include "config.hpp"
+#include "input_device.h"
+#include "setting_menu.h"
 
 /**********************
  *   PROTOTYPES
@@ -25,18 +24,25 @@ void keyCheckLoop();
 // extern volatile unsigned long encoder1Flag;
 // extern volatile unsigned long encoder2Flag;
 // extern FFTHandler V, I;
-FFTHandler V, I;
+
+// extern lv_obj_t *menu;
+// extern lv_obj_t *voltageCurrentCalibration;
+// extern lv_obj_t *myTextBox;
+
+// extern lv_obj_t *dd_calibration;
+// extern lv_obj_t *lbl_voltageCalib_m;
+// extern lv_obj_t *lbl_voltageCalib_b;
+// extern lv_obj_t *lbl_rawCode;
+// extern lv_obj_t *lbl_calibratedValue;
+// extern lv_obj_t *lbl_rawAVG_;
+// extern lv_obj_t *lbl_calibValueAVG_;
+// extern lv_obj_t *lbl_ER_;
 
 // volatile long chartInterruptCounter;
 
 int32_t encoder1_value = 0, encoder2_value = 0;
 
 // extern std::map<DEVICE, deviceColors> stateColor;
-
-hw_timer_t *timerChart = NULL;
-hw_timer_t *timerADC = NULL;
-
-portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
 void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data);
 
@@ -131,7 +137,7 @@ static void legend(lv_obj_t *parent, lv_color16_t c1, const char *ser1, lv_color
     lv_style_set_text_letter_space(&PowerSupply.graph.style_legend1, -2);
     lv_style_set_text_color(&PowerSupply.graph.style_legend1, c1);
     lv_style_set_text_font(&PowerSupply.graph.style_legend1, &Undertale_16b);
-    lv_style_set_bg_color(&PowerSupply.graph.style_legend1, lv_palette_darken(LV_PALETTE_GREY, 255));
+    lv_style_set_bg_color(&PowerSupply.graph.style_legend1, lv_palette_darken(LV_PALETTE_GREY, 4));
     lv_style_set_bg_opa(&PowerSupply.graph.style_legend1, LV_OPA_50);
     lv_style_set_border_opa(&PowerSupply.graph.style_legend1, LV_OPA_50);
     lv_style_set_border_width(&PowerSupply.graph.style_legend1, 4);
@@ -182,7 +188,7 @@ static void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_col
     lv_style_set_text_letter_space(style, -2);
     lv_style_set_text_color(style, c1);
     lv_style_set_text_font(style, &lv_font_unscii_8);
-    lv_style_set_bg_color(style, lv_palette_darken(LV_PALETTE_GREY, 255));
+    lv_style_set_bg_color(style, lv_palette_darken(LV_PALETTE_GREY, 4));
     lv_style_set_bg_opa(style, LV_OPA_50);
     lv_style_set_border_opa(style, LV_OPA_50);
     lv_style_set_border_width(style, 4);
@@ -885,22 +891,23 @@ void Task1code(void *pvParameters)
 {
     for (;;)
     {
-         if (lvglIsBusy)
-         {
+        if (lvglIsBusy)
+        {
             vTaskDelay(1);
             continue;
         }
         // toneOff();
 
         // if (!lvglIsBusy)
-            PowerSupply.Voltage.barUpdate();
+        PowerSupply.Voltage.barUpdate();
         // else
         //     vTaskDelay(1);
 
         // if (!lvglIsBusy)
-            PowerSupply.Current.barUpdate();
+        PowerSupply.Current.barUpdate();
         // else
         //     vTaskDelay(1);
+        //   PowerSupply.getPower();
     }
 }
 
@@ -915,10 +922,9 @@ void Task_ADC(void *pvParameters)
     // ************************ Temperature DS18B20 Sensor ********************************************************
     for (;;)
     {
-        
+
         // toneOff();
 
-        
         if (!lvglIsBusy)
             getSettingEncoder(NULL, NULL);
 
@@ -943,6 +949,7 @@ void Task_ADC(void *pvParameters)
 
         PowerSupply.readVoltage();
         PowerSupply.readCurrent();
+        PowerSupply.Power.measureUpdate(PowerSupply.Current.measured.Mean() * PowerSupply.Voltage.measured.Mean());
 
         static bool lastCCCVStatus = false;
 
@@ -2217,4 +2224,332 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
 //     break;
 //   }
 // }
-#endif
+
+void trackLoopExecution()
+{
+    static constexpr int loopInterval = 1000; // Time interval in milliseconds
+    static unsigned long lastLoopTime = 0;
+    static unsigned long loopCount = 0;
+
+    loopCount++;
+    unsigned long currentTime = millis();
+    if ((currentTime - lastLoopTime) >= loopInterval)
+    {
+        Serial.printf("Loop Count: %5.0f at time %07.2f \n", loopCount * 1000.0 / loopInterval, currentTime / 1000.0);
+        lastLoopTime = currentTime;
+        loopCount = 0;
+    }
+}
+
+void LvglUpdatesInterval(unsigned long interval)
+{
+    static unsigned long timer_ = {0}; // Interval in milliseconds
+                                       // static unsigned long timer_;
+    schedule([]
+             {lvglIsBusy=1;
+            lv_timer_handler();
+            lvglIsBusy=0; },
+             interval, timer_);
+}
+
+void StatusBarUupdateInterval(unsigned long interval){
+ static unsigned long timer_ = {0}; // Interval in milliseconds
+   schedule(&StatusBar, interval, timer_);
+}
+
+void FlushMeasuresInterval(unsigned long interval)
+{
+    static unsigned long timer_ = {0}; // Interval in milliseconds
+    // static unsigned long timer_;
+    schedule([]
+             { PowerSupply.FlushMeasures(); }, interval, timer_);
+}
+void statisticUpdateInterval(unsigned long interval)
+{
+    static unsigned long timer_ = {0};
+    schedule([]
+             {
+             PowerSupply.Voltage.statUpdate();
+             PowerSupply.Current.statUpdate(); },
+             100, timer_);
+}
+
+void FFTUpdateInterval(unsigned long interval)
+{
+    static unsigned long timer_ = {0};
+    schedule([]
+             {
+              /*FFT_v*/
+
+              V.computeFFT( PowerSupply.adc.realADCSpeed / 2.0);
+              I.computeFFT( PowerSupply.adc.realADCSpeed / 2.0);
+
+
+              lv_label_set_text_fmt(label_graphMenu_VFFT, "V-FFT_v:%5.1f Hz",V.peak);
+              lv_label_set_text_fmt(label_graphMenu_IFFT, "I-FFT_v:%5.1f Hz",I.peak);
+
+              lv_label_set_text_fmt(label_statMenu_VFFT, "V-FFT_v:%5.1f Hz", V.peak);
+              lv_label_set_text_fmt(label_statMenu_IFFT, "I-FFT_i:%5.1f Hz", I.peak); }, interval, timer_);
+}
+
+void EncoderUpdateInterval(unsigned long interval)
+{
+    static unsigned long timer_ = {0};
+    schedule([]
+             {
+                 /*FFT_v*/
+
+                 int64_t temp = PowerSupply.Voltage.encoder.getCount();
+                 PowerSupply.Voltage.encoder.clearCount();
+                 PowerSupply.Voltage.encoder.setCount(temp);
+                 temp = PowerSupply.Current.encoder.getCount();
+                 PowerSupply.Current.encoder.clearCount();
+                 PowerSupply.Current.encoder.setCount(temp); },
+             interval, timer_);
+}
+
+void managePageInteraction()
+{
+    switch (Tabs::getCurrentPage())
+    {
+
+    case 4:
+        if (lv_obj_is_visible(voltageCurrentCalibration))
+        {
+            static int32_t encoder1_last_value = 0;
+            static int32_t encoder2_last_value = 0;
+
+            if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
+                break;
+
+            static int32_t cursor_pos = 0;
+
+            if (encoder2_last_value < encoder2_value)
+                cursor_pos++;
+            else if (encoder2_last_value > encoder2_value)
+                cursor_pos--;
+
+            int width = spinboxes.digit_count[spinboxes.id_index] - 1;
+            cursor_pos = std::clamp(cursor_pos, 0, width);
+
+            lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
+
+            lv_spinbox_set_cursor_pos(spinBox, 0);
+            lv_spinbox_set_cursor_pos(spinBox, width - cursor_pos);
+
+            encoder2_last_value = encoder2_value;
+
+            /********************************************************************/
+            if (encoder1_last_value < encoder1_value)
+                lv_event_send(spinboxes.btn_plus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
+            else if (encoder1_last_value > encoder1_value)
+                lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
+
+            PowerSupply.calibrate();
+            encoder1_last_value = encoder1_value;
+            // SaveCalibrationData();
+
+            // lv_label_set_text(lbl_voltageCalib_m, std::to_string(get_voltageCalib_m()).c_str());
+        }
+
+        else
+        {
+            static int32_t lastValue = 0;
+
+            if (lastValue < encoder2_value)
+                lastButton++;
+            else if (lastValue > encoder2_value)
+                lastButton--;
+            else
+                break;
+
+            lastButton = std::clamp(int(lastButton), 0, 6);
+
+            lv_obj_t *theMenu = lv_obj_get_child(lv_menu_get_cur_sidebar_page(menu), 0);
+
+            // Serial.printf("\nlastValue:%i  encoder2_value:%i lastButton:%i", lastValue, encoder2_value, lastButton);
+            lv_event_send(lv_obj_get_child(theMenu, lastButton), LV_EVENT_CLICKED, NULL);
+
+            lastValue = encoder2_value;
+        }
+        break;
+
+    case 1:
+        static int32_t encoder1_last_value = 0;
+        static int32_t encoder2_last_value = 0;
+
+        // if (encoder2_last_value == encoder2_value)
+        // break;
+        if (encoder2_last_value != encoder2_value)
+        {
+            static int32_t _posX = lv_slider_get_value(lv_obj_get_child(PowerSupply.page[1], 1));
+
+            if (encoder2_last_value < encoder2_value)
+                _posX += 64;
+            else if (encoder2_last_value > encoder2_value)
+                _posX -= 64;
+
+            // int32_t v = lv_slider_get_value(lv_obj_get_child(PowerSupply.graph.chart,1));
+            // lv_coord_t x = lv_obj_get_scroll_x(PowerSupply.graph.chart);
+            // lv_coord_t v0 = lv_chart_get_zoom_x(PowerSupply.graph.chart);
+            // lv_chart_set_zoom_x(PowerSupply.graph.chart, _posX);
+            // lv_obj_scroll_to_x(PowerSupply.graph.chart, 1e10, LV_ANIM_OFF);
+            // Serial.println(keyChar);
+            if (keyChar == 'W' && msg == " HOLD.")
+            {
+                _posX = std::clamp(_posX, 0, 57 * (lv_chart_get_zoom_x(PowerSupply.graph.chart) - 256) / 16);
+                lv_obj_scroll_to_x(PowerSupply.graph.chart, _posX, LV_ANIM_OFF);
+            }
+            else
+            {
+                // Serial.printf("\n*************** %i", millis());
+                // lv_obj_scroll_to_x(PowerSupply.graph.chart, _posX, LV_ANIM_OFF);
+                _posX = std::clamp(_posX, 256, 5120);
+                lv_slider_set_value(lv_obj_get_child(PowerSupply.page[1], 1), _posX, LV_ANIM_OFF);
+                lv_event_send(lv_obj_get_child(PowerSupply.page[1], 1), LV_EVENT_VALUE_CHANGED, NULL);
+            }
+
+            // Serial.printf("\n lv_obj_get_scroll_x:%i %i", lv_obj_get_scroll_x(PowerSupply.graph.chart), millis());
+            // Serial.printf("\n lv_chart_get_zoom_x:%i %i", lv_chart_get_zoom_x(PowerSupply.graph.chart), millis());
+
+            encoder2_last_value = encoder2_value;
+        }
+        ///*********************************************
+
+        if (encoder1_last_value != encoder1_value)
+        {
+
+            static int32_t _posY = lv_slider_get_value(lv_obj_get_child(PowerSupply.page[1], 2));
+
+            if (encoder1_last_value < encoder1_value)
+                _posY += 64;
+            else if (encoder1_last_value > encoder1_value)
+                _posY -= 64;
+
+            // Serial.printf("\n keychar:%c ,msg:%s", keyChar, msg);
+
+            if (keyChar == 'W' && msg == " HOLD.")
+            {
+                // keyChar = ' ';
+                _posY = std::clamp(_posY, 0, int(33.5 * (lv_chart_get_zoom_y(PowerSupply.graph.chart) - 256) / 64));
+                lv_obj_scroll_to_y(PowerSupply.graph.chart, _posY, LV_ANIM_OFF);
+            }
+            else
+            {
+
+                // lv_obj_scroll_to_x(PowerSupply.graph.chart, _pos, LV_ANIM_OFF);
+                _posY = std::clamp(_posY, 256, 5120);
+                lv_slider_set_value(lv_obj_get_child(PowerSupply.page[1], 2), _posY, LV_ANIM_OFF);
+                lv_event_send(lv_obj_get_child(PowerSupply.page[1], 2), LV_EVENT_VALUE_CHANGED, NULL);
+            }
+
+            encoder1_last_value = encoder1_value;
+        }
+        // Serial.printf("\nscroll_y:%4i ", lv_obj_get_scroll_y(PowerSupply.graph.chart));
+        // Serial.printf("  zoom_y:%4i ", lv_chart_get_zoom_y(PowerSupply.graph.chart));
+
+        // Serial.printf("  scroll_x:%4i ", lv_obj_get_scroll_x(PowerSupply.graph.chart));
+        // Serial.printf("  zoom_x:%4i  %4i", lv_chart_get_zoom_x(PowerSupply.graph.chart), millis());
+
+        break;
+    case 0:
+
+        if (encoder1_last_value != encoder1_value)
+        {
+
+            static int32_t _posY = 0;
+
+            if (encoder1_last_value < encoder1_value)
+                _posY = 1;
+            else if (encoder1_last_value > encoder1_value)
+                _posY = -1;
+
+            if (keyChar == 'W' && msg == " HOLD.")
+            {
+                if (_posY > 0)
+                {
+                    PowerSupply.Voltage.hist.histWinMin += .025;
+                    PowerSupply.Voltage.hist.histWinMax += .025;
+
+                    PowerSupply.Current.hist.histWinMin += .025;
+                    PowerSupply.Current.hist.histWinMax += .025;
+                }
+                if (_posY < 0)
+                {
+                    PowerSupply.Voltage.hist.histWinMin -= .025;
+                    PowerSupply.Voltage.hist.histWinMax -= .025;
+
+                    PowerSupply.Current.hist.histWinMin -= .025;
+                    PowerSupply.Current.hist.histWinMax -= .025;
+                }
+            }
+            else
+            {
+
+                if (_posY > 0)
+                {
+                    double midValue = (PowerSupply.Voltage.hist.histWinMin + PowerSupply.Voltage.hist.histWinMax) / 2;
+                    PowerSupply.Voltage.hist.histWinMin = PowerSupply.Voltage.hist.histWinMin + (midValue - PowerSupply.Voltage.hist.histWinMin) / 2;
+                    PowerSupply.Voltage.hist.histWinMax = midValue + (PowerSupply.Voltage.hist.histWinMax - midValue) / 2;
+
+                    midValue = (PowerSupply.Current.hist.histWinMin + PowerSupply.Current.hist.histWinMax) / 2;
+                    PowerSupply.Current.hist.histWinMin = PowerSupply.Current.hist.histWinMin + (midValue - PowerSupply.Current.hist.histWinMin) / 2;
+                    PowerSupply.Current.hist.histWinMax = midValue + (PowerSupply.Current.hist.histWinMax - midValue) / 2;
+                }
+                if (_posY < 0)
+                {
+                    double midValue = (PowerSupply.Voltage.hist.histWinMin + PowerSupply.Voltage.hist.histWinMax) / 2;
+                    PowerSupply.Voltage.hist.histWinMin = midValue - (midValue - PowerSupply.Voltage.hist.histWinMin) * 2;
+                    PowerSupply.Voltage.hist.histWinMax = PowerSupply.Voltage.hist.histWinMax + (PowerSupply.Voltage.hist.histWinMax - midValue) * 2;
+
+                    midValue = (PowerSupply.Current.hist.histWinMin + PowerSupply.Current.hist.histWinMax) / 2;
+                    PowerSupply.Current.hist.histWinMin = midValue - (midValue - PowerSupply.Current.hist.histWinMin) * 2;
+                    PowerSupply.Current.hist.histWinMax = PowerSupply.Current.hist.histWinMax + (PowerSupply.Current.hist.histWinMax - midValue) * 2;
+                }
+            }
+
+            encoder1_last_value = encoder1_value;
+            PowerSupply.Voltage.hist.Reset();
+            PowerSupply.Current.hist.Reset();
+        }
+
+        break;
+    }
+}
+
+// Might be in the llop
+void MiscPriority()
+{
+    if (ismyTextHiddenChange && false)
+    {
+
+        if (priorityFlag != 1 && lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN)) // lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN) || !
+        {
+            priorityFlag = 1;
+            vTaskPrioritySet(Task_adc, priorityFlag);
+        }
+
+        else if (priorityFlag != 0 && !lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN))
+        {
+            priorityFlag = 0;
+            vTaskPrioritySet(Task_adc, priorityFlag);
+        }
+
+        // Serial.printf("\nPriority changes! %i", priorityFlag);
+        ismyTextHiddenChange = false;
+    }
+    if (Serial.available() > 0)
+    {
+        String received_command = Serial.readStringUntil('\n');
+        Serial.print("\nUploading .......");
+
+        // pinMode(PowerSupply.CCCVPin, INPUT_PULLDOWN);
+        // digitalWrite(PowerSupply.CCCVPin,INPUT_PULLDOWN);
+        // PowerSupply.turn(SWITCH::OFF);
+        // PowerSupply.Current.SetUpdate(-0.001- PowerSupply.Current.adjOffset);
+    }
+      // LV_LOG_USER("%i",digitalRead(PowerSupply.CCCVPin));
+    // if (g_wifiConnection)
+    // ArduinoOTA.handle();
+    // Serial.printf("3 \n");
+}

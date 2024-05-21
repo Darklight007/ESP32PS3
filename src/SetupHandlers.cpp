@@ -1,40 +1,5 @@
 #include "SetupHandlers.h"
 
-extern Device PowerSupply; // Assuming PowerSupply is a class or struct
-
-extern TFT_eSPI tft; // Global TFT instance
-extern Preferences preferences;
-
-extern Keypad_MC17 kpd;
-extern lv_disp_draw_buf_t draw_buf;
-extern const uint16_t screenWidth;
-extern lv_color_t *buf[2];
-extern void btn_event_cb(lv_event_t *e);
-
-extern void IRAM_ATTR VoltageEnc(void *arg);
-extern void IRAM_ATTR CurrentEnc(void *arg);
-extern void IRAM_ATTR ADCPinISR(void *arg);
-extern void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y);
-extern void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y);
-extern void textarea(lv_obj_t *parent);
-extern void Utility_tabview(lv_obj_t *parent);
-extern void SettingMenu(lv_obj_t *parent);
-extern void voltage_current_calibration(void);
-
-extern lv_obj_t *menu;
-extern lv_obj_t *voltageCurrentCalibration;
-extern lv_obj_t *myTextBox;
-
-extern lv_obj_t *dd_calibration;
-extern lv_obj_t *lbl_voltageCalib_m;
-extern lv_obj_t *lbl_voltageCalib_b;
-extern lv_obj_t *lbl_rawCode;
-extern lv_obj_t *lbl_calibratedValue;
-extern lv_obj_t *lbl_rawAVG_;
-extern lv_obj_t *lbl_calibValueAVG_;
-extern lv_obj_t *lbl_ER_;
-
-
 void initializeSerial()
 {
     Serial.begin(115200);
@@ -44,6 +9,7 @@ void initializeSerial()
 
 void initialMemory()
 {
+    memory = ESP.getFreeHeap();
     Serial.printf("Total heap: %d\n", ESP.getHeapSize());
     Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
     Serial.printf("Total PSRAM: %d\n", ESP.getPsramSize());
@@ -125,12 +91,6 @@ void setupPowerSupply()
     // Setting menu on page 4
     SettingMenu(PowerSupply.page[4]);
 
-    // Create Calibration page
-    // voltage_current_calibration();
-
-    // lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
-    // lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
-
     // myTone(NOTE_A4, 100);
     // Serial.println("\nSetup done");
     // PowerSupply.turn(SWITCH::ON);
@@ -140,16 +100,23 @@ void setupPowerSupply()
     // fmemory.putUShort("pi", 314);
     // Serial.printf("\nPreferences Memory test get:%i", fmemory.getUShort("pi", 0));
     // fmemory.end();
-      myTone(NOTE_A4, 100);
-  Serial.println("\nSetup done");
-  PowerSupply.turn(SWITCH::ON);
+    myTone(NOTE_A4, 100);
+    Serial.println("\nSetup done");
+    PowerSupply.turn(SWITCH::ON);
     Preferences fmemory;
-  fmemory.begin("param", false);
-  fmemory.putUShort("pi", 314);
-  Serial.printf("\nPreferences Memory test get:%i", fmemory.getUShort("pi", 0));
-  fmemory.end();
+    fmemory.begin("param", false);
+    fmemory.putUShort("pi", 314);
+    Serial.printf("\nPreferences Memory test get:%i", fmemory.getUShort("pi", 0));
+    fmemory.end();
 }
+void seupCalibPage()
+{
+    // Create Calibration page
+    voltage_current_calibration();
 
+    lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+}
 void initializeTouch()
 {
     // Touchscreen initialization code
@@ -158,7 +125,42 @@ void initializeTouch()
     tft.setTouch(calData);
     Serial.println("Touch Screen Calibrated.");
 }
+void setupLVGL()
+{
+    lv_init();
+    init_display();
+    init_touch();
 
+    String LVGL_Arduino = "Hello ESP32! ";
+    LVGL_Arduino += String('V') + lv_version_major() + "." + lv_version_minor() + "." + lv_version_patch();
+    Serial.println(LVGL_Arduino);
+}
+void setupDMA()
+{
+#if DMA
+    //     // Define sprite colour depth
+    spr[0].setColorDepth(COLOR_DEPTH);
+    spr[1].setColorDepth(COLOR_DEPTH);
+
+    // Create the 2 sprites
+    buf[0] = (lv_color_t *)spr[0].createSprite(IWIDTH, IHEIGHT / 1);
+    buf[1] = (lv_color_t *)spr[1].createSprite(IWIDTH, IHEIGHT / 1);
+
+    // spr[1].setViewport(0, IHEIGHT / 10, IWIDTH, IHEIGHT);
+
+    // Define text datum for each Sprite
+    spr[0].setTextDatum(MC_DATUM);
+    spr[1].setTextDatum(MC_DATUM);
+
+    // To use SPI DMA you must call initDMA() to setup the DMA engine
+    tft.initDMA();
+    lv_disp_draw_buf_init(&draw_buf, buf[0], buf[1], IWIDTH * IHEIGHT / 1);
+
+#else
+    //     // Initialize `disp_buf` display buffer with the buffer(s).
+    lv_disp_draw_buf_init(&draw_buf, buf[0], buf[1], screenWidth * 10);
+#endif
+}
 void setupTasks()
 {
     // Task creation for FreeRTOS
@@ -202,9 +204,60 @@ void setupDAC()
 
 void createTasks()
 {
-    // Example task creation
-    // xTaskCreatePinnedToCore(Task1code, "Task1", 4000 + 4500, NULL, 0, &Task1, 0);
-    // xTaskCreatePinnedToCore(Task_ADC, "Voltage & Current ADC", 2600, NULL, 1, &Task_adc, 0);
-    // Add other task creations as needed
+    // create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
+    xTaskCreatePinnedToCore(
+        Task1code, /* Task function. */
+        "Task1",   /* name of task. */
+        4000,      /* Stack size of task */
+        NULL,      /* parameter of the task */
+        0,         /* priority of the task */
+        &Task1,    /* Task handle to keep track of created task */
+        0);        /* pin task to core 0 */
+
+    xTaskCreatePinnedToCore(
+        Task_ADC,                         /* Task function. */
+        "Voltage & Current ADC",          /* name of task. */
+        2600,                             /* Stack size of task */
+        NULL, /* parameter of the task */ /* (void *)&adcDataReady */
+        1,                                /* priority of the task */
+        &Task_adc,                        /* Task handle to keep track of created task */
+        0);
+
     Serial.println("Real-time tasks created and pinned to cores.");
+}
+// /* Display flushing */
+void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p)
+{
+
+  tft.startWrite();
+
+#if DMA
+  tft.pushImageDMA(area->x1, area->y1, area->x2 - area->x1 + 1, area->y2 - area->y1 + 1, (uint16_t *)&color_p->full);
+  // sprSel = !sprSel;
+  // tft.dmaWait();
+
+#else
+  uint32_t w = (area->x2 - area->x1 + 1);
+  uint32_t h = (area->y2 - area->y1 + 1);
+  tft.setAddrWindow(area->x1, area->y1, w, h);
+  tft.pushColors((uint16_t *)&color_p->full, w * h, true);
+#endif
+
+  tft.endWrite();
+
+  lv_disp_flush_ready(disp);
+}
+
+// // Initialize the display -------------------------------------------
+void init_display()
+{
+  static lv_disp_drv_t disp_drv;     // Descriptor of a display driver
+  lv_disp_drv_init(&disp_drv);       // Basic initialization
+  disp_drv.flush_cb = my_disp_flush; // Set your driver function
+  disp_drv.draw_buf = &draw_buf;     // Set an initialized buffer
+  disp_drv.hor_res = screenWidth;    // horizontal resolution
+  disp_drv.ver_res = screenHeight;   // vertical resolution
+  lv_disp_drv_register(&disp_drv);   // Finally register the driver
+
+  lv_disp = lv_disp_get_default();
 }
