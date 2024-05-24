@@ -43,6 +43,8 @@ void setupPowerSupply()
     // pinMode(PowerSupply.CCCVPin, INPUT);
     PowerSupply.setupDisplay(lv_scr_act());
     PowerSupply.setupPages("Stats", "Graph", "Main", "Utility", "Setting");
+    PowerSupply.setPagesCallback(updateObjectPos_cb);
+    // lv_obj_add_event_cb(PowerSupply.tab.tabview, updateObjectPos_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     // Setup up on/off touch switch on page 3
     PowerSupply.setupSwitch(PowerSupply.page[2], 0, 240, 160, btn_event_cb);
@@ -51,6 +53,7 @@ void setupPowerSupply()
     PowerSupply.Voltage.setup(PowerSupply.page[2], "V-Set:", -14, -8, "V", 32.7675, 5.0, -12, 2000);
     PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", 6.5535, 1.0, -5.5 /*miliampere*/, 2000);
     PowerSupply.Power.setup(PowerSupply.page[2], "", -14, 144, "W", 0, 0, 0, 0, &dseg_b_24, &Tauri_R_28);
+
     Serial.println("Power Supply Setup Completed.");
 
     // Setup voltage and current's encoder pins
@@ -217,9 +220,9 @@ void createTasks()
     xTaskCreatePinnedToCore(
         Task_ADC,                         /* Task function. */
         "Voltage & Current ADC",          /* name of task. */
-        2600,                             /* Stack size of task */
+        5600,                             /* Stack size of task */
         NULL, /* parameter of the task */ /* (void *)&adcDataReady */
-        1,                                /* priority of the task */
+        10,                               /* priority of the task */
         &Task_adc,                        /* Task handle to keep track of created task */
         0);
 
@@ -229,35 +232,35 @@ void createTasks()
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p)
 {
 
-  tft.startWrite();
+    tft.startWrite();
 
 #if DMA
-  tft.pushImageDMA(area->x1, area->y1, area->x2 - area->x1 + 1, area->y2 - area->y1 + 1, (uint16_t *)&color_p->full);
-  // sprSel = !sprSel;
-  // tft.dmaWait();
+    tft.pushImageDMA(area->x1, area->y1, area->x2 - area->x1 + 1, area->y2 - area->y1 + 1, (uint16_t *)&color_p->full);
+    // sprSel = !sprSel;
+    // tft.dmaWait();
 
 #else
-  uint32_t w = (area->x2 - area->x1 + 1);
-  uint32_t h = (area->y2 - area->y1 + 1);
-  tft.setAddrWindow(area->x1, area->y1, w, h);
-  tft.pushColors((uint16_t *)&color_p->full, w * h, true);
+    uint32_t w = (area->x2 - area->x1 + 1);
+    uint32_t h = (area->y2 - area->y1 + 1);
+    tft.setAddrWindow(area->x1, area->y1, w, h);
+    tft.pushColors((uint16_t *)&color_p->full, w * h, true);
 #endif
 
-  tft.endWrite();
+    tft.endWrite();
 
-  lv_disp_flush_ready(disp);
+    lv_disp_flush_ready(disp);
 }
 
 // // Initialize the display -------------------------------------------
 void init_display()
 {
-  static lv_disp_drv_t disp_drv;     // Descriptor of a display driver
-  lv_disp_drv_init(&disp_drv);       // Basic initialization
-  disp_drv.flush_cb = my_disp_flush; // Set your driver function
-  disp_drv.draw_buf = &draw_buf;     // Set an initialized buffer
-  disp_drv.hor_res = screenWidth;    // horizontal resolution
-  disp_drv.ver_res = screenHeight;   // vertical resolution
-  lv_disp_drv_register(&disp_drv);   // Finally register the driver
+    static lv_disp_drv_t disp_drv;     // Descriptor of a display driver
+    lv_disp_drv_init(&disp_drv);       // Basic initialization
+    disp_drv.flush_cb = my_disp_flush; // Set your driver function
+    disp_drv.draw_buf = &draw_buf;     // Set an initialized buffer
+    disp_drv.hor_res = screenWidth;    // horizontal resolution
+    disp_drv.ver_res = screenHeight;   // vertical resolution
+    lv_disp_drv_register(&disp_drv);   // Finally register the driver
 
-  lv_disp = lv_disp_get_default();
+    lv_disp = lv_disp_get_default();
 }

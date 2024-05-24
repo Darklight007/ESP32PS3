@@ -49,6 +49,7 @@ extern void textarea(lv_obj_t *parent);
 extern void Utility_tabview(lv_obj_t *parent);
 extern void SettingMenu(lv_obj_t *parent);
 extern void voltage_current_calibration(void);
+extern void updateObjectPos_cb(lv_event_t *e);
 
 extern lv_obj_t *menu;
 extern lv_obj_t *voltageCurrentCalibration;

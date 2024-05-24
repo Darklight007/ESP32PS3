@@ -514,6 +514,10 @@ void Device::setupPages(const char *page0, const char *page1, const char *page2,
                                           lv_color_hex(0x001A3C)};
 }
 
+void Device::setPagesCallback( lv_event_cb_t event_cb ){
+ lv_obj_add_event_cb(tab.tabview, event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+}
+
 void Device::setupSwitch(lv_obj_t *parent, lv_align_t align, lv_coord_t x_ofs, lv_coord_t y_ofs, lv_event_cb_t event_cb)
 {
     powerSwitch.setup(parent, align, x_ofs, y_ofs, event_cb);

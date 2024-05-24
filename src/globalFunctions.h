@@ -16,6 +16,7 @@ void ChartUpdate();
 void StatusBar();
 void schedule(std::function<void(void)> func, unsigned long &&interval, unsigned long &startTime);
 void keyCheckLoop();
+
 /**********************
  *   GLOBAL VARIABLES
  **********************/
@@ -140,7 +141,7 @@ static void legend(lv_obj_t *parent, lv_color16_t c1, const char *ser1, lv_color
     lv_style_set_bg_color(&PowerSupply.graph.style_legend1, lv_palette_darken(LV_PALETTE_GREY, 4));
     lv_style_set_bg_opa(&PowerSupply.graph.style_legend1, LV_OPA_50);
     lv_style_set_border_opa(&PowerSupply.graph.style_legend1, LV_OPA_50);
-    lv_style_set_border_width(&PowerSupply.graph.style_legend1, 4);
+    lv_style_set_border_width(&PowerSupply.graph.style_legend1, 2);
 
     static lv_obj_t *label_legend1;
     label_legend1 = lv_label_create(parent);
@@ -191,29 +192,25 @@ static void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_col
     lv_style_set_bg_color(style, lv_palette_darken(LV_PALETTE_GREY, 4));
     lv_style_set_bg_opa(style, LV_OPA_50);
     lv_style_set_border_opa(style, LV_OPA_50);
-    lv_style_set_border_width(style, 4);
+    lv_style_set_border_width(style, 2);
 
     lv_label_set_text(label, text);
     lv_obj_align(label, LV_ALIGN_DEFAULT, x, y);
     lv_obj_remove_style(label, style, LV_STATE_DEFAULT);
     lv_obj_add_style(label, style, LV_STATE_DEFAULT);
+    //   lv_obj_set_size(label, 150, 50);
+    lv_obj_add_event_cb(label, drag_event_handler, LV_EVENT_PRESSING, NULL);
 }
-
-lv_obj_t *label_graphMenu_VFFT;
-lv_obj_t *label_graphMenu_IFFT;
-
-lv_obj_t *label_statMenu_VFFT;
-lv_obj_t *label_statMenu_IFFT;
 
 void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 { /*Create a chart*/
 
     PowerSupply.graph.chart = lv_chart_create(parent);
-    lv_obj_set_size(PowerSupply.graph.chart, 248, 154);
+    lv_obj_set_size(PowerSupply.graph.chart, 242, 154);
     lv_obj_align(PowerSupply.graph.chart, LV_ALIGN_DEFAULT, x, y);
 
-    lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_Y, 0, 32000);  // 40000mv
-    lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_Y, 0, 8000); // 8000ma
+    lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_Y, -.3 * 1000, 32000);  // 40000mv
+    lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_Y, -.3 * 1000, 8000); // 8000ma
     lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_X, 0, 200);
 
     lv_chart_set_div_line_count(PowerSupply.graph.chart, 9, 13);
@@ -233,7 +230,7 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     PowerSupply.graph.serI = lv_chart_add_series(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_AMBER), LV_CHART_AXIS_SECONDARY_Y);
 
     // uint32_t pcnt = sizeof(ecg_sample) / sizeof(ecg_sample[0]);
-    lv_chart_set_point_count(PowerSupply.graph.chart, 600 * 5);
+    lv_chart_set_point_count(PowerSupply.graph.chart, 600 * 2);
     // lv_chart_set_ext_y_array(PowerSupply.graph.chart, ser, (lv_coord_t *)ecg_sample);
 
     static lv_style_t style_slider;
@@ -304,13 +301,18 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     // lv_obj_set_size(bed, 100, 30);
     // lv_obj_add_event_cb(bed, drag_event_handler, LV_EVENT_PRESSING, NULL);
 
-    label_graphMenu_VFFT = lv_label_create(parent);
-    label_graphMenu_IFFT = lv_label_create(parent);
+    // PowerSupply.Voltage.statLabels.label_fft = lv_label_create(parent);
+    // label_graphMenu_IFFT = lv_label_create(parent);
 
-    // legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V-Set", lv_palette_main(LV_PALETTE_AMBER), "I-set", 170, 0);
+    legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V-Set", lv_palette_main(LV_PALETTE_AMBER), "I-set", 25, 0);
+
     static lv_style_t style_FFT;
-    overlay(label_graphMenu_VFFT, "", &style_FFT, lv_palette_lighten(LV_PALETTE_AMBER, 4), 160, 0);
-    overlay(label_graphMenu_IFFT, "", &style_FFT, lv_palette_lighten(LV_PALETTE_AMBER, 4), 160, 14);
+    overlay(PowerSupply.Voltage.statLabels.label_fft, "", &style_FFT, lv_palette_lighten(LV_PALETTE_AMBER, 4), 160, 0);
+    overlay(PowerSupply.Current.statLabels.label_fft, "", &style_FFT, lv_palette_lighten(LV_PALETTE_AMBER, 4), 160, 14);
+
+    lv_obj_set_parent(PowerSupply.Voltage.statLabels.label_fft, parent);
+    lv_obj_set_parent(PowerSupply.Current.statLabels.label_fft, parent);
+    // lv_obj_add_event_cb(PowerSupply.Voltage.statLabels.label_fft, drag_event_handler, LV_EVENT_PRESSING, NULL);
 
     /******************************
      **   Stats
@@ -324,12 +326,12 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
         lv_style_set_text_color(&style_stats, lv_palette_main(LV_PALETTE_GREY));
         lv_style_set_text_letter_space(&style_stats, -1);
 
-        lv_obj_t *label_stats = lv_label_create(parent);
-        lv_label_set_text(label_stats, " Set      Mean     STD      Max      Min");
-        //   "+00.0000 +00.0000 +00.0000                              |+00.0000 |
-        lv_obj_align(label_stats, LV_ALIGN_DEFAULT, x, y);
-        lv_obj_remove_style(label_stats, &style_stats, LV_STATE_DEFAULT);
-        lv_obj_add_style(label_stats, &style_stats, LV_STATE_DEFAULT);
+        lv_obj_set_parent(PowerSupply.Voltage.statLabels.label_legend, parent);
+        lv_label_set_text(PowerSupply.Voltage.statLabels.label_legend, " Set      Mean     STD      Max      Min");
+        //                                                            "+00.0000 +00.0000 +00.0000 +00.0000 +00.0000
+        lv_obj_align(PowerSupply.Voltage.statLabels.label_legend, LV_ALIGN_DEFAULT, x, y);
+        lv_obj_remove_style(PowerSupply.Voltage.statLabels.label_legend, &style_stats, LV_STATE_DEFAULT);
+        lv_obj_add_style(PowerSupply.Voltage.statLabels.label_legend, &style_stats, LV_STATE_DEFAULT);
 
         // int offset = x;  unused variable
         int offsetY = 10 + y;
@@ -340,7 +342,7 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
         lv_style_init(&PowerSupply.graph.style_statsCurrent);
         lv_style_set_text_color(&PowerSupply.graph.style_statsCurrent, lv_palette_main(LV_PALETTE_AMBER));
         // Display mean max min ...
-        auto stat_obj = [](lv_obj_t *parent, lv_obj_t *label_statUnit, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
+        auto stat_obj = [](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
         {
             lv_style_set_text_font(style_, &lv_font_unscii_8);
             lv_style_set_text_letter_space(style_, 1);
@@ -348,46 +350,45 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 
             int space = 61;
 
-            lv_obj_remove_style_all(label_statUnit);
-            lv_label_set_text(label_statUnit, lv_label_get_text(dObj.label_unit));
-            lv_obj_align(label_statUnit, LV_ALIGN_DEFAULT, x + -10, y);
-            lv_obj_add_style(label_statUnit, style_, LV_STATE_DEFAULT);
+            lv_obj_remove_style_all(dObj.statLabels.label_unit);
+            lv_obj_set_parent(dObj.statLabels.label_unit, parent);
+            lv_label_set_text(dObj.statLabels.label_unit, lv_label_get_text(dObj.label_unit));
+            lv_obj_align(dObj.statLabels.label_unit, LV_ALIGN_DEFAULT, x + -10, y);
+            lv_obj_add_style(dObj.statLabels.label_unit, style_, LV_STATE_DEFAULT);
 
-            lv_obj_remove_style_all(dObj.label_value);
-            lv_obj_set_parent(dObj.label_value, parent);
-            lv_obj_align(dObj.label_value, LV_ALIGN_DEFAULT, 0, -500);
-            lv_obj_add_style(dObj.label_value, style_, LV_STATE_DEFAULT);
+            lv_obj_remove_style_all(dObj.statLabels.label_value);
+            lv_obj_set_parent(dObj.statLabels.label_value, parent);
+            lv_obj_align(dObj.statLabels.label_value, LV_ALIGN_DEFAULT, 0, -500);
+            lv_obj_add_style(dObj.statLabels.label_value, style_, LV_STATE_DEFAULT);
 
-            lv_obj_remove_style_all(dObj.label_setSmallFont);
-            lv_obj_set_parent(dObj.label_setSmallFont, parent);
-            lv_obj_align(dObj.label_setSmallFont, LV_ALIGN_DEFAULT, x + space * 0, y);
-            lv_obj_add_style(dObj.label_setSmallFont, style_, LV_STATE_DEFAULT);
+            lv_obj_remove_style_all(dObj.statLabels.label_setSmallFont);
+            lv_obj_set_parent(dObj.statLabels.label_setSmallFont, parent);
+            lv_obj_align(dObj.statLabels.label_setSmallFont, LV_ALIGN_DEFAULT, x + space * 0, y);
+            lv_obj_add_style(dObj.statLabels.label_setSmallFont, style_, LV_STATE_DEFAULT);
 
-            lv_obj_remove_style_all(dObj.label_mean);
-            lv_obj_set_parent(dObj.label_mean, parent);
-            lv_obj_align(dObj.label_mean, LV_ALIGN_DEFAULT, x + space * 1, y);
-            lv_obj_add_style(dObj.label_mean, style_, LV_STATE_DEFAULT);
+            lv_obj_remove_style_all(dObj.statLabels.label_mean);
+            lv_obj_set_parent(dObj.statLabels.label_mean, parent);
+            lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, x + space * 1, y);
+            lv_obj_add_style(dObj.statLabels.label_mean, style_, LV_STATE_DEFAULT);
 
-            lv_obj_remove_style_all(dObj.label_std);
-            lv_obj_set_parent(dObj.label_std, parent);
-            lv_obj_align(dObj.label_std, LV_ALIGN_DEFAULT, x + space * 2 + 4, y);
-            lv_obj_add_style(dObj.label_std, style_, LV_STATE_DEFAULT);
+            lv_obj_remove_style_all(dObj.statLabels.label_std);
+            lv_obj_set_parent(dObj.statLabels.label_std, parent);
+            lv_obj_align(dObj.statLabels.label_std, LV_ALIGN_DEFAULT, x + space * 2 + 4, y);
+            lv_obj_add_style(dObj.statLabels.label_std, style_, LV_STATE_DEFAULT);
 
-            lv_obj_remove_style_all(dObj.label_max);
-            lv_obj_set_parent(dObj.label_max, parent);
-            lv_obj_align(dObj.label_max, LV_ALIGN_DEFAULT, x + space * 3, y);
-            lv_obj_add_style(dObj.label_max, style_, LV_STATE_DEFAULT);
+            lv_obj_remove_style_all(dObj.statLabels.label_max);
+            lv_obj_set_parent(dObj.statLabels.label_max, parent);
+            lv_obj_align(dObj.statLabels.label_max, LV_ALIGN_DEFAULT, x + space * 3, y);
+            lv_obj_add_style(dObj.statLabels.label_max, style_, LV_STATE_DEFAULT);
 
-            lv_obj_remove_style_all(dObj.label_min);
-            lv_obj_set_parent(dObj.label_min, parent);
-            lv_obj_align(dObj.label_min, LV_ALIGN_DEFAULT, x + space * 4, y);
-            lv_obj_add_style(dObj.label_min, style_, LV_STATE_DEFAULT);
+            lv_obj_remove_style_all(dObj.statLabels.label_min);
+            lv_obj_set_parent(dObj.statLabels.label_min, parent);
+            lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, x + space * 4, y);
+            lv_obj_add_style(dObj.statLabels.label_min, style_, LV_STATE_DEFAULT);
         };
 
-        lv_obj_t *label_stat_V = lv_label_create(parent);
-        stat_obj(parent, label_stat_V, PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, x - 8, offsetY);
-        lv_obj_t *label_stat_A = lv_label_create(parent);
-        stat_obj(parent, label_stat_A, PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, x - 8, offsetY + 10);
+        stat_obj(parent, PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, x - 8, offsetY);
+        stat_obj(parent, PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, x - 8, offsetY + 10);
     };
     stat_(parent, 10, 167);
 }
@@ -485,8 +486,8 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 
     lv_chart_set_type(PowerSupply.stats.chart, LV_CHART_TYPE_LINE);
     lv_chart_set_update_mode(PowerSupply.stats.chart, LV_CHART_UPDATE_MODE_SHIFT);
-    // lv_obj_add_event_cb(PowerSupply.stats.chart, draw_event_stat_chart_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
-    // lv_obj_set_style_line_width(PowerSupply.stats.chart, 3, LV_PART_ITEMS);
+    lv_obj_add_event_cb(PowerSupply.stats.chart, draw_event_stat_chart_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
+    lv_obj_set_style_line_width(PowerSupply.stats.chart, 2, LV_PART_ITEMS);
 
     // /*Do not display points on the data*/
     lv_obj_set_style_size(PowerSupply.stats.chart, 0, LV_PART_INDICATOR);
@@ -498,83 +499,7 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     PowerSupply.stats.serI->y_points = PowerSupply.Current.hist.data;
     PowerSupply.stats.serV->y_points = PowerSupply.Voltage.hist.data;
 
-    // legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V", lv_palette_main(LV_PALETTE_AMBER), "A", 245, 0);
-
-    label_statMenu_VFFT = lv_label_create(parent);
-    label_statMenu_IFFT = lv_label_create(parent);
-
-    static lv_style_t style_FFT;
-    static lv_style_t style_FFTi;
-
-    overlay(label_statMenu_VFFT, "", &style_FFT, lv_palette_lighten(LV_PALETTE_DEEP_PURPLE, 2), 180, 8 - 7);
-    overlay(label_statMenu_IFFT, "", &style_FFTi, lv_palette_lighten(LV_PALETTE_DEEP_PURPLE, 2), 180, 22 - 7);
-
-    auto stat_ = [](lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
-    {
-        static lv_style_t style_stats;
-        lv_style_init(&style_stats);
-        lv_style_set_text_font(&style_stats, &lv_font_unscii_8);
-        // lv_style_set_text_letter_space(&style_stats, 1);
-        lv_style_set_text_color(&style_stats, lv_palette_main(LV_PALETTE_GREY));
-        lv_style_set_text_letter_space(&style_stats, -1);
-
-        lv_obj_t *label_stats = lv_label_create(parent);
-        lv_label_set_text(label_stats, "   Value     Mean       Max       Min");
-        //   "+00.0000 +00.0000 +00.0000                              |+00.0000 |
-        lv_obj_align(label_stats, LV_ALIGN_DEFAULT, x, y);
-
-        lv_obj_remove_style(label_stats, &style_stats, LV_STATE_DEFAULT);
-        lv_obj_add_style(label_stats, &style_stats, LV_STATE_DEFAULT);
-
-        // int offset = x;  unused variable
-        int offsetY = 10 + y;
-
-        lv_style_init(&PowerSupply.stats.style_statsVolt);
-        lv_style_set_text_color(&PowerSupply.stats.style_statsVolt, lv_palette_main(LV_PALETTE_BLUE));
-
-        lv_style_init(&PowerSupply.stats.style_statsCurrent);
-        lv_style_set_text_color(&PowerSupply.stats.style_statsCurrent, lv_palette_main(LV_PALETTE_AMBER));
-
-        auto stat_obj = [](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
-        {
-            lv_style_set_text_font(style_, &lv_font_unscii_8);
-            // lv_style_set_text_letter_space(style_, 1);
-            lv_style_set_text_letter_space(style_, -1);
-
-            int space = 70;
-
-            lv_obj_t *label_statUnit = lv_label_create(parent);
-
-            lv_obj_remove_style_all(label_statUnit);
-            lv_label_set_text(label_statUnit, lv_label_get_text(dObj.label_unit));
-            lv_obj_align(label_statUnit, LV_ALIGN_DEFAULT, x + -10, y);
-            lv_obj_add_style(label_statUnit, style_, LV_STATE_DEFAULT);
-
-            lv_obj_remove_style_all(dObj.label_value);
-            lv_obj_set_parent(dObj.label_value, parent);
-            lv_obj_align(dObj.label_value, LV_ALIGN_DEFAULT, x, y);
-            lv_obj_add_style(dObj.label_value, style_, LV_STATE_DEFAULT);
-
-            lv_obj_remove_style_all(dObj.label_mean);
-            lv_obj_set_parent(dObj.label_mean, parent);
-            lv_obj_align(dObj.label_mean, LV_ALIGN_DEFAULT, x + space * 1, y);
-            lv_obj_add_style(dObj.label_mean, style_, LV_STATE_DEFAULT);
-
-            lv_obj_remove_style_all(dObj.label_max);
-            lv_obj_set_parent(dObj.label_max, parent);
-            lv_obj_align(dObj.label_max, LV_ALIGN_DEFAULT, x + space * 2, y);
-            lv_obj_add_style(dObj.label_max, style_, LV_STATE_DEFAULT);
-
-            lv_obj_set_parent(dObj.label_min, parent);
-            lv_obj_align(dObj.label_min, LV_ALIGN_DEFAULT, x + space * 3, y);
-            lv_obj_remove_style_all(dObj.label_min);
-            lv_obj_add_style(dObj.label_min, style_, LV_STATE_DEFAULT);
-        };
-
-        stat_obj(parent, PowerSupply.Voltage, &PowerSupply.stats.style_statsVolt, x + 10, offsetY);
-        stat_obj(parent, PowerSupply.Current, &PowerSupply.stats.style_statsCurrent, x + 10, offsetY + 10);
-    };
-    // stat_(parent, 10, 167);
+    legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V", lv_palette_main(LV_PALETTE_AMBER), "A", 25, 0);
 }
 /*
 static void draw_event_cb(lv_event_t *e)
@@ -961,7 +886,7 @@ void Task_ADC(void *pvParameters)
 
         static unsigned long NoAvgTime;
         if (!lvglIsBusy)
-            schedule(&ChartUpdate, PowerSupply.Voltage.measured.NofAvgs * 1000.0 / 5 /*pixels per point*/ / ((double)PowerSupply.adc.realADCSpeed), NoAvgTime);
+            schedule(&ChartUpdate, PowerSupply.Voltage.measured.NofAvgs * 1000.0 * 2.0 / /*pixels per point*/ ((double)PowerSupply.adc.realADCSpeed), NoAvgTime);
 
         if (V.sampleReady)
         {
@@ -1260,6 +1185,8 @@ void Utility_tabview(lv_obj_t *parent)
     lv_style_set_pad_all(&style_utility, 0);
 
     lv_obj_add_style(parent, &style_utility, LV_STATE_DEFAULT);
+    lv_style_set_text_letter_space(&style_utility, 1);
+    lv_style_set_text_color(&style_utility, lv_palette_main(LV_PALETTE_GREY));
 
     /*Create a Tab view object*/
     lv_obj_t *tabview;
@@ -1296,21 +1223,27 @@ void Utility_tabview(lv_obj_t *parent)
     {
         label = lv_label_create(tab1);
         lv_label_set_text_fmt(label, "%i:", i);
-        lv_obj_set_style_text_font(label, &monofont_R_16, 0);
+        lv_obj_remove_style_all(label);
+        lv_obj_add_style(label, &style_utility, LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(label, &monofont_R_20, 0);
         lv_obj_set_pos(label, -4 + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
 
         label = lv_label_create(tab1);
         uint16_t adjValue;
         // PowerSupply.EEPROMwrite(90 + i * 4, i);
         PowerSupply.EEPROMread(90 + i * 4, adjValue);
-        lv_label_set_text_fmt(label, "%+08.4fV", (i * 2000.0 * 3.5555) / 2000.0);
+        lv_obj_remove_style_all(label);
+        lv_obj_add_style(label, &style_utility, LV_STATE_DEFAULT);
+        lv_label_set_text_fmt(label, "%+07.3fV", (i * 2000.0 * 3.5555) / 2000.0);
         lv_obj_set_style_text_font(label, &monofont_R_16, 0); // graph_R_16 monofont_R_16
         lv_obj_set_pos(label, 18 + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
         label = lv_label_create(tab1);
 
         // PowerSupply.EEPROMwrite(90 + i * 4 + 2, i);
         PowerSupply.EEPROMread(90 + i * 4 + 2, adjValue);
-        lv_label_set_text_fmt(label, "%+08.4fA", adjValue / 10000.0);
+        lv_obj_remove_style_all(label);
+        lv_obj_add_style(label, &style_utility, LV_STATE_DEFAULT);
+        lv_label_set_text_fmt(label, "%+07.3fA", adjValue / 10000.0);
         lv_obj_set_style_text_font(label, &monofont_R_16, 0);
         lv_obj_set_pos(label, 18 + verOff * (i >= 5), i * yOff * (i < 5) + 15 + (i - 5) * yOff * (i >= 5) + yStart);
     }
@@ -1330,6 +1263,7 @@ void Utility_tabview(lv_obj_t *parent)
     // label = lv_label_create(tab1);
     // lv_label_set_text(label, "0: 0.000V\t\t0.000A\n1: 0.100V\t\t0.010A\n2: 2.048V\t\t0.050A\n3: 3.000V 0.050A\n4: 4.096V 0.050A\n5: 5.000V 0.050A\n6: 0.000V 0.000A\n7: 0.100V 0.010A\n8: 20.480V 0.050A\n9: 32.000V 0.050A");
 
+return;
     const lv_font_t *font_set{&lv_font_montserrat_16}; // graph_R_16 dseg_b_20
 
     static lv_style_t style_set;
@@ -1833,6 +1767,39 @@ PowerSupply.Current.Bar.changed=true;
     }
 }
 
+auto StatsPositions = [&](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
+{
+    lv_obj_set_parent(dObj.statLabels.label_unit, parent);
+    lv_obj_set_parent(dObj.statLabels.label_setSmallFont, parent);
+    lv_obj_set_parent(dObj.statLabels.label_value, parent);
+    lv_obj_set_parent(dObj.statLabels.label_mean, parent);
+    lv_obj_set_parent(dObj.statLabels.label_std, parent);
+    lv_obj_set_parent(dObj.statLabels.label_max, parent);
+    lv_obj_set_parent(dObj.statLabels.label_min, parent);
+    lv_obj_set_parent(dObj.statLabels.label_fft, parent);
+    lv_obj_set_parent(dObj.statLabels.label_legend, parent);
+};
+
+void updateObjectPos_cb(lv_event_t *e)
+{
+    // Serial.printf("Page Changed to %i!\n", Tabs::getCurrentPage());
+    switch (Tabs::getCurrentPage())
+    {
+
+    case 0:
+        StatsPositions(PowerSupply.page[0], PowerSupply.Voltage, &PowerSupply.stats.style_statsVolt, 0, 177);
+        StatsPositions(PowerSupply.page[0], PowerSupply.Current, &PowerSupply.stats.style_statsCurrent, 0, 187);
+        break;
+    case 1:
+        StatsPositions(PowerSupply.page[1], PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, 0, 177);
+        StatsPositions(PowerSupply.page[1], PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, 0, 187);
+        break;
+    case 4:
+        PowerSupply.SaveSetting();
+        break;
+    }
+}
+
 void StatusBar()
 {
     static lv_obj_t *statusLabel_time;
@@ -1897,51 +1864,61 @@ void StatusBar()
 
     lv_label_set_text_fmt(statusLabel_avg, str, PowerSupply.Voltage.measured.NofAvgs);
 
-    auto StatsPosion = [&](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
+    // auto StatsPosion = [&](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
+    // {
+    //     int space = 70;
+
+    //     lv_obj_set_parent(dObj.statLabels.label_value, parent);
+    //     lv_obj_align(dObj.statLabels.label_value, LV_ALIGN_DEFAULT, x, y);
+
+    //     lv_obj_set_parent(dObj.statLabels.label_mean, parent);
+    //     lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, x + space * 1, y);
+
+    //     lv_obj_set_parent(dObj.statLabels.label_max, parent);
+    //     lv_obj_align(dObj.statLabels.label_max, LV_ALIGN_DEFAULT, x + space * 2, y);
+
+    //     lv_obj_set_parent(dObj.statLabels.label_min, parent);
+    //     lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, x + space * 3, y);
+    // };
+
+    auto StatsPositions = [&](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
     {
-        int space = 70;
+        int space = 61;
 
-        lv_obj_set_parent(dObj.label_value, parent);
-        lv_obj_align(dObj.label_value, LV_ALIGN_DEFAULT, x, y);
+        // lv_obj_set_parent(dObj.statLabels.label_mean, parent);
+        // lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, x, y);
 
-        lv_obj_set_parent(dObj.label_mean, parent);
-        lv_obj_align(dObj.label_mean, LV_ALIGN_DEFAULT, x + space * 1, y);
+        lv_obj_set_parent(dObj.statLabels.label_value, parent);
+        lv_obj_align(dObj.statLabels.label_value, LV_ALIGN_DEFAULT, x, y);
 
-        lv_obj_set_parent(dObj.label_max, parent);
-        lv_obj_align(dObj.label_max, LV_ALIGN_DEFAULT, x + space * 2, y);
+        lv_obj_set_parent(dObj.statLabels.label_mean, parent);
+        lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, x + space * 1, y);
 
-        lv_obj_set_parent(dObj.label_min, parent);
-        lv_obj_align(dObj.label_min, LV_ALIGN_DEFAULT, x + space * 3, y);
+        lv_obj_set_parent(dObj.statLabels.label_std, parent);
+        lv_obj_align(dObj.statLabels.label_std, LV_ALIGN_DEFAULT, x + space * 2 + 4, y);
+
+        lv_obj_set_parent(dObj.statLabels.label_max, parent);
+        lv_obj_align(dObj.statLabels.label_max, LV_ALIGN_DEFAULT, x + space * 3, y);
+
+        lv_obj_set_parent(dObj.statLabels.label_min, parent);
+        lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, x + space * 4, y);
     };
 
-    auto GraphPosion = [&](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
-    {
-        int space = 70;
-
-        lv_obj_set_parent(dObj.label_mean, parent);
-        lv_obj_align(dObj.label_mean, LV_ALIGN_DEFAULT, x, y);
-
-        lv_obj_set_parent(dObj.label_max, parent);
-        lv_obj_align(dObj.label_max, LV_ALIGN_DEFAULT, x + space * 2, y);
-
-        lv_obj_set_parent(dObj.label_min, parent);
-        lv_obj_align(dObj.label_min, LV_ALIGN_DEFAULT, x + space * 3, y);
-    };
-
-    switch (Tabs::getCurrentPage())
-    {
-    // case 0:
-    //     StatsPosion(PowerSupply.page[0], PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, 20, 177);
-    //     StatsPosion(PowerSupply.page[0], PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, 20, 187);
+    // switch (Tabs::getCurrentPage())
+    // {
+    // lv_obj_add_event_cb(slider, slider_x_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    //  case 0:
+    //      StatsPositions(PowerSupply.page[0], PowerSupply.Voltage, &PowerSupply.stats.style_statsVolt, 0, 177);
+    //      StatsPositions(PowerSupply.page[0], PowerSupply.Current, &PowerSupply.stats.style_statsCurrent,0, 187);
+    //      break;
+    //  case 1:
+    //      StatsPositions(PowerSupply.page[1], PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, 0, 177);
+    //      StatsPositions(PowerSupply.page[1], PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, 0, 187);
+    //      break;
+    // case 4:
+    //     PowerSupply.SaveSetting();
     //     break;
-    // case 1:
-    //     GraphPosion(PowerSupply.page[1], PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, 20, 177);
-    //     GraphPosion(PowerSupply.page[1], PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, 20, 187);
-    //     break;
-    case 4:
-        PowerSupply.SaveSetting();
-        break;
-    }
+    // }
 
     lv_obj_t *vin1_ = lv_obj_get_child(voltageCurrentCalibration, spinboxes.ids[0]);
     lv_obj_t *code1_ = lv_obj_get_child(voltageCurrentCalibration, spinboxes.ids[1]);
@@ -2087,7 +2064,7 @@ void ChartUpdate()
     // Histogram
     PowerSupply.Voltage.hist[PowerSupply.Voltage.measured.value];
     PowerSupply.Current.hist[PowerSupply.Current.measured.value];
-    lv_chart_refresh(PowerSupply.stats.chart);
+    // lv_chart_refresh(PowerSupply.stats.chart);
 }
 
 void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
@@ -2252,9 +2229,10 @@ void LvglUpdatesInterval(unsigned long interval)
              interval, timer_);
 }
 
-void StatusBarUupdateInterval(unsigned long interval){
- static unsigned long timer_ = {0}; // Interval in milliseconds
-   schedule(&StatusBar, interval, timer_);
+void StatusBarUupdateInterval(unsigned long interval)
+{
+    static unsigned long timer_ = {0}; // Interval in milliseconds
+    schedule(&StatusBar, interval, timer_);
 }
 
 void FlushMeasuresInterval(unsigned long interval)
@@ -2269,6 +2247,9 @@ void statisticUpdateInterval(unsigned long interval)
     static unsigned long timer_ = {0};
     schedule([]
              {
+            if (!lvglIsBusy)
+                lv_chart_refresh(PowerSupply.stats.chart);
+
              PowerSupply.Voltage.statUpdate();
              PowerSupply.Current.statUpdate(); },
              100, timer_);
@@ -2279,17 +2260,18 @@ void FFTUpdateInterval(unsigned long interval)
     static unsigned long timer_ = {0};
     schedule([]
              {
-              /*FFT_v*/
+                 /*FFT_v*/
 
-              V.computeFFT( PowerSupply.adc.realADCSpeed / 2.0);
-              I.computeFFT( PowerSupply.adc.realADCSpeed / 2.0);
+                 V.computeFFT(PowerSupply.adc.realADCSpeed / 2.0);
+                 I.computeFFT(PowerSupply.adc.realADCSpeed / 2.0);
 
+                 lv_label_set_text_fmt(PowerSupply.Voltage.statLabels.label_fft, "V-FFT:%5.1f Hz", V.peak);
+                 lv_label_set_text_fmt(PowerSupply.Current.statLabels.label_fft, "I-FFT:%5.1f Hz", I.peak);
 
-              lv_label_set_text_fmt(label_graphMenu_VFFT, "V-FFT_v:%5.1f Hz",V.peak);
-              lv_label_set_text_fmt(label_graphMenu_IFFT, "I-FFT_v:%5.1f Hz",I.peak);
-
-              lv_label_set_text_fmt(label_statMenu_VFFT, "V-FFT_v:%5.1f Hz", V.peak);
-              lv_label_set_text_fmt(label_statMenu_IFFT, "I-FFT_i:%5.1f Hz", I.peak); }, interval, timer_);
+                 //   lv_label_set_text_fmt(label_statMenu_VFFT, "V-FFT_v:%5.1f Hz", V.peak);
+                 //   lv_label_set_text_fmt(label_statMenu_IFFT, "I-FFT_i:%5.1f Hz", I.peak);
+             },
+             interval, timer_);
 }
 
 void EncoderUpdateInterval(unsigned long interval)
@@ -2548,7 +2530,7 @@ void MiscPriority()
         // PowerSupply.turn(SWITCH::OFF);
         // PowerSupply.Current.SetUpdate(-0.001- PowerSupply.Current.adjOffset);
     }
-      // LV_LOG_USER("%i",digitalRead(PowerSupply.CCCVPin));
+    // LV_LOG_USER("%i",digitalRead(PowerSupply.CCCVPin));
     // if (g_wifiConnection)
     // ArduinoOTA.handle();
     // Serial.printf("3 \n");

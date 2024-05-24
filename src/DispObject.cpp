@@ -48,26 +48,26 @@ void DispObjects::displayUpdate(void)
 
     // if ((millis() - timeKeeper) >= 250)
     // {
-        // timeKeeper = millis();
+    // timeKeeper = millis();
 
-        // lv_label_set_text_fmt(label_setSmallFont, "%+08.4f", adjValue+adjOffset);
-        //     lv_label_set_text_fmt(label_value, "%+08.4f", measured.value);
-        //     lv_label_set_text_fmt(label_mean, "%+08.4f", mean);
-        //     lv_label_set_text_fmt(label_std, "%07.4f", measured.StandardDeviation());
-        //     lv_label_set_text_fmt(label_max, "%+08.4f", measured.absMax);
-        //     lv_label_set_text_fmt(label_min, "%+08.4f", measured.absMin);
+    // lv_label_set_text_fmt(label_setSmallFont, "%+08.4f", adjValue+adjOffset);
+    //     lv_label_set_text_fmt(label_value, "%+08.4f", measured.value);
+    //     lv_label_set_text_fmt(label_mean, "%+08.4f", mean);
+    //     lv_label_set_text_fmt(label_std, "%07.4f", measured.StandardDeviation());
+    //     lv_label_set_text_fmt(label_max, "%+08.4f", measured.absMax);
+    //     lv_label_set_text_fmt(label_min, "%+08.4f", measured.absMin);
     // }
 }
 
 void DispObjects::statUpdate(void)
 {
 
-    lv_label_set_text_fmt(label_setSmallFont, "%+08.4f", adjValue + adjOffset);
-    lv_label_set_text_fmt(label_value, "%+08.4f", measured.value);
-    lv_label_set_text_fmt(label_mean, "%+08.4f",  measured.Mean());
-    lv_label_set_text_fmt(label_std, "%07.4f", measured.StandardDeviation());
-    lv_label_set_text_fmt(label_max, "%+08.4f", measured.absMax);
-    lv_label_set_text_fmt(label_min, "%+08.4f", measured.absMin);
+    lv_label_set_text_fmt(statLabels.label_setSmallFont, "%+08.4f", adjValue + adjOffset);
+    lv_label_set_text_fmt(statLabels.label_value, "%+08.4f", measured.value);
+    lv_label_set_text_fmt(statLabels.label_mean, "%+08.4f", measured.Mean());
+    lv_label_set_text_fmt(statLabels.label_std, "%07.4f", measured.StandardDeviation());
+    lv_label_set_text_fmt(statLabels.label_max, "%+08.4f", measured.absMax);
+    lv_label_set_text_fmt(statLabels.label_min, "%+08.4f", measured.absMin);
 }
 
 void DispObjects::barUpdate(void)
@@ -77,7 +77,7 @@ void DispObjects::barUpdate(void)
     {
         lv_bar_set_value(Bar.bar, measured.value / maxValue * lv_bar_get_max_value(Bar.bar), LV_ANIM_OFF);
         lv_obj_invalidate(Bar.bar); // it will update only when lv_timer_handler is called so no matter how offen this is called
-        
+
         // lv_obj_set_width(Bar.bar_adjValue, adjValue / maxValue * lv_bar_get_max_value(Bar.bar));
 
         // lv_obj_align(Bar.bar_minMarker, LV_ALIGN_TOP_LEFT, lv_obj_get_x(Bar.bar) + int(measured.absMin / denum) - 3, lv_obj_get_y(Bar.bar) + 4);
@@ -239,39 +239,39 @@ void DispObjects::setStatsColor(lv_color_t color)
     {
         lv_style_set_text_color(&stat_style1, color);
 
-        lv_obj_remove_style(label_value, &stat_style1, LV_STATE_DEFAULT);
-        lv_obj_add_style(label_value, &stat_style1, LV_STATE_DEFAULT);
+        lv_obj_remove_style(statLabels.label_value, &stat_style1, LV_STATE_DEFAULT);
+        lv_obj_add_style(statLabels.label_value, &stat_style1, LV_STATE_DEFAULT);
 
-        lv_obj_remove_style(label_mean, &stat_style1, LV_STATE_DEFAULT);
-        lv_obj_add_style(label_mean, &stat_style1, LV_STATE_DEFAULT);
+        lv_obj_remove_style(statLabels.label_mean, &stat_style1, LV_STATE_DEFAULT);
+        lv_obj_add_style(statLabels.label_mean, &stat_style1, LV_STATE_DEFAULT);
 
-        lv_obj_remove_style(label_std, &stat_style1, LV_STATE_DEFAULT);
-        lv_obj_add_style(label_std, &stat_style1, LV_STATE_DEFAULT);
+        lv_obj_remove_style(statLabels.label_std, &stat_style1, LV_STATE_DEFAULT);
+        lv_obj_add_style(statLabels.label_std, &stat_style1, LV_STATE_DEFAULT);
 
-        lv_obj_remove_style(label_max, &stat_style1, LV_STATE_DEFAULT);
-        lv_obj_add_style(label_max, &stat_style1, LV_STATE_DEFAULT);
+        lv_obj_remove_style(statLabels.label_max, &stat_style1, LV_STATE_DEFAULT);
+        lv_obj_add_style(statLabels.label_max, &stat_style1, LV_STATE_DEFAULT);
 
-        lv_obj_remove_style(label_min, &stat_style1, LV_STATE_DEFAULT);
-        lv_obj_add_style(label_min, &stat_style1, LV_STATE_DEFAULT);
+        lv_obj_remove_style(statLabels.label_min, &stat_style1, LV_STATE_DEFAULT);
+        lv_obj_add_style(statLabels.label_min, &stat_style1, LV_STATE_DEFAULT);
     }
     else
     {
         lv_style_set_text_color(&stat_style2, color);
 
-        lv_obj_remove_style(label_std, &stat_style2, LV_STATE_DEFAULT);
-        lv_obj_add_style(label_std, &stat_style2, LV_STATE_DEFAULT);
+        lv_obj_remove_style(statLabels.label_std, &stat_style2, LV_STATE_DEFAULT);
+        lv_obj_add_style(statLabels.label_std, &stat_style2, LV_STATE_DEFAULT);
 
-        lv_obj_remove_style(label_value, &stat_style2, LV_STATE_DEFAULT);
-        lv_obj_add_style(label_value, &stat_style2, LV_STATE_DEFAULT);
+        lv_obj_remove_style(statLabels.label_value, &stat_style2, LV_STATE_DEFAULT);
+        lv_obj_add_style(statLabels.label_value, &stat_style2, LV_STATE_DEFAULT);
 
-        lv_obj_remove_style(label_mean, &stat_style2, LV_STATE_DEFAULT);
-        lv_obj_add_style(label_mean, &stat_style2, LV_STATE_DEFAULT);
+        lv_obj_remove_style(statLabels.label_mean, &stat_style2, LV_STATE_DEFAULT);
+        lv_obj_add_style(statLabels.label_mean, &stat_style2, LV_STATE_DEFAULT);
 
-        lv_obj_remove_style(label_max, &stat_style2, LV_STATE_DEFAULT);
-        lv_obj_add_style(label_max, &stat_style2, LV_STATE_DEFAULT);
+        lv_obj_remove_style(statLabels.label_max, &stat_style2, LV_STATE_DEFAULT);
+        lv_obj_add_style(statLabels.label_max, &stat_style2, LV_STATE_DEFAULT);
 
-        lv_obj_remove_style(label_min, &stat_style2, LV_STATE_DEFAULT);
-        lv_obj_add_style(label_min, &stat_style2, LV_STATE_DEFAULT);
+        lv_obj_remove_style(statLabels.label_min, &stat_style2, LV_STATE_DEFAULT);
+        lv_obj_add_style(statLabels.label_min, &stat_style2, LV_STATE_DEFAULT);
     }
 }
 
@@ -372,13 +372,31 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
      **   Stats
      ******************************/
 
-    label_setSmallFont = lv_label_create(label_set);
+    // label_setSmallFont = lv_label_create(label_set);
+    // label_value = lv_label_create(label_set);
+    // label_mean = lv_label_create(label_set);
+    // label_std = lv_label_create(label_set);
+    // label_max = lv_label_create(label_set);
+    // label_min = lv_label_create(label_set);
 
-    label_value = lv_label_create(label_set);
-    label_mean = lv_label_create(label_set);
-    label_std = lv_label_create(label_set);
-    label_max = lv_label_create(label_set);
-    label_min = lv_label_create(label_set);
+    statLabels.label_unit = lv_label_create(label_set);
+    lv_obj_align(statLabels.label_unit, LV_ALIGN_DEFAULT, -500, -500);
+    statLabels.label_setSmallFont = lv_label_create(label_set);
+    lv_obj_align(statLabels.label_setSmallFont, LV_ALIGN_DEFAULT, -500, -500);
+    statLabels.label_value = lv_label_create(label_set);
+    lv_obj_align(statLabels.label_value, LV_ALIGN_DEFAULT, -500, -500);
+    statLabels.label_mean = lv_label_create(label_set);
+    lv_obj_align(statLabels.label_mean, LV_ALIGN_DEFAULT, -500, -500);
+    statLabels.label_max = lv_label_create(label_set);
+    lv_obj_align(statLabels.label_max, LV_ALIGN_DEFAULT, -500, -500);
+    statLabels.label_min = lv_label_create(label_set);
+    lv_obj_align(statLabels.label_min, LV_ALIGN_DEFAULT, -500, -500);
+    statLabels.label_std = lv_label_create(label_set);
+    lv_obj_align(statLabels.label_std, LV_ALIGN_DEFAULT, -500, -500);
+    statLabels.label_fft = lv_label_create(label_set);
+    lv_obj_align(statLabels.label_fft, LV_ALIGN_DEFAULT, 0, -500);
+    statLabels.label_legend = lv_label_create(label_set);
+    lv_obj_align(statLabels.label_legend, LV_ALIGN_DEFAULT, 0, -500);
 
     /******************************
      **   Measure

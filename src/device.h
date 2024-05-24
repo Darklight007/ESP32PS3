@@ -308,6 +308,7 @@ public:
     void setupDisplay(lv_obj_t *scr);
     void setupPages(const char *page0, const char *page1, const char *page2, const char *page3, const char *page4);
     void setupSwitch(lv_obj_t *parent, lv_align_t align, lv_coord_t x_ofs, lv_coord_t y_ofs, lv_event_cb_t event_cb);
+    void setPagesCallback( lv_event_cb_t event_cb );
     DEVICE getStatus(void);
     void setStatus(DEVICE status_);
     void FlushSettings(void);

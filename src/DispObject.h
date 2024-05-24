@@ -37,53 +37,52 @@ public:
     float maxHist;
     float histWinMin;
     float histWinMax;
-    uint16_t cap = 128;
+    uint16_t cap = 120;
 
     Histogram(){};
     ~Histogram() {}
 
+    void updateMinMax(int index)
+    {
+        if (index < binMin)
+            binMin = index;
+        if (index > binMax)
+            binMax = index;
+    }
+
+    void rescaleHistogram()
+    {
+        maxHist = *std::max_element(data, data + length_);
+        binMin = length_; // Reset binMin to maximum possible value
+        binMax = -1;      // Reset binMax to minimum possible value
+
+        for (int i = 0; i < length_; ++i)
+        {
+            data[i] = static_cast<int>(data[i] * cap / maxHist);
+
+            if (data[i] != 0)
+            {
+                if (i < binMin)
+                    binMin = i;
+                if (i > binMax)
+                    binMax = i;
+            }
+        }
+    }
+
     void operator[](double &value)
     {
-        int index = round((value - histWinMin) / (histWinMax - histWinMin) * length_);
-
-        // index = std::clamp(index, 0, length_);
-        // Serial.printf("\n%i",index);
+        const int index = static_cast<int>(std::round((value - histWinMin) / (histWinMax - histWinMin) * length_));
 
         if (index < 0 || index >= length_)
             return;
 
         data[index]++;
+        updateMinMax(index);
 
-        if (index < binMin)
-            binMin = index;
-
-        if (index > binMax)
-            binMax = index;
-
- 
-        if (data[index] > (cap + 2))
+        if (data[index] > (cap + 10))
         {
-            maxHist = *std::max_element(data, data + length_);
-            binMax = -100;
-            binMin = 1000;
-            for (auto &val : data)
-            {
-                val *= cap / maxHist;
-            }
-
-            for (int iter = 0; iter < 328; ++iter)
-            {
-                // data[iter] *= cap / maxHist;
-                if (data[iter] == 0)
-                    continue;
-                // auto &val = *iter;
-
-                if (iter < binMin)
-                    binMin = iter;
-
-                if (iter > binMax)
-                    binMax = iter;
-            }
+            rescaleHistogram();
         }
     }
     void Reset()
@@ -108,7 +107,7 @@ public:
     int RangeMin()
     {
         int iter = 0;
-        for ( iter = 0; iter < 328; ++iter)
+        for (iter = 0; iter < 328; ++iter)
         {
             // data[iter] *= cap / maxHist;
             if (data[iter] != 0)
@@ -123,7 +122,7 @@ public:
     int RangeMax()
     {
         int iter = 0;
-        for ( iter = 328; iter >=0; --iter)
+        for (iter = 328; iter >= 0; --iter)
         {
             // data[iter] *= cap / maxHist;
             if (data[iter] != 0)
@@ -134,7 +133,6 @@ public:
 
         return iter;
     }
-
 };
 
 //***********************************************************
@@ -201,8 +199,8 @@ public:
         windowSizeIndex_ = 0;
         // samples_[windowSizeIndex_++] = 0;
     }
-    operator double() const { return sum_ / std::max((const long long unsigned)1,std::min(windowSizeIndex_, uint64_t(NofAvgs))); }
-    double Mean() const { return sum_ / std::max((const long long unsigned)1,std::min(windowSizeIndex_, uint64_t(NofAvgs))); }
+    operator double() const { return sum_ / std::max((const long long unsigned)1, std::min(windowSizeIndex_, uint64_t(NofAvgs))); }
+    double Mean() const { return sum_ / std::max((const long long unsigned)1, std::min(windowSizeIndex_, uint64_t(NofAvgs))); }
     double Sum() const { return sum_; }
 
     double Rms() const
@@ -243,7 +241,7 @@ public:
 
     void ResetStats()
     {
-        SetWindowSize(NofAvgs);        
+        SetWindowSize(NofAvgs);
         absMin = INFINITY;
         absMax = -INFINITY;
         // for (int i = 0; i < 128; i++)
@@ -266,6 +264,18 @@ struct _bar
     double oldValue;
 };
 
+struct _statisticsSmallLabels
+{
+    lv_obj_t *label_unit;
+    lv_obj_t *label_setSmallFont;
+    lv_obj_t *label_value;
+    lv_obj_t *label_mean;
+    lv_obj_t *label_std;
+    lv_obj_t *label_max;
+    lv_obj_t *label_min;
+    lv_obj_t *label_fft;
+    lv_obj_t *label_legend;
+};
 class DispObjects
 {
 
@@ -275,14 +285,9 @@ public:
     lv_obj_t *label_setValue;
     lv_obj_t *label_measureValue;
     lv_obj_t *label_unit;
-    lv_obj_t *label_setSmallFont;    
-    lv_obj_t *label_value;
-    lv_obj_t *label_mean;
-    lv_obj_t *label_std;
-    lv_obj_t *label_max;
-    lv_obj_t *label_min;
     lv_obj_t *highlight_adjValue;
     _bar Bar;
+    _statisticsSmallLabels statLabels;
 
     lv_obj_t *lock_img;
     lv_obj_t *unlock_img;
@@ -309,7 +314,6 @@ public:
     unsigned long timeKeeper{0};
     bool changed;
 
-
     const char *restrict {"%+07.3f"};
     const lv_font_t *font_measure{&lv_font_montserrat_42}; // dseg_b_48
     const lv_font_t *font_set{&graph_R_16};                //&unscii_16b4 Tauri_R_20
@@ -325,8 +329,6 @@ public:
     lv_style_t stat_style2;
     lv_style_t style_highlight_adjValue;
     lv_style_t style_set;
-
-    
 
     // int tick = 1;
     double rotaryEncoderStep{.0001};
