@@ -31,7 +31,7 @@ extern TFT_eSPI tft; // Global TFT instance
 extern TFT_eSprite spr[2];
 extern Preferences preferences;
 
-extern Keypad_MC17 kpd;
+ 
 extern lv_disp_draw_buf_t draw_buf;
 
 extern  uint16_t screenWidth;

@@ -34,10 +34,10 @@ public:
     uint16_t binMin = INFINITY;
     uint16_t numberOfBin;
     // double binWidth;
-    float maxHist;
+    int maxHist;
     float histWinMin;
     float histWinMax;
-    uint16_t cap = 120;
+    uint16_t cap = 88;
 
     Histogram(){};
     ~Histogram() {}
@@ -58,7 +58,11 @@ public:
 
         for (int i = 0; i < length_; ++i)
         {
-            data[i] = static_cast<int>(data[i] * cap / maxHist);
+            // data[i] = static_cast<int>(data[i] * cap / maxHist);
+            // data[i] = data[i] * cap / maxHist;
+            // data[i] -= 10;
+            //  if (data[i] < 0) data[i]=0;
+            data[i] = std::max(0, data[i] - 4); // Decrement by 10 and clamp to 0 in one step
 
             if (data[i] != 0)
             {
@@ -80,7 +84,7 @@ public:
         data[index]++;
         updateMinMax(index);
 
-        if (data[index] > (cap + 10))
+        if (data[index] > (cap + 4))
         {
             rescaleHistogram();
         }
@@ -299,6 +303,7 @@ public:
 
     int rawValue;
     double calib_m;
+    double calib_1m;
     double calib_b;
 
     double maxValue;

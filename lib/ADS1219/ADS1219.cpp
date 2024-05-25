@@ -6,22 +6,23 @@
 
 #include <Wire.h>
 #include "ADS1219.h"
+    TwoWire *_wire_g =  &Wire1;
 
 static uint8_t i2cRead(void)
 {
 #if ARDUINO >= 100
-  return Wire.read();
+  return _wire_g->read();
 #else
-  return Wire.receive();
+  return _wire->receive();
 #endif
 }
 
 static void i2cWrite(uint8_t x)
 {
 #if ARDUINO >= 100
-  Wire.write(x);
+  _wire_g->write(x);
 #else
-  Wire.send(x);
+  _wire->send(x);
 #endif
 }
 
@@ -31,50 +32,52 @@ ADS1219::ADS1219(int drdy, uint8_t addr)
   address = addr;
   config = 0x00;
   singleShot = true;
+    _wire= _wire_g;
 }
 
 void ADS1219::begin()
 {
-  Wire.begin();
+
+  _wire->begin();
 }
 
 void ADS1219::start()
 {
-  Wire.beginTransmission(address);
+  _wire->beginTransmission(address);
   i2cWrite(0x08);
-  Wire.endTransmission();
+  _wire->endTransmission();
 }
 
 void ADS1219::powerDown()
 {
-  Wire.beginTransmission(address);
+  _wire->beginTransmission(address);
   i2cWrite(0x02);
-  Wire.endTransmission();
+  _wire->endTransmission();
 }
 
 uint8_t ADS1219::readRegister(uint8_t reg)
 {
-  Wire.beginTransmission(address);
+  _wire->beginTransmission(address);
   i2cWrite(reg);
-  Wire.endTransmission();
-  Wire.requestFrom((uint8_t)address, (uint8_t)1);
+  _wire->endTransmission();
+  _wire->requestFrom((uint8_t)address, (uint8_t)1);
   return i2cRead();
 }
 
 void ADS1219::writeRegister(uint8_t data)
 {
-  Wire.beginTransmission(address);
+  _wire->beginTransmission(address);
   i2cWrite(CONFIG_REGISTER_ADDRESS);
   i2cWrite(data);
-  Wire.endTransmission();
+  _wire->endTransmission();
 }
 
 long ADS1219::readConversionResult()
 {
-  Wire.beginTransmission(address);
+  _wire->beginTransmission(address);
   i2cWrite(0x10);
-  Wire.endTransmission();
-  Wire.requestFrom((uint8_t)address, (uint8_t)3);
+  _wire->endTransmission();
+  _wire->requestFrom((uint8_t)address, (uint8_t)3);
   long data32 = i2cRead();
   data32 <<= 8;
   data32 |= i2cRead();

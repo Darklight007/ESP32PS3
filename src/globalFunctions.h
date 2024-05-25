@@ -6,6 +6,7 @@
 // #include "config.hpp"
 #include "input_device.h"
 #include "setting_menu.h"
+#include <string>
 
 /**********************
  *   PROTOTYPES
@@ -13,6 +14,7 @@
 void init_display(void);
 void init_touch(void);
 void ChartUpdate();
+void HistPush();
 void StatusBar();
 void schedule(std::function<void(void)> func, unsigned long &&interval, unsigned long &startTime);
 void keyCheckLoop();
@@ -20,24 +22,6 @@ void keyCheckLoop();
 /**********************
  *   GLOBAL VARIABLES
  **********************/
-// extern Tabs pages;
-
-// extern volatile unsigned long encoder1Flag;
-// extern volatile unsigned long encoder2Flag;
-// extern FFTHandler V, I;
-
-// extern lv_obj_t *menu;
-// extern lv_obj_t *voltageCurrentCalibration;
-// extern lv_obj_t *myTextBox;
-
-// extern lv_obj_t *dd_calibration;
-// extern lv_obj_t *lbl_voltageCalib_m;
-// extern lv_obj_t *lbl_voltageCalib_b;
-// extern lv_obj_t *lbl_rawCode;
-// extern lv_obj_t *lbl_calibratedValue;
-// extern lv_obj_t *lbl_rawAVG_;
-// extern lv_obj_t *lbl_calibValueAVG_;
-// extern lv_obj_t *lbl_ER_;
 
 // volatile long chartInterruptCounter;
 
@@ -226,8 +210,8 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_SHIFT);
     lv_obj_add_event_cb(PowerSupply.graph.chart, draw_event_cb2, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
-    PowerSupply.graph.serV = lv_chart_add_series(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_BLUE), LV_CHART_AXIS_PRIMARY_Y);
     PowerSupply.graph.serI = lv_chart_add_series(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_AMBER), LV_CHART_AXIS_SECONDARY_Y);
+    PowerSupply.graph.serV = lv_chart_add_series(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_BLUE), LV_CHART_AXIS_PRIMARY_Y);
 
     // uint32_t pcnt = sizeof(ecg_sample) / sizeof(ecg_sample[0]);
     lv_chart_set_point_count(PowerSupply.graph.chart, 600 * 2);
@@ -423,34 +407,35 @@ static void draw_event_stat_chart_cb(lv_event_t *e)
             static char str[7][18];
 
             // static const char *restrict {"%+4.1f"};
-            for (int i = 0; i < 7; i++)
-            {
-                if (i != 6)
+            // for (int i = 0; i < 7; i++)
+            // {
+            //     if (i != 6)
 
-                {
-                    if (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin > .6)
-                        std::sprintf(str[i], "%3.1f\n%4.1f",
-                                     i / 6.0 * (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) + PowerSupply.Voltage.hist.histWinMin,
-                                     i / 6.0 * (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) + PowerSupply.Current.hist.histWinMin);
-                    else
-                        std::sprintf(str[i], "%3.2f\n%4.1f",
-                                     i / 6.0 * (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) + PowerSupply.Voltage.hist.histWinMin,
-                                     i / 6.0 * (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) + PowerSupply.Current.hist.histWinMin);
-                }
+            //     {
+            //         if (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin > .6)
+            //             std::sprintf(str[i], "%3.1f\n%4.1f",
+            //                          i / 6.0 * (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) + PowerSupply.Voltage.hist.histWinMin,
+            //                          i / 6.0 * (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) + PowerSupply.Current.hist.histWinMin);
+            //         else
+            //             std::sprintf(str[i], "%3.2f\n%4.1f",
+            //                          i / 6.0 * (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) + PowerSupply.Voltage.hist.histWinMin,
+            //                          i / 6.0 * (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) + PowerSupply.Current.hist.histWinMin);
+            //     }
 
-                else
-                {
-                    if (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin > .6)
-                        std::sprintf(str[i], "%3.1f[V]\n%4.1f[A]",
-                                     i / 6.0 * PowerSupply.Voltage.hist.histWinMax,
-                                     i / 6.0 * PowerSupply.Current.hist.histWinMax);
-                    else
-                        std::sprintf(str[i], "%3.2f[V]\n%4.1f[A]",
-                                     i / 6.0 * PowerSupply.Voltage.hist.histWinMax,
-                                     i / 6.0 * PowerSupply.Current.hist.histWinMax);
-                }
-                tickLabel[i] = str[i];
-            }
+            //     else
+            //     {
+            //         if (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin > .6)
+            //             std::sprintf(str[i], "%3.1f[V]\n%4.1f[A]",
+            //                          i / 6.0 * PowerSupply.Voltage.hist.histWinMax,
+            //                          i / 6.0 * PowerSupply.Current.hist.histWinMax);
+            //         else
+            //             std::sprintf(str[i], "%3.2f[V]\n%4.1f[A]",
+            //                          i / 6.0 * PowerSupply.Voltage.hist.histWinMax,
+            //                          i / 6.0 * PowerSupply.Current.hist.histWinMax);
+            //     }
+            //     tickLabel[i] = str[i];
+            // }
+
             // char * a="%+08.4f";
             // strcpy(a, "%+08.4f");
             // strcat(a, lv_label_get_text(label_unit));
@@ -474,26 +459,26 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     lv_obj_center(PowerSupply.stats.chart);
     lv_obj_align(PowerSupply.stats.chart, LV_ALIGN_DEFAULT, x, y + 0);
 
-    lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_Y, 0, 120);   // 40000mv
-    lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_SECONDARY_Y, 0, 120); // 8000ma
+    lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_Y, 0, 80);   // 40000mv
+    lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_SECONDARY_Y, 0, 80); // 8000ma
     lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_X, 0, 328);
 
-    lv_chart_set_div_line_count(PowerSupply.stats.chart, 6, 13);
+    lv_chart_set_div_line_count(PowerSupply.stats.chart, 5, 13);
     lv_obj_set_style_text_color(PowerSupply.stats.chart, lv_palette_main(LV_PALETTE_GREY), LV_PART_TICKS);
 
-    lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_Y, 5, 3, 6, 4, true, 40);
+    lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_Y, 5, 3, 5, 4, true, 40);
     lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_X, 5, 3, 7, 10, true, 50);
 
     lv_chart_set_type(PowerSupply.stats.chart, LV_CHART_TYPE_LINE);
-    lv_chart_set_update_mode(PowerSupply.stats.chart, LV_CHART_UPDATE_MODE_SHIFT);
+    lv_chart_set_update_mode(PowerSupply.stats.chart, LV_CHART_UPDATE_MODE_CIRCULAR);
     lv_obj_add_event_cb(PowerSupply.stats.chart, draw_event_stat_chart_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
     lv_obj_set_style_line_width(PowerSupply.stats.chart, 2, LV_PART_ITEMS);
 
     // /*Do not display points on the data*/
     lv_obj_set_style_size(PowerSupply.stats.chart, 0, LV_PART_INDICATOR);
 
-    PowerSupply.stats.serV = lv_chart_add_series(PowerSupply.stats.chart, lv_palette_main(LV_PALETTE_BLUE), LV_CHART_AXIS_PRIMARY_Y);
     PowerSupply.stats.serI = lv_chart_add_series(PowerSupply.stats.chart, lv_palette_main(LV_PALETTE_AMBER), LV_CHART_AXIS_SECONDARY_Y);
+    PowerSupply.stats.serV = lv_chart_add_series(PowerSupply.stats.chart, lv_palette_main(LV_PALETTE_BLUE), LV_CHART_AXIS_PRIMARY_Y);
 
     lv_chart_set_point_count(PowerSupply.stats.chart, 328);
     PowerSupply.stats.serI->y_points = PowerSupply.Current.hist.data;
@@ -883,10 +868,32 @@ void Task_ADC(void *pvParameters)
             lastCCCVStatus = digitalRead(PowerSupply.CCCVPin);
             myTone(NOTE_A4, 50);
         }
+        HistPush();
+
+        static unsigned long chartUpdate;
+
+        if (!lvglIsBusy && Tabs::getCurrentPage() == 0 )
+            schedule([]
+                     {
+                         lvglChartIsBusy = true;
+                         lv_chart_refresh(PowerSupply.stats.chart);
+                         lvglChartIsBusy = false;
+                         //
+                     },
+                     PowerSupply.Voltage.measured.NofAvgs * 0, chartUpdate);
 
         static unsigned long NoAvgTime;
-        if (!lvglIsBusy)
-            schedule(&ChartUpdate, PowerSupply.Voltage.measured.NofAvgs * 1000.0 * 2.0 / /*pixels per point*/ ((double)PowerSupply.adc.realADCSpeed), NoAvgTime);
+
+        if (!lvglIsBusy && !chartPause)
+            schedule([]
+                     {
+                         lvglChartIsBusy = true;
+                         lv_chart_set_next_value(PowerSupply.graph.chart, PowerSupply.graph.serV, PowerSupply.Voltage.measured.value * 1000.0);
+                         lv_chart_set_next_value(PowerSupply.graph.chart, PowerSupply.graph.serI, PowerSupply.Current.measured.value * 1000.0);
+                         lvglChartIsBusy = false;
+                         //
+                     },
+                     PowerSupply.Voltage.measured.NofAvgs * 100 /* pixels per point ((double)PowerSupply.adc.realADCSpeed)*/, NoAvgTime);
 
         if (V.sampleReady)
         {
@@ -1177,7 +1184,7 @@ static void scroll_begin_event(lv_event_t *e)
 
 void Utility_tabview(lv_obj_t *parent)
 {
-    lv_obj_set_size(parent, 295, 190);
+    lv_obj_set_size(parent, 320, 194);
 
     static lv_style_t style_utility;
     lv_style_init(&style_utility);
@@ -1185,12 +1192,12 @@ void Utility_tabview(lv_obj_t *parent)
     lv_style_set_pad_all(&style_utility, 0);
 
     lv_obj_add_style(parent, &style_utility, LV_STATE_DEFAULT);
-    lv_style_set_text_letter_space(&style_utility, 1);
+    lv_style_set_text_letter_space(&style_utility, 0);
     lv_style_set_text_color(&style_utility, lv_palette_main(LV_PALETTE_GREY));
 
     /*Create a Tab view object*/
     lv_obj_t *tabview;
-    tabview = lv_tabview_create(parent, LV_DIR_LEFT, 60);
+    tabview = lv_tabview_create(parent, LV_DIR_TOP, 25);
     lv_obj_add_event_cb(lv_tabview_get_content(tabview), scroll_begin_event, LV_EVENT_SCROLL_BEGIN, NULL);
 
     // lv_obj_set_style_bg_color(tabview, lv_palette_darken(LV_PALETTE_DEEP_PURPLE, 3), 0);
@@ -1202,9 +1209,9 @@ void Utility_tabview(lv_obj_t *parent)
 
     /*Add 3 tabs (the tabs are page (lv_page) and can be scrolled*/
     lv_obj_t *tab1 = lv_tabview_add_tab(tabview, "Memory");
-    lv_obj_t *tab2 = lv_tabview_add_tab(tabview, "Tab 2");
-    lv_obj_t *tab3 = lv_tabview_add_tab(tabview, "Tab 3");
-    lv_obj_t *tab4 = lv_tabview_add_tab(tabview, "Tab 4");
+    lv_obj_t *tab2 = lv_tabview_add_tab(tabview, "F. Gen.");
+    lv_obj_t *tab3 = lv_tabview_add_tab(tabview, "Arbit");
+    lv_obj_t *tab4 = lv_tabview_add_tab(tabview, "Table");
 
     // lv_obj_set_style_bg_color(tab1, lv_palette_darken(LV_PALETTE_BLUE, 3), 0);
     // lv_obj_set_style_bg_opa(tab1, LV_OPA_COVER, 10);
@@ -1218,7 +1225,7 @@ void Utility_tabview(lv_obj_t *parent)
     // lv_label_set_text(label, "0: 0.000V\t\t0.000A\n1: 0.100V\t\t0.010A\n2: 2.048V\t\t0.050A\n3: 3.000V 0.050A\n4: 4.096V 0.050A\n5: 5.000V 0.050A\n6: 0.000V 0.000A\n7: 0.100V 0.010A\n8: 20.480V 0.050A\n9: 32.000V 0.050A");
     /*Add content to the tabs*/
     lv_obj_t *label;
-    int8_t yOff = 34, verOff = 110, yStart = -10;
+    int8_t yOff = 34, verOff = 120, yStart = -10, xS = 10;
     for (int i = 0; i < 10; i++)
     {
         label = lv_label_create(tab1);
@@ -1226,7 +1233,7 @@ void Utility_tabview(lv_obj_t *parent)
         lv_obj_remove_style_all(label);
         lv_obj_add_style(label, &style_utility, LV_STATE_DEFAULT);
         lv_obj_set_style_text_font(label, &monofont_R_20, 0);
-        lv_obj_set_pos(label, -4 + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
+        lv_obj_set_pos(label, xS + -4 + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
 
         label = lv_label_create(tab1);
         uint16_t adjValue;
@@ -1236,7 +1243,7 @@ void Utility_tabview(lv_obj_t *parent)
         lv_obj_add_style(label, &style_utility, LV_STATE_DEFAULT);
         lv_label_set_text_fmt(label, "%+07.3fV", (i * 2000.0 * 3.5555) / 2000.0);
         lv_obj_set_style_text_font(label, &monofont_R_16, 0); // graph_R_16 monofont_R_16
-        lv_obj_set_pos(label, 18 + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
+        lv_obj_set_pos(label, xS + 18 + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
         label = lv_label_create(tab1);
 
         // PowerSupply.EEPROMwrite(90 + i * 4 + 2, i);
@@ -1245,106 +1252,52 @@ void Utility_tabview(lv_obj_t *parent)
         lv_obj_add_style(label, &style_utility, LV_STATE_DEFAULT);
         lv_label_set_text_fmt(label, "%+07.3fA", adjValue / 10000.0);
         lv_obj_set_style_text_font(label, &monofont_R_16, 0);
-        lv_obj_set_pos(label, 18 + verOff * (i >= 5), i * yOff * (i < 5) + 15 + (i - 5) * yOff * (i >= 5) + yStart);
+        lv_obj_set_pos(label, xS + 18 + verOff * (i >= 5), i * yOff * (i < 5) + 15 + (i - 5) * yOff * (i >= 5) + yStart);
     }
 
-    // label = lv_label_create(tab1);
-    // lv_label_set_text(label, "1.000V");
-    // lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 2);
-    // lv_obj_set_pos(label, 20, 32);
-    // label = lv_label_create(tab1);
-    // lv_label_set_text(label, "1.000A");
-    // lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
-    // lv_obj_set_pos(label, 20, 48);
+    lv_obj_set_style_pad_ver(tabview, 0, LV_PART_ITEMS);
+    lv_obj_t *table = lv_table_create(tab4);
+    lv_obj_set_pos(table, -4, -4);
+    // lv_table_set_cell_value(table, 0, 0, "#");
+    // lv_table_set_cell_value(table, 0, 1, "V");
+    // lv_table_set_cell_value(table, 0, 2, "C");
 
-    // lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0); //  lv_font_montserrat_14
-    // lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
-    // lv_label_set_recolor(label, true);
-    // label = lv_label_create(tab1);
-    // lv_label_set_text(label, "0: 0.000V\t\t0.000A\n1: 0.100V\t\t0.010A\n2: 2.048V\t\t0.050A\n3: 3.000V 0.050A\n4: 4.096V 0.050A\n5: 5.000V 0.050A\n6: 0.000V 0.000A\n7: 0.100V 0.010A\n8: 20.480V 0.050A\n9: 32.000V 0.050A");
+    // lv_table_set_row_cnt(table, 2);
+    lv_obj_clear_flag(tab4, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_ver(tab4, 0, LV_PART_ITEMS);
+    lv_obj_set_style_pad_ver(table, 3, LV_PART_ITEMS);
 
-return;
-    const lv_font_t *font_set{&lv_font_montserrat_16}; // graph_R_16 dseg_b_20
-
-    static lv_style_t style_set;
-    lv_style_init(&style_set);
-    lv_style_set_text_color(&style_set, lv_palette_main(LV_PALETTE_YELLOW));
-    lv_style_set_text_font(&style_set, font_set);
-    lv_obj_add_style(label, &style_set, LV_STATE_DEFAULT);
-
-    label = lv_label_create(tab2);
-    lv_label_set_text(label, "Second tab");
-
-    label = lv_label_create(tab3);
-    lv_label_set_text(label, "Third tab");
-
-    label = lv_label_create(tab3);
-    lv_label_set_text(label, "Third tab");
-
-    label = lv_label_create(tab4);
-    lv_label_set_text(label, "Fourth tab");
-
-    lv_obj_clear_flag(lv_tabview_get_content(tabview), LV_OBJ_FLAG_SCROLLABLE);
-}
-
-void Utility_tabview2(lv_obj_t *parent)
-{
-    lv_obj_set_size(parent, 295, 190);
-
-    static lv_style_t style_utility;
-    lv_style_init(&style_utility);
-
-    lv_style_set_pad_all(&style_utility, 0);
-
-    lv_obj_add_style(parent, &style_utility, LV_STATE_DEFAULT);
-
-    /*Create a Tab view object*/
-    lv_obj_t *tabview;
-    tabview = lv_tabview_create(parent, LV_DIR_LEFT, 60);
-    lv_obj_add_event_cb(lv_tabview_get_content(tabview), scroll_begin_event, LV_EVENT_SCROLL_BEGIN, NULL);
-
-    // lv_obj_set_style_bg_color(tabview, lv_palette_darken(LV_PALETTE_DEEP_PURPLE, 3), 0);
-
-    lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tabview);
-
-    lv_obj_t *tab1 = lv_tabview_add_tab(tabview, "Memory");
-    lv_obj_t *tab2 = lv_tabview_add_tab(tabview, "Tab 2");
-    lv_obj_t *tab3 = lv_tabview_add_tab(tabview, "Tab 3");
-    lv_obj_t *tab4 = lv_tabview_add_tab(tabview, "Tab 4");
-
-    lv_obj_t *label;
-    int8_t yOff = 34, verOff = 114, yStart = -10;
-
-    label = lv_label_create(tab1);
-    lv_label_set_text_fmt(label,
-                          "%i:           %i:\n%i:            %i:\n%i:           %i:\n%i:           %i:\n%i:           %i:",
-                          0, 5, 1, 6, 2, 7, 3, 8, 4, 9);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_30, 0);
-    lv_obj_set_pos(label, -4, yStart);
-
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 100; i++)
     {
-        // label = lv_label_create(tab1);
-        // lv_label_set_text_fmt(label, "%i:", i);
-        // lv_obj_set_style_text_font(label, &lv_font_montserrat_22, 0);
-        // lv_obj_set_pos(label, -4 + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
-
-        label = lv_label_create(tab1);
-        uint16_t adjValue;
-        // PowerSupply.EEPROMwrite(90 + i * 4, i);
-        PowerSupply.EEPROMread(90 + i * 4, adjValue);
-        lv_label_set_text_fmt(label, "%+07.3fV", adjValue / 2000.0);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
-        lv_obj_set_pos(label, 26 + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
-
-        label = lv_label_create(tab1);
-        // PowerSupply.EEPROMwrite(90 + i * 4 + 2, i);
-        PowerSupply.EEPROMread(90 + i * 4 + 2, adjValue);
-        lv_label_set_text_fmt(label, "%+07.3fA", adjValue / 10000.0);
-        lv_obj_set_style_text_font(label, &dseg_b_22, 0);
-        lv_obj_set_pos(label, 26 + verOff * (i >= 5), i * yOff * (i < 5) + 15 + (i - 5) * yOff * (i >= 5) + yStart);
+        lv_table_set_cell_value_fmt(table, i, 0, "%0i", i);
+        lv_table_set_cell_value_fmt(table, i, 1, "%06.3fV", i * 2000.0 * 3.5555 / 2000.0);
+        lv_table_set_cell_value_fmt(table, i, 2, "%06.3fA", i * 2000.0 * 3.5555 / 10000.0);
     }
 
+    static lv_style_t style_stats;
+    lv_style_init(&style_stats);
+    lv_style_set_text_font(&style_stats, &graph_R_16);
+    lv_style_set_text_letter_space(&style_stats, 1);
+    lv_style_set_text_color(&style_stats, lv_palette_main(LV_PALETTE_GREY));
+    lv_style_set_text_letter_space(&style_stats, -1);
+
+    lv_obj_remove_style(table, &style_stats, LV_STATE_DEFAULT);
+    lv_obj_add_style(table, &style_stats, LV_STATE_DEFAULT);
+
+    // lv_obj_add_style(table, LV_TABLE_DRAW_PART_CELL, &style_cellx);
+    /*Set a smaller height to the table. It'll make it scrollable*/
+    lv_obj_set_height(table, 172);
+    //  lv_obj_clear_flag(lv_tabview_get_content(table), LV_OBJ_FLAG_SCROLLABLE);
+    // lv_obj_set_width(tab1, 25);
+    // lv_obj_set_width(table, 294);
+    // lv_obj_center(table);
+
+    lv_table_set_col_width(table, 0, 27 * 2);
+    lv_table_set_col_width(table, 1, 140);
+    lv_table_set_col_width(table, 2, 140);
+
+    lv_obj_clear_flag(lv_tabview_get_content(tabview), LV_OBJ_FLAG_SCROLLABLE);
+    return;
     const lv_font_t *font_set{&lv_font_montserrat_16}; // graph_R_16 dseg_b_20
 
     static lv_style_t style_set;
@@ -1359,7 +1312,11 @@ void Utility_tabview2(lv_obj_t *parent)
     label = lv_label_create(tab3);
     lv_label_set_text(label, "Third tab");
 
-    lv_obj_clear_flag(lv_tabview_get_content(tabview), LV_OBJ_FLAG_SCROLLABLE);
+    label = lv_label_create(tab3);
+    lv_label_set_text(label, "Third tab");
+
+    // label = lv_label_create(tab4);
+    // lv_label_set_text(label, "Fourth tab");
 }
 
 void UpdateTabs(void)
@@ -1789,10 +1746,12 @@ void updateObjectPos_cb(lv_event_t *e)
     case 0:
         StatsPositions(PowerSupply.page[0], PowerSupply.Voltage, &PowerSupply.stats.style_statsVolt, 0, 177);
         StatsPositions(PowerSupply.page[0], PowerSupply.Current, &PowerSupply.stats.style_statsCurrent, 0, 187);
+        PowerSupply.SaveSetting();
         break;
     case 1:
         StatsPositions(PowerSupply.page[1], PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, 0, 177);
         StatsPositions(PowerSupply.page[1], PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, 0, 187);
+        PowerSupply.SaveSetting();
         break;
     case 4:
         PowerSupply.SaveSetting();
@@ -2062,11 +2021,18 @@ void ChartUpdate()
     }
 
     // Histogram
+    // PowerSupply.Voltage.hist[PowerSupply.Voltage.measured.value];
+    // PowerSupply.Current.hist[PowerSupply.Current.measured.value];
+    // lv_chart_refresh(PowerSupply.stats.chart);
+}
+void HistPush()
+
+{
+    // Histogram
     PowerSupply.Voltage.hist[PowerSupply.Voltage.measured.value];
     PowerSupply.Current.hist[PowerSupply.Current.measured.value];
     // lv_chart_refresh(PowerSupply.stats.chart);
 }
-
 void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
 {
     if (encoder2Flag /*&& (Tabs::getCurrentPage() == 4)*/)
@@ -2212,7 +2178,7 @@ void trackLoopExecution()
     unsigned long currentTime = millis();
     if ((currentTime - lastLoopTime) >= loopInterval)
     {
-        Serial.printf("Loop Count: %5.0f at time %07.2f \n", loopCount * 1000.0 / loopInterval, currentTime / 1000.0);
+        Serial.printf("Loop Count: %5.0f @ %07.2f \n", loopCount * 1000.0 / loopInterval, currentTime / 1000.0);
         lastLoopTime = currentTime;
         loopCount = 0;
     }
@@ -2221,7 +2187,8 @@ void trackLoopExecution()
 void LvglUpdatesInterval(unsigned long interval)
 {
     static unsigned long timer_ = {0}; // Interval in milliseconds
-                                       // static unsigned long timer_;
+    if (lvglChartIsBusy)
+        return;
     schedule([]
              {lvglIsBusy=1;
             lv_timer_handler();
@@ -2247,8 +2214,8 @@ void statisticUpdateInterval(unsigned long interval)
     static unsigned long timer_ = {0};
     schedule([]
              {
-            if (!lvglIsBusy)
-                lv_chart_refresh(PowerSupply.stats.chart);
+            // if (!lvglIsBusy)
+            //     lv_chart_refresh(PowerSupply.stats.chart);
 
              PowerSupply.Voltage.statUpdate();
              PowerSupply.Current.statUpdate(); },
@@ -2262,8 +2229,8 @@ void FFTUpdateInterval(unsigned long interval)
              {
                  /*FFT_v*/
 
-                 V.computeFFT(PowerSupply.adc.realADCSpeed / 2.0);
-                 I.computeFFT(PowerSupply.adc.realADCSpeed / 2.0);
+                 V.computeFFT(PowerSupply.adc.realADCSpeed * 0.495049505 /*2.02*/);
+                 I.computeFFT(PowerSupply.adc.realADCSpeed * 0.495049505 /**/);
 
                  lv_label_set_text_fmt(PowerSupply.Voltage.statLabels.label_fft, "V-FFT:%5.1f Hz", V.peak);
                  lv_label_set_text_fmt(PowerSupply.Current.statLabels.label_fft, "I-FFT:%5.1f Hz", I.peak);

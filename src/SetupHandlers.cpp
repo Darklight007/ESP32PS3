@@ -16,10 +16,18 @@ void initialMemory()
     Serial.printf("Free PSRAM: %d\n", ESP.getFreePsram());
 }
 
+#define SDA_1 17
+#define SCL_1 18
+
+#define SDA_2 17
+#define SCL_2 18
 void initializeI2C()
 {
     // setupOTA("Power Supply");
-    Wire.begin(18, 15, 1000000UL);
+    // TwoWire I2C1 = TwoWire(0);
+    // TwoWire I2C2 = TwoWire(1);
+    Wire1.begin(SDA_1, SCL_1, 1000000UL); //(18,15), 16,17
+    // Wire1.begin(SDA_2, SCL_2, 1000000UL);
     // Wire.setClock(1250000);
     Serial.println("I2C Initialized.");
     if (0)
@@ -199,7 +207,8 @@ void setupADC()
 
 void setupDAC()
 {
-    PowerSupply.setupADC(9, ADCPinISR);
+
+    PowerSupply.setupADC(9, ADCPinISR, &Wire);
     PowerSupply.setupDAC(0x41);
 
     // LTC2655 Device::DAC(0x41);
@@ -220,9 +229,9 @@ void createTasks()
     xTaskCreatePinnedToCore(
         Task_ADC,                         /* Task function. */
         "Voltage & Current ADC",          /* name of task. */
-        5600,                             /* Stack size of task */
+        8000,                             /* Stack size of task */
         NULL, /* parameter of the task */ /* (void *)&adcDataReady */
-        10,                               /* priority of the task */
+        1,                                /* priority of the task */
         &Task_adc,                        /* Task handle to keep track of created task */
         0);
 
@@ -237,7 +246,7 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
 #if DMA
     tft.pushImageDMA(area->x1, area->y1, area->x2 - area->x1 + 1, area->y2 - area->y1 + 1, (uint16_t *)&color_p->full);
     // sprSel = !sprSel;
-    // tft.dmaWait();
+    tft.dmaWait(); // Remove this will make displaly stuck!
 
 #else
     uint32_t w = (area->x2 - area->x1 + 1);

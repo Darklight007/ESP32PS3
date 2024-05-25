@@ -3,7 +3,7 @@
 extern Calibration StoreData;
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
 
-void Device::setupADC(uint8_t pin, void func(void))
+void Device::setupADC(uint8_t pin, void func(void),TwoWire *_awire)
 
 {
     // mem.begin("param", false);
@@ -12,14 +12,17 @@ void Device::setupADC(uint8_t pin, void func(void))
     // calibrate();
     LoadCalibrationData();
 
-    adc.ads1219->setDataRate(90);
+    // adc.ads1219->setDataRate(90);
     adc.ads1219->begin();
     adc.ads1219->setVoltageReference(REF_INTERNAL);
     adc.ads1219->setGain(ONE);
     adc.ads1219->setConversionMode(SINGLE_SHOT); // SINGLE_SHOT
     adc.ads1219->readSingleEnded(VOLTAGE);
     adc.busyChannel = VOLTAGE;
+    // adc.ads1219->_wire= _awire;
+
 }
+
 void Device::setupDAC(uint8_t addr)
 {
     DAC.address = addr;
@@ -56,9 +59,13 @@ void Device::calibrationUpdate(void)
                       (CalBank[bankCalibId].vCal.value_2 - CalBank[bankCalibId].vCal.value_1);
     Voltage.calib_b = CalBank[bankCalibId].vCal.code_1 - Voltage.calib_m * CalBank[bankCalibId].vCal.value_1;
 
+ Voltage.calib_1m=1.0/ Voltage.calib_m;
+ 
     Current.calib_m = (CalBank[bankCalibId].iCal.code_2 - CalBank[bankCalibId].iCal.code_1) /
                       (CalBank[bankCalibId].iCal.value_2 - CalBank[bankCalibId].iCal.value_1);
     Current.calib_b = CalBank[bankCalibId].iCal.code_1 - Current.calib_m * CalBank[bankCalibId].iCal.value_1;
+
+ Current.calib_1m=1.0/ Current.calib_m;
 
     Power.measured.ResetStats();
     Voltage.measured.ResetStats();
@@ -300,7 +307,7 @@ void Device::readVoltage()
         adc.startConversion(CURRENT);
         adcDataReady = false;
 
-        v = (Voltage.rawValue - Voltage.calib_b) / Voltage.calib_m;
+        v = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
 
         // Voltage.hist[v];
         Voltage.measureUpdate(v); //  enob(rs[0].StandardDeviation())
@@ -314,6 +321,7 @@ void Device::readVoltage()
     }
 }
 double internalCurrentConsumption;
+
 void Device::readCurrent()
 {
     if ((adcDataReady || false) && (adc.busyChannel == CURRENT) /* && ads.checkDataReady() */)
@@ -327,10 +335,11 @@ void Device::readCurrent()
         // double currentOfUnknowSource = 1.0 * Voltage.measured.Mean() / (32.0 / (0.0019 - 0.0012));
 
         // Current used by R11&R12 and maybe others?
-        double currentOfUnknowSource = 1.0 * Voltage.measured.Mean() / (32.0 / (0.0037 - 0.0034));
+        static double den=1.0/ (32.0 / (0.0037 - 0.0034));
+        double currentOfUnknowSource = 1.0 * Voltage.measured.Mean() *den;
         internalCurrentConsumption = currentOfUnknowSource +
                                      1.0 * 0.000180 * !digitalRead(CCCVPin);                         // Why?
-        c = (((Current.rawValue - Current.calib_b) / Current.calib_m) - internalCurrentConsumption); // old value: .0009
+        c = (((Current.rawValue - Current.calib_b) * Current.calib_1m) - internalCurrentConsumption); // old value: .0009
 
         // Current.hist[c];
 

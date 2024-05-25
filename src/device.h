@@ -44,7 +44,7 @@ struct Graph_
 {
 public:
     lv_obj_t *chart;
-    lv_chart_series_t * serV;
+    lv_chart_series_t *serV;
     lv_chart_series_t *serI;
     lv_chart_series_t *serT;
     lv_style_t style_legend1;
@@ -212,12 +212,16 @@ public:
     uint8_t config;
     uint16_t realADCSpeed{0};
     unsigned long ADC_loopCounter{0};
+    TwoWire *_wire;
 
     // ADC(int drdy, uint8_t addr = 0x40)
     ADC()
     {
         ads1219 = new ADS1219(drdy, addr);
+            _wire=&Wire1;
     }
+
+
     void startConversion(int channel)
     {
         ads1219->readSingleEnded(channel);
@@ -228,15 +232,15 @@ public:
     int32_t data32;
     long readConversion()
     {
-        Wire.beginTransmission(addr);
-        Wire.write(0x10);
-        Wire.endTransmission();
-        Wire.requestFrom((uint8_t)addr, (uint8_t)3);
-        data32 = Wire.read();
+        _wire->beginTransmission(addr);
+        _wire->write(0x10);
+        _wire->endTransmission();
+        _wire->requestFrom((uint8_t)addr, (uint8_t)3);
+        data32 = _wire->read();
         data32 <<= 8;
-        data32 |= Wire.read();
+        data32 |= _wire->read();
         data32 <<= 8;
-        data32 |= Wire.read();
+        data32 |= _wire->read();
         return (data32 << 8) >> 8;
         // return ads1219->readSingleEnded(channel); // readConversionResult();
     }
@@ -244,11 +248,11 @@ public:
     bool checkDataReady(void)
     {
 
-        Wire.beginTransmission(addr);
-        Wire.write(36);
-        Wire.endTransmission();
-        Wire.requestFrom((uint8_t)addr, (uint8_t)1);
-        uint8_t drdy = Wire.read();
+        _wire->beginTransmission(addr);
+        _wire->write(36);
+        _wire->endTransmission();
+        _wire->requestFrom((uint8_t)addr, (uint8_t)1);
+        uint8_t drdy = _wire->read();
 
         // uint8_t drdy = ads1219->readRegister(36);
         if (drdy == 224)
@@ -293,7 +297,7 @@ public:
      * @param pin MCU interrupt pin for ADC drdy
      * @param func interrupt routine
      ****************/
-    void setupADC(uint8_t pin, void func(void));
+    void setupADC(uint8_t pin, void func(void),TwoWire *_awire);
     void setupDAC(uint8_t);
     void calibrate(void);
     void calibrationUpdate(void);
@@ -308,7 +312,7 @@ public:
     void setupDisplay(lv_obj_t *scr);
     void setupPages(const char *page0, const char *page1, const char *page2, const char *page3, const char *page4);
     void setupSwitch(lv_obj_t *parent, lv_align_t align, lv_coord_t x_ofs, lv_coord_t y_ofs, lv_event_cb_t event_cb);
-    void setPagesCallback( lv_event_cb_t event_cb );
+    void setPagesCallback(lv_event_cb_t event_cb);
     DEVICE getStatus(void);
     void setStatus(DEVICE status_);
     void FlushSettings(void);
