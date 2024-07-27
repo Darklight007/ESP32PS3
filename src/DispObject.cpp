@@ -1,14 +1,15 @@
 #include "DispObject.h"
 
+extern bool lvglIsBusy;
 void DispObjects::SetEncoderPins(int aPintNumber, int bPinNumber, enc_isr_cb_t enc_isr_cb = nullptr)
 {
     encoder = new ESP32Encoder;
     encoder.always_interrupt = true;
     encoder._enc_isr_cb = enc_isr_cb;
-    encoder.attachFullQuad(aPintNumber, bPinNumber); // attachFullQuad attachHalfQuad attachSingleEdge
+    encoder.attachHalfQuad(aPintNumber, bPinNumber); // attachFullQuad attachHalfQuad attachSingleEdge
     encoder.clearCount();
     encoder.setCount(0);
-    encoder.setFilter(1023);
+    encoder.setFilter(500);
     // ESP32Encoder::useInternalWeakPullResistors = UP;
 };
 
@@ -41,7 +42,7 @@ void DispObjects::displayUpdate(void)
     {
         // Display mean  of measured data not the value
         lv_label_set_text_fmt(label_measureValue, restrict, mean);
-        lv_obj_invalidate(label_measureValue);
+        // lv_obj_invalidate(label_measureValue);
         changed = true;
         oldValue = mean;
     }
@@ -129,7 +130,7 @@ void DispObjects::SetUpdate(double value)
         return;
     }
 
-    // adjValue = std::max(std::min(value, maxValue), minValue);
+    adjValue = std::max(std::min(value, maxValue), minValue);
     // adjValue = std::clamp(value, minValue, maxValue); => already taken care of
     adjValue = value;
     myTone(NOTE_A4, 3);
@@ -142,8 +143,11 @@ void DispObjects::SetUpdate(double value)
 
     // LV_LOG_USER("LOG: %s", "Beep!");
     // lv_disp_enable_invalidation( lv_disp_get_default(), false);
-    // lv_label_set_text_fmt(label_setValue, "%+08.4f",adjValue);
+    // if (!lvglIsBusy)
+    lv_label_set_text_fmt(label_setValue, "%+08.4f",adjValue);
     // lv_disp_enable_invalidation(lv_disp_get_default(), true);
+    // lv_obj_invalidate(label_setValue);
+    // toneOff();
 }
 
 void DispObjects::Flush(void)
@@ -179,7 +183,7 @@ void DispObjects::SetEncoderUpdate(void)
     // if ((counter++ % 4) == 3)
 
     static int64_t rotaryOldValue = 0;
-    int64_t count = encoder.getCount() / 4;
+    int64_t count = encoder.getCount() / 2;
     if (rotaryOldValue == count)
         return;
 

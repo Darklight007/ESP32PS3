@@ -18,7 +18,8 @@ void HistPush();
 void StatusBar();
 void schedule(std::function<void(void)> func, unsigned long &&interval, unsigned long &startTime);
 void keyCheckLoop();
-
+void KeyCheckInterval(unsigned long interval);
+void trackLoopExecution(const char *);
 /**********************
  *   GLOBAL VARIABLES
  **********************/
@@ -74,7 +75,11 @@ void btn_event_cb(lv_event_t *e)
 
 static void slider_x_event_cb(lv_event_t *e)
 {
+    if (!e)
+        return; // Safety check
     lv_obj_t *obj = lv_event_get_target(e);
+    if (!obj)
+        return; // Safety check
     //  int32_t v = lv_slider_get_value(obj);
 
     // lv_coord_t l = lv_obj_get_scroll_left(chart); unused variable
@@ -185,7 +190,7 @@ static void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_col
     //   lv_obj_set_size(label, 150, 50);
     lv_obj_add_event_cb(label, drag_event_handler, LV_EVENT_PRESSING, NULL);
 }
-
+lv_obj_t *slider_x;
 void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 { /*Create a chart*/
 
@@ -222,22 +227,24 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     lv_style_set_bg_opa(&style_slider, LV_OPA_50);
     lv_style_set_bg_color(&style_slider, lv_palette_main(LV_PALETTE_LIGHT_GREEN));
 
-    lv_obj_t *slider;
-    slider = lv_slider_create(parent);
+    // lv_obj_t *slider_x;
+    slider_x = lv_slider_create(parent);
 
-    lv_obj_remove_style(slider, &style_slider, LV_STATE_DEFAULT);
+    lv_obj_remove_style(slider_x, &style_slider, LV_STATE_DEFAULT);
     // lv_obj_remove_style_all(slider);
-    lv_slider_set_range(slider, LV_IMG_ZOOM_NONE, LV_IMG_ZOOM_NONE * 120);
-    lv_obj_add_event_cb(slider, slider_x_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_set_size(slider, 228, 6);
-    lv_obj_align_to(slider, PowerSupply.graph.chart, LV_ALIGN_OUT_BOTTOM_MID, 0, -5);
+    lv_slider_set_range(slider_x, LV_IMG_ZOOM_NONE, LV_IMG_ZOOM_NONE * 120);
+    lv_obj_add_event_cb(slider_x, slider_x_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_add_event_cb(slider_x, slider_x_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_set_size(slider_x, 228, 6);
+    lv_obj_align_to(slider_x, PowerSupply.graph.chart, LV_ALIGN_OUT_BOTTOM_MID, 0, -5);
     // return;
 
     //  lv_obj_add_style(slider, &style_slider, LV_STATE_DEFAULT);
-    lv_obj_add_style(slider, &style_slider, LV_PART_INDICATOR);
-    lv_obj_add_style(slider, &style_slider, LV_PART_MAIN);
-    lv_obj_add_style(slider, &style_slider, LV_PART_KNOB);
-
+    lv_obj_add_style(slider_x, &style_slider, LV_PART_INDICATOR);
+    lv_obj_add_style(slider_x, &style_slider, LV_PART_MAIN);
+    lv_obj_add_style(slider_x, &style_slider, LV_PART_KNOB);
+    lv_obj_t *slider;
     slider = lv_slider_create(parent);
     lv_slider_set_range(slider, LV_IMG_ZOOM_NONE, LV_IMG_ZOOM_NONE * 20);
     lv_obj_add_event_cb(slider, slider_y_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -801,23 +808,22 @@ void Task1code(void *pvParameters)
 {
     for (;;)
     {
+
         if (lvglIsBusy)
         {
+            // toneOff();
             vTaskDelay(1);
             continue;
         }
-        // toneOff();
 
-        // if (!lvglIsBusy)
-        PowerSupply.Voltage.barUpdate();
-        // else
-        //     vTaskDelay(1);
-
-        // if (!lvglIsBusy)
+        if (!lvglIsBusy)
+            PowerSupply.Voltage.barUpdate();
         PowerSupply.Current.barUpdate();
+
         // else
         //     vTaskDelay(1);
         //   PowerSupply.getPower();
+        // trackLoopExecution(__func__);
     }
 }
 
@@ -832,15 +838,25 @@ void Task_ADC(void *pvParameters)
     // ************************ Temperature DS18B20 Sensor ********************************************************
     for (;;)
     {
+        // if (lvglIsBusy)
+        // {
 
-        // toneOff();
-
-        if (!lvglIsBusy)
-            getSettingEncoder(NULL, NULL);
+        //  toneOff();
+        // vTaskDelay(1);
+        // if (!lvglIsBusy)
+        // trackLoopExecution(__func__);
+        //     continue;
+        // }
 
         if (!adcDataReady)
         {
+            toneOff();
             vTaskDelay(1);
+            // if (!lvglIsBusy)
+            KeyCheckInterval(50);
+            // keyCheckLoop();
+            getSettingEncoder(NULL, NULL);
+            // trackLoopExecution(__func__);
             continue;
         }
 
@@ -866,18 +882,23 @@ void Task_ADC(void *pvParameters)
         if (lastCCCVStatus != digitalRead(PowerSupply.CCCVPin))
         {
             lastCCCVStatus = digitalRead(PowerSupply.CCCVPin);
-            myTone(NOTE_A4, 50);
+            // // // // // myTone(NOTE_A4, 50);
         }
         HistPush();
 
         static unsigned long chartUpdate;
 
-        if (!lvglIsBusy && Tabs::getCurrentPage() == 0 )
+        if (!lvglIsBusy && Tabs::getCurrentPage() == 0)
             schedule([]
                      {
-                         lvglChartIsBusy = true;
-                         lv_chart_refresh(PowerSupply.stats.chart);
-                         lvglChartIsBusy = false;
+                         if (!lvglChartIsBusy)
+                         {
+
+                             lvglChartIsBusy = true;
+                             lv_chart_refresh(PowerSupply.stats.chart);
+                             lvglChartIsBusy = false;
+                         }
+
                          //
                      },
                      PowerSupply.Voltage.measured.NofAvgs * 0, chartUpdate);
@@ -887,13 +908,16 @@ void Task_ADC(void *pvParameters)
         if (!lvglIsBusy && !chartPause)
             schedule([]
                      {
+                            if (!lvglChartIsBusy)
+    {
+ 
                          lvglChartIsBusy = true;
+
                          lv_chart_set_next_value(PowerSupply.graph.chart, PowerSupply.graph.serV, PowerSupply.Voltage.measured.value * 1000.0);
                          lv_chart_set_next_value(PowerSupply.graph.chart, PowerSupply.graph.serI, PowerSupply.Current.measured.value * 1000.0);
-                         lvglChartIsBusy = false;
-                         //
-                     },
-                     PowerSupply.Voltage.measured.NofAvgs * 100 /* pixels per point ((double)PowerSupply.adc.realADCSpeed)*/, NoAvgTime);
+                         lvglChartIsBusy = false; 
+    } },
+                     PowerSupply.Voltage.measured.NofAvgs * 1 /* pixels per point ((double)PowerSupply.adc.realADCSpeed)*/, NoAvgTime);
 
         if (V.sampleReady)
         {
@@ -945,7 +969,7 @@ lv_obj_t *btnm;
 static void textarea_event_handler(lv_event_t *e)
 {
     ta = lv_event_get_target(e);
-    LV_LOG_USER("Enter was pressed. \nThe current text is: \"%s\"", lv_textarea_get_text(ta));
+    // LV_LOG_USER("Enter was pressed. \nThe current text is: \"%s\"", lv_textarea_get_text(ta));
 }
 
 static void btnm_event_handler(lv_event_t *e)
@@ -1392,18 +1416,22 @@ void UpdateTabs(void)
 }
 void keyCheckLoop()
 {
+    // unsigned long mi = micros();
     getKeys();
     if (msg == " IDLE.")
+    {
+        // vTaskDelay(1);
         return;
+    }
     // Serial.printf(" time %i \n", micros() - mi);
-
+    // return;
     keyMenus('O', " RELEASED.", []
              {
                  PowerSupply.toggle();
                  //  lv_event_send(PowerSupply.powerSwitch.btn,LV_EVENT_LONG_PRESSED, NULL);
              });
 
-    keyMenus('O', " HOLD.", []
+    keyMenus('O', " HOLD.", [] // Output button
              {myTone(NOTE_A5, 200, true);
             myTone(NOTE_A3, 200, true);
 
@@ -1956,9 +1984,9 @@ void schedule(std::function<void(void)> func, unsigned long &interval, unsigned 
 {
     if ((millis() - startTime) < interval)
         return;
-
     startTime = millis();
     func();
+    // getSettingEncoder(NULL, NULL);
 }
 // class RepeatedScheduler
 // {
@@ -2039,39 +2067,34 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
     {
         // encoder2Flag = 0;
 
-        int64_t count = PowerSupply.Current.encoder.getCount() / 4;
+        int64_t count = PowerSupply.Current.encoder.getCount() / 2;
         // PowerSupply.Current.encoder.pauseCount();
 
-        static int64_t rotaryOldValue = 0;
+        static int64_t rotaryOldValue2 = 0;
 
         // encoder2_value = count;
-        if (count > rotaryOldValue)
+        if (count > rotaryOldValue2)
         {
             encoder2_value++;
             // PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue + PowerSupply.Current.rotaryEncoderStep);
         }
-        else if (count < rotaryOldValue)
+        else if (count < rotaryOldValue2)
         {
             encoder2_value--;
             // PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue - PowerSupply.Current.rotaryEncoderStep);
         }
 
-        rotaryOldValue = count;
+        rotaryOldValue2 = count;
         // encoder2_value = std::clamp(encoder2_value, -500, 500);
-        encoder2Flag = (encoder2Flag > 3) ? 3 : encoder2Flag - 1;
-
+        // encoder2Flag = (encoder2Flag > 300) ? 300 : encoder2Flag - 1;
+        encoder2Flag = 0;
         // if (encoder2Flag == 0)
         //   PowerSupply.Current.encoder.setCount(0);
-
         switch (Tabs::getCurrentPage())
         {
-
         case 4:
-
             break;
-
         case 2:
-
             PowerSupply.Current.SetEncoderUpdate();
             // PowerSupply.Voltage.SetEncoderUpdate();
             break;
@@ -2082,8 +2105,8 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
     if (encoder1Flag /*&& (Tabs::getCurrentPage() == 4)*/)
     {
 
-        int64_t count = PowerSupply.Voltage.encoder.getCount() / 4;
-        // PowerSupply.Current.encoder.pauseCount();
+        int64_t count = PowerSupply.Voltage.encoder.getCount() / 2;
+        // // PowerSupply.Current.encoder.pauseCount();
 
         static int64_t rotaryOldValue = 0;
 
@@ -2095,13 +2118,17 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
             encoder1_value--;
 
         rotaryOldValue = count;
-        encoder1Flag = (encoder1Flag > 3) ? 3 : encoder1Flag - 1;
-
+        // encoder1Flag = (encoder1Flag > 300) ? 300 : encoder1Flag - 1;
+        // encoder1_value = PowerSupply.Voltage.encoder.getCount() / 2;
+        encoder1Flag = 0;
         switch (Tabs::getCurrentPage())
         {
-
+        case 4:
+            break;
         case 2:
             PowerSupply.Voltage.SetEncoderUpdate();
+            // void Device::FlushSettings(void)
+            // PowerSupply.Voltage.Flush();
             break;
         }
         // PowerSupply.Current.encoder.resumeCount();
@@ -2168,7 +2195,7 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
 //   }
 // }
 
-void trackLoopExecution()
+void trackLoopExecution(const char *callerName)
 {
     static constexpr int loopInterval = 1000; // Time interval in milliseconds
     static unsigned long lastLoopTime = 0;
@@ -2178,7 +2205,8 @@ void trackLoopExecution()
     unsigned long currentTime = millis();
     if ((currentTime - lastLoopTime) >= loopInterval)
     {
-        Serial.printf("Loop Count: %5.0f @ %07.2f \n", loopCount * 1000.0 / loopInterval, currentTime / 1000.0);
+        // Print the caller's name along with the loop count and time
+        Serial.printf("\n%s: Loop Count: %5.0f @ %07.2f seconds", callerName, loopCount * 1000.0 / loopInterval, currentTime / 1000.0);
         lastLoopTime = currentTime;
         loopCount = 0;
     }
@@ -2188,15 +2216,23 @@ void LvglUpdatesInterval(unsigned long interval)
 {
     static unsigned long timer_ = {0}; // Interval in milliseconds
     if (lvglChartIsBusy)
+    {
+        vTaskDelay(1);
         return;
+    }
     schedule([]
-             {lvglIsBusy=1;
-            lv_timer_handler();
-            lvglIsBusy=0; },
+             {
+                 if (!lvglChartIsBusy)
+                 { 
+                        lvglIsBusy = 1;
+                        lv_timer_handler();
+                        lvglIsBusy = 0;
+                 } },
+
              interval, timer_);
 }
 
-void StatusBarUupdateInterval(unsigned long interval)
+void StatusBarUpdateInterval(unsigned long interval)
 {
     static unsigned long timer_ = {0}; // Interval in milliseconds
     schedule(&StatusBar, interval, timer_);
@@ -2247,13 +2283,24 @@ void EncoderUpdateInterval(unsigned long interval)
     schedule([]
              {
                  /*FFT_v*/
-
                  int64_t temp = PowerSupply.Voltage.encoder.getCount();
                  PowerSupply.Voltage.encoder.clearCount();
                  PowerSupply.Voltage.encoder.setCount(temp);
+                 // toneOff();
                  temp = PowerSupply.Current.encoder.getCount();
                  PowerSupply.Current.encoder.clearCount();
-                 PowerSupply.Current.encoder.setCount(temp); },
+                 PowerSupply.Current.encoder.setCount(temp);
+                 // toneOff();
+             },
+             interval, timer_);
+}
+
+void KeyCheckInterval(unsigned long interval)
+{
+    static unsigned long timer_ = {0}; // Interval in milliseconds
+    // static unsigned long timer_;
+    schedule([]
+             { keyCheckLoop(); },
              interval, timer_);
 }
 
@@ -2310,8 +2357,11 @@ void managePageInteraction()
             else if (lastValue > encoder2_value)
                 lastButton--;
             else
-                break;
 
+                break;
+            lastValue = encoder2_value;
+
+            int8_t temp = lastButton;
             lastButton = std::clamp(int(lastButton), 0, 6);
 
             lv_obj_t *theMenu = lv_obj_get_child(lv_menu_get_cur_sidebar_page(menu), 0);
@@ -2319,7 +2369,8 @@ void managePageInteraction()
             // Serial.printf("\nlastValue:%i  encoder2_value:%i lastButton:%i", lastValue, encoder2_value, lastButton);
             lv_event_send(lv_obj_get_child(theMenu, lastButton), LV_EVENT_CLICKED, NULL);
 
-            lastValue = encoder2_value;
+            if (temp == lastButton)
+                myTone(NOTE_A4, 3);
         }
         break;
 
@@ -2328,15 +2379,16 @@ void managePageInteraction()
         static int32_t encoder2_last_value = 0;
 
         // if (encoder2_last_value == encoder2_value)
-        // break;
+
         if (encoder2_last_value != encoder2_value)
         {
-            static int32_t _posX = lv_slider_get_value(lv_obj_get_child(PowerSupply.page[1], 1));
+
+            int32_t _posX = lv_slider_get_value(slider_x);
 
             if (encoder2_last_value < encoder2_value)
-                _posX += 64;
+                _posX += 640;
             else if (encoder2_last_value > encoder2_value)
-                _posX -= 64;
+                _posX -= 640;
 
             // int32_t v = lv_slider_get_value(lv_obj_get_child(PowerSupply.graph.chart,1));
             // lv_coord_t x = lv_obj_get_scroll_x(PowerSupply.graph.chart);
@@ -2344,6 +2396,7 @@ void managePageInteraction()
             // lv_chart_set_zoom_x(PowerSupply.graph.chart, _posX);
             // lv_obj_scroll_to_x(PowerSupply.graph.chart, 1e10, LV_ANIM_OFF);
             // Serial.println(keyChar);
+            //    break;
             if (keyChar == 'W' && msg == " HOLD.")
             {
                 _posX = std::clamp(_posX, 0, 57 * (lv_chart_get_zoom_x(PowerSupply.graph.chart) - 256) / 16);
@@ -2353,9 +2406,21 @@ void managePageInteraction()
             {
                 // Serial.printf("\n*************** %i", millis());
                 // lv_obj_scroll_to_x(PowerSupply.graph.chart, _posX, LV_ANIM_OFF);
-                _posX = std::clamp(_posX, 256, 5120);
-                lv_slider_set_value(lv_obj_get_child(PowerSupply.page[1], 1), _posX, LV_ANIM_OFF);
-                lv_event_send(lv_obj_get_child(PowerSupply.page[1], 1), LV_EVENT_VALUE_CHANGED, NULL);
+                _posX = std::clamp(_posX, 256, LV_IMG_ZOOM_NONE * 120);
+                lv_slider_set_value(slider_x, _posX, LV_ANIM_OFF);
+                // if (!lvglIsBusy )
+                // lv_event_send(slider_x, LV_EVENT_VALUE_CHANGED, NULL);
+                // lv_event_send(slider_x, LV_EVENT_CLICKED, NULL);
+                // lv_chart_set_zoom_x(PowerSupply.graph.chart, _posX);
+                if (!lvglChartIsBusy)
+                {
+                    lvglChartIsBusy = true;
+                    // lv_obj_scroll_to_x(PowerSupply.graph.chart, 32000, LV_ANIM_OFF);
+                    lv_event_send(lv_obj_get_child(PowerSupply.page[1], 1), LV_EVENT_VALUE_CHANGED, NULL);
+                    lvglChartIsBusy = false;
+                }
+                // call_slider_x_event_cb_manually(slider_x);
+                // delay(10);
             }
 
             // Serial.printf("\n lv_obj_get_scroll_x:%i %i", lv_obj_get_scroll_x(PowerSupply.graph.chart), millis());
@@ -2389,7 +2454,12 @@ void managePageInteraction()
                 // lv_obj_scroll_to_x(PowerSupply.graph.chart, _pos, LV_ANIM_OFF);
                 _posY = std::clamp(_posY, 256, 5120);
                 lv_slider_set_value(lv_obj_get_child(PowerSupply.page[1], 2), _posY, LV_ANIM_OFF);
-                lv_event_send(lv_obj_get_child(PowerSupply.page[1], 2), LV_EVENT_VALUE_CHANGED, NULL);
+                if (!lvglChartIsBusy)
+                {
+                    lvglChartIsBusy = true;
+                    lv_event_send(lv_obj_get_child(PowerSupply.page[1], 2), LV_EVENT_VALUE_CHANGED, NULL);
+                    lvglChartIsBusy = false;
+                }
             }
 
             encoder1_last_value = encoder1_value;

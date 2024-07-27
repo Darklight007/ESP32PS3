@@ -7,7 +7,7 @@
 #define SOUND_RESOLUTION 10                     // 8 bit resolution
 #define SOUND_ON (1 << (SOUND_RESOLUTION - 1)) // 50% duty cycle
 #define SOUND_OFF 0
-#define BUZZER_PIN 12 // Buzzer pin
+#define BUZZER_PIN 14 // Buzzer pin
 
 struct Buzzer
 {

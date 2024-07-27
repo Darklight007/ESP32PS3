@@ -280,7 +280,7 @@ int64_t ESP32Encoder::resumeCount()
 	return pcnt_counter_resume(unit);
 }
 
-void ESP32Encoder::setFilter(uint16_t value)
+void ESP32Encoder::	setFilter(uint16_t value)
 {
 	if (value > 1023)
 		value = 1023;

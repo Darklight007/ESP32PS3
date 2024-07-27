@@ -132,7 +132,7 @@ void sendCommand(int command, uint16_t data)
     Wire.write(data >> 8);
     Wire.write(data & 0xff);
     Wire.endTransmission();
-    // __asm__("nop\n\t");
+    __asm__("nop\n\t");
 }
 
 #endif

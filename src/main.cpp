@@ -69,12 +69,15 @@ void setup()
 void loop()
 {
 
-  LvglUpdatesInterval(30);
-  trackLoopExecution();
-  StatusBarUupdateInterval(250);
+  LvglUpdatesInterval(1);
+  // trackLoopExecution(__func__);
+  StatusBarUpdateInterval(250);
   FlushMeasuresInterval(100 * PowerSupply.Voltage.measured.NofAvgs);
   statisticUpdateInterval(100);
   FFTUpdateInterval(1000);
-  EncoderUpdateInterval(2000);
+  EncoderUpdateInterval(1000); //--> some bugs?
   managePageInteraction();
+ 
+  // Serial.printf("\nVoltage.encoder.getCount %l",PowerSupply.Voltage.encoder.getCount());
+// KeyCheckInterval(0);  moved to adc tasks
 }

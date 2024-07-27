@@ -16,26 +16,28 @@ void initialMemory()
     Serial.printf("Free PSRAM: %d\n", ESP.getFreePsram());
 }
 
-#define SDA_1 17
-#define SCL_1 18
+#define SDA_1_ADC 17
+#define SCL_1_ADC 18
 
-#define SDA_2 17
-#define SCL_2 18
+#define SDA_2_KEY 15
+#define SCL_2_KEY 16
+
+#define I2C_CLKRATE_400K            400000UL      // Speed of I2C bus 400KHz
+#define I2C_CLKRATE_1M             1000000UL      // Speed of I2C bus 1MHz
+
 void initializeI2C()
 {
     // setupOTA("Power Supply");
-    // TwoWire I2C1 = TwoWire(0);
-    // TwoWire I2C2 = TwoWire(1);
-    Wire1.begin(SDA_1, SCL_1, 1000000UL); //(18,15), 16,17
-    // Wire1.begin(SDA_2, SCL_2, 1000000UL);
-    // Wire.setClock(1250000);
+
+    Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_400K); //(18,15), 16,17
+    Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_400K);
+    // Wire.setClock(400000UL);
+
+    
+    kpd.begin(); // now does not starts wire library
+    kpd.setDebounceTime(23); //no bouncying for this i2C
+    kpd.setHoldTime(750);
     Serial.println("I2C Initialized.");
-    if (0)
-    {
-        kpd.begin(); // now does not starts wire library
-        kpd.setDebounceTime(30);
-        kpd.setHoldTime(700);
-    }
 }
 
 void initializeDisplay()
@@ -64,13 +66,13 @@ void setupPowerSupply()
 
     Serial.println("Power Supply Setup Completed.");
 
-    // Setup voltage and current's encoder pins
-    PowerSupply.Voltage.SetEncoderPins(4, 5, VoltageEnc);
+    // Setup voltage and Voltage's encoder pins
+    PowerSupply.Voltage.SetEncoderPins(5, 4, VoltageEnc);
     PowerSupply.Voltage.setLock(false);
     PowerSupply.Voltage.restrict = "%+07.3f";
 
     //   // PowerSupply.Voltage.adjValue
-    PowerSupply.Current.SetEncoderPins(6, 7, CurrentEnc);
+    PowerSupply.Current.SetEncoderPins(7, 6, CurrentEnc);
     PowerSupply.Current.setLock(false);
     PowerSupply.Current.restrict = "%+07.3f";
 
@@ -202,7 +204,7 @@ void setupADC()
                                                                                                     //  {"94:B9:7E:D3:01:CC", {0.099009, 10108, 32.7500, 3354461}, {0.0000, 126945, 3.000, 1667719}}
     };
 
-    Serial.println("ADC Calibration Completed.");
+    Serial.print("\nADC Calibration Completed.");
 }
 
 void setupDAC()
@@ -232,10 +234,10 @@ void createTasks()
         8000,                             /* Stack size of task */
         NULL, /* parameter of the task */ /* (void *)&adcDataReady */
         1,                                /* priority of the task */
-        &Task_adc,                        /* Task handle to keep track of created task */
+        &Task_adc,                         /* pin task to core x */
         0);
 
-    Serial.println("Real-time tasks created and pinned to cores.");
+    Serial.print("\nReal-time tasks created and pinned to cores.");
 }
 // /* Display flushing */
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p)
