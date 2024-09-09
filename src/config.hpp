@@ -92,9 +92,9 @@ static char keys[ROWS][COLS] = {
     {'H', 'M', 'j', 'k', 'l', 'T'},
     {'7', '8', '9', '<', '-', '^'},
     {'4', '5', '6', 'V', 'v', '>'},
-    {'1', '2', '3', 'A', 'a', ' '},
-    {'0', '.', 'm', 'E', '+', ' '},
-    {'W', 'X', 'Y', 'Z', 'O', ' '}};
+    {'1', '2', '3', 'A', 'a', 'p'},
+    {'0', '.', 'm', 'E', '+', 'q'},
+    {'W', 'X', 'Y', 'Z', 'O', 'r'}};
 
 static byte rowPins[ROWS] = {0, 1, 2, 3, 4, 5};     // connect to the row pinouts of the kpd
 static byte colPins[COLS] = {8, 9, 10, 11, 12, 13}; // connect to the column pinouts of the kpd

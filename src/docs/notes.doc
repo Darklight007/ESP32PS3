@@ -26,7 +26,12 @@ Current.SetUpdate(Current.adjValue+.0001);
 lock_trim_free: Asserted at expression: block_is_free(block) && "block must be free" 
  tone(NOTE_A5, 200);
  
+
 ----------------------------------------------------------------------
+Good resources
+http://wiki.fluidnc.com/en/hardware/ESP32-S3_Pin_Reference
+
+
 
 2470 High Voltage SourceMeter® Instrument
 https://download.tek.com/manual/2470-900-01B_Aug_2019_User.pdf
@@ -191,96 +196,6 @@ Voltage{setup{max,min,size,location, fonts},
 {setValue,getValue,enable}, 
 measureValue{setMeasuredValue, getMeasuredValue}, }
 
-
-  // lv_example_chart_3();
-  // lv_example_chart_2();
-  // lv_example_btn_2();
-  //  lv_obj_remove_style_all(btn2);
-
-  // lv_obj_add_style(btn2, &style, LV_STATE_PRESSED);
-  // lv_obj_add_style(btn2, &style, LV_STATE_DEFAULT);
-
-  // lv_label_set_long_mode
-  // lv_obj_remove_style(label, &style_cv, LV_STATE_PRESSED);
-
-  // lv_example_line_1();
-  // lv_example_meter_1();
-
-  // lv_draw_line_dsc_init
-
-  // lv_render(Voltage);
-
-  //  lv_demo_widgets();
-  // lv_demo_benchmark();
-  // lv_demo_keypad_encoder();
-  // lv_demo_music();
-  // lv_demo_stress();
-
-
-    // // Current.measureUpdate(56.789);
-  // if (abs(scale) < .02)
-  // {
-  //   Voltage.measured.ResetStats();
-  //   Current.measured.ResetStats();
-  // }
-
-  // if (Voltage.measured.history.size()==800)
-  // {
-  //   for (int i = 0; i < 800; i++)
-  //   {
-  //     ecg_sample[i] = Voltage.measured.history.at(i) * 30.0 - 450.0;
-  //   }
-  //   static int zoom = 800;
-  //   if (zoom == 800)
-  //   {
-  //     lv_chart_set_zoom_x(chart,  lv_chart_get_zoom_x(chart)-1);
-  //     zoom = 799;
-  //   }
-
-  //   else
-  //   {
-  //     lv_chart_set_zoom_x(chart, lv_chart_get_zoom_x(chart)+1);
-  //     zoom = 800;
-  //   }
-  //   // lv_obj_refresh_self_size(chart);
-  // }
-  // lv_timer_handler_run_in_period(1);
-
-
-
-
-  // lv_style_set_bg_grad_color(&style, lv_palette_darken(LV_PALETTE_BLUE, 2));
-  // lv_style_set_bg_grad_dir(&style, LV_GRAD_DIR_VER);
-
-  // lv_style_set_border_opa(&style, LV_OPA_40);
-  // lv_style_set_border_width(&style, 2);
-  // lv_style_set_border_color(&style, lv_palette_main(LV_PALETTE_GREY));
-
-  // lv_style_set_shadow_width(&style, 8);
-  // lv_style_set_shadow_color(&style, lv_palette_main(LV_PALETTE_GREY));
-  // lv_style_set_shadow_ofs_y(&style, 8);
-
-  // lv_style_set_outline_opa(&style, LV_OPA_COVER);
-  // lv_style_set_outline_color(&style, lv_palette_main(LV_PALETTE_BLUE));
-
-
-  
-
-    /*Add a large outline when pressed*/
-  // lv_style_set_outline_width(&style_pr, 30);
-  // lv_style_set_outline_opa(&style_pr, LV_OPA_TRANSP);
-
-  // lv_style_set_translate_y(&style_pr, 5);
-  // lv_style_set_shadow_ofs_y(&style_pr, 3);
-  // lv_style_set_bg_color(&style_pr, lv_palette_darken(LV_PALETTE_BLUE, 2));
-  // lv_style_set_bg_grad_color(&style_pr, lv_palette_darken(LV_PALETTE_BLUE, 4));
-
-  /*Add a transition to the outline*/
-  // static lv_style_transition_dsc_t trans;
-  // static lv_style_prop_t props[] = {LV_STYLE_OUTLINE_WIDTH, LV_STYLE_OUTLINE_OPA, (lv_style_prop_t) 0};
-  // lv_style_transition_dsc_init(&trans, props, lv_anim_path_linear, 300, 0, NULL);
-
-  // lv_style_set_transition(&style_pr, &trans);
 
 
   echo "# ESP32PS2" >> README.md

@@ -69,7 +69,7 @@ extern TaskHandle_t Task1;
 // extern lv_obj_t *lbl_ER_;
 extern int memory;
 
-extern void Task1code(void *pvParameters);
+extern void Task_BarGraph(void *pvParameters);
 extern void Task_ADC(void *pvParameters);
 extern void  init_touch();
 

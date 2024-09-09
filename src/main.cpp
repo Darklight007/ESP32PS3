@@ -55,29 +55,29 @@ void setup()
 
   /**************************************************************************/
   setupPowerSupply();
+  setupPreferences();
   setupADC();
   setupDAC();
   // SetupOVP();  // Create OVP/OCP protection
-
-  createTasks();
   seupCalibPage();
-
-  Serial.print("\nSetup() run on core: ");
-  Serial.print(xPortGetCoreID());
+  createTasks();
+  Serial.printf("\nSetup() run on core: #%i \n\n", xPortGetCoreID());
+  
 }
 
 void loop()
 {
 
-  LvglUpdatesInterval(1);
-  // trackLoopExecution(__func__);
+  LvglUpdatesInterval(10);
+  trackLoopExecution(__func__);
   StatusBarUpdateInterval(250);
   FlushMeasuresInterval(100 * PowerSupply.Voltage.measured.NofAvgs);
   statisticUpdateInterval(100);
   FFTUpdateInterval(1000);
   EncoderUpdateInterval(1000); //--> some bugs?
   managePageInteraction();
- 
+  DACInterval(100);
   // Serial.printf("\nVoltage.encoder.getCount %l",PowerSupply.Voltage.encoder.getCount());
-// KeyCheckInterval(0);  moved to adc tasks
+  KeyCheckInterval(0); // moved to adc taskse
+  // delay(10);
 }

@@ -13,13 +13,20 @@ void Device::setupADC(uint8_t pin, void func(void),TwoWire *_awire)
     LoadCalibrationData();
 
     // adc.ads1219->setDataRate(90);
+    adc.ads1219->resetConfig();
+
     adc.ads1219->begin();
     adc.ads1219->setVoltageReference(REF_INTERNAL);
     adc.ads1219->setGain(ONE);
     adc.ads1219->setConversionMode(SINGLE_SHOT); // SINGLE_SHOT
-    adc.ads1219->readSingleEnded(VOLTAGE);
-    adc.busyChannel = VOLTAGE;
+    // adc.ads1219->readSingleEnded(VOLTAGE);
+    // adc.busyChannel = VOLTAGE;
+    // adc.ads1219->readDifferential_0_1();
     // adc.ads1219->_wire= _awire;
+
+     adc.startConversion(VOLTAGE);
+    adcDataReady=false;
+    adc.dataReady = false;
 
 }
 
@@ -121,7 +128,7 @@ void Device::LoadCalibrationData()
 
     calibrationUpdate();
 
-    Serial.printf("\nLoaded data:%s {%+08.4f %+08i %+08.4f %+08i}, {%+08.4f %+08i %+08.4f %+08i}",
+    Serial.printf("\nCalibration data loaded:%s {%+08.4f %+08i %+08.4f %+08i}, {%+08.4f %+08i %+08.4f %+08i}",
                   outputData.macAdd,
                   outputData.vCal.value_1, outputData.vCal.code_1, outputData.vCal.value_2, outputData.vCal.code_2,
                   outputData.iCal.value_1, outputData.iCal.code_1, outputData.iCal.value_2, outputData.iCal.code_2);
@@ -306,6 +313,7 @@ void Device::readVoltage()
         Voltage.rawValue = adc.readConversion();
         adc.startConversion(CURRENT);
         adcDataReady = false;
+        
 
         v = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
 

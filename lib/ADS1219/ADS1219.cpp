@@ -113,6 +113,7 @@ void ADS1219::readSingleEnded(int channel)
   }
   writeRegister(config);
   start();
+  //  busyChannel = channel;
   // while(digitalRead(data_ready)==1);
   // return readConversionResult();
 }
@@ -120,12 +121,12 @@ void ADS1219::readSingleEnded(int channel)
 long ADS1219::readDifferential_0_1()
 {
   config &= MUX_MASK;
-  config |= MUX_DIFF_0_1;
+  config |= MUX_DIFF_0_1; //MUX_DIFF_0_1;
   writeRegister(config);
   start();
-  while (digitalRead(data_ready) == 1)
-    ;
-  return readConversionResult();
+  // while (digitalRead(data_ready) == 1);
+  // return readConversionResult();
+  return 0;
 }
 
 long ADS1219::readDifferential_2_3()
@@ -134,9 +135,9 @@ long ADS1219::readDifferential_2_3()
   config |= MUX_DIFF_2_3;
   writeRegister(config);
   start();
-  while (digitalRead(data_ready) == 1)
-    ;
-  return readConversionResult();
+  // while (digitalRead(data_ready) == 1);
+  // return readConversionResult();
+  return 0;
 }
 
 long ADS1219::readDifferential_1_2()
@@ -145,9 +146,8 @@ long ADS1219::readDifferential_1_2()
   config |= MUX_DIFF_1_2;
   writeRegister(config);
   start();
-  while (digitalRead(data_ready) == 1)
-    ;
-  return readConversionResult();
+  // while (digitalRead(data_ready) == 1);
+  // return readConversionResult();
 }
 
 long ADS1219::readShorted()

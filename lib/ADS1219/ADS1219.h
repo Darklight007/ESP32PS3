@@ -90,5 +90,6 @@ private:
 	uint8_t config;
 	boolean singleShot;
 	int data_ready;
+	int busyChannel = -1;
 };
 #endif

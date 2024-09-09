@@ -19,6 +19,7 @@ void StatusBar();
 void schedule(std::function<void(void)> func, unsigned long &&interval, unsigned long &startTime);
 void keyCheckLoop();
 void KeyCheckInterval(unsigned long interval);
+void DACInterval(unsigned long interval);
 void trackLoopExecution(const char *);
 /**********************
  *   GLOBAL VARIABLES
@@ -804,21 +805,24 @@ void init_touch()
     lv_indev_drv_register(&indev_drv);
 }
 
-void Task1code(void *pvParameters)
+void Task_BarGraph(void *pvParameters)
 {
     for (;;)
     {
 
         if (lvglIsBusy)
         {
-            // toneOff();
+            toneOff();
             vTaskDelay(1);
+
             continue;
         }
 
         if (!lvglIsBusy)
             PowerSupply.Voltage.barUpdate();
-        PowerSupply.Current.barUpdate();
+
+        if (!lvglIsBusy)
+            PowerSupply.Current.barUpdate();
 
         // else
         //     vTaskDelay(1);
@@ -847,14 +851,15 @@ void Task_ADC(void *pvParameters)
         // trackLoopExecution(__func__);
         //     continue;
         // }
-
+        // Serial.printf("\nMeasured adcDataReady :%i",adcDataReady);
         if (!adcDataReady)
         {
             toneOff();
             vTaskDelay(1);
             // if (!lvglIsBusy)
-            KeyCheckInterval(50);
-            // keyCheckLoop();
+            KeyCheckInterval(10);
+           
+            // // keyCheckLoop();
             getSettingEncoder(NULL, NULL);
             // trackLoopExecution(__func__);
             continue;
@@ -882,7 +887,8 @@ void Task_ADC(void *pvParameters)
         if (lastCCCVStatus != digitalRead(PowerSupply.CCCVPin))
         {
             lastCCCVStatus = digitalRead(PowerSupply.CCCVPin);
-            // // // // // myTone(NOTE_A4, 50);
+            // myTone(NOTE_A4, 50);
+             
         }
         HistPush();
 
@@ -1436,6 +1442,12 @@ void keyCheckLoop()
             myTone(NOTE_A3, 200, true);
 
             ESP.restart(); });
+    keyMenus('m', " HOLD.", [] // Output button
+             {
+                myTone(NOTE_A5, 200, true);
+                myTone(NOTE_A3, 200, true);
+                PowerSupply.SaveSetting(); 
+                return; });
 
     // next page
     keyMenus('k', " RELEASED.",
@@ -2209,6 +2221,7 @@ void trackLoopExecution(const char *callerName)
         Serial.printf("\n%s: Loop Count: %5.0f @ %07.2f seconds", callerName, loopCount * 1000.0 / loopInterval, currentTime / 1000.0);
         lastLoopTime = currentTime;
         loopCount = 0;
+        // Serial.printf("\n%i", digitalRead(PowerSupply.CCCVPin));
     }
 }
 
@@ -2227,7 +2240,10 @@ void LvglUpdatesInterval(unsigned long interval)
                         lvglIsBusy = 1;
                         lv_timer_handler();
                         lvglIsBusy = 0;
-                 } },
+                 } 
+                //  else 
+                //  delay(10);
+                 },
 
              interval, timer_);
 }
@@ -2301,6 +2317,16 @@ void KeyCheckInterval(unsigned long interval)
     // static unsigned long timer_;
     schedule([]
              { keyCheckLoop(); },
+             interval, timer_);
+}
+
+void DACInterval(unsigned long interval)
+{
+    static unsigned long timer_ = {0}; 
+    schedule([]
+             {
+                if (!lvglChartIsBusy)
+                     PowerSupply.DACUpdate(); },
              interval, timer_);
 }
 

@@ -209,11 +209,14 @@
 // For ESP32 Dev board (only tested with ILI9341 display)
 // The hardware SPI can be mapped to any pins
 
-#define TFT_MISO 40     //40
-#define TFT_MOSI 41     //41
-#define TFT_SCLK 39     //39
-#define TFT_CS   42  // Chip select control pin
-#define TFT_DC   38  // Data Command control pin 35,36,37 used with 
+#define TFT_MISO 40 //13     //40
+#define TFT_MOSI 41 //11     //41
+// #define TFT_SCLK 39 //12     //39
+
+
+
+#define TFT_CS   42 //10     //42  // Chip select control pin
+#define TFT_DC   38     // 38  // Data Command control pin 35,36,37 used with 
 #define TFT_RST  -1  // Set TFT_RST to -1 if display RESET is connected to ESP32 board RST
 
 // For ESP32 Dev board (only tested with GC9A01 display)
@@ -226,7 +229,7 @@
 //#define TFT_RST  33  // Reset pin (could connect to Arduino RESET pin)
 //#define TFT_BL   22  // LED back-light
 
-#define TOUCH_CS 45     // Chip select pin (T_CS) of touch screen
+#define TOUCH_CS  45     // Chip select pin (T_CS) of touch screen //ESP32S3-> OK pins 10 19 20 21 45 47 48 //Not OK pins  37 36 0 
 
 //#define TFT_WR 22    // Write strobe for modified Raspberry Pi TFT only
 

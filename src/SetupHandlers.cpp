@@ -22,21 +22,32 @@ void initialMemory()
 #define SDA_2_KEY 15
 #define SCL_2_KEY 16
 
-#define I2C_CLKRATE_400K            400000UL      // Speed of I2C bus 400KHz
-#define I2C_CLKRATE_1M             1000000UL      // Speed of I2C bus 1MHz
+
+// High-Speed I^2 C Interface (MCP23017):
+// - 100 kHz
+// - 400 kHz
+// - 1.7 MHz
+
+// 8.5.1.4 Interface Speed
+// The ADS1219 supports I2C interface speeds up to 1 Mbps. Standard-mode (Sm) with bit rates up to 100 kbps,
+// fast-mode (Fm) with bit rates up to 400 kbps, and fast-mode plus (Fm+) with bit rates up to 1 Mbps are
+// supported. High-speed mode (Hs-mode) is not supported.
+
+#define I2C_CLKRATE_400K 400000UL // Speed of I2C bus 400KHz
+#define I2C_CLKRATE_1M 1000000UL  // Speed of I2C bus 1MHz
+#define I2C_CLKRATE_1_7M 1700000UL  // Speed of I2C bus 1MHz
 
 void initializeI2C()
 {
     // setupOTA("Power Supply");
 
-    Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_400K); //(18,15), 16,17
-    Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_400K);
+    Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_1M); //(18,15), 16,17
+    Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_1_7M);
     // Wire.setClock(400000UL);
 
-    
-    kpd.begin(); // now does not starts wire library
-    kpd.setDebounceTime(23); //no bouncying for this i2C
-    kpd.setHoldTime(750);
+    kpd.begin();             // now does not starts wire library
+    kpd.setDebounceTime(13); // no bouncying for this i2C
+    kpd.setHoldTime(1000);
     Serial.println("I2C Initialized.");
 }
 
@@ -50,7 +61,9 @@ void initializeDisplay()
 void setupPowerSupply()
 {
     // Additional setup code for power supply here
-    // pinMode(PowerSupply.CCCVPin, INPUT);
+    pinMode(PowerSupply.CCCVPin, INPUT);
+    // pinMode(PowerSupply.CCCVPin, INPUT_PULLUP);
+
     PowerSupply.setupDisplay(lv_scr_act());
     PowerSupply.setupPages("Stats", "Graph", "Main", "Utility", "Setting");
     PowerSupply.setPagesCallback(updateObjectPos_cb);
@@ -60,7 +73,7 @@ void setupPowerSupply()
     PowerSupply.setupSwitch(PowerSupply.page[2], 0, 240, 160, btn_event_cb);
 
     // Setup voltage,current and power for page 3
-    PowerSupply.Voltage.setup(PowerSupply.page[2], "V-Set:", -14, -8, "V", 32.7675, 5.0, -12, 2000);
+    PowerSupply.Voltage.setup(PowerSupply.page[2], "V-Set:", -14, -8, "V", 32.7675, 5.0, -12 * 0, 2000);
     PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", 6.5535, 1.0, -5.5 /*miliampere*/, 2000);
     PowerSupply.Power.setup(PowerSupply.page[2], "", -14, 144, "W", 0, 0, 0, 0, &dseg_b_24, &Tauri_R_28);
 
@@ -113,14 +126,17 @@ void setupPowerSupply()
     // fmemory.putUShort("pi", 314);
     // Serial.printf("\nPreferences Memory test get:%i", fmemory.getUShort("pi", 0));
     // fmemory.end();
-    myTone(NOTE_A4, 100);
-    Serial.println("\nSetup done");
-    PowerSupply.turn(SWITCH::ON);
-    Preferences fmemory;
-    fmemory.begin("param", false);
-    fmemory.putUShort("pi", 314);
-    Serial.printf("\nPreferences Memory test get:%i", fmemory.getUShort("pi", 0));
-    fmemory.end();
+
+
+    // myTone(NOTE_A4, 100);
+    // Serial.println("\nSetup done");
+    // PowerSupply.turn(SWITCH::ON);
+
+    // Preferences fmemory;
+    // fmemory.begin("param", false);
+    // fmemory.putUShort("pi", 314);
+    // Serial.printf("\nPreferences Memory test get:%i", fmemory.getUShort("pi", 0));
+    // fmemory.end();
 }
 void seupCalibPage()
 {
@@ -182,10 +198,18 @@ void setupTasks()
 
 void setupPreferences()
 {
+
+    Preferences preferences;
+
+
     preferences.begin("param", false);
     preferences.putUShort("pi", 314);
     unsigned short readBack = preferences.getUShort("pi", 0);
-    Serial.printf("Preferences Memory test get: %d\n", readBack);
+    if (314 == readBack)
+        // Serial.printf("Preferences Memory test get: %d\n", readBack);
+        Serial.print("\nPreferences Memory: OK");
+    else
+        Serial.print("\nPreferences Memory: NOT OK");
     preferences.end();
 }
 
@@ -203,38 +227,38 @@ void setupADC()
                                                                                                     // {"7C:9E:BD:39:28:10", {0.099900, 10108, 32.7500, 3354461}, {0.0000, 126945, 3.000, 1667719}},
                                                                                                     //  {"94:B9:7E:D3:01:CC", {0.099009, 10108, 32.7500, 3354461}, {0.0000, 126945, 3.000, 1667719}}
     };
-
-    Serial.print("\nADC Calibration Completed.");
+    PowerSupply.setupADC(9, ADCPinISR, &Wire);
+    Serial.print("\nADC Setup & Calibration Completed.");
 }
 
 void setupDAC()
 {
 
-    PowerSupply.setupADC(9, ADCPinISR, &Wire);
     PowerSupply.setupDAC(0x41);
 
     // LTC2655 Device::DAC(0x41);
+    Serial.print("\nDAC Setup Completed.");
 }
 
 void createTasks()
 {
-    // create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
+    // create a task that will be executed in the Task_BarGraph() function, with priority 1 and executed on core 0
     xTaskCreatePinnedToCore(
-        Task1code, /* Task function. */
-        "Task1",   /* name of task. */
-        4000,      /* Stack size of task */
-        NULL,      /* parameter of the task */
-        0,         /* priority of the task */
-        &Task1,    /* Task handle to keep track of created task */
-        0);        /* pin task to core 0 */
+        Task_BarGraph, /* Task function. */
+        "Task1",       /* name of task. */
+        40000,         /* Stack size of task */
+        NULL,          /* parameter of the task */
+        1,             /* priority of the task */
+        &Task1,        /* Task handle to keep track of created task */
+        0);            /* pin task to core 0 */
 
     xTaskCreatePinnedToCore(
         Task_ADC,                         /* Task function. */
         "Voltage & Current ADC",          /* name of task. */
-        8000,                             /* Stack size of task */
+        120000,                           /* Stack size of task */
         NULL, /* parameter of the task */ /* (void *)&adcDataReady */
-        1,                                /* priority of the task */
-        &Task_adc,                         /* pin task to core x */
+        2,                                /* priority of the task */
+        &Task_adc,                        /* pin task to core x */
         0);
 
     Serial.print("\nReal-time tasks created and pinned to cores.");

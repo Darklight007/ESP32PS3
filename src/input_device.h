@@ -26,7 +26,7 @@
 volatile unsigned long encoder1Flag;
 volatile unsigned long encoder2Flag;
 
- void IRAM_ATTR VoltageEnc(void *)
+void IRAM_ATTR VoltageEnc(void *)
 {
     // ESP32Encoder *enc = (ESP32Encoder *)arg;
     // Serial.printf("VoltageEnc cb at: %d\n", millis());
@@ -106,7 +106,16 @@ void keyMenus(char &&item, String &&str, std::function<void(void)> func) //  voi
 {
     if ((keyChar == item) && (msg == str))
     {
+        static String oldMsg = "";
+        //Ignore RELEASE after HOLD
+        if (oldMsg == " HOLD." && str == " RELEASED.")
+        {
+            msg = "done!";
+            oldMsg = msg;
+            return;
+        }
         //  pages.setCurrentPage(x);
+        oldMsg = msg;
         func();
         msg = "done!"; // Have to break the loop
     }

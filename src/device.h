@@ -21,10 +21,12 @@
 
 extern lv_disp_t *lv_disp;
 extern volatile bool adcDataReady;
+// extern volatile bool dataReady;
 
 static void IRAM_ATTR ADCPinISR()
 {
     adcDataReady = true;
+    // dataReady = true;
     // Device::readVoltage();
     // Device::readCurrent();
 }
@@ -198,7 +200,7 @@ public:
     {
     }
 
-    ~Calibration(){};
+    ~Calibration() {};
 };
 
 class ADC
@@ -206,25 +208,35 @@ class ADC
 public:
     // ADS1219 ADC(int dataReady, uint8_t addrs);
     ADS1219 *ads1219;
-    int busyChannel{VOLTAGE};
+    int busyChannel{0};
     int drdy{-1};
     uint8_t addr{0x40};
     uint8_t config;
     uint16_t realADCSpeed{0};
     unsigned long ADC_loopCounter{0};
     TwoWire *_wire;
+    volatile bool dataReady{false};
 
     // ADC(int drdy, uint8_t addr = 0x40)
     ADC()
     {
         ads1219 = new ADS1219(drdy, addr);
-            _wire=&Wire1;
+        _wire = &Wire1;
     }
-
 
     void startConversion(int channel)
     {
-        ads1219->readSingleEnded(channel);
+
+        if (channel == VOLTAGE)
+            ads1219->readDifferential_0_1();
+        // ads1219->readSingleEnded(VOLTAGE);
+        else if (channel == CURRENT)
+            ads1219->readDifferential_2_3();
+        // ads1219->readSingleEnded(CURRENT);
+
+        // ads1219->setVoltageReference(REF_EXTERNAL);
+
+        // ads1219->readSingleEnded(channel);
         busyChannel = channel;
     }
 
@@ -290,14 +302,14 @@ public:
     int8_t bankCalibId;
     Graph_ graph;
     Stats_ stats;
-    const byte CCCVPin = 4;
+    const byte CCCVPin = 12;
 
     SettingParameters settingParameters;
     /***************
      * @param pin MCU interrupt pin for ADC drdy
      * @param func interrupt routine
      ****************/
-    void setupADC(uint8_t pin, void func(void),TwoWire *_awire);
+    void setupADC(uint8_t pin, void func(void), TwoWire *_awire);
     void setupDAC(uint8_t);
     void calibrate(void);
     void calibrationUpdate(void);
