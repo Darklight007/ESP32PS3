@@ -34,7 +34,7 @@ static void IRAM_ATTR ADCPinISR()
 struct SettingParameters
 {
     uint8_t adcRate;
-    uint8_t adcNumberOfAvgs;
+    uint16_t adcNumberOfAvgs;
     uint8_t adcNumberOfDigits;
     double SetVoltage;
     double SetCurrent;
@@ -222,10 +222,14 @@ public:
     {
         ads1219 = new ADS1219(drdy, addr);
         _wire = &Wire1;
+        ads1219->setVoltageReference(REF_EXTERNAL);
     }
 
     void startConversion(int channel)
     {
+
+        // ads1219->setVoltageReference(REF_INTERNAL);
+        ads1219->setVoltageReference(REF_EXTERNAL);
 
         if (channel == VOLTAGE)
             ads1219->readDifferential_0_1();
@@ -233,7 +237,6 @@ public:
         else if (channel == CURRENT)
             ads1219->readDifferential_2_3();
         // ads1219->readSingleEnded(CURRENT);
-
         // ads1219->setVoltageReference(REF_EXTERNAL);
 
         // ads1219->readSingleEnded(channel);
@@ -284,6 +287,7 @@ public:
     lv_obj_t *screen;
 
     DispObjects Voltage;
+    
     DispObjects Current;
     DispObjects Power;
 
@@ -317,6 +321,7 @@ public:
     void readCurrent(void);
     void writeDAC_Voltage(uint16_t value);
     void writeDAC_Current(uint16_t value);
+    void VCCCStatusUpdate(void);
     void DACUpdate(void);
     void getPower(void);
     void turn(SWITCH onOff);

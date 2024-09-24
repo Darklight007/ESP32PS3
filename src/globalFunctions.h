@@ -833,6 +833,11 @@ void Task_BarGraph(void *pvParameters)
 
 void Task_ADC(void *pvParameters)
 {
+
+    // Need to refresh for the first time when boot
+    encoder1Flag = 1;
+    encoder2Flag = 1;
+
     // Serial.print("\nTask1 running on core ");
     // Serial.println(xPortGetCoreID());
     //   const size_t stackSize = (size_t)pvParameters;
@@ -855,13 +860,17 @@ void Task_ADC(void *pvParameters)
         if (!adcDataReady)
         {
             toneOff();
-            vTaskDelay(1);
+
             // if (!lvglIsBusy)
-            KeyCheckInterval(10);
-           
+            KeyCheckInterval(45);
+
+            // DACInterval(49);
+            PowerSupply.DACUpdate();
             // // keyCheckLoop();
             getSettingEncoder(NULL, NULL);
             // trackLoopExecution(__func__);
+            vTaskDelay(1);
+
             continue;
         }
 
@@ -888,8 +897,8 @@ void Task_ADC(void *pvParameters)
         {
             lastCCCVStatus = digitalRead(PowerSupply.CCCVPin);
             // myTone(NOTE_A4, 50);
-             
         }
+
         HistPush();
 
         static unsigned long chartUpdate;
@@ -1537,18 +1546,26 @@ void keyCheckLoop()
                 PowerSupply.Power.measured.ResetStats();
                 PowerSupply.Voltage.measured.ResetStats();
                 PowerSupply.Current.measured.ResetStats();
+
+                PowerSupply.Voltage.measureStats.ResetStats();
+                PowerSupply.Current.measureStats.ResetStats();
+
+                PowerSupply.Voltage.effectiveResolution.ResetStats();
+                PowerSupply.Current.effectiveResolution.ResetStats();
                 
-PowerSupply.Voltage.Bar.changed=true;
-PowerSupply.Current.Bar.changed=true;
+                
+                PowerSupply.Voltage.Bar.changed=true;
+                PowerSupply.Current.Bar.changed=true;
 
                 PowerSupply.Current.hist.Reset();
                 PowerSupply.Voltage.hist.Reset(); });
 
     keyMenus('Z', " RELEASED.", []
              {
-                uint8_t w;
+                uint16_t w;
                 w = PowerSupply.Voltage.measured.NofAvgs;
-                w = (w == 128) ? 1 : w * 2;
+                w = (w == MAX_NO_OF_AVG) ? 1 : w * 2;
+                PowerSupply.Voltage.effectiveResolution(64);
                 lv_slider_set_value(lv_obj_get_child(slider_Avgs, -1), log2(w), LV_ANIM_OFF);
                 lv_event_send(lv_obj_get_child(slider_Avgs, -1), LV_EVENT_VALUE_CHANGED, NULL); });
 
@@ -1943,7 +1960,11 @@ void StatusBar()
             lv_label_set_text_fmt(lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
             lv_label_set_text_fmt(lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
 
-            lv_label_set_text_fmt(lbl_ER_, "%+02.2f", PowerSupply.Voltage.measured.ER(80));
+            double er_v_sample = PowerSupply.Voltage.measureStats.ER(2 * 32.768);
+            if (!std::isinf(er_v_sample))
+                PowerSupply.Voltage.effectiveResolution(er_v_sample);
+
+            lv_label_set_text_fmt(lbl_ER_, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
 
             PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
             PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2 = code2;
@@ -1959,7 +1980,7 @@ void StatusBar()
             lv_label_set_text_fmt(lbl_calibratedValue, "%+09.4f", PowerSupply.Current.measured.value);
             lv_label_set_text_fmt(lbl_calibValueAVG_, "%+09.4f", PowerSupply.Current.measured.Mean());
 
-            lv_label_set_text_fmt(lbl_ER_, "%+02.2f", PowerSupply.Current.measured.ER(12));
+            lv_label_set_text_fmt(lbl_ER_, "%+02.2f", PowerSupply.Current.measured.ER(2 * 12));
 
             PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_1 = code1;
             PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_2 = code2;
@@ -2108,6 +2129,7 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
             break;
         case 2:
             PowerSupply.Current.SetEncoderUpdate();
+            PowerSupply.FlushSettings();
             // PowerSupply.Voltage.SetEncoderUpdate();
             break;
         }
@@ -2139,7 +2161,8 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
             break;
         case 2:
             PowerSupply.Voltage.SetEncoderUpdate();
-            // void Device::FlushSettings(void)
+            PowerSupply.FlushSettings();
+
             // PowerSupply.Voltage.Flush();
             break;
         }
@@ -2236,14 +2259,14 @@ void LvglUpdatesInterval(unsigned long interval)
     schedule([]
              {
                  if (!lvglChartIsBusy)
-                 { 
-                        lvglIsBusy = 1;
-                        lv_timer_handler();
-                        lvglIsBusy = 0;
-                 } 
-                //  else 
-                //  delay(10);
-                 },
+                 {
+                     lvglIsBusy = 1;
+                     lv_timer_handler();
+                     lvglIsBusy = 0;
+                 }
+                 //  else
+                 //  delay(10);
+             },
 
              interval, timer_);
 }
@@ -2293,7 +2316,7 @@ void FFTUpdateInterval(unsigned long interval)
              interval, timer_);
 }
 
-void EncoderUpdateInterval(unsigned long interval)
+void EncoderRestartInterval(unsigned long interval)
 {
     static unsigned long timer_ = {0};
     schedule([]
@@ -2320,13 +2343,23 @@ void KeyCheckInterval(unsigned long interval)
              interval, timer_);
 }
 
-void DACInterval(unsigned long interval)
+void VCCCInterval(unsigned long interval)
 {
-    static unsigned long timer_ = {0}; 
+    static unsigned long timer_ = {0};
     schedule([]
              {
                 if (!lvglChartIsBusy)
-                     PowerSupply.DACUpdate(); },
+                     PowerSupply.VCCCStatusUpdate(); },
+             interval, timer_);
+}
+
+void DACInterval(unsigned long interval)
+{
+    static unsigned long timer_ = {0};
+    schedule([]
+             {
+                // if (!lvglChartIsBusy)
+             PowerSupply.DACUpdate(); },
              interval, timer_);
 }
 
@@ -2588,10 +2621,10 @@ void MiscPriority()
         String received_command = Serial.readStringUntil('\n');
         Serial.print("\nUploading .......");
 
-        // pinMode(PowerSupply.CCCVPin, INPUT_PULLDOWN);
-        // digitalWrite(PowerSupply.CCCVPin,INPUT_PULLDOWN);
-        // PowerSupply.turn(SWITCH::OFF);
-        // PowerSupply.Current.SetUpdate(-0.001- PowerSupply.Current.adjOffset);
+        pinMode(PowerSupply.CCCVPin, INPUT_PULLDOWN);
+        digitalWrite(PowerSupply.CCCVPin, INPUT_PULLDOWN);
+        PowerSupply.turn(SWITCH::OFF);
+        PowerSupply.Current.SetUpdate(-0.001 - PowerSupply.Current.adjOffset);
     }
     // LV_LOG_USER("%i",digitalRead(PowerSupply.CCCVPin));
     // if (g_wifiConnection)

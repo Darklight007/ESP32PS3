@@ -19,7 +19,7 @@
 // #include "setting_menu.h"
 // #include "globalFunctions.h"
 #define DMA true
-#define COLOR_DEPTH 16
+#define COLOR_DEPTH 32
 #define IWIDTH 320
 #define IHEIGHT 240
 

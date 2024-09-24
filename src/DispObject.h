@@ -8,6 +8,9 @@
 #include "ESP32Encoder.h"
 #include "buzzer.h"
 
+const int MAX_NO_OF_AVG = 512;
+// extern  uint64_t MAX_NO_OF_AVG;
+
 // #include "config.hpp"
 // #include "gLobalVariables.h"
 
@@ -39,7 +42,7 @@ public:
     float histWinMax;
     uint16_t cap = 88;
 
-    Histogram(){};
+    Histogram() {};
     ~Histogram() {}
 
     void updateMinMax(int index)
@@ -148,12 +151,24 @@ public:
     double mean;
     double absMin = +INFINITY, absMax = -INFINITY;
     bool enable = false;
-    uint8_t NofAvgs = 128;
+    uint16_t NofAvgs = MAX_NO_OF_AVG;
     uint64_t windowSizeIndex_{0};
 
 public:
-    double samples_[128]; // Maximum number of average
+    double samples_[MAX_NO_OF_AVG]; // Maximum number of average
     double sum_{0};
+    
+    
+    MovingStats(int n)
+    {
+        SetWindowSize(n);
+
+    }
+    MovingStats()
+    {
+        SetWindowSize(64);
+
+    }
 
     MovingStats &operator()(double sample)
     {
@@ -196,7 +211,7 @@ public:
 
     ~MovingStats() {}
 
-    void SetWindowSize(uint8_t w)
+    void SetWindowSize(uint16_t w)
     {
         NofAvgs = w;
         sum_ = 0; // value;
@@ -239,8 +254,8 @@ public:
     // https://training.ti.com/adc-noise-measurement-methods-parameters @12:30
     double ER(double FSR)
     {
-        return double(
-            log(FSR / (StandardDeviation())) / log(2));
+
+        return  double(log2(FSR / (StandardDeviation())));
     }
 
     void ResetStats()
@@ -248,8 +263,8 @@ public:
         SetWindowSize(NofAvgs);
         absMin = INFINITY;
         absMax = -INFINITY;
-        // for (int i = 0; i < 128; i++)
-        //     samples_[i] = 0;
+        sum_ = 0; // value;
+        windowSizeIndex_ = 0;
     }
 };
 
@@ -297,6 +312,9 @@ public:
     lv_obj_t *unlock_img;
 
     MovingStats measured;
+
+    MovingStats measureStats;
+    MovingStats effectiveResolution = MovingStats(64);
     //  MovingStats measuredRaw;
 
     Histogram hist;

@@ -23,8 +23,8 @@
 // void keyMenus(char item, String str, int x, std::function<void(int)> func);
 // void keyMenus(char item, String str, std::function<void(void)> func);
 
-volatile unsigned long encoder1Flag;
-volatile unsigned long encoder2Flag;
+volatile unsigned long encoder1Flag=true;
+volatile unsigned long encoder2Flag=true;
 
 void IRAM_ATTR VoltageEnc(void *)
 {

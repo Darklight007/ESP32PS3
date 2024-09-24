@@ -13,13 +13,12 @@ void DispObjects::SetEncoderPins(int aPintNumber, int bPinNumber, enc_isr_cb_t e
     // ESP32Encoder::useInternalWeakPullResistors = UP;
 };
 
-DispObjects::DispObjects(){};
-DispObjects::~DispObjects(){};
+DispObjects::DispObjects() {};
+DispObjects::~DispObjects() {};
 
 void DispObjects::measureUpdate(double value)
 {
     measured(value);
-
     double rv = round(value * 320);
     if (Bar.oldValue != rv)
     {
@@ -32,6 +31,7 @@ void DispObjects::measureUpdate(double value)
         oldValue = value;
         changed = true;
     }
+    measureStats(value);
 }
 
 void DispObjects::displayUpdate(void)
@@ -144,7 +144,7 @@ void DispObjects::SetUpdate(double value)
     // LV_LOG_USER("LOG: %s", "Beep!");
     // lv_disp_enable_invalidation( lv_disp_get_default(), false);
     // if (!lvglIsBusy)
-    lv_label_set_text_fmt(label_setValue, "%+08.4f",adjValue);
+    lv_label_set_text_fmt(label_setValue, "%+08.4f", adjValue);
     // lv_disp_enable_invalidation(lv_disp_get_default(), true);
     // lv_obj_invalidate(label_setValue);
     // toneOff();
@@ -194,6 +194,7 @@ void DispObjects::SetEncoderUpdate(void)
         SetUpdate(adjValue - rotaryEncoderStep);
 
     rotaryOldValue = count;
+    // adjValueChanged=true;
 }
 
 void DispObjects::setLock(bool lck)
@@ -299,6 +300,7 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     // const lv_font_t *font_set = &Undertale_16b1; // WindyCity_16b4; // Undertale_16b;
     measureColor = {lv_palette_darken(LV_PALETTE_GREY, 3)};
 
+    // effectiveResolution.SetWindowSize(4);
     /******************************
      **   Init hist
      ******************************/

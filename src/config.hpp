@@ -28,11 +28,15 @@ void IRAM_ATTR ADCPinISR(void* arg);
  uint16_t screenWidth{320};
  uint16_t screenHeight{240};
 
+
+
+
 lv_disp_t *lv_disp;
 Device PowerSupply;
 FFTHandler V, I;
 int priorityFlag = 1;
 int memory;
+
 volatile bool adcDataReady{false};
 
 

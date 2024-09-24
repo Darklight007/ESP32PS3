@@ -14,12 +14,26 @@ LTC2655::LTC2655(uint8_t addr)
 
 void LTC2655::sendCommand(int command, dacChannel_t channel, uint16_t data)
 {
-    Wire.beginTransmission(address); // transmit to device #65, Table 2. Slave Address Map, page 20th data sheet (FLOAT FLOAT FLOAT)
-    Wire.write((command << 4) | channel);
+  // Start I2C transmission to device at the address specified in the datasheet.
+    // Reference: Slave Address Map, Table 2, page 20 of the datasheet.
+    Wire.beginTransmission(address); 
+    
+    // Combine the 4-bit command and 4-bit channel into a single byte.
+    Wire.write(((command & 0b00001111) << 4) | channel);
+    // Write the high byte of the 16-bit data.
     Wire.write(data >> 8);
-    Wire.write(data & 0xff);
+    // Write the low byte of the 16-bit data.
+    Wire.write(data & 0x00ff);
+    
+    // End I2C transmission.
     Wire.endTransmission();
-    __asm__("nop\n\t");
+    
+    // NOPs may be unnecessary unless specifically required by the timing of the I2C hardware.
+    // __asm__("nop\n\t");
+    // __asm__("nop\n\t");
+    
+    // Delay can be uncommented if required by the device after sending commands (see datasheet specifications).
+    // delay(1);
 }
 
 void LTC2655::write(dacChannel_t channel, uint16_t data)
@@ -37,7 +51,6 @@ void LTC2655::writeAndPowerAll(dacChannel_t channel, uint16_t data)
 void LTC2655::writeUpdate(dacChannel_t channel, uint16_t data)
 {
     sendCommand(WRITE_UPDATE, channel, data);
-
 }
 void LTC2655::powerDown(dacChannel_t channel)
 {

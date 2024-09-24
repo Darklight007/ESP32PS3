@@ -264,13 +264,13 @@ void voltage_current_calibration(void)
     lv_obj_remove_style_all(close_btn_label);
     // lv_obj_remove_style_all(close_btn);
 
-    lv_label_set_text(close_btn_label, " X ");
+    lv_label_set_text(close_btn_label, "  X ");
     lv_obj_set_pos(close_btn, 0, 0);
     lv_obj_add_event_cb(close_btn, MainMenu_event_cb, LV_EVENT_RELEASED, NULL);
     lv_obj_set_align(close_btn, LV_ALIGN_TOP_RIGHT);
 
-    //  lv_obj_set_content_width(close_btn_label, 50); //The actual width: padding left + 50 + padding right
-    // lv_obj_set_content_height(close_btn_label, 10); //The actual width: padding top + 30 + padding bottom
+    lv_obj_set_content_width(close_btn_label, 20);  // The actual width: padding left + 50 + padding right
+    lv_obj_set_content_height(close_btn_label, 20); // The actual width: padding top + 30 + padding bottom
 
     /********************
      * drop down list
@@ -679,7 +679,7 @@ void SettingMenu(lv_obj_t *parent)
     lv_obj_t *sub_measure_page = lv_menu_page_create(menu, NULL);
     section = lv_menu_section_create(sub_measure_page);
     create_slider(section, NULL, "ADC SPS", 0, 3, PowerSupply.settingParameters.adcRate, slider_adcRate_event_cb, LV_EVENT_VALUE_CHANGED); // 0:20, 1:90. 2:330,3:1000
-    slider_Avgs = create_slider(section, NULL, "ADC # of Avgs", 0, 7, PowerSupply.settingParameters.adcNumberOfAvgs, slider_adcAVG_event_cb, LV_EVENT_VALUE_CHANGED);
+    slider_Avgs = create_slider(section, NULL, "ADC # of Avgs", 0, log2(MAX_NO_OF_AVG), PowerSupply.settingParameters.adcNumberOfAvgs, slider_adcAVG_event_cb, LV_EVENT_VALUE_CHANGED);
     create_slider(section, NULL, "Number of Digits", 1, 4, PowerSupply.settingParameters.adcNumberOfDigits, slider_decimalPoints_event_cb, LV_EVENT_VALUE_CHANGED);
     create_switch_(section, NULL, "Auto Bar-Graph", false, switch_buzzer_event_cb, LV_EVENT_VALUE_CHANGED, menu);
 
@@ -869,6 +869,13 @@ static void slider_adcRate_event_cb(lv_event_t *e)
     lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(obj), 1), ADC_SPS.at(v));
     PowerSupply.adc.ads1219->setDataRate(atoi(ADC_SPS.at(v)));
     PowerSupply.settingParameters.adcRate = v;
+
+    // Reset statistics too
+    PowerSupply.Voltage.measureStats.ResetStats();
+    PowerSupply.Current.measureStats.ResetStats();
+
+    PowerSupply.Voltage.effectiveResolution.ResetStats();
+    PowerSupply.Current.effectiveResolution.ResetStats();
 }
 
 static void slider_adcAVG_event_cb(lv_event_t *e)
@@ -881,8 +888,8 @@ static void slider_adcAVG_event_cb(lv_event_t *e)
     // lv_label_set_text(slider_label, "");
     // lv_obj_set_pos(slider_label, 180, 0);
 
-    char buf[4];
-    lv_snprintf(buf, sizeof(buf), "%-d", (uint16_t)  std::pow(2, v) );
+    char buf[6];
+    lv_snprintf(buf, sizeof(buf), "%-d", (uint16_t)std::pow(2, v));
 
     // lv_label_set_text(slider_label2, ADC_AVG.at(v));
     lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(obj), 1), buf);
@@ -985,10 +992,8 @@ static void MainMenu_event_cb(lv_event_t *e)
 
 static void RELEASED_event2_cb(lv_event_t *e)
 {
- 
 
     lv_obj_clear_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
- 
 }
 
 static void LCD_Calibration_cb(lv_event_t *e)

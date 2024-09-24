@@ -37,6 +37,7 @@
 #include "setting_menu.h"
 #include "SetupHandlers.h"
 
+
 void setup()
 {
 
@@ -68,16 +69,19 @@ void setup()
 void loop()
 {
 
-  LvglUpdatesInterval(10);
+  LvglUpdatesInterval(33);
   trackLoopExecution(__func__);
   StatusBarUpdateInterval(250);
   FlushMeasuresInterval(100 * PowerSupply.Voltage.measured.NofAvgs);
   statisticUpdateInterval(100);
   FFTUpdateInterval(1000);
-  EncoderUpdateInterval(1000); //--> some bugs?
+  EncoderRestartInterval(1000); //--> some bugs?
   managePageInteraction();
-  DACInterval(100);
+  // DACInterval(100);
+  // VCCCInterval(250);
+  // KeyCheckInterval(45);
   // Serial.printf("\nVoltage.encoder.getCount %l",PowerSupply.Voltage.encoder.getCount());
-  KeyCheckInterval(0); // moved to adc taskse
+  // KeyCheckInterval(0); // moved to adc taskse
   // delay(10);
 }
+ 
