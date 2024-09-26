@@ -8,7 +8,7 @@
 #include "ESP32Encoder.h"
 #include "buzzer.h"
 
-const int MAX_NO_OF_AVG = 512;
+const int MAX_NO_OF_AVG = 128;
 // extern  uint64_t MAX_NO_OF_AVG;
 
 // #include "config.hpp"
@@ -144,104 +144,246 @@ public:
 
 //***********************************************************
 // https://stackoverflow.com/questions/10990618/calculate-rolling-moving-average-in-c
-class MovingStats
+// class MovingStats
+// {
+// public:
+//     double value;
+//     double mean;
+//     double absMin = +INFINITY, absMax = -INFINITY;
+//     bool enable = false;
+//     uint16_t NofAvgs = MAX_NO_OF_AVG;
+//     uint64_t windowSizeIndex_{0};
+
+// public:
+//     double samples_[MAX_NO_OF_AVG]; // Maximum number of average
+//     double sum_{0};
+
+//     MovingStats(int n)
+//     {
+//         SetWindowSize(n);
+//     }
+//     MovingStats()
+//     {
+//         SetWindowSize(64);
+//     }
+
+//     MovingStats &operator()(double sample)
+//     {
+
+//         value = sample;
+//         // if (windowSizeIndex_ == 0)
+//         //     sum_ = 0;
+
+//         if (absMin > sample)
+//         {
+//             absMin = sample;
+//             //  myTone(NOTE_A3, 1);
+//         }
+
+//         if (absMax < sample)
+//         {
+//             absMax = sample;
+//             //  myTone(NOTE_A4, 1);
+//         }
+
+//         sum_ += sample;
+
+//         if (windowSizeIndex_ < NofAvgs)
+
+//             samples_[windowSizeIndex_++] = sample;
+
+//         else
+//         {
+//             double &oldest = samples_[windowSizeIndex_++ % NofAvgs];
+//             sum_ -= oldest;
+//             oldest = sample;
+//         }
+
+//         // history.push_back(sample);
+//         // if (history.size() > 100)
+//         // history.erase(std::begin(history));
+
+//         return *this;
+//     }
+
+//     ~MovingStats() {}
+
+//     void SetWindowSize(uint16_t w)
+//     {
+//         NofAvgs = w;
+//         sum_ = 0; // value;
+//         windowSizeIndex_ = 0;
+//         // samples_[windowSizeIndex_++] = 0;
+//     }
+//     operator double() const { return sum_ / std::max((const long long unsigned)1, std::min(windowSizeIndex_, uint64_t(NofAvgs))); }
+
+//     double Mean() const
+//     {
+//         return sum_ / std::max((const long long unsigned)1, std::min(windowSizeIndex_, uint64_t(NofAvgs)));
+//     }
+
+//     double Sum() const { return sum_; }
+
+//     double Rms() const
+//     {
+//         double total = 0;
+//         size_t currentSize = std::min(windowSizeIndex_, uint64_t(NofAvgs));
+//         for (int i = 0; i < currentSize; i++)
+//             total += samples_[i] * samples_[i];
+
+//         return sqrt(total / double(NofAvgs));
+//     }
+
+//     double Variance() const
+//     {
+//         double mu = Mean();
+//         double total = 0;
+
+//         size_t currentSize = std::min(windowSizeIndex_, uint64_t(NofAvgs));
+//         for (int i = 0; i < currentSize; i++)
+//             total += (samples_[i] - mu) * (samples_[i] - mu);
+
+//         return (currentSize > 1) ? total / (currentSize - 1) : 0.0;
+//     }
+
+//     double StandardDeviation() const
+//     {
+//         return sqrt(Variance());
+//     }
+
+//     // Effective resolution:
+//     // https://www.eetimes.com/understanding-noise-enob-and-effective-resolution-in-analog-to-digital-converters/
+//     // https://training.ti.com/adc-noise-measurement-methods-parameters @12:30
+//     double ER(double FSR)
+//     {
+
+//         return double(log2(FSR / (StandardDeviation())));
+//     }
+
+//     void ResetStats()
+//     {
+//         SetWindowSize(NofAvgs);
+//         absMin = INFINITY;
+//         absMax = -INFINITY;
+//         sum_ = 0; // value;
+//         windowSizeIndex_ = 0;
+//     }
+// };
+
+class Moving_Stats
 {
 public:
+    std::vector<double> samples_;
     double value;
     double mean;
     double absMin = +INFINITY, absMax = -INFINITY;
     bool enable = false;
-    uint16_t NofAvgs = MAX_NO_OF_AVG;
+    uint16_t NofAvgs;
     uint64_t windowSizeIndex_{0};
-
-public:
-    double samples_[MAX_NO_OF_AVG]; // Maximum number of average
     double sum_{0};
-    
-    
-    MovingStats(int n)
-    {
-        SetWindowSize(n);
 
-    }
-    MovingStats()
-    {
-        SetWindowSize(64);
+    double M2 = 0.0; // Sum of squares of differences from the current mean
 
+    explicit Moving_Stats(uint16_t n = 64) : NofAvgs(n), samples_(n)
+    {
+        ResetStats();
     }
 
-    MovingStats &operator()(double sample)
+    Moving_Stats &operator()(double sample)
     {
-
         value = sample;
-        // if (windowSizeIndex_ == 0)
-        //     sum_ = 0;
 
-        if (absMin > sample)
-        {
-            absMin = sample;
-            //  myTone(NOTE_A3, 1);
-        }
+        // Update min and max statistics
+        absMin = std::min(absMin, sample);
+        absMax = std::max(absMax, sample);
 
-        if (absMax < sample)
-        {
-            absMax = sample;
-            //  myTone(NOTE_A4, 1);
-        }
-
+        // Update the mean and variance using Welford's online algorithm adapted for a moving window
+        // Update running total sum
         sum_ += sample;
-
         if (windowSizeIndex_ < NofAvgs)
-
-            samples_[windowSizeIndex_++] = sample;
-
+        {
+            // Still filling the initial window
+            int index = windowSizeIndex_++;
+            double delta = sample - mean;
+            mean += delta / windowSizeIndex_;
+            M2 += delta * (sample - mean);
+            samples_[index] = sample;
+        }
         else
         {
-            double &oldest = samples_[windowSizeIndex_++ % NofAvgs];
+            // Window is full, roll over the oldest data point
+            int index = windowSizeIndex_ % NofAvgs;
+            double oldest = samples_[index];
+            double delta = sample - oldest;
+            double delta2 = sample - mean;
             sum_ -= oldest;
-            oldest = sample;
+            mean += delta / NofAvgs;
+            M2 += delta2 * (sample - mean) + delta * (oldest - mean);
+            samples_[index] = sample;
+            windowSizeIndex_++;
+            // sum_ += sample;
         }
-
-        // history.push_back(sample);
-        // if (history.size() > 100)
-        // history.erase(std::begin(history));
+ 
+        // if (windowSizeIndex_ < NofAvgs)
+        // {
+        //     samples_[windowSizeIndex_++] = sample;
+        // }
+        // else
+        // {
+        //     double &oldest = samples_[windowSizeIndex_++ % NofAvgs];
+        //     sum_ -= oldest;
+        //     oldest = sample;
+        // }
 
         return *this;
     }
 
-    ~MovingStats() {}
-
     void SetWindowSize(uint16_t w)
     {
         NofAvgs = w;
-        sum_ = 0; // value;
+        samples_.resize(NofAvgs, 0.0); // Resize and initialize the vector
+        std::fill(samples_.begin(), samples_.end(), 0.0);
+        sum_ = 0;
         windowSizeIndex_ = 0;
-        // samples_[windowSizeIndex_++] = 0;
+        absMin = +INFINITY;
+        absMax = -INFINITY;
     }
-    operator double() const { return sum_ / std::max((const long long unsigned)1, std::min(windowSizeIndex_, uint64_t(NofAvgs))); }
-    double Mean() const { return sum_ / std::max((const long long unsigned)1, std::min(windowSizeIndex_, uint64_t(NofAvgs))); }
-    double Sum() const { return sum_; }
+
+    double Mean() const
+    {
+        //   return mean;
+        // return value;
+        return sum_ / std::max(uint64_t(1), std::min(windowSizeIndex_, uint64_t(NofAvgs)));
+    }
+
+    double Sum() const
+    {
+        return sum_;
+    }
 
     double Rms() const
     {
         double total = 0;
         size_t currentSize = std::min(windowSizeIndex_, uint64_t(NofAvgs));
-        for (int i = 0; i < currentSize; i++)
+        for (size_t i = 0; i < currentSize; ++i)
+        {
             total += samples_[i] * samples_[i];
-
-        return sqrt(total / double(NofAvgs));
+        }
+        return sqrt(total / currentSize);
     }
 
     double Variance() const
     {
-        double mu = Mean();
-        double total = 0;
-
-        size_t currentSize = std::min(windowSizeIndex_, uint64_t(NofAvgs));
-        for (int i = 0; i < currentSize; i++)
-            total += (samples_[i] - mu) * (samples_[i] - mu);
-
-        return (currentSize > 1) ? total / (currentSize - 1) : 0.0;
+        // double mu = Mean();
+        // double total = 0;
+        // size_t currentSize = std::min(windowSizeIndex_, uint64_t(NofAvgs));
+        // for (size_t i = 0; i < currentSize; ++i)
+        // {
+        //     double diff = samples_[i] - mu;
+        //     total += diff * diff;
+        // }
+        // return currentSize > 1 ? total / (currentSize - 1) : 0.0;
+        return (windowSizeIndex_ >= NofAvgs) ? M2 / NofAvgs : (windowSizeIndex_ > 1 ? M2 / (windowSizeIndex_ - 1) : 0);
     }
 
     double StandardDeviation() const
@@ -249,22 +391,22 @@ public:
         return sqrt(Variance());
     }
 
-    // Effective resolution:
-    // https://www.eetimes.com/understanding-noise-enob-and-effective-resolution-in-analog-to-digital-converters/
-    // https://training.ti.com/adc-noise-measurement-methods-parameters @12:30
-    double ER(double FSR)
+    double ER(double FSR) const
     {
-
-        return  double(log2(FSR / (StandardDeviation())));
+        return log2(FSR / StandardDeviation());
     }
 
     void ResetStats()
     {
-        SetWindowSize(NofAvgs);
-        absMin = INFINITY;
-        absMax = -INFINITY;
-        sum_ = 0; // value;
+
+        std::fill(samples_.begin(), samples_.end(), 0.0);
+        // samples_.resize(NofAvgs, 0.0);  // Resize and initialize the vector
+        sum_ = 0;
         windowSizeIndex_ = 0;
+        absMin = +INFINITY;
+        absMax = -INFINITY;
+        mean = 0.0;
+        M2 = 0.0;
     }
 };
 
@@ -311,10 +453,9 @@ public:
     lv_obj_t *lock_img;
     lv_obj_t *unlock_img;
 
-    MovingStats measured;
-
-    MovingStats measureStats;
-    MovingStats effectiveResolution = MovingStats(64);
+    Moving_Stats measured;
+    Moving_Stats measureStats;
+    Moving_Stats effectiveResolution;
     //  MovingStats measuredRaw;
 
     Histogram hist;

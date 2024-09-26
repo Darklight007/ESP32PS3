@@ -18,6 +18,13 @@
 // #include "buzzer.h"
 // #include "setting_menu.h"
 // #include "globalFunctions.h"
+
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_heap_caps.h"
+#include "esp_log.h"
+
 #define DMA true
 #define COLOR_DEPTH 32
 #define IWIDTH 320
@@ -76,6 +83,7 @@ extern void  init_touch();
 
 // Declarations of setup and utility functions
 void initializeSerial();
+void print_memory_info();
 void initialMemory();
 void initializeI2C();
 void initializeDisplay();

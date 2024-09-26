@@ -14,6 +14,27 @@ void initialMemory()
     Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
     Serial.printf("Total PSRAM: %d\n", ESP.getPsramSize());
     Serial.printf("Free PSRAM: %d\n", ESP.getFreePsram());
+
+        // Getting information about internal RAM
+    multi_heap_info_t info;
+    heap_caps_get_info(&info, MALLOC_CAP_INTERNAL);
+
+    size_t total_memory = info.total_free_bytes + info.total_allocated_bytes;
+    Serial.printf("\nTotal internal memory: %zu bytes\n", total_memory);
+    Serial.printf("Used internal memory: %zu bytes\n", info.total_allocated_bytes);
+    Serial.printf("Free internal memory: %zu bytes\n", info.total_free_bytes);
+
+    // If you also need information about PSRAM (external SPI RAM)
+    heap_caps_get_info(&info, MALLOC_CAP_SPIRAM);
+    // if (info.total_allocated_bytes > 0) 
+    { // Check if PSRAM is being used
+        total_memory = info.total_free_bytes + info.total_allocated_bytes;
+        Serial.printf("Total PSRAM memory: %zu bytes\n", total_memory);
+        Serial.printf("Used PSRAM memory: %zu bytes\n", info.total_allocated_bytes);
+        Serial.printf("Free PSRAM memory: %zu bytes\n", info.total_free_bytes);
+    }
+
+
 }
 
 #define SDA_1_ADC 17
@@ -74,13 +95,20 @@ void setupPowerSupply()
 
     // Setup voltage,current and power for page 3
     PowerSupply.Voltage.setup(PowerSupply.page[2], "V-Set:", -14, -8, "V", 32.7675, 5.0, -12 * 0, 2000);
-    PowerSupply.Voltage.measureStats.SetWindowSize(MAX_NO_OF_AVG);
-    PowerSupply.Current.measureStats.SetWindowSize(MAX_NO_OF_AVG);
-    PowerSupply.Power.measureStats.SetWindowSize(64);
+    
+    PowerSupply.Voltage.measured.SetWindowSize(MAX_NO_OF_AVG);
+    PowerSupply.Voltage.measureStats.SetWindowSize(4096);
+    
+    PowerSupply.Current.measured.SetWindowSize(MAX_NO_OF_AVG);
+    PowerSupply.Current.measureStats.SetWindowSize(4096);
+    
+    PowerSupply.Power.measured.SetWindowSize(MAX_NO_OF_AVG);
+    PowerSupply.Power.measureStats.SetWindowSize(1);
 
 
     PowerSupply.Voltage.effectiveResolution.SetWindowSize(32);
     PowerSupply.Current.effectiveResolution.SetWindowSize(32);
+    PowerSupply.Power.effectiveResolution.SetWindowSize(1);
 
     PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", 6.5535, 1.0, -5.5 /*miliampere*/, 2000);
     PowerSupply.Power.setup(PowerSupply.page[2], "", -14, 144, "W", 0, 0, 0, 0, &dseg_b_24, &Tauri_R_28);
@@ -204,6 +232,7 @@ void setupTasks()
     // Task creation for FreeRTOS
     Serial.println("Tasks Setup Completed.");
 }
+
 
 void setupPreferences()
 {

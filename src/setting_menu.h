@@ -264,7 +264,7 @@ void voltage_current_calibration(void)
     lv_obj_remove_style_all(close_btn_label);
     // lv_obj_remove_style_all(close_btn);
 
-    lv_label_set_text(close_btn_label, "  X ");
+    lv_label_set_text(close_btn_label, " X ");
     lv_obj_set_pos(close_btn, 0, 0);
     lv_obj_add_event_cb(close_btn, MainMenu_event_cb, LV_EVENT_RELEASED, NULL);
     lv_obj_set_align(close_btn, LV_ALIGN_TOP_RIGHT);
@@ -871,11 +871,8 @@ static void slider_adcRate_event_cb(lv_event_t *e)
     PowerSupply.settingParameters.adcRate = v;
 
     // Reset statistics too
-    PowerSupply.Voltage.measureStats.ResetStats();
-    PowerSupply.Current.measureStats.ResetStats();
-
-    PowerSupply.Voltage.effectiveResolution.ResetStats();
-    PowerSupply.Current.effectiveResolution.ResetStats();
+    PowerSupply.ResetStats();
+    
 }
 
 static void slider_adcAVG_event_cb(lv_event_t *e)

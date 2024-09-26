@@ -32,19 +32,23 @@ void DispObjects::measureUpdate(double value)
         changed = true;
     }
     measureStats(value);
+
+    double er_sample = measureStats.ER(2 * maxValue);
+    if (!std::isinf(er_sample))
+        effectiveResolution(er_sample);
 }
 
 void DispObjects::displayUpdate(void)
 {
-    static double mean;
-    mean = measured.Mean();
-    if (oldValue != mean)
+    static double mean_;
+    mean_ = measured.Mean();
+    if (oldValue != mean_)
     {
         // Display mean  of measured data not the value
-        lv_label_set_text_fmt(label_measureValue, restrict, mean);
+        lv_label_set_text_fmt(label_measureValue, restrict, mean_);
         // lv_obj_invalidate(label_measureValue);
         changed = true;
-        oldValue = mean;
+        oldValue = mean_;
     }
 
     // if ((millis() - timeKeeper) >= 250)

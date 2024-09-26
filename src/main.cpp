@@ -37,11 +37,14 @@
 #include "setting_menu.h"
 #include "SetupHandlers.h"
 
+#include "esp_heap_caps.h"
+#include "esp_log.h"
 
 void setup()
 {
 
   initializeSerial();
+  // print_memory_info();
   initialMemory();
   initializeI2C();
   initializeDisplay();
@@ -62,8 +65,8 @@ void setup()
   // SetupOVP();  // Create OVP/OCP protection
   seupCalibPage();
   createTasks();
+  initialMemory();
   Serial.printf("\nSetup() run on core: #%i \n\n", xPortGetCoreID());
-  
 }
 
 void loop()
@@ -71,9 +74,9 @@ void loop()
 
   LvglUpdatesInterval(33);
   trackLoopExecution(__func__);
-  StatusBarUpdateInterval(250);
-  FlushMeasuresInterval(100 * PowerSupply.Voltage.measured.NofAvgs);
-  statisticUpdateInterval(100);
+  StatusBarUpdateInterval(333);
+  FlushMeasuresInterval(125 * PowerSupply.Voltage.measured.NofAvgs); //PowerSupply.Voltage.measured.NofAvgs
+  statisticUpdateInterval(333);
   FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?
   managePageInteraction();
@@ -84,4 +87,3 @@ void loop()
   // KeyCheckInterval(0); // moved to adc taskse
   // delay(10);
 }
- 

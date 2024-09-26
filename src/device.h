@@ -287,7 +287,6 @@ public:
     lv_obj_t *screen;
 
     DispObjects Voltage;
-    
     DispObjects Current;
     DispObjects Power;
 
@@ -346,6 +345,25 @@ public:
 
     void SaveSettingData(const String &key, const SettingParameters &data);
     SettingParameters LoadSettingData(const String &key);
+
+    void ResetStats(void)
+    {
+        Power.measured.ResetStats();
+        Voltage.measured.ResetStats();
+        Current.measured.ResetStats();
+
+        Voltage.measureStats.ResetStats();
+        Current.measureStats.ResetStats();
+
+        Voltage.effectiveResolution.ResetStats();
+        Current.effectiveResolution.ResetStats();
+
+        Voltage.Bar.changed = true;
+        Current.Bar.changed = true;
+
+        Current.hist.Reset();
+        Voltage.hist.Reset();
+    }
 
     bool eepromWriteFlag = false;
     template <class T>

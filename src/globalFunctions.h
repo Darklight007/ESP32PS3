@@ -1518,11 +1518,9 @@ void keyCheckLoop()
 
               PowerSupply.Current.hist.histWinMin = (PowerSupply.Current.hist.RangeMin()+.10)/ 328.0 * 6.5536 ;
               PowerSupply.Current.hist.histWinMax = (PowerSupply.Current.hist.RangeMax()+.5)/ 328.0 * 6.5536 ;
-              PowerSupply.Current.hist.Reset();
-
- 
+              PowerSupply.Current.hist.Reset(); 
           
-             PowerSupply.Voltage.hist.histWinMin = (PowerSupply.Voltage.hist.RangeMin()+.10)/ 328.0 * 32.768 ;
+              PowerSupply.Voltage.hist.histWinMin = (PowerSupply.Voltage.hist.RangeMin()+.10)/ 328.0 * 32.768 ;
               PowerSupply.Voltage.hist.histWinMax = (PowerSupply.Voltage.hist.RangeMax()+.2)/ 328.0 * 32.768 ;
 
               PowerSupply.Voltage.hist.Reset(); 
@@ -1542,30 +1540,16 @@ void keyCheckLoop()
 
     // Statistics Reset button
     keyMenus('j', " RELEASED.", []
-             {  
-                PowerSupply.Power.measured.ResetStats();
-                PowerSupply.Voltage.measured.ResetStats();
-                PowerSupply.Current.measured.ResetStats();
-
-                PowerSupply.Voltage.measureStats.ResetStats();
-                PowerSupply.Current.measureStats.ResetStats();
-
-                PowerSupply.Voltage.effectiveResolution.ResetStats();
-                PowerSupply.Current.effectiveResolution.ResetStats();
-                
-                
-                PowerSupply.Voltage.Bar.changed=true;
-                PowerSupply.Current.Bar.changed=true;
-
-                PowerSupply.Current.hist.Reset();
-                PowerSupply.Voltage.hist.Reset(); });
+             { PowerSupply.ResetStats(); });
 
     keyMenus('Z', " RELEASED.", []
              {
                 uint16_t w;
                 w = PowerSupply.Voltage.measured.NofAvgs;
                 w = (w == MAX_NO_OF_AVG) ? 1 : w * 2;
-                PowerSupply.Voltage.effectiveResolution(64);
+                // PowerSupply.Voltage.effectiveResolution(64);
+                PowerSupply.ResetStats();
+
                 lv_slider_set_value(lv_obj_get_child(slider_Avgs, -1), log2(w), LV_ANIM_OFF);
                 lv_event_send(lv_obj_get_child(slider_Avgs, -1), LV_EVENT_VALUE_CHANGED, NULL); });
 
@@ -1959,11 +1943,6 @@ void StatusBar()
 
             lv_label_set_text_fmt(lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
             lv_label_set_text_fmt(lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
-
-            double er_v_sample = PowerSupply.Voltage.measureStats.ER(2 * 32.768);
-            if (!std::isinf(er_v_sample))
-                PowerSupply.Voltage.effectiveResolution(er_v_sample);
-
             lv_label_set_text_fmt(lbl_ER_, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
 
             PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
@@ -1979,8 +1958,7 @@ void StatusBar()
 
             lv_label_set_text_fmt(lbl_calibratedValue, "%+09.4f", PowerSupply.Current.measured.value);
             lv_label_set_text_fmt(lbl_calibValueAVG_, "%+09.4f", PowerSupply.Current.measured.Mean());
-
-            lv_label_set_text_fmt(lbl_ER_, "%+02.2f", PowerSupply.Current.measured.ER(2 * 12));
+            lv_label_set_text_fmt(lbl_ER_, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
 
             PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_1 = code1;
             PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_2 = code2;

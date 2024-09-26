@@ -289,8 +289,6 @@ void Device::LoadSetting(void)
 
     Serial.printf("\nLast Voltage Value:% +8.4f", Voltage.adjValue + Voltage.adjOffset);
     Serial.printf("\nLast Current Value:% +8.4f", Current.adjValue + Current.adjOffset);
-
-
 };
 
 void Device::SaveSetting(void)
@@ -324,7 +322,7 @@ void Device::readVoltage()
         // Voltage.hist[v];
         Voltage.measureUpdate(v); //  enob(rs[0].StandardDeviation())
         adc.ADC_loopCounter++;
- myTone(NOTE_A3, 1);
+        myTone(NOTE_A3, 1);
         // Serial.print("Measured Raw Voltage:");
         // Serial.println(v);
         // Serial.print("Voltage:");
