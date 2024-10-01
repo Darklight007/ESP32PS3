@@ -352,8 +352,8 @@ public:
         Voltage.measured.ResetStats();
         Current.measured.ResetStats();
 
-        Voltage.measureStats.ResetStats();
-        Current.measureStats.ResetStats();
+        Voltage.Statistics.ResetStats();
+        Current.Statistics.ResetStats();
 
         Voltage.effectiveResolution.ResetStats();
         Current.effectiveResolution.ResetStats();

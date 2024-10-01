@@ -8,6 +8,11 @@
 #include "ESP32Encoder.h"
 #include "buzzer.h"
 
+#include <cmath>
+#include <cstdint>
+#include <algorithm>
+#include <limits>
+
 const int MAX_NO_OF_AVG = 128;
 // extern  uint64_t MAX_NO_OF_AVG;
 
@@ -270,6 +275,138 @@ public:
 //     }
 // };
 
+class MovingStatistics
+{
+public:
+    // Public member variables
+    std::vector<double> samples_;
+    double value;
+    double absMin = +std::numeric_limits<double>::infinity();
+    double absMax = -std::numeric_limits<double>::infinity();
+    bool enable = false;
+    uint16_t NofAvgs;
+    uint64_t windowSizeIndex_{0};
+    double sum_{0.0};
+    double sum_sq_{0.0}; // Running sum of squares for RMS
+
+    // Constructor with explicit keyword to prevent implicit conversions
+    explicit MovingStatistics(uint16_t n = 64)
+        : NofAvgs(n), samples_(n, 0.0)
+    {
+        if (NofAvgs == 0)
+        {
+            throw std::invalid_argument("Window size must be greater than 0.");
+        }
+        ResetStats();
+    }
+
+    // Overloaded function call operator to add a new sample
+    MovingStatistics &operator()(double sample)
+    {
+        value = sample;
+
+        // Update minimum and maximum
+        absMin = std::min(absMin, sample);
+        absMax = std::max(absMax, sample);
+
+        sum_ += sample;
+        if (windowSizeIndex_ < NofAvgs)
+        {
+            // Initial filling of the window
+            size_t index = windowSizeIndex_++;
+            samples_[index] = sample;
+            sum_sq_ += sample * sample;
+        }
+        else
+        {
+            // Window is full; remove the oldest sample and add the new one
+            size_t index = windowSizeIndex_ % NofAvgs;
+            double oldest = samples_[index];
+            samples_[index] = sample;
+            sum_ += - oldest;
+            sum_sq_ += sample * sample - oldest * oldest;
+            windowSizeIndex_++;
+        }
+
+        return *this;
+    }
+
+    // Set a new window size
+    void SetWindowSize(uint16_t w)
+    {
+        if (w == 0)
+        {
+            throw std::invalid_argument("Window size must be greater than 0.");
+        }
+        NofAvgs = w;
+        samples_.resize(NofAvgs, 0.0); // Resize and initialize the vector
+        std::fill(samples_.begin(), samples_.end(), 0.0);
+        ResetStats();
+    }
+
+    // Calculate the mean of the samples
+    double Mean() const
+    {
+        // size_t currentSize = std::min(windowSizeIndex_, static_cast<uint64_t>(NofAvgs));
+        // if (currentSize == 0)
+        //     return 0.0;
+        // return sum_ / static_cast<double>(currentSize);
+
+        return sum_ / std::max(uint64_t(1), std::min(windowSizeIndex_, uint64_t(NofAvgs)));
+    }
+
+    // Get the sum of the samples
+    double Sum() const
+    {
+        return sum_;
+    }
+
+    // Calculate the Root Mean Square (RMS) of the samples
+    double Rms() const
+    {
+        uint64_t currentSize = std::min(windowSizeIndex_, static_cast<uint64_t>(NofAvgs));
+        if (currentSize == 0)
+            return 0.0;
+        return std::sqrt(sum_sq_ / static_cast<double>(currentSize));
+    }
+
+    // Calculate the variance of the samples
+    double Variance() const
+    {
+        size_t n = std::min(windowSizeIndex_, static_cast<uint64_t>(NofAvgs));
+        if (n < 2)
+            return 0.0;
+        double mean = sum_ / static_cast<double>(n);
+        double variance = (sum_sq_ - (sum_ * mean)) / static_cast<double>(n - 1);
+        return (variance >= 0.0) ? variance : 0.0;
+    }
+
+    // Calculate the standard deviation of the samples
+    double StandardDeviation() const
+    {
+        double var = Variance();
+        return (var > 0.0) ? std::sqrt(var) : 0.0;
+    }
+
+    // Calculate ER (Effective Resolution) given Full Scale Range (FSR)
+    double ER(double FSR) const
+    {
+        double stdDev = StandardDeviation();
+        return (stdDev > 0.0) ? std::log2(FSR / stdDev) : 0.0;
+    }
+
+    // Reset all statistics and clear the window
+    void ResetStats()
+    {
+        std::fill(samples_.begin(), samples_.end(), 0.0);
+        sum_ = 0.0;
+        sum_sq_ = 0.0;
+        windowSizeIndex_ = 0;
+        absMin = +std::numeric_limits<double>::infinity();
+        absMax = -std::numeric_limits<double>::infinity();
+    }
+};
+
 class Moving_Stats
 {
 public:
@@ -323,7 +460,7 @@ public:
             windowSizeIndex_++;
             // sum_ += sample;
         }
- 
+
         // if (windowSizeIndex_ < NofAvgs)
         // {
         //     samples_[windowSizeIndex_++] = sample;
@@ -410,7 +547,7 @@ public:
     }
 };
 
-//***********************************************************
+// Main Class ***********************************************************
 
 struct _bar
 {
@@ -453,9 +590,9 @@ public:
     lv_obj_t *lock_img;
     lv_obj_t *unlock_img;
 
-    Moving_Stats measured;
-    Moving_Stats measureStats;
-    Moving_Stats effectiveResolution;
+    MovingStatistics measured;
+    MovingStatistics Statistics;
+    MovingStatistics effectiveResolution;
     //  MovingStats measuredRaw;
 
     Histogram hist;

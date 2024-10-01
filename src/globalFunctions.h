@@ -810,23 +810,24 @@ void Task_BarGraph(void *pvParameters)
     for (;;)
     {
 
-        if (lvglIsBusy)
+        // if (lvglIsBusy)
+        // {
+        //     toneOff();
+        //     vTaskDelay(3);
+
+        //     continue;
+        // }
+
+        if (!lvglIsBusy)
+        {
+            PowerSupply.Voltage.barUpdate();
+            PowerSupply.Current.barUpdate();
+        }
+        else
         {
             toneOff();
-            vTaskDelay(1);
-
-            continue;
+            vTaskDelay(3);
         }
-
-        if (!lvglIsBusy)
-            PowerSupply.Voltage.barUpdate();
-
-        if (!lvglIsBusy)
-            PowerSupply.Current.barUpdate();
-
-        // else
-        //     vTaskDelay(1);
-        //   PowerSupply.getPower();
         // trackLoopExecution(__func__);
     }
 }
@@ -865,11 +866,19 @@ void Task_ADC(void *pvParameters)
             KeyCheckInterval(45);
 
             // DACInterval(49);
-            PowerSupply.DACUpdate();
-            // // keyCheckLoop();
+
+            static unsigned long timer_ = {0};
+            schedule([]
+                     { PowerSupply.DACUpdate(); },
+                     100, timer_);
+
             getSettingEncoder(NULL, NULL);
             // trackLoopExecution(__func__);
-            vTaskDelay(1);
+
+            if (Tabs::getCurrentPage() == 2)
+                vTaskDelay(1);
+            else if (Tabs::getCurrentPage() == 1)
+                vTaskDelay(10);
 
             continue;
         }

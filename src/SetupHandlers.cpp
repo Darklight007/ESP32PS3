@@ -97,13 +97,13 @@ void setupPowerSupply()
     PowerSupply.Voltage.setup(PowerSupply.page[2], "V-Set:", -14, -8, "V", 32.7675, 5.0, -12 * 0, 2000);
     
     PowerSupply.Voltage.measured.SetWindowSize(MAX_NO_OF_AVG);
-    PowerSupply.Voltage.measureStats.SetWindowSize(4096);
+    PowerSupply.Voltage.Statistics.SetWindowSize(4096);
     
     PowerSupply.Current.measured.SetWindowSize(MAX_NO_OF_AVG);
-    PowerSupply.Current.measureStats.SetWindowSize(4096);
+    PowerSupply.Current.Statistics.SetWindowSize(4096);
     
     PowerSupply.Power.measured.SetWindowSize(MAX_NO_OF_AVG);
-    PowerSupply.Power.measureStats.SetWindowSize(1);
+    PowerSupply.Power.Statistics.SetWindowSize(1);
 
 
     PowerSupply.Voltage.effectiveResolution.SetWindowSize(32);

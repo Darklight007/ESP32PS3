@@ -75,7 +75,7 @@ void loop()
   LvglUpdatesInterval(33);
   trackLoopExecution(__func__);
   StatusBarUpdateInterval(333);
-  FlushMeasuresInterval(125 * PowerSupply.Voltage.measured.NofAvgs); //PowerSupply.Voltage.measured.NofAvgs
+  FlushMeasuresInterval(60+ 50* PowerSupply.Voltage.measured.NofAvgs); //PowerSupply.Voltage.measured.NofAvgs
   statisticUpdateInterval(333);
   FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?
