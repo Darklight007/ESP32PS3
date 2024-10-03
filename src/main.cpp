@@ -63,7 +63,7 @@ void setup()
   setupADC();
   setupDAC();
   // SetupOVP();  // Create OVP/OCP protection
-  seupCalibPage();
+  setupCalibPage();
   createTasks();
   initialMemory();
   Serial.printf("\nSetup() run on core: #%i \n\n", xPortGetCoreID());
@@ -72,10 +72,10 @@ void setup()
 void loop()
 {
 
-  LvglUpdatesInterval(33);
+  LvglUpdatesInterval(15);
   trackLoopExecution(__func__);
   StatusBarUpdateInterval(333);
-  FlushMeasuresInterval(60+ 50* PowerSupply.Voltage.measured.NofAvgs); //PowerSupply.Voltage.measured.NofAvgs
+  FlushMeasuresInterval(75+ 50* PowerSupply.Voltage.measured.NofAvgs); //PowerSupply.Voltage.measured.NofAvgs
   statisticUpdateInterval(333);
   FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?

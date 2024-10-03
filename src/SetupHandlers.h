@@ -96,7 +96,7 @@ void setupPreferences();
 void setupADC();
 void setupDAC();
 void createTasks();
-void seupCalibPage();
+void setupCalibPage();
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
 
 void init_display();

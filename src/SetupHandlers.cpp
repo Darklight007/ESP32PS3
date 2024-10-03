@@ -61,12 +61,12 @@ void initializeI2C()
 {
     // setupOTA("Power Supply");
 
-    Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_1M); //(18,15), 16,17
+    Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_1_7M); //(18,15), 16,17
     Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_1_7M);
     // Wire.setClock(400000UL);
 
     kpd.begin();             // now does not starts wire library
-    kpd.setDebounceTime(23); // no bouncying for this i2C
+    kpd.setDebounceTime(33); // no bouncying for this i2C
     kpd.setHoldTime(1000);
 
     Serial.println("I2C Initialized.");

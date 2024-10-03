@@ -13,6 +13,7 @@ extern TFT_eSPI tft;
 lv_obj_t *menu;
 lv_obj_t *voltageCurrentCalibration;
 lv_obj_t *myTextBox;
+bool isMyTextBoxHidden;
 enum
 {
     LV_MENU_ITEM_BUILDER_VARIANT_1,

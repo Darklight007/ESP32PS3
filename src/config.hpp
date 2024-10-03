@@ -82,7 +82,7 @@ extern bool buzzerSound;
 TaskHandle_t Task_adc,Task1, LVGL;
 bool ismyTextHiddenChange = false;
 
-bool lvglIsBusy,lvglChartIsBusy;
+bool lvglIsBusy,lvglChartIsBusy,emergencyRefresh;
 
 
 // #include "myMenu.h"

@@ -810,13 +810,12 @@ void Task_BarGraph(void *pvParameters)
     for (;;)
     {
 
-        // if (lvglIsBusy)
-        // {
-        //     toneOff();
-        //     vTaskDelay(3);
-
-        //     continue;
-        // }
+        if (Tabs::getCurrentPage() != 2)
+        // trackLoopExecution(__func__);
+        {
+            vTaskDelay(10);
+            continue;
+        }
 
         if (!lvglIsBusy)
         {
@@ -838,7 +837,8 @@ void Task_ADC(void *pvParameters)
     // Need to refresh for the first time when boot
     encoder1Flag = 1;
     encoder2Flag = 1;
-
+    PowerSupply.Voltage.SetEncoderUpdate();
+    PowerSupply.Current.SetEncoderUpdate();
     // Serial.print("\nTask1 running on core ");
     // Serial.println(xPortGetCoreID());
     //   const size_t stackSize = (size_t)pvParameters;
@@ -853,9 +853,7 @@ void Task_ADC(void *pvParameters)
 
         //  toneOff();
         // vTaskDelay(1);
-        // if (!lvglIsBusy)
-        // trackLoopExecution(__func__);
-        //     continue;
+
         // }
         // Serial.printf("\nMeasured adcDataReady :%i",adcDataReady);
         if (!adcDataReady)
@@ -863,7 +861,13 @@ void Task_ADC(void *pvParameters)
             toneOff();
 
             // if (!lvglIsBusy)
-            KeyCheckInterval(45);
+            isMyTextBoxHidden =lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+            if (!isMyTextBoxHidden)
+
+                KeyCheckInterval(10);
+
+            else
+                KeyCheckInterval(105);
 
             // DACInterval(49);
 
@@ -872,17 +876,16 @@ void Task_ADC(void *pvParameters)
                      { PowerSupply.DACUpdate(); },
                      100, timer_);
 
-            getSettingEncoder(NULL, NULL);
             // trackLoopExecution(__func__);
 
             if (Tabs::getCurrentPage() == 2)
                 vTaskDelay(1);
             else if (Tabs::getCurrentPage() == 1)
-                vTaskDelay(10);
+                vTaskDelay(5);
 
             continue;
         }
-
+        getSettingEncoder(NULL, NULL);
         // if (xSemaphoreTake(timerSemaphore, portMAX_DELAY) != pdTRUE)
         // {
         //     vTaskDelay(1);
@@ -917,14 +920,10 @@ void Task_ADC(void *pvParameters)
                      {
                          if (!lvglChartIsBusy)
                          {
-
                              lvglChartIsBusy = true;
                              lv_chart_refresh(PowerSupply.stats.chart);
                              lvglChartIsBusy = false;
-                         }
-
-                         //
-                     },
+                         } },
                      PowerSupply.Voltage.measured.NofAvgs * 0, chartUpdate);
 
         static unsigned long NoAvgTime;
@@ -933,14 +932,12 @@ void Task_ADC(void *pvParameters)
             schedule([]
                      {
                             if (!lvglChartIsBusy)
-    {
- 
-                         lvglChartIsBusy = true;
-
+         {
+                          lvglChartIsBusy = true;
                          lv_chart_set_next_value(PowerSupply.graph.chart, PowerSupply.graph.serV, PowerSupply.Voltage.measured.value * 1000.0);
                          lv_chart_set_next_value(PowerSupply.graph.chart, PowerSupply.graph.serI, PowerSupply.Current.measured.value * 1000.0);
                          lvglChartIsBusy = false; 
-    } },
+        } },
                      PowerSupply.Voltage.measured.NofAvgs * 1 /* pixels per point ((double)PowerSupply.adc.realADCSpeed)*/, NoAvgTime);
 
         if (V.sampleReady)
@@ -2087,7 +2084,7 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
     {
         // encoder2Flag = 0;
 
-        int64_t count = PowerSupply.Current.encoder.getCount() / 2;
+        int64_t count = PowerSupply.Current.encoder.getCount() >> 1; // / 2;
         // PowerSupply.Current.encoder.pauseCount();
 
         static int64_t rotaryOldValue2 = 0;
@@ -2116,7 +2113,7 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
             break;
         case 2:
             PowerSupply.Current.SetEncoderUpdate();
-            PowerSupply.FlushSettings();
+            // PowerSupply.FlushSettings();
             // PowerSupply.Voltage.SetEncoderUpdate();
             break;
         }
@@ -2126,7 +2123,7 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
     if (encoder1Flag /*&& (Tabs::getCurrentPage() == 4)*/)
     {
 
-        int64_t count = PowerSupply.Voltage.encoder.getCount() / 2;
+        int64_t count = PowerSupply.Voltage.encoder.getCount() >> 1; // / 2;
         // // PowerSupply.Current.encoder.pauseCount();
 
         static int64_t rotaryOldValue = 0;
@@ -2148,7 +2145,7 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
             break;
         case 2:
             PowerSupply.Voltage.SetEncoderUpdate();
-            PowerSupply.FlushSettings();
+            // PowerSupply.FlushSettings();
 
             // PowerSupply.Voltage.Flush();
             break;
@@ -2267,7 +2264,6 @@ void StatusBarUpdateInterval(unsigned long interval)
 void FlushMeasuresInterval(unsigned long interval)
 {
     static unsigned long timer_ = {0}; // Interval in milliseconds
-    // static unsigned long timer_;
     schedule([]
              { PowerSupply.FlushMeasures(); }, interval, timer_);
 }
@@ -2278,10 +2274,13 @@ void statisticUpdateInterval(unsigned long interval)
              {
             // if (!lvglIsBusy)
             //     lv_chart_refresh(PowerSupply.stats.chart);
+        PowerSupply.settingParameters.SetVoltage = PowerSupply.Voltage.adjValue;
+        PowerSupply.settingParameters.SetCurrent = PowerSupply.Current.adjValue;
+        PowerSupply.SaveSetting();
 
              PowerSupply.Voltage.statUpdate();
              PowerSupply.Current.statUpdate(); },
-             100, timer_);
+             interval, timer_);
 }
 
 void FFTUpdateInterval(unsigned long interval)

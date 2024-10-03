@@ -322,7 +322,7 @@ void Device::readVoltage()
         // Voltage.hist[v];
         Voltage.measureUpdate(v); //  enob(rs[0].StandardDeviation())
         adc.ADC_loopCounter++;
-        myTone(NOTE_A3, 1);
+        // myTone(NOTE_A3, 1);
         // Serial.print("Measured Raw Voltage:");
         // Serial.println(v);
         // Serial.print("Voltage:");

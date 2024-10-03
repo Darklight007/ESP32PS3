@@ -137,21 +137,28 @@ void DispObjects::SetUpdate(double value)
     adjValue = std::max(std::min(value, maxValue), minValue);
     // adjValue = std::clamp(value, minValue, maxValue); => already taken care of
     adjValue = value;
-    myTone(NOTE_A4, 3);
 
     if (adjValue != adjValueOld)
     {
         adjValueChanged = true;
         adjValueOld = adjValue;
+        myTone(NOTE_A4, 3);
     }
 
     // LV_LOG_USER("LOG: %s", "Beep!");
     // lv_disp_enable_invalidation( lv_disp_get_default(), false);
     // if (!lvglIsBusy)
-    lv_label_set_text_fmt(label_setValue, "%+08.4f", adjValue);
+    if (strcmp(lv_label_get_text(label_unit), "A"))
+
+        lv_label_set_text_fmt(label_setValue, "%+08.4fV", adjValue + adjOffset);
+    else
+        lv_label_set_text_fmt(label_setValue, "%+08.4fA", adjValue + adjOffset);
+
     // lv_disp_enable_invalidation(lv_disp_get_default(), true);
     // lv_obj_invalidate(label_setValue);
     // toneOff();
+    // Serial.printf("\n%10.4f", adjValue + adjOffset);
+
 }
 
 void DispObjects::Flush(void)
@@ -172,9 +179,9 @@ void DispObjects::Flush(void)
 
         // update bar setting shadaow
         lv_obj_set_width(Bar.bar_adjValue, (adjValue + adjOffset) / maxValue * lv_bar_get_max_value(Bar.bar));
-        // adjValueChanged = false;
-        lv_obj_invalidate(label_setValue);
-        // Serial.printf("\n%10.4f",adjValue+adjOffset);
+        adjValueChanged = false;
+        // lv_obj_invalidate(label_setValue);
+        Serial.printf("\n%10.4f", adjValue + adjOffset);
     }
     // _lv_disp_refr_timer(NULL);
 }
@@ -187,7 +194,7 @@ void DispObjects::SetEncoderUpdate(void)
     // if ((counter++ % 4) == 3)
 
     static int64_t rotaryOldValue = 0;
-    int64_t count = encoder.getCount() / 2;
+    int64_t count = encoder.getCount() >> 1;
     if (rotaryOldValue == count)
         return;
 
