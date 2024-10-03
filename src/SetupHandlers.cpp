@@ -175,7 +175,7 @@ void setupPowerSupply()
 
     // er(PowerSupply.Voltage.measured.ER(2*32.768));
 }
-void seupCalibPage()
+void setupCalibPage()
 {
     // Create Calibration page
     voltage_current_calibration();
