@@ -514,10 +514,12 @@ void Device::turn(SWITCH onOff)
 
 void Device::toggle(void)
 {
+    delay(40);
     if (getStatus() != DEVICE::OFF)
         turn(SWITCH::OFF);
     else
         turn(SWITCH::ON);
+        delay(40);
 };
 
 void Device::setupDisplay(lv_obj_t *scr)

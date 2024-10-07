@@ -72,7 +72,7 @@ void setup()
 void loop()
 {
 
-  LvglUpdatesInterval(15);
+  LvglUpdatesInterval(33);
   trackLoopExecution(__func__);
   StatusBarUpdateInterval(333);
   FlushMeasuresInterval(75+ 50* PowerSupply.Voltage.measured.NofAvgs); //PowerSupply.Voltage.measured.NofAvgs

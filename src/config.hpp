@@ -84,7 +84,9 @@ bool ismyTextHiddenChange = false;
 
 bool lvglIsBusy,lvglChartIsBusy,emergencyRefresh;
 
-
+  bool wireConnected ;
+  bool wire1Connected;
+  
 // #include "myMenu.h"
 
 

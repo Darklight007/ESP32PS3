@@ -862,12 +862,15 @@ void Task_ADC(void *pvParameters)
 
             // if (!lvglIsBusy)
             isMyTextBoxHidden =lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+
+            if (wireConnected){
             if (!isMyTextBoxHidden)
 
                 KeyCheckInterval(10);
 
             else
                 KeyCheckInterval(105);
+            }
 
             // DACInterval(49);
 
@@ -878,14 +881,14 @@ void Task_ADC(void *pvParameters)
 
             // trackLoopExecution(__func__);
 
+        getSettingEncoder(NULL, NULL);
             if (Tabs::getCurrentPage() == 2)
                 vTaskDelay(1);
             else if (Tabs::getCurrentPage() == 1)
                 vTaskDelay(5);
-
+//  vTaskDelay(1);
             continue;
         }
-        getSettingEncoder(NULL, NULL);
         // if (xSemaphoreTake(timerSemaphore, portMAX_DELAY) != pdTRUE)
         // {
         //     vTaskDelay(1);
@@ -1457,6 +1460,7 @@ void keyCheckLoop()
             myTone(NOTE_A3, 200, true);
 
             ESP.restart(); });
+            
     keyMenus('m', " HOLD.", [] // Output button
              {
                 myTone(NOTE_A5, 200, true);

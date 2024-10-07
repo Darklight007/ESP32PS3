@@ -229,7 +229,7 @@ public:
     {
 
         // ads1219->setVoltageReference(REF_INTERNAL);
-        ads1219->setVoltageReference(REF_EXTERNAL);
+        // ads1219->setVoltageReference(REF_EXTERNAL);
 
         if (channel == VOLTAGE)
             ads1219->readDifferential_0_1();
@@ -237,7 +237,7 @@ public:
         else if (channel == CURRENT)
             ads1219->readDifferential_2_3();
         // ads1219->readSingleEnded(CURRENT);
-        // ads1219->setVoltageReference(REF_EXTERNAL);
+
 
         // ads1219->readSingleEnded(channel);
         busyChannel = channel;
