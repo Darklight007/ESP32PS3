@@ -24,7 +24,7 @@ void Device::setupADC(uint8_t pin, void func(void), TwoWire *_awire)
                                                  // adc.ads1219->readDifferential_0_1();
                                                  // adc.ads1219->_wire= _awire;
 
-    adc.startConversion(VOLTAGE);
+    adc.startConversion(VOLTAGE,REF_EXTERNAL);
     adcDataReady = false;
     adc.dataReady = false;
 }
@@ -314,7 +314,9 @@ void Device::readVoltage()
         static double v;
 
         Voltage.rawValue = adc.readConversion();
-        adc.startConversion(CURRENT);
+
+        
+        adc.startConversion(CURRENT,REF_EXTERNAL);
         adcDataReady = false;
 
         v = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
@@ -337,7 +339,7 @@ void Device::readCurrent()
     {
         static double c;
         Current.rawValue = adc.readConversion();
-        adc.startConversion(VOLTAGE);
+        adc.startConversion(VOLTAGE,REF_EXTERNAL);
         adcDataReady = false;
 
         double currentOfR11R12 = 1.0 * Voltage.measured.Mean() / 100.0e3; // Current consuming by R11 & R12

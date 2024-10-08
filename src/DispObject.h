@@ -84,7 +84,7 @@ public:
 
     void operator[](double &value)
     {
-        const int index = static_cast<int>(std::round((value - histWinMin) / (histWinMax - histWinMin) * length_));
+        const int index = 30+static_cast<int>(std::round((value - histWinMin) / (histWinMax - histWinMin) * length_));
 
         if (index < 0 || index >= length_)
             return;
@@ -644,6 +644,7 @@ public:
     ~DispObjects();
 
     void measureUpdate(double value);
+    void StatisticsUpdate(double value);
     void displayUpdate(void);
     void statUpdate(void);
     void barUpdate(void);

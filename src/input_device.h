@@ -25,6 +25,7 @@
 
 volatile unsigned long encoder1Flag=true;
 volatile unsigned long encoder2Flag=true;
+long long encoderTimeStamp=0;
 
 void IRAM_ATTR VoltageEnc(void *)
 {

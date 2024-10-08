@@ -222,23 +222,20 @@ public:
     {
         ads1219 = new ADS1219(drdy, addr);
         _wire = &Wire1;
-        ads1219->setVoltageReference(REF_EXTERNAL);
+        // ads1219->setVoltageReference(REF_EXTERNAL);
     }
 
-    void startConversion(int channel)
+    void startConversion(int channel,adsRef_t vref=REF_INTERNAL,adsGain_t gain=ONE)
     {
 
         // ads1219->setVoltageReference(REF_INTERNAL);
-        // ads1219->setVoltageReference(REF_EXTERNAL);
+        ads1219->setVoltageReference(vref);
+        ads1219->setGain(gain);
 
         if (channel == VOLTAGE)
             ads1219->readDifferential_0_1();
-        // ads1219->readSingleEnded(VOLTAGE);
-        else if (channel == CURRENT)
+       else if (channel == CURRENT)
             ads1219->readDifferential_2_3();
-        // ads1219->readSingleEnded(CURRENT);
-
-
         // ads1219->readSingleEnded(channel);
         busyChannel = channel;
     }

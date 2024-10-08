@@ -19,6 +19,11 @@ DispObjects::~DispObjects() {};
 void DispObjects::measureUpdate(double value)
 {
     measured(value);
+
+// ignore the rest for Power measurement
+    if (!strcmp(lv_label_get_text(label_unit), "W"))
+        return;
+
     double rv = round(value * 320);
     if (Bar.oldValue != rv)
     {
@@ -31,11 +36,16 @@ void DispObjects::measureUpdate(double value)
         oldValue = value;
         changed = true;
     }
+
+}
+void DispObjects::StatisticsUpdate(double value)
+{
     Statistics(value);
 
     double er_sample = Statistics.ER(2 * maxValue);
     if (!std::isinf(er_sample))
         effectiveResolution(er_sample);
+
 }
 
 void DispObjects::displayUpdate(void)
@@ -47,7 +57,7 @@ void DispObjects::displayUpdate(void)
         // Display mean  of measured data not the value
         lv_label_set_text_fmt(label_measureValue, restrict, mean_);
         // lv_obj_invalidate(label_measureValue);
-        changed = true;
+        // changed = true;
         oldValue = mean_;
     }
 
@@ -80,8 +90,8 @@ void DispObjects::barUpdate(void)
 
     if (Bar.changed)
     {
-        lv_bar_set_value(Bar.bar, Statistics.value / maxValue * lv_bar_get_max_value(Bar.bar), LV_ANIM_OFF);
-        lv_obj_invalidate(Bar.bar); // it will update only when lv_timer_handler is called so no matter how offen this is called
+        lv_bar_set_value(Bar.bar, measured.value / maxValue * lv_bar_get_max_value(Bar.bar), LV_ANIM_OFF);
+        // lv_obj_invalidate(Bar.bar); // it will update only when lv_timer_handler is called so no matter how offen this is called
 
         // lv_obj_set_width(Bar.bar_adjValue, adjValue / maxValue * lv_bar_get_max_value(Bar.bar));
 
@@ -89,17 +99,17 @@ void DispObjects::barUpdate(void)
         // lv_obj_align(Bar.bar_maxMarker, LV_ALIGN_TOP_LEFT, lv_obj_get_x(Bar.bar) + int(measured.absMax /denum) - 3, lv_obj_get_y(Bar.bar) + 4);
 
         static double oldMaxValue{0};
-
-        if (Statistics.absMax != oldMaxValue)
+        if (measured.absMax != oldMaxValue)
         {
-            lv_obj_set_x(Bar.bar_maxMarker, lv_obj_get_x(Bar.bar) + int(Statistics.absMax * lv_obj_get_width(Bar.bar) / maxValue) - 3);
-            oldMaxValue = Statistics.absMax;
+            lv_obj_set_x(Bar.bar_maxMarker, lv_obj_get_x(Bar.bar) + int(measured.absMax * lv_obj_get_width(Bar.bar) / maxValue) - 3);
+            oldMaxValue = measured.absMax;
         }
+
         static double oldMinValue{0};
-        if (Statistics.absMin != oldMinValue)
+        if (measured.absMin != oldMinValue)
         {
-            lv_obj_set_x(Bar.bar_minMarker, lv_obj_get_x(Bar.bar) + int(Statistics.absMin * lv_obj_get_width(Bar.bar) / maxValue) - 3);
-            oldMinValue = Statistics.absMin;
+            lv_obj_set_x(Bar.bar_minMarker, lv_obj_get_x(Bar.bar) + int(measured.absMin * lv_obj_get_width(Bar.bar) / maxValue) - 3);
+            oldMinValue = measured.absMin;
         }
         // LV_LOG_USER("Voltage max bar:%f",Statistics.value);
         // Bar.changed = false;
@@ -158,7 +168,6 @@ void DispObjects::SetUpdate(double value)
     // lv_obj_invalidate(label_setValue);
     // toneOff();
     // Serial.printf("\n%10.4f", adjValue + adjOffset);
-
 }
 
 void DispObjects::Flush(void)

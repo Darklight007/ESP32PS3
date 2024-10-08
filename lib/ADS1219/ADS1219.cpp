@@ -37,7 +37,6 @@ ADS1219::ADS1219(int drdy, uint8_t addr)
 
 void ADS1219::begin()
 {
-
   _wire->begin();
 }
 
@@ -150,21 +149,22 @@ long ADS1219::readDifferential_1_2()
   // return readConversionResult();
 }
 
-long ADS1219::readShorted()
+void ADS1219::readShorted()
 {
   config &= MUX_MASK;
   config |= MUX_SHORTED;
   writeRegister(config);
-  while (digitalRead(data_ready) == 1)
-    ;
-  return readConversionResult();
+  // while (digitalRead(data_ready) == 1)
+    // ;
+  // return readConversionResult();
+    start();
 }
 
 void ADS1219::setGain(adsGain_t gain)
 {
   config &= GAIN_MASK;
   config |= gain;
-  writeRegister(config);
+  // writeRegister(config);
 }
 
 void ADS1219::setDataRate(int rate)
@@ -187,14 +187,14 @@ void ADS1219::setDataRate(int rate)
   default:
     break;
   }
-  writeRegister(config);
+  // writeRegister(config);
 }
 
 void ADS1219::setConversionMode(adsMode_t mode)
 {
   config &= MODE_MASK;
   config |= mode;
-  writeRegister(config);
+  // writeRegister(config);
   if (mode == CONTINUOUS)
   {
     singleShot = false;
@@ -209,5 +209,5 @@ void ADS1219::setVoltageReference(adsRef_t vref)
 {
   config &= VREF_MASK;
   config |= vref;
-  writeRegister(config);
+  // writeRegister(config);
 }

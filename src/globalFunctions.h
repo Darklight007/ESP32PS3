@@ -813,20 +813,21 @@ void Task_BarGraph(void *pvParameters)
         if (Tabs::getCurrentPage() != 2)
         // trackLoopExecution(__func__);
         {
-            vTaskDelay(10);
+            vTaskDelay(1);
             continue;
         }
 
-        if (!lvglIsBusy)
+        // if (!lvglIsBusy)
         {
             PowerSupply.Voltage.barUpdate();
             PowerSupply.Current.barUpdate();
+            //   getSettingEncoder(NULL, NULL);
         }
-        else
-        {
-            toneOff();
-            vTaskDelay(3);
-        }
+        // else
+        // {
+        //     toneOff();
+        //     vTaskDelay(3);
+        // }
         // trackLoopExecution(__func__);
     }
 }
@@ -861,16 +862,18 @@ void Task_ADC(void *pvParameters)
             toneOff();
 
             // if (!lvglIsBusy)
-            isMyTextBoxHidden =lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
 
-            if (wireConnected){
-            if (!isMyTextBoxHidden)
+            if (wireConnected)
+            {
+                isMyTextBoxHidden = lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                if (!isMyTextBoxHidden)
 
-                KeyCheckInterval(10);
+                    KeyCheckInterval(10);
 
-            else
-                KeyCheckInterval(105);
+                else
+                    KeyCheckInterval(105);
             }
+            getSettingEncoder(NULL, NULL);
 
             // DACInterval(49);
 
@@ -881,12 +884,11 @@ void Task_ADC(void *pvParameters)
 
             // trackLoopExecution(__func__);
 
-        getSettingEncoder(NULL, NULL);
-            if (Tabs::getCurrentPage() == 2)
-                vTaskDelay(1);
-            else if (Tabs::getCurrentPage() == 1)
-                vTaskDelay(5);
-//  vTaskDelay(1);
+            // if (Tabs::getCurrentPage() == 2)
+            //     vTaskDelay(1);
+            // else if (Tabs::getCurrentPage() == 1)
+            //     vTaskDelay(5);
+            //  vTaskDelay(1);
             continue;
         }
         // if (xSemaphoreTake(timerSemaphore, portMAX_DELAY) != pdTRUE)
@@ -896,16 +898,23 @@ void Task_ADC(void *pvParameters)
         // }
 
         // New ADC sample is ready
-        if (adcDataReady && PowerSupply.adc.busyChannel == VOLTAGE)
-            V.shift(); // Shift for new sample
+        if (Tabs::getCurrentPage() == 1)
+        {
+            if (adcDataReady && PowerSupply.adc.busyChannel == VOLTAGE)
+                V.shift(); // Shift for new sample
 
-        if (adcDataReady && PowerSupply.adc.busyChannel == CURRENT)
-            I.shift(); // Shift for new sample
+            if (adcDataReady && PowerSupply.adc.busyChannel == CURRENT)
+                I.shift(); // Shift for new sample
+        }
 
         PowerSupply.readVoltage();
         PowerSupply.readCurrent();
         PowerSupply.Power.measureUpdate(PowerSupply.Current.measured.Mean() * PowerSupply.Voltage.measured.Mean());
-
+        if (Tabs::getCurrentPage() != 2)
+        {
+            PowerSupply.Voltage.StatisticsUpdate(PowerSupply.Voltage.measured.value);
+            PowerSupply.Current.StatisticsUpdate(PowerSupply.Current.measured.value);
+        }
         static bool lastCCCVStatus = false;
 
         if (lastCCCVStatus != digitalRead(PowerSupply.CCCVPin))
@@ -941,18 +950,21 @@ void Task_ADC(void *pvParameters)
                          lv_chart_set_next_value(PowerSupply.graph.chart, PowerSupply.graph.serI, PowerSupply.Current.measured.value * 1000.0);
                          lvglChartIsBusy = false; 
         } },
-                     PowerSupply.Voltage.measured.NofAvgs * 1 /* pixels per point ((double)PowerSupply.adc.realADCSpeed)*/, NoAvgTime);
+                     PowerSupply.Voltage.measured.NofAvgs * 1000 / /* pixels per point*/ ((double)PowerSupply.adc.realADCSpeed), NoAvgTime);
 
-        if (V.sampleReady)
+        if (Tabs::getCurrentPage() == 1)
         {
-            V.push(PowerSupply.Voltage.measured.Mean());
-            V.sampleReady = false;
-        }
+            if (V.sampleReady)
+            {
+                V.push(PowerSupply.Voltage.measured.Mean());
+                V.sampleReady = false;
+            }
 
-        if (I.sampleReady)
-        {
-            I.push(PowerSupply.Current.measured.Mean());
-            I.sampleReady = false;
+            if (I.sampleReady)
+            {
+                I.push(PowerSupply.Current.measured.Mean());
+                I.sampleReady = false;
+            }
         }
     }
 }
@@ -1460,7 +1472,7 @@ void keyCheckLoop()
             myTone(NOTE_A3, 200, true);
 
             ESP.restart(); });
-            
+
     keyMenus('m', " HOLD.", [] // Output button
              {
                 myTone(NOTE_A5, 200, true);
@@ -2122,6 +2134,7 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
             break;
         }
         // LV_LOG_USER("encoder2_value:%i encoder2Flag:%i count:%i", encoder2_value, encoder2Flag, count);
+        encoderTimeStamp = millis();
     }
 
     if (encoder1Flag /*&& (Tabs::getCurrentPage() == 4)*/)
@@ -2157,6 +2170,7 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
         // PowerSupply.Current.encoder.resumeCount();
 
         // LV_LOG_USER("encoder2_value:%i encoder1Flag:%i count:%i", 0, encoder1Flag,
+        encoderTimeStamp = millis();
     }
 }
 
@@ -2242,11 +2256,11 @@ void LvglUpdatesInterval(unsigned long interval)
     if (lvglChartIsBusy)
     {
         vTaskDelay(1);
-        return;
+        // return;
     }
     schedule([]
              {
-                 if (!lvglChartIsBusy)
+                 //  if (!lvglChartIsBusy)
                  {
                      lvglIsBusy = 1;
                      lv_timer_handler();

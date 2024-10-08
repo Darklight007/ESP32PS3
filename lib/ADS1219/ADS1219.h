@@ -74,7 +74,7 @@ public:
 	long readDifferential_0_1();
 	long readDifferential_2_3();
 	long readDifferential_1_2();
-	long readShorted();
+	void readShorted();
 	void setGain(adsGain_t gain);
 	void setDataRate(int rate);
 	void setConversionMode(adsMode_t mode);
