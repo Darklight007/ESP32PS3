@@ -2576,8 +2576,136 @@ void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
         encoder1_last_value = encoder1_value;
     }
 }
-
 void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
+{
+    bool histogramUpdated = false;  // Flag to indicate if histogram needs to be reset
+
+    // **Handle Vertical Shift/Zoom with Encoder 1**
+    if (encoder1_last_value != encoder1_value)
+    {
+        int32_t _posY = 0;
+
+        // Determine the direction of encoder 1 rotation
+        if (encoder1_last_value < encoder1_value)
+            _posY = 1;  // Rotated clockwise
+        else if (encoder1_last_value > encoder1_value)
+            _posY = -1; // Rotated counter-clockwise
+
+        if (keyChar == 'W' && msg == " HOLD.")
+        {
+            // **Shift the histogram window up or down**
+            double shiftAmountVoltage = 0.025;  // Adjust as needed
+            double shiftAmountCurrent = 0.025;  // Adjust as needed
+
+            if (_posY > 0)
+            {
+                // Shift up
+                PowerSupply.Voltage.hist.histWinMin += shiftAmountVoltage;
+                PowerSupply.Voltage.hist.histWinMax += shiftAmountVoltage;
+
+                PowerSupply.Current.hist.histWinMin += shiftAmountCurrent;
+                PowerSupply.Current.hist.histWinMax += shiftAmountCurrent;
+            }
+            else if (_posY < 0)
+            {
+                // Shift down
+                PowerSupply.Voltage.hist.histWinMin -= shiftAmountVoltage;
+                PowerSupply.Voltage.hist.histWinMax -= shiftAmountVoltage;
+
+                PowerSupply.Current.hist.histWinMin -= shiftAmountCurrent;
+                PowerSupply.Current.hist.histWinMax -= shiftAmountCurrent;
+            }
+        }
+        else
+        {
+            // **Zoom the histogram window vertically centered around the middle value**
+            if (_posY > 0)
+            {
+                // Zoom in (reduce range)
+                double midValueVoltage = (PowerSupply.Voltage.hist.histWinMin + PowerSupply.Voltage.hist.histWinMax) / 2.0;
+                double rangeVoltage = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / 2.0;
+                double newRangeVoltage = rangeVoltage * 0.5; // Zoom in by reducing the range by half
+                PowerSupply.Voltage.hist.histWinMin = midValueVoltage - newRangeVoltage;
+                PowerSupply.Voltage.hist.histWinMax = midValueVoltage + newRangeVoltage;
+
+                double midValueCurrent = (PowerSupply.Current.hist.histWinMin + PowerSupply.Current.hist.histWinMax) / 2.0;
+                double rangeCurrent = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / 2.0;
+                double newRangeCurrent = rangeCurrent * 0.5;
+                PowerSupply.Current.hist.histWinMin = midValueCurrent - newRangeCurrent;
+                PowerSupply.Current.hist.histWinMax = midValueCurrent + newRangeCurrent;
+            }
+            else if (_posY < 0)
+            {
+                // Zoom out (increase range)
+                double midValueVoltage = (PowerSupply.Voltage.hist.histWinMin + PowerSupply.Voltage.hist.histWinMax) / 2.0;
+                double rangeVoltage = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / 2.0;
+                double newRangeVoltage = rangeVoltage * 2.0; // Zoom out by doubling the range
+                PowerSupply.Voltage.hist.histWinMin = midValueVoltage - newRangeVoltage;
+                PowerSupply.Voltage.hist.histWinMax = midValueVoltage + newRangeVoltage;
+
+                double midValueCurrent = (PowerSupply.Current.hist.histWinMin + PowerSupply.Current.hist.histWinMax) / 2.0;
+                double rangeCurrent = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / 2.0;
+                double newRangeCurrent = rangeCurrent * 2.0;
+                PowerSupply.Current.hist.histWinMin = midValueCurrent - newRangeCurrent;
+                PowerSupply.Current.hist.histWinMax = midValueCurrent + newRangeCurrent;
+            }
+        }
+
+        encoder1_last_value = encoder1_value;
+        histogramUpdated = true;  // Mark histogram as updated
+    }
+
+    // **Handle Horizontal Shift with Encoder 2**
+    if (encoder2_last_value != encoder2_value)
+    {
+        int32_t _posX = 0;
+
+        // Determine the direction of encoder 2 rotation
+        if (encoder2_last_value < encoder2_value)
+            _posX = 1;  // Rotated clockwise
+        else if (encoder2_last_value > encoder2_value)
+            _posX = -1; // Rotated counter-clockwise
+
+        // Shift the histogram window left or right by 10% of the window size
+        double windowSizeVoltage = PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin;
+        double shiftAmountVoltage = 0.10 * windowSizeVoltage;  // 10% of voltage window size
+
+        double windowSizeCurrent = PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin;
+        double shiftAmountCurrent = 0.10 * windowSizeCurrent;  // 10% of current window size
+
+        if (_posX > 0)
+        {
+            // Shift right
+            PowerSupply.Voltage.hist.histWinMin += shiftAmountVoltage;
+            PowerSupply.Voltage.hist.histWinMax += shiftAmountVoltage;
+
+            PowerSupply.Current.hist.histWinMin += shiftAmountCurrent;
+            PowerSupply.Current.hist.histWinMax += shiftAmountCurrent;
+        }
+        else if (_posX < 0)
+        {
+            // Shift left
+            PowerSupply.Voltage.hist.histWinMin -= shiftAmountVoltage;
+            PowerSupply.Voltage.hist.histWinMax -= shiftAmountVoltage;
+
+            PowerSupply.Current.hist.histWinMin -= shiftAmountCurrent;
+            PowerSupply.Current.hist.histWinMax -= shiftAmountCurrent;
+        }
+
+        encoder2_last_value = encoder2_value;
+        histogramUpdated = true;  // Mark histogram as updated
+    }
+
+    // **Reset Histograms if Updated**
+    if (histogramUpdated)
+    {
+        // Reset histograms to apply new window settings
+        PowerSupply.Voltage.hist.Reset();
+        PowerSupply.Current.hist.Reset();
+    }
+}
+
+void handleHistogramPage3(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 {
     bool histogramUpdated = false; // Flag to indicate if histogram needs to be reset
 
