@@ -31,6 +31,7 @@ void initializeSerial()
     Serial.begin(115200);
     delay(1000); // Stabilize serial connection
     Serial.println("Serial Connection Initialized.");
+
 }
 
 void initialMemory()

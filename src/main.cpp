@@ -10,6 +10,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include "esp_task_wdt.h"
+
 // EEPROM and Device configurations
 #include <Preferences.h>
 
@@ -40,11 +42,16 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 
+#include "esp_int_wdt.h"
+#include "esp_system.h"
+
 void setup()
 {
 
+  // Disable Task Watchdog Timer
+  // esp_task_wdt_deinit(); // Deinitializes the task watchdog timer
+
   initializeSerial();
-  // print_memory_info();
   initialMemory();
   initializeI2C();
   initializeDisplay();
@@ -75,9 +82,9 @@ void loop()
   LvglUpdatesInterval(33);
   trackLoopExecution(__func__);
   StatusBarUpdateInterval(333);
-  
-  if ((millis()-encoderTimeStamp)>33)
-  FlushMeasuresInterval(75+ 60* PowerSupply.Voltage.measured.NofAvgs); //PowerSupply.Voltage.measured.NofAvgs
+
+  if ((millis() - encoderTimeStamp) > 33)
+    FlushMeasuresInterval(75 + 60 * PowerSupply.Voltage.measured.NofAvgs); // PowerSupply.Voltage.measured.NofAvgs
   statisticUpdateInterval(333);
   FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?

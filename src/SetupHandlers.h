@@ -83,7 +83,6 @@ extern void  init_touch();
 
 // Declarations of setup and utility functions
 void initializeSerial();
-void print_memory_info();
 void initialMemory();
 void initializeI2C();
 void initializeDisplay();

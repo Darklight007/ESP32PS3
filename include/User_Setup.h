@@ -213,8 +213,6 @@
 #define TFT_MOSI 41 //11     //41
 #define TFT_SCLK 39 //12     //39
 
-
-
 #define TFT_CS   42 //10     //42  // Chip select control pin
 #define TFT_DC   38     // 38  // Data Command control pin 35,36,37 used with 
 #define TFT_RST  -1  // Set TFT_RST to -1 if display RESET is connected to ESP32 board RST
