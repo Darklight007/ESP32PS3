@@ -5,7 +5,6 @@
 #include <Keypad_MC17.h> // I2C i/o library for Keypad
 #include <Wire.h>        // I2C library for Keypad_MC17
 #include <functional>
-// #include "ADC.h"
 #include <ADS1219.h>
 #include "device.h"
 #include "FFTHandler.h"
@@ -35,7 +34,7 @@ lv_disp_t *lv_disp;
 Device PowerSupply;
 FFTHandler V, I;
 int priorityFlag = 1;
-int memory;
+int heepMemory;
 
 volatile bool adcDataReady{false};
 

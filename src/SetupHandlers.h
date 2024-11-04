@@ -74,7 +74,7 @@ extern TaskHandle_t Task1;
 // extern lv_obj_t *lbl_rawAVG_;
 // extern lv_obj_t *lbl_calibValueAVG_;
 // extern lv_obj_t *lbl_ER_;
-extern int memory;
+extern int heepMemory;
 
 extern void Task_BarGraph(void *pvParameters);
 extern void Task_ADC(void *pvParameters);
@@ -100,5 +100,7 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
 
 void init_display();
 // Add other necessary function declarations here
+
+bool scanI2CBus(TwoWire &i2cBus, uint8_t address);
 
 #endif // SETUP_HANDLERS_H

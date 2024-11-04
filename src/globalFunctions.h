@@ -384,9 +384,81 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     };
     stat_(parent, 10, 167);
 }
-
-// There will ne memory leak/crash if not use static keyword!?
 static void draw_event_stat_chart_cb(lv_event_t *e)
+{
+    /* Hook the division lines too */
+    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
+
+    // Check if the event is for tick labels on the X-axis
+    if (dsc->text && dsc->id == LV_CHART_AXIS_PRIMARY_X)
+    {
+        // Number of ticks (assumed to be 7 based on your code)
+        const int numTicks = 7;
+
+        // Arrays to hold tick labels
+        static char tickLabels[7][20]; // Adjust size as needed
+        static const char *tickLabelPtrs[7];
+
+        // Calculate the step sizes for voltage and current
+        double voltageStep = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / (numTicks - 1);
+        double currentStep = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / (numTicks - 1);
+
+        // Generate tick labels
+        for (int i = 0; i < numTicks; i++)
+        {
+            double voltageValue = PowerSupply.Voltage.hist.histWinMin + i * voltageStep;
+            double currentValue = PowerSupply.Current.hist.histWinMin + i * currentStep;
+
+            // Format the voltage value with appropriate precision
+            char voltageStr[12];
+            char *v_unit = "[V] ";
+            char *c_unit = "[A] ";
+
+            if (voltageStep >= 1.0)
+                sprintf(voltageStr, "%3.0f", voltageValue);
+            else if (voltageStep >= 0.1)
+                sprintf(voltageStr, "%3.1f", voltageValue);
+            else if (voltageStep >= 0.01)
+                sprintf(voltageStr, "%3.2f", voltageValue);
+            else
+            {
+                sprintf(voltageStr, "%3.1f", voltageValue * 1000);
+                v_unit = "[mV]";
+            }
+
+            // Format the current value with appropriate precision
+            char currentStr[12];
+            if (currentStep >= 1.0)
+                sprintf(currentStr, "%4.0f", currentValue);
+            else if (currentStep >= 0.1)
+                sprintf(currentStr, "%4.1f", currentValue);
+            else if (currentStep >= 0.01)
+                sprintf(currentStr, "%4.2f", currentValue);
+            else
+            {
+                sprintf(currentStr, "%4.1f", currentValue * 1000);
+                c_unit = "[mA]";
+            }
+            // Add units to the last tick label
+            if (i == numTicks - 1)
+            {
+                strcat(voltageStr, v_unit);
+                strcat(currentStr, c_unit);
+            }
+
+            // Combine voltage and current strings into one label
+            sprintf(tickLabels[i], "%s\n%s", voltageStr, currentStr);
+
+            // Assign the label pointer
+            tickLabelPtrs[i] = tickLabels[i];
+        }
+
+        // Set the tick label for the current value
+        lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabelPtrs[dsc->value]);
+    }
+}
+
+static void draw_event_stat_chart_cb_old(lv_event_t *e)
 {
     /*Hook the division lines too*/
     lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
@@ -469,7 +541,7 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 
     lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_Y, 0, 80);   // 40000mv
     lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_SECONDARY_Y, 0, 80); // 8000ma
-    lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_X, 0, 328);
+    lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_X, 0, 350);
 
     lv_chart_set_div_line_count(PowerSupply.stats.chart, 5, 13);
     lv_obj_set_style_text_color(PowerSupply.stats.chart, lv_palette_main(LV_PALETTE_GREY), LV_PART_TICKS);
@@ -488,7 +560,7 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     PowerSupply.stats.serI = lv_chart_add_series(PowerSupply.stats.chart, lv_palette_main(LV_PALETTE_AMBER), LV_CHART_AXIS_SECONDARY_Y);
     PowerSupply.stats.serV = lv_chart_add_series(PowerSupply.stats.chart, lv_palette_main(LV_PALETTE_BLUE), LV_CHART_AXIS_PRIMARY_Y);
 
-    lv_chart_set_point_count(PowerSupply.stats.chart, 328);
+    lv_chart_set_point_count(PowerSupply.stats.chart, 350);
     PowerSupply.stats.serI->y_points = PowerSupply.Current.hist.data;
     PowerSupply.stats.serV->y_points = PowerSupply.Voltage.hist.data;
 
@@ -1879,7 +1951,7 @@ void StatusBar()
 
     static char str[35];
 
-    sprintf(str, "SPS:%3i;Used memory:%04d;#Avgs ", PowerSupply.adc.realADCSpeed, memory - ESP.getFreeHeap()); // memory - getFreeHeap getFreeSketchSpace getFreePsram
+    sprintf(str, "SPS:%3i;Used memory:%04d;#Avgs ", PowerSupply.adc.realADCSpeed, heepMemory - ESP.getFreeHeap()); // memory - getFreeHeap getFreeSketchSpace getFreePsram
 
     // const char *str2 = "%i";
     strcat(str, "%i");
@@ -2367,7 +2439,350 @@ void DACInterval(unsigned long interval)
              interval, timer_);
 }
 
+// **Helper Functions**
+
+void handleCalibrationPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
+{
+    if (lv_obj_is_visible(voltageCurrentCalibration))
+    {
+        static int32_t cursor_pos = 0;
+
+        // Check if encoder values have changed
+        if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
+            return;
+
+        // Update cursor position based on encoder 2
+        if (encoder2_last_value < encoder2_value)
+            cursor_pos++;
+        else if (encoder2_last_value > encoder2_value)
+            cursor_pos--;
+
+        int width = spinboxes.digit_count[spinboxes.id_index] - 1;
+        cursor_pos = std::clamp(cursor_pos, 0, width);
+
+        lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
+
+        // Set cursor position in the spinbox
+        lv_spinbox_set_cursor_pos(spinBox, 0);
+        lv_spinbox_set_cursor_pos(spinBox, width - cursor_pos);
+
+        encoder2_last_value = encoder2_value;
+
+        // Adjust spinbox value based on encoder 1
+        if (encoder1_last_value < encoder1_value)
+            lv_event_send(spinboxes.btn_plus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
+        else if (encoder1_last_value > encoder1_value)
+            lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
+
+        // Perform calibration
+        PowerSupply.calibrate();
+        encoder1_last_value = encoder1_value;
+        // SaveCalibrationData(); // Uncomment if needed
+
+        // Update calibration label (if needed)
+        // lv_label_set_text(lbl_voltageCalib_m, std::to_string(get_voltageCalib_m()).c_str());
+    }
+    else
+    {
+        // Handle menu navigation when calibration page is not visible
+        static int32_t lastValue = 0;
+
+        if (lastValue == encoder2_value)
+            return;
+
+        if (lastValue < encoder2_value)
+            lastButton++;
+        else if (lastValue > encoder2_value)
+            lastButton--;
+
+        lastValue = encoder2_value;
+
+        int8_t temp = lastButton;
+        lastButton = std::clamp(int(lastButton), 0, 6);
+
+        lv_obj_t *theMenu = lv_obj_get_child(lv_menu_get_cur_sidebar_page(menu), 0);
+
+        // Navigate the menu
+        lv_event_send(lv_obj_get_child(theMenu, lastButton), LV_EVENT_CLICKED, NULL);
+
+        if (temp == lastButton)
+            myTone(NOTE_A4, 3); // Play a tone if selection didn't change
+    }
+}
+
+void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
+{
+    // Handle horizontal scrolling and zooming with encoder 2
+    if (encoder2_last_value != encoder2_value)
+    {
+        int32_t _posX = lv_slider_get_value(slider_x);
+
+        if (encoder2_last_value < encoder2_value)
+            _posX += 640;
+        else if (encoder2_last_value > encoder2_value)
+            _posX -= 640;
+
+        if (keyChar == 'W' && msg == " HOLD.")
+        {
+            // Scroll the graph horizontally
+            _posX = std::clamp(_posX, 0, 57 * (lv_chart_get_zoom_x(PowerSupply.graph.chart) - 256) / 16);
+            lv_obj_scroll_to_x(PowerSupply.graph.chart, _posX, LV_ANIM_OFF);
+        }
+        else
+        {
+            // Zoom the graph horizontally
+            _posX = std::clamp(_posX, 256, LV_IMG_ZOOM_NONE * 120);
+            lv_slider_set_value(slider_x, _posX, LV_ANIM_OFF);
+
+            if (!lvglChartIsBusy)
+            {
+                lvglChartIsBusy = true;
+                lv_event_send(lv_obj_get_child(PowerSupply.page[1], 1), LV_EVENT_VALUE_CHANGED, NULL);
+                lvglChartIsBusy = false;
+            }
+        }
+        encoder2_last_value = encoder2_value;
+    }
+
+    // Handle vertical scrolling and zooming with encoder 1
+    if (encoder1_last_value != encoder1_value)
+    {
+        static int32_t _posY = lv_slider_get_value(lv_obj_get_child(PowerSupply.page[1], 2));
+
+        if (encoder1_last_value < encoder1_value)
+            _posY += 64;
+        else if (encoder1_last_value > encoder1_value)
+            _posY -= 64;
+
+        if (keyChar == 'W' && msg == " HOLD.")
+        {
+            // Scroll the graph vertically
+            _posY = std::clamp(_posY, 0, int(33.5 * (lv_chart_get_zoom_y(PowerSupply.graph.chart) - 256) / 64));
+            lv_obj_scroll_to_y(PowerSupply.graph.chart, _posY, LV_ANIM_OFF);
+        }
+        else
+        {
+            // Zoom the graph vertically
+            _posY = std::clamp(_posY, 256, 5120);
+            lv_slider_set_value(lv_obj_get_child(PowerSupply.page[1], 2), _posY, LV_ANIM_OFF);
+
+            if (!lvglChartIsBusy)
+            {
+                lvglChartIsBusy = true;
+                lv_event_send(lv_obj_get_child(PowerSupply.page[1], 2), LV_EVENT_VALUE_CHANGED, NULL);
+                lvglChartIsBusy = false;
+            }
+        }
+        encoder1_last_value = encoder1_value;
+    }
+}
+
+void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
+{
+    bool histogramUpdated = false; // Flag to indicate if histogram needs to be reset
+
+    // **Handle Vertical Shift/Zoom with Encoder 1**
+    if (encoder1_last_value != encoder1_value)
+    {
+        int32_t _posY = 0;
+
+        // Determine the direction of encoder 1 rotation
+        if (encoder1_last_value < encoder1_value)
+            _posY = 1; // Rotated clockwise
+        else if (encoder1_last_value > encoder1_value)
+            _posY = -1; // Rotated counter-clockwise
+
+        if (keyChar == 'W' && msg == " HOLD.")
+        {
+            // **Shift the histogram window up or down**
+            if (_posY > 0)
+            {
+                // Shift up
+                PowerSupply.Voltage.hist.histWinMin += 0.025;
+                PowerSupply.Voltage.hist.histWinMax += 0.025;
+
+                PowerSupply.Current.hist.histWinMin += 0.025;
+                PowerSupply.Current.hist.histWinMax += 0.025;
+            }
+            else if (_posY < 0)
+            {
+                // Shift down
+                PowerSupply.Voltage.hist.histWinMin -= 0.025;
+                PowerSupply.Voltage.hist.histWinMax -= 0.025;
+
+                PowerSupply.Current.hist.histWinMin -= 0.025;
+                PowerSupply.Current.hist.histWinMax -= 0.025;
+            }
+        }
+        else
+        {
+            // **Zoom the histogram window vertically**
+            if (_posY > 0 && PowerSupply.Voltage.hist.histWinMax > 0.001)
+            {
+                // Zoom in (reduce range)
+                PowerSupply.Voltage.hist.histWinMin *= 0.5;
+                PowerSupply.Voltage.hist.histWinMax *= 0.5;
+
+                PowerSupply.Current.hist.histWinMin *= 0.5;
+                PowerSupply.Current.hist.histWinMax *= 0.5;
+            }
+            else if (_posY < 0 && PowerSupply.Voltage.hist.histWinMax < 33)
+            {
+                // Zoom out (increase range)
+                PowerSupply.Voltage.hist.histWinMin *= 2;
+                PowerSupply.Voltage.hist.histWinMax *= 2;
+
+                PowerSupply.Current.hist.histWinMin *= 2;
+                PowerSupply.Current.hist.histWinMax *= 2;
+            }
+        }
+
+        encoder1_last_value = encoder1_value;
+        histogramUpdated = true; // Mark histogram as updated
+    }
+
+    // **Handle Horizontal Shift with Encoder 2**
+    if (encoder2_last_value != encoder2_value)
+    {
+        int32_t _posX = 0;
+
+        // Determine the direction of encoder 2 rotation
+        if (encoder2_last_value < encoder2_value)
+            _posX = 1; // Rotated clockwise
+        else if (encoder2_last_value > encoder2_value)
+            _posX = -1; // Rotated counter-clockwise
+
+        // Shift the histogram window left or right by 10% of the window size
+        double windowSizeVoltage = PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin;
+        double shiftAmountVoltage = 0.10 * windowSizeVoltage; // 10% of voltage window size
+
+        double windowSizeCurrent = PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin;
+        double shiftAmountCurrent = 0.10 * windowSizeCurrent; // 10% of current window size
+
+        if (_posX > 0)
+        {
+            // Shift right
+            PowerSupply.Voltage.hist.histWinMin += shiftAmountVoltage;
+            PowerSupply.Voltage.hist.histWinMax += shiftAmountVoltage;
+
+            PowerSupply.Current.hist.histWinMin += shiftAmountCurrent;
+            PowerSupply.Current.hist.histWinMax += shiftAmountCurrent;
+        }
+        else if (_posX < 0)
+        {
+            // Shift left
+            PowerSupply.Voltage.hist.histWinMin -= shiftAmountVoltage;
+            PowerSupply.Voltage.hist.histWinMax -= shiftAmountVoltage;
+
+            PowerSupply.Current.hist.histWinMin -= shiftAmountCurrent;
+            PowerSupply.Current.hist.histWinMax -= shiftAmountCurrent;
+        }
+
+        encoder2_last_value = encoder2_value;
+        histogramUpdated = true; // Mark histogram as updated
+    }
+    // **Reset Histograms if Updated**
+    if (histogramUpdated)
+    {
+        // Reset histograms to apply new window settings
+        PowerSupply.Voltage.hist.Reset();
+        PowerSupply.Current.hist.Reset();
+    }
+}
+
+void handleHistogramPage2(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
+{
+    if (encoder1_last_value != encoder1_value)
+    {
+        static int32_t _posY = 0;
+
+        if (encoder1_last_value < encoder1_value)
+            _posY = 1;
+        else if (encoder1_last_value > encoder1_value)
+            _posY = -1;
+
+        if (keyChar == 'W' && msg == " HOLD.")
+        {
+            // Shift the histogram window up or down
+            if (_posY > 0)
+            {
+                PowerSupply.Voltage.hist.histWinMin += 0.025;
+                PowerSupply.Voltage.hist.histWinMax += 0.025;
+
+                PowerSupply.Current.hist.histWinMin += 0.025;
+                PowerSupply.Current.hist.histWinMax += 0.025;
+            }
+            else if (_posY < 0)
+            {
+                PowerSupply.Voltage.hist.histWinMin -= 0.025;
+                PowerSupply.Voltage.hist.histWinMax -= 0.025;
+
+                PowerSupply.Current.hist.histWinMin -= 0.025;
+                PowerSupply.Current.hist.histWinMax -= 0.025;
+            }
+        }
+        else
+        {
+            // Zoom the histogram window
+            if (_posY > 0 && PowerSupply.Voltage.hist.histWinMax > .001)
+            {
+                // Zoom in
+                PowerSupply.Voltage.hist.histWinMin *= 0.5;
+                PowerSupply.Voltage.hist.histWinMax *= 0.5;
+
+                PowerSupply.Current.hist.histWinMin *= 0.5;
+                PowerSupply.Current.hist.histWinMax *= 0.5;
+            }
+            else if (_posY < 0 && PowerSupply.Voltage.hist.histWinMax < 33)
+            {
+                // Zoom out
+                PowerSupply.Voltage.hist.histWinMin *= 2;
+                PowerSupply.Voltage.hist.histWinMax *= 2;
+
+                PowerSupply.Current.hist.histWinMin *= 2;
+                PowerSupply.Current.hist.histWinMax *= 2;
+            }
+        }
+
+        // Ensure the voltage histogram range is from -1 to 33
+        // PowerSupply.Voltage.hist.histWinMin = -1;
+        // PowerSupply.Voltage.hist.histWinMax = 33;
+
+        encoder1_last_value = encoder1_value;
+
+        // Reset histograms to apply new window settings
+        PowerSupply.Voltage.hist.Reset();
+        PowerSupply.Current.hist.Reset();
+    }
+}
+
 void managePageInteraction()
+{
+    // Variables to store the last encoder values
+    static int32_t encoder1_last_value = 0;
+    static int32_t encoder2_last_value = 0;
+
+    // Get the current page from the Tabs
+    switch (Tabs::getCurrentPage())
+    {
+    case 0: // Histogram Page
+        handleHistogramPage(encoder1_last_value, encoder2_last_value);
+        break;
+
+    case 1: // Graph Page
+        handleGraphPage(encoder1_last_value, encoder2_last_value);
+        break;
+
+    case 4: // Calibration Page
+        handleCalibrationPage(encoder1_last_value, encoder2_last_value);
+        break;
+
+    default:
+        break;
+    }
+}
+
+void managePageInteraction_old()
 {
     switch (Tabs::getCurrentPage())
     {

@@ -29,8 +29,8 @@ LV_IMG_DECLARE(p_u);
 class Histogram
 {
 public:
-    const int length_ = 328;
-    lv_coord_t data[328] = {0};
+    const int length_ = 350;
+    lv_coord_t data[350] = {0};
     // double m = 50;
     // double b = 0;
     lv_obj_t *label_binMax;
@@ -84,7 +84,8 @@ public:
 
     void operator[](double &value)
     {
-        const int index = 30+static_cast<int>(std::round((value - histWinMin) / (histWinMax - histWinMin) * length_));
+        int Length_=328;
+        const int index = 10+static_cast<int>(std::round((value - histWinMin) / (histWinMax - histWinMin) * Length_));
 
         if (index < 0 || index >= length_)
             return;
@@ -99,7 +100,7 @@ public:
     }
     void Reset()
     {
-        for (int iter = 0; iter < 328; ++iter)
+        for (int iter = 0; iter < length_; ++iter)
         {
             // data[iter] *= cap / maxHist;
             if (data[iter] == 0)
@@ -119,7 +120,7 @@ public:
     int RangeMin()
     {
         int iter = 0;
-        for (iter = 0; iter < 328; ++iter)
+        for (iter = 0; iter < length_; ++iter)
         {
             // data[iter] *= cap / maxHist;
             if (data[iter] != 0)
@@ -134,7 +135,7 @@ public:
     int RangeMax()
     {
         int iter = 0;
-        for (iter = 328; iter >= 0; --iter)
+        for (iter = length_; iter >= 0; --iter)
         {
             // data[iter] *= cap / maxHist;
             if (data[iter] != 0)
