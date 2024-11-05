@@ -21,6 +21,7 @@ void keyCheckLoop();
 void KeyCheckInterval(unsigned long interval);
 void DACInterval(unsigned long interval);
 void trackLoopExecution(const char *);
+void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value);
 /**********************
  *   GLOBAL VARIABLES
  **********************/
@@ -415,11 +416,11 @@ static void draw_event_stat_chart_cb(lv_event_t *e)
             double currentValue = PowerSupply.Current.hist.histWinMin + i * currentStep;
 
             // Initialize units as empty strings
-            char v_unit[3] = "";
-            char c_unit[3] = "";
+            char v_unit[3] = "V";
+            char c_unit[3] = "A";
 
             // Format the voltage value with appropriate precision
-            char voltageStr[12];
+            char voltageStr[10];
             if (fabs(voltageStep) >= 1.0)
                 snprintf(voltageStr, sizeof(voltageStr), "%3.0f", voltageValue);
             else if (fabs(voltageStep) >= 0.1)
@@ -435,35 +436,35 @@ static void draw_event_stat_chart_cb(lv_event_t *e)
             }
 
             // Format the current value with appropriate precision
-            char currentStr[12];
+            char currentStr[10];
             if (fabs(currentStep) >= 1.0)
-                snprintf(currentStr, sizeof(currentStr), "%4.0f", currentValue);
+                snprintf(currentStr, sizeof(currentStr), "%3.0f", currentValue);
             else if (fabs(currentStep) >= 0.1)
-                snprintf(currentStr, sizeof(currentStr), "%4.1f", currentValue);
+                snprintf(currentStr, sizeof(currentStr), "%3.1f", currentValue);
             else if (fabs(currentStep) >= 0.01)
-                snprintf(currentStr, sizeof(currentStr), "%4.2f", currentValue);
+                snprintf(currentStr, sizeof(currentStr), "%3.2f", currentValue);
             else
             {
                 // Convert to milliamps if the step is very small
                 currentValue *= 1000;
-                snprintf(currentStr, sizeof(currentStr), "%4.1f", currentValue);
+                snprintf(currentStr, sizeof(currentStr), "%3.1f", currentValue);
                 strcpy(c_unit, "mA");
             }
 
             // **Add units only to the middle tick label (position 3)**
             if (i == 3)
             {
-                if (strlen(v_unit) == 0)
-                    strcpy(v_unit, "V"); // Default voltage unit
-                if (strlen(c_unit) == 0)
-                    strcpy(c_unit, "A"); // Default current unit
+                // if (strlen(v_unit) == 0)
+                //     strcpy(v_unit, "V"); // Default voltage unit
+                // if (strlen(c_unit) == 0)
+                //     strcpy(c_unit, "A"); // Default current unit
 
                 strcat(voltageStr, v_unit);
                 strcat(currentStr, c_unit);
             }
 
             // Combine voltage and current strings into one label
-            snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s\n%s", voltageStr, currentStr);
+            snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s\n%s ", voltageStr, currentStr);
         }
 
         // **Boundary Check to Prevent Out-of-Bounds Access**
@@ -1093,18 +1094,14 @@ void Task_ADC(void *pvParameters)
 
         HistPush();
 
-        static unsigned long chartUpdate;
-
         if (!lvglIsBusy && Tabs::getCurrentPage() == 0)
-            schedule([]
-                     {
-                         if (!lvglChartIsBusy)
-                         {
-                             lvglChartIsBusy = true;
-                             lv_chart_refresh(PowerSupply.stats.chart);
-                             lvglChartIsBusy = false;
-                         } },
-                     PowerSupply.Voltage.measured.NofAvgs * 0, chartUpdate);
+
+            if (!lvglChartIsBusy)
+            {
+                lvglChartIsBusy = true;
+                lv_chart_refresh(PowerSupply.stats.chart);
+                lvglChartIsBusy = false;
+            }
 
         static unsigned long NoAvgTime;
 
@@ -1669,9 +1666,9 @@ void keyCheckLoop()
                  if (!lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN))
                      return;
                  Tabs::previousPage();
-
                  UpdateTabs();
              });
+
     keyMenus('H', " RELEASED.", []
              { Tabs::goToHomeTab();
                lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN); 
@@ -1696,48 +1693,35 @@ void keyCheckLoop()
                  //  lv_obj_del(Utility);
                  //   hackerUtilityObj = NULL;
              });
+    keyMenusPage('-', " RELEASED.", 0, [encoder1_value, encoder2_value]
+                 {
+                     int32_t newEncoder1Value = encoder1_value +1;
+                     int32_t newEncoder2Value = encoder2_value;
+                     handleHistogramPage(newEncoder1Value, newEncoder2Value);
 
-    keyMenus('+', " RELEASED.", []
-             {if (Tabs::getCurrentPage()==0) {
-            //   PowerSupply.Current.hist.histWinMin = max(PowerSupply.Current.hist.binMin - 5, 0) / 328.0 * (6.5536 + 0.01);
-            //   PowerSupply.Current.hist.histWinMax = min(PowerSupply.Current.hist.binMax + 5, 328) / 328.0 * (6.5536 + 0.01);
-            //   PowerSupply.Current.hist.Reset();
+                     PowerSupply.Current.hist.Reset();
+                     PowerSupply.Voltage.hist.Reset(); });
 
-            //   PowerSupply.Voltage.hist.histWinMin = max(PowerSupply.Voltage.hist.binMin - 2, 0) / 328.0 * (32.768 + 0.00);
-            //   PowerSupply.Voltage.hist.histWinMax = min(PowerSupply.Voltage.hist.binMax + 2, 328) / 328.0 * (32.768 + 0.00);
+    keyMenusPage('+', " RELEASED.", 0, [encoder1_value, encoder2_value]
+                 {
+                     int32_t newEncoder1Value = encoder1_value - 1;
+                     int32_t newEncoder2Value = encoder2_value;
+                     handleHistogramPage(newEncoder1Value, newEncoder2Value);
 
-              PowerSupply.Current.hist.histWinMin = (PowerSupply.Current.hist.RangeMin()+.10)/ 328.0 * 6.5536 ;
-              PowerSupply.Current.hist.histWinMax = (PowerSupply.Current.hist.RangeMax()+.5)/ 328.0 * 6.5536 ;
-              PowerSupply.Current.hist.Reset(); 
-          
-              PowerSupply.Voltage.hist.histWinMin = (PowerSupply.Voltage.hist.RangeMin()+.10)/ 328.0 * 32.768 ;
-              PowerSupply.Voltage.hist.histWinMax = (PowerSupply.Voltage.hist.RangeMax()+.2)/ 328.0 * 32.768 ;
-
-              PowerSupply.Voltage.hist.Reset(); 
-              
-              } });
+                     PowerSupply.Current.hist.Reset();
+                     PowerSupply.Voltage.hist.Reset(); });
 
     keyMenusPage('V', " RELEASED.", 0, []
                  {
                      static bool show = false;
                      show = !show;
                      lv_chart_hide_series( PowerSupply.stats.chart,  PowerSupply.stats.serV,show); });
+
     keyMenusPage('A', " RELEASED.", 0, []
                  {
                      static bool show = false;
                      show = !show;
                      lv_chart_hide_series( PowerSupply.stats.chart,  PowerSupply.stats.serI,show); });
-
-    keyMenus('-', " RELEASED.", []
-             {if (Tabs::getCurrentPage()==0) {
-              PowerSupply.Current.hist.histWinMin = -.01;
-              PowerSupply.Current.hist.histWinMax = 6.5536;
-              PowerSupply.Current.hist.Reset();
-
-              PowerSupply.Voltage.hist.histWinMin = -.009;
-              PowerSupply.Voltage.hist.histWinMax = 32.768;
-              PowerSupply.Voltage.hist.Reset();
-            } });
 
     // Statistics Reset and auto ajdust histogram window
     keyMenus('j', " RELEASED.", []
@@ -2379,7 +2363,6 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
     }
 }
 
-
 void trackLoopExecution(const char *callerName)
 {
     static constexpr int loopInterval = 1000; // Time interval in milliseconds
@@ -2591,18 +2574,26 @@ void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
     // Handle horizontal scrolling and zooming with encoder 2
     if (encoder2_last_value != encoder2_value)
     {
-        int32_t _posX = lv_slider_get_value(slider_x);
+        // int32_t _posX = lv_slider_get_value(slider_x);
+        static int32_t _posX = lv_slider_get_value(lv_obj_get_child(PowerSupply.page[1], 3));
 
         if (encoder2_last_value < encoder2_value)
-            _posX += 640;
+            _posX += 160;
         else if (encoder2_last_value > encoder2_value)
-            _posX -= 640;
+            _posX -= 160;
+        encoder2_last_value = encoder2_value;
 
         if (keyChar == 'W' && msg == " HOLD.")
         {
             // Scroll the graph horizontally
             _posX = std::clamp(_posX, 0, 57 * (lv_chart_get_zoom_x(PowerSupply.graph.chart) - 256) / 16);
-            lv_obj_scroll_to_x(PowerSupply.graph.chart, _posX, LV_ANIM_OFF);
+            // _posY = std::clamp(_posY, 0, int(33.5 * (lv_chart_get_zoom_y(PowerSupply.graph.chart) - 256) / 64));
+            if (!lvglChartIsBusy)
+            {
+                lvglChartIsBusy = true;
+                lv_obj_scroll_to_x(PowerSupply.graph.chart, _posX, LV_ANIM_OFF);
+                lvglChartIsBusy = false;
+            }
         }
         else
         {
@@ -2617,7 +2608,6 @@ void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
                 lvglChartIsBusy = false;
             }
         }
-        encoder2_last_value = encoder2_value;
     }
 
     // Handle vertical scrolling and zooming with encoder 1
@@ -2629,12 +2619,17 @@ void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
             _posY += 64;
         else if (encoder1_last_value > encoder1_value)
             _posY -= 64;
-
+        encoder1_last_value = encoder1_value;
         if (keyChar == 'W' && msg == " HOLD.")
         {
             // Scroll the graph vertically
             _posY = std::clamp(_posY, 0, int(33.5 * (lv_chart_get_zoom_y(PowerSupply.graph.chart) - 256) / 64));
-            lv_obj_scroll_to_y(PowerSupply.graph.chart, _posY, LV_ANIM_OFF);
+            if (!lvglChartIsBusy)
+            {
+                lvglChartIsBusy = true;
+                lv_obj_scroll_to_y(PowerSupply.graph.chart, _posY, LV_ANIM_OFF);
+                lvglChartIsBusy = false;
+            }
         }
         else
         {
@@ -2649,7 +2644,6 @@ void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
                 lvglChartIsBusy = false;
             }
         }
-        encoder1_last_value = encoder1_value;
     }
 }
 void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
@@ -2667,6 +2661,7 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
         else if (encoder1_last_value > encoder1_value)
             _posY = -1; // Rotated counter-clockwise
 
+        encoder1_last_value = encoder1_value;
         if (keyChar == 'W' && msg == " HOLD.")
         {
             // **Shift the histogram window up or down**
@@ -2703,6 +2698,8 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
                     double midValueVoltage = (PowerSupply.Voltage.hist.histWinMin + PowerSupply.Voltage.hist.histWinMax) / 2.0;
                     double rangeVoltage = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / 2.0;
                     double newRangeVoltage = rangeVoltage * 0.5; // Zoom in by reducing the range by half
+                    if (newRangeVoltage < .00004)
+                        return;
                     PowerSupply.Voltage.hist.histWinMin = midValueVoltage - newRangeVoltage;
                     PowerSupply.Voltage.hist.histWinMax = midValueVoltage + newRangeVoltage;
                 }
@@ -2711,6 +2708,8 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
                     double midValueCurrent = (PowerSupply.Current.hist.histWinMin + PowerSupply.Current.hist.histWinMax) / 2.0;
                     double rangeCurrent = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / 2.0;
                     double newRangeCurrent = rangeCurrent * 0.5;
+                    if (newRangeCurrent < .00001)
+                        return;
                     PowerSupply.Current.hist.histWinMin = midValueCurrent - newRangeCurrent;
                     PowerSupply.Current.hist.histWinMax = midValueCurrent + newRangeCurrent;
                 }
@@ -2723,6 +2722,8 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
                     double midValueVoltage = (PowerSupply.Voltage.hist.histWinMin + PowerSupply.Voltage.hist.histWinMax) / 2.0;
                     double rangeVoltage = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / 2.0;
                     double newRangeVoltage = rangeVoltage * 2.0; // Zoom out by doubling the range
+                    if (newRangeVoltage > 50)
+                        return;
                     PowerSupply.Voltage.hist.histWinMin = midValueVoltage - newRangeVoltage;
                     PowerSupply.Voltage.hist.histWinMax = midValueVoltage + newRangeVoltage;
                 }
@@ -2731,6 +2732,8 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
                     double midValueCurrent = (PowerSupply.Current.hist.histWinMin + PowerSupply.Current.hist.histWinMax) / 2.0;
                     double rangeCurrent = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / 2.0;
                     double newRangeCurrent = rangeCurrent * 2.0;
+                    if (newRangeCurrent > 25)
+                        return;
                     PowerSupply.Current.hist.histWinMin = midValueCurrent - newRangeCurrent;
                     PowerSupply.Current.hist.histWinMax = midValueCurrent + newRangeCurrent;
                 }
@@ -2751,7 +2754,7 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
             _posX = 1; // Rotated clockwise
         else if (encoder2_last_value > encoder2_value)
             _posX = -1; // Rotated counter-clockwise
-
+        encoder2_last_value = encoder2_value;
         // Shift the histogram window left or right by 10% of the window size
         double windowSizeVoltage = PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin;
         double shiftAmountVoltage = 0.10 * windowSizeVoltage; // 10% of voltage window size
@@ -2764,11 +2767,16 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
             // Shift right
             if (PowerSupply.stats.serV->hidden == 0)
             {
+                if (PowerSupply.Voltage.hist.histWinMin > 50)
+                    return;
                 PowerSupply.Voltage.hist.histWinMin += shiftAmountVoltage;
                 PowerSupply.Voltage.hist.histWinMax += shiftAmountVoltage;
             }
             if (PowerSupply.stats.serI->hidden == 0)
             {
+                if (PowerSupply.Current.hist.histWinMin > 20)
+                    return;
+
                 PowerSupply.Current.hist.histWinMin += shiftAmountCurrent;
                 PowerSupply.Current.hist.histWinMax += shiftAmountCurrent;
             }
@@ -2778,18 +2786,20 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
             // Shift left
             if (PowerSupply.stats.serV->hidden == 0)
             {
+                if (PowerSupply.Voltage.hist.histWinMin < -50)
+                    return;
                 PowerSupply.Voltage.hist.histWinMin -= shiftAmountVoltage;
                 PowerSupply.Voltage.hist.histWinMax -= shiftAmountVoltage;
             }
             if (PowerSupply.stats.serI->hidden == 0)
             {
-
+                if (PowerSupply.Current.hist.histWinMin < -20)
+                    return;
                 PowerSupply.Current.hist.histWinMin -= shiftAmountCurrent;
                 PowerSupply.Current.hist.histWinMax -= shiftAmountCurrent;
             }
         }
 
-        encoder2_last_value = encoder2_value;
         histogramUpdated = true; // Mark histogram as updated
     }
 
@@ -2826,238 +2836,6 @@ void managePageInteraction()
         break;
 
     default:
-        break;
-    }
-}
-
-void managePageInteraction_old()
-{
-    switch (Tabs::getCurrentPage())
-    {
-
-    case 4:
-        if (lv_obj_is_visible(voltageCurrentCalibration))
-        {
-            static int32_t encoder1_last_value = 0;
-            static int32_t encoder2_last_value = 0;
-
-            if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
-                break;
-
-            static int32_t cursor_pos = 0;
-
-            if (encoder2_last_value < encoder2_value)
-                cursor_pos++;
-            else if (encoder2_last_value > encoder2_value)
-                cursor_pos--;
-
-            int width = spinboxes.digit_count[spinboxes.id_index] - 1;
-            cursor_pos = std::clamp(cursor_pos, 0, width);
-
-            lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
-
-            lv_spinbox_set_cursor_pos(spinBox, 0);
-            lv_spinbox_set_cursor_pos(spinBox, width - cursor_pos);
-
-            encoder2_last_value = encoder2_value;
-
-            /********************************************************************/
-            if (encoder1_last_value < encoder1_value)
-                lv_event_send(spinboxes.btn_plus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
-            else if (encoder1_last_value > encoder1_value)
-                lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
-
-            PowerSupply.calibrate();
-            encoder1_last_value = encoder1_value;
-            // SaveCalibrationData();
-
-            // lv_label_set_text(lbl_voltageCalib_m, std::to_string(get_voltageCalib_m()).c_str());
-        }
-
-        else
-        {
-            static int32_t lastValue = 0;
-
-            if (lastValue < encoder2_value)
-                lastButton++;
-            else if (lastValue > encoder2_value)
-                lastButton--;
-            else
-
-                break;
-            lastValue = encoder2_value;
-
-            int8_t temp = lastButton;
-            lastButton = std::clamp(int(lastButton), 0, 6);
-
-            lv_obj_t *theMenu = lv_obj_get_child(lv_menu_get_cur_sidebar_page(menu), 0);
-
-            // Serial.printf("\nlastValue:%i  encoder2_value:%i lastButton:%i", lastValue, encoder2_value, lastButton);
-            lv_event_send(lv_obj_get_child(theMenu, lastButton), LV_EVENT_CLICKED, NULL);
-
-            if (temp == lastButton)
-                myTone(NOTE_A4, 3);
-        }
-        break;
-
-    case 1:
-        static int32_t encoder1_last_value = 0;
-        static int32_t encoder2_last_value = 0;
-
-        // if (encoder2_last_value == encoder2_value)
-
-        if (encoder2_last_value != encoder2_value)
-        {
-
-            int32_t _posX = lv_slider_get_value(slider_x);
-
-            if (encoder2_last_value < encoder2_value)
-                _posX += 640;
-            else if (encoder2_last_value > encoder2_value)
-                _posX -= 640;
-
-            // int32_t v = lv_slider_get_value(lv_obj_get_child(PowerSupply.graph.chart,1));
-            // lv_coord_t x = lv_obj_get_scroll_x(PowerSupply.graph.chart);
-            // lv_coord_t v0 = lv_chart_get_zoom_x(PowerSupply.graph.chart);
-            // lv_chart_set_zoom_x(PowerSupply.graph.chart, _posX);
-            // lv_obj_scroll_to_x(PowerSupply.graph.chart, 1e10, LV_ANIM_OFF);
-            // Serial.println(keyChar);
-            //    break;
-            if (keyChar == 'W' && msg == " HOLD.")
-            {
-                _posX = std::clamp(_posX, 0, 57 * (lv_chart_get_zoom_x(PowerSupply.graph.chart) - 256) / 16);
-                lv_obj_scroll_to_x(PowerSupply.graph.chart, _posX, LV_ANIM_OFF);
-            }
-            else
-            {
-                // Serial.printf("\n*************** %i", millis());
-                // lv_obj_scroll_to_x(PowerSupply.graph.chart, _posX, LV_ANIM_OFF);
-                _posX = std::clamp(_posX, 256, LV_IMG_ZOOM_NONE * 120);
-                lv_slider_set_value(slider_x, _posX, LV_ANIM_OFF);
-                // if (!lvglIsBusy )
-                // lv_event_send(slider_x, LV_EVENT_VALUE_CHANGED, NULL);
-                // lv_event_send(slider_x, LV_EVENT_CLICKED, NULL);
-                // lv_chart_set_zoom_x(PowerSupply.graph.chart, _posX);
-                if (!lvglChartIsBusy)
-                {
-                    lvglChartIsBusy = true;
-                    // lv_obj_scroll_to_x(PowerSupply.graph.chart, 32000, LV_ANIM_OFF);
-                    lv_event_send(lv_obj_get_child(PowerSupply.page[1], 1), LV_EVENT_VALUE_CHANGED, NULL);
-                    lvglChartIsBusy = false;
-                }
-                // call_slider_x_event_cb_manually(slider_x);
-                // delay(10);
-            }
-
-            // Serial.printf("\n lv_obj_get_scroll_x:%i %i", lv_obj_get_scroll_x(PowerSupply.graph.chart), millis());
-            // Serial.printf("\n lv_chart_get_zoom_x:%i %i", lv_chart_get_zoom_x(PowerSupply.graph.chart), millis());
-
-            encoder2_last_value = encoder2_value;
-        }
-        ///*********************************************
-
-        if (encoder1_last_value != encoder1_value)
-        {
-
-            static int32_t _posY = lv_slider_get_value(lv_obj_get_child(PowerSupply.page[1], 2));
-
-            if (encoder1_last_value < encoder1_value)
-                _posY += 64;
-            else if (encoder1_last_value > encoder1_value)
-                _posY -= 64;
-
-            // Serial.printf("\n keychar:%c ,msg:%s", keyChar, msg);
-
-            if (keyChar == 'W' && msg == " HOLD.")
-            {
-                // keyChar = ' ';
-                _posY = std::clamp(_posY, 0, int(33.5 * (lv_chart_get_zoom_y(PowerSupply.graph.chart) - 256) / 64));
-                lv_obj_scroll_to_y(PowerSupply.graph.chart, _posY, LV_ANIM_OFF);
-            }
-            else
-            {
-
-                // lv_obj_scroll_to_x(PowerSupply.graph.chart, _pos, LV_ANIM_OFF);
-                _posY = std::clamp(_posY, 256, 5120);
-                lv_slider_set_value(lv_obj_get_child(PowerSupply.page[1], 2), _posY, LV_ANIM_OFF);
-                if (!lvglChartIsBusy)
-                {
-                    lvglChartIsBusy = true;
-                    lv_event_send(lv_obj_get_child(PowerSupply.page[1], 2), LV_EVENT_VALUE_CHANGED, NULL);
-                    lvglChartIsBusy = false;
-                }
-            }
-
-            encoder1_last_value = encoder1_value;
-        }
-        // Serial.printf("\nscroll_y:%4i ", lv_obj_get_scroll_y(PowerSupply.graph.chart));
-        // Serial.printf("  zoom_y:%4i ", lv_chart_get_zoom_y(PowerSupply.graph.chart));
-
-        // Serial.printf("  scroll_x:%4i ", lv_obj_get_scroll_x(PowerSupply.graph.chart));
-        // Serial.printf("  zoom_x:%4i  %4i", lv_chart_get_zoom_x(PowerSupply.graph.chart), millis());
-
-        break;
-    case 0:
-
-        if (encoder1_last_value != encoder1_value)
-        {
-
-            static int32_t _posY = 0;
-
-            if (encoder1_last_value < encoder1_value)
-                _posY = 1;
-            else if (encoder1_last_value > encoder1_value)
-                _posY = -1;
-
-            if (keyChar == 'W' && msg == " HOLD.")
-            {
-                if (_posY > 0)
-                {
-                    PowerSupply.Voltage.hist.histWinMin += .025;
-                    PowerSupply.Voltage.hist.histWinMax += .025;
-
-                    PowerSupply.Current.hist.histWinMin += .025;
-                    PowerSupply.Current.hist.histWinMax += .025;
-                }
-                if (_posY < 0)
-                {
-                    PowerSupply.Voltage.hist.histWinMin -= .025;
-                    PowerSupply.Voltage.hist.histWinMax -= .025;
-
-                    PowerSupply.Current.hist.histWinMin -= .025;
-                    PowerSupply.Current.hist.histWinMax -= .025;
-                }
-            }
-            else
-            {
-
-                if (_posY > 0)
-                {
-                    double midValue = (PowerSupply.Voltage.hist.histWinMin + PowerSupply.Voltage.hist.histWinMax) / 2;
-                    PowerSupply.Voltage.hist.histWinMin = PowerSupply.Voltage.hist.histWinMin + (midValue - PowerSupply.Voltage.hist.histWinMin) / 2;
-                    PowerSupply.Voltage.hist.histWinMax = midValue + (PowerSupply.Voltage.hist.histWinMax - midValue) / 2;
-
-                    midValue = (PowerSupply.Current.hist.histWinMin + PowerSupply.Current.hist.histWinMax) / 2;
-                    PowerSupply.Current.hist.histWinMin = PowerSupply.Current.hist.histWinMin + (midValue - PowerSupply.Current.hist.histWinMin) / 2;
-                    PowerSupply.Current.hist.histWinMax = midValue + (PowerSupply.Current.hist.histWinMax - midValue) / 2;
-                }
-                if (_posY < 0)
-                {
-                    double midValue = (PowerSupply.Voltage.hist.histWinMin + PowerSupply.Voltage.hist.histWinMax) / 2;
-                    PowerSupply.Voltage.hist.histWinMin = midValue - (midValue - PowerSupply.Voltage.hist.histWinMin) * 2;
-                    PowerSupply.Voltage.hist.histWinMax = PowerSupply.Voltage.hist.histWinMax + (PowerSupply.Voltage.hist.histWinMax - midValue) * 2;
-
-                    midValue = (PowerSupply.Current.hist.histWinMin + PowerSupply.Current.hist.histWinMax) / 2;
-                    PowerSupply.Current.hist.histWinMin = midValue - (midValue - PowerSupply.Current.hist.histWinMin) * 2;
-                    PowerSupply.Current.hist.histWinMax = PowerSupply.Current.hist.histWinMax + (PowerSupply.Current.hist.histWinMax - midValue) * 2;
-                }
-            }
-
-            encoder1_last_value = encoder1_value;
-            PowerSupply.Voltage.hist.Reset();
-            PowerSupply.Current.hist.Reset();
-        }
-
         break;
     }
 }
