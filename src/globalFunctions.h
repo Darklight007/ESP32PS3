@@ -386,6 +386,102 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 }
 static void draw_event_stat_chart_cb(lv_event_t *e)
 {
+    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
+
+    // Check if the event is for tick labels on the X-axis
+    if (dsc->part == LV_PART_TICKS && dsc->id == LV_CHART_AXIS_PRIMARY_X)
+    {
+        // Number of ticks is 7
+        const int numTicks = 7;
+
+        // Arrays to hold tick labels for 7 ticks
+        char tickLabels[7][20]; // Adjust size as needed
+
+        // Calculate the step sizes for voltage and current
+        double voltageStep = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / (numTicks - 1);
+        double currentStep = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / (numTicks - 1);
+
+        // Generate tick labels
+        for (int i = 0; i < numTicks; i++)
+        {
+            // **Set labels at positions 1, 2, 4, and 5 to empty strings**
+            if (i == 1 || i == 2 || i == 4 || i == 5)
+            {
+                strcpy(tickLabels[i], "");
+                continue; // Skip to the next iteration
+            }
+
+            double voltageValue = PowerSupply.Voltage.hist.histWinMin + i * voltageStep;
+            double currentValue = PowerSupply.Current.hist.histWinMin + i * currentStep;
+
+            // Initialize units as empty strings
+            char v_unit[3] = "";
+            char c_unit[3] = "";
+
+            // Format the voltage value with appropriate precision
+            char voltageStr[12];
+            if (fabs(voltageStep) >= 1.0)
+                snprintf(voltageStr, sizeof(voltageStr), "%3.0f", voltageValue);
+            else if (fabs(voltageStep) >= 0.1)
+                snprintf(voltageStr, sizeof(voltageStr), "%3.1f", voltageValue);
+            else if (fabs(voltageStep) >= 0.01)
+                snprintf(voltageStr, sizeof(voltageStr), "%3.2f", voltageValue);
+            else
+            {
+                // Convert to millivolts if the step is very small
+                voltageValue *= 1000;
+                snprintf(voltageStr, sizeof(voltageStr), "%3.1f", voltageValue);
+                strcpy(v_unit, "mV");
+            }
+
+            // Format the current value with appropriate precision
+            char currentStr[12];
+            if (fabs(currentStep) >= 1.0)
+                snprintf(currentStr, sizeof(currentStr), "%4.0f", currentValue);
+            else if (fabs(currentStep) >= 0.1)
+                snprintf(currentStr, sizeof(currentStr), "%4.1f", currentValue);
+            else if (fabs(currentStep) >= 0.01)
+                snprintf(currentStr, sizeof(currentStr), "%4.2f", currentValue);
+            else
+            {
+                // Convert to milliamps if the step is very small
+                currentValue *= 1000;
+                snprintf(currentStr, sizeof(currentStr), "%4.1f", currentValue);
+                strcpy(c_unit, "mA");
+            }
+
+            // **Add units only to the middle tick label (position 3)**
+            if (i == 3)
+            {
+                if (strlen(v_unit) == 0)
+                    strcpy(v_unit, "V"); // Default voltage unit
+                if (strlen(c_unit) == 0)
+                    strcpy(c_unit, "A"); // Default current unit
+
+                strcat(voltageStr, v_unit);
+                strcat(currentStr, c_unit);
+            }
+
+            // Combine voltage and current strings into one label
+            snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s\n%s", voltageStr, currentStr);
+        }
+
+        // **Boundary Check to Prevent Out-of-Bounds Access**
+        if (dsc->value >= 0 && dsc->value < numTicks)
+        {
+            // Set the tick label for the current value
+            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabels[dsc->value]);
+        }
+        else
+        {
+            // If out of bounds, set an empty label
+            lv_snprintf(dsc->text, dsc->text_length, "");
+        }
+    }
+}
+
+static void draw_event_stat_chart_cb2(lv_event_t *e)
+{
     /* Hook the division lines too */
     lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
 
@@ -422,7 +518,7 @@ static void draw_event_stat_chart_cb(lv_event_t *e)
                 sprintf(voltageStr, "%3.2f", voltageValue);
             else
             {
-                sprintf(voltageStr, "%3.1f", voltageValue * 1000);
+                sprintf(voltageStr, "%3.1f", voltageValue);
                 v_unit = "[mV]";
             }
 
@@ -1621,6 +1717,17 @@ void keyCheckLoop()
               
               } });
 
+    keyMenusPage('V', " RELEASED.", 0, []
+                 {
+                     static bool show = false;
+                     show = !show;
+                     lv_chart_hide_series( PowerSupply.stats.chart,  PowerSupply.stats.serV,show); });
+    keyMenusPage('A', " RELEASED.", 0, []
+                 {
+                     static bool show = false;
+                     show = !show;
+                     lv_chart_hide_series( PowerSupply.stats.chart,  PowerSupply.stats.serI,show); });
+
     keyMenus('-', " RELEASED.", []
              {if (Tabs::getCurrentPage()==0) {
               PowerSupply.Current.hist.histWinMin = -.01;
@@ -1632,9 +1739,30 @@ void keyCheckLoop()
               PowerSupply.Voltage.hist.Reset();
             } });
 
-    // Statistics Reset button
+    // Statistics Reset and auto ajdust histogram window
     keyMenus('j', " RELEASED.", []
-             { PowerSupply.ResetStats(); });
+             {
+
+                if ( PowerSupply.stats.serV->hidden==0 ){
+                    PowerSupply.Voltage.hist.histWinMin = PowerSupply.Voltage.measured.Mean() -
+                                                        PowerSupply.Voltage.Statistics.StandardDeviation() * 6;
+
+                    PowerSupply.Voltage.hist.histWinMax = PowerSupply.Voltage.measured.Mean() +
+                                                        PowerSupply.Voltage.Statistics.StandardDeviation() * 6;
+                }
+                if ( PowerSupply.stats.serI->hidden==0 ){
+                    PowerSupply.Current.hist.histWinMin = PowerSupply.Current.measured.Mean() -
+                                                       PowerSupply.Current.Statistics.StandardDeviation() * 6;
+
+                    PowerSupply.Current.hist.histWinMax = PowerSupply.Current.measured.Mean() +
+                                                       PowerSupply.Current.Statistics.StandardDeviation() * 6;
+                }
+                //  PowerSupply.stats.serI->y_points = PowerSupply.Current.hist.data;
+                 //  PowerSupply.stats.serV->y_points = PowerSupply.Voltage.hist.data;
+
+
+
+                 PowerSupply.ResetStats(); });
 
     keyMenus('Z', " RELEASED.", []
              {
@@ -1743,14 +1871,19 @@ void keyCheckLoop()
 
     keyMenusPage('V', " RELEASED.", 2, []
                  {
-            if (!lv_obj_is_visible(myTextBox))
-            {
-                lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
-                key_event_handler_readBack(PowerSupply.Voltage);
-                ismyTextHiddenChange = true;
-            }
-            else if (strcmp(lv_label_get_text(unit_label), "V") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-                key_event_handler(8); });
+                     if (!lv_obj_is_visible(myTextBox))
+                     {
+                         lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                         key_event_handler_readBack(PowerSupply.Voltage);
+                         ismyTextHiddenChange = true;
+                     }
+                     else if (strcmp(lv_label_get_text(unit_label), "V") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
+                         key_event_handler(8);
+
+                     //  lv_obj_move_foreground(PowerSupply.stats.chart);
+                     static bool show = false;
+                     show = !show;
+                     lv_chart_hide_series(PowerSupply.stats.chart, PowerSupply.stats.serV, show); });
 
     keyMenusPage('v', " RELEASED.", 2, []
                  {
@@ -2162,8 +2295,8 @@ void HistPush()
 
 {
     // Histogram
-    PowerSupply.Voltage.hist[PowerSupply.Voltage.measured.value];
-    PowerSupply.Current.hist[PowerSupply.Current.measured.value];
+    PowerSupply.Current.hist[PowerSupply.Current.measured.Mean()];
+    PowerSupply.Voltage.hist[PowerSupply.Voltage.measured.Mean()];
     // lv_chart_refresh(PowerSupply.stats.chart);
 }
 void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
@@ -2246,63 +2379,6 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
     }
 }
 
-// void LoadSetting(){
-//     uint8_t adc_sps;
-//   PowerSupply.EEPROMread(PowerSupply.Voltage.adjEEPROMAddress + 8 * 10, adc_sps); // PowerSupply.Voltage.adjValue
-
-//   switch (adc_sps)
-//   {
-//   case 0:
-//   PowerSupply.adc.ads1219->setDataRate(20);
-//     break;
-
-//   case 1:
-//   PowerSupply.adc.ads1219->setDataRate(90);
-//     break;
-//   case 3:
-//   PowerSupply.adc.ads1219->setDataRate(330);
-//     break;
-//   case 4:
-//   PowerSupply.adc.ads1219->setDataRate(1000);
-//     break;
-//   }
-
-//   // Serial.println(atoi(ADC_SPS.at(adc_sps)));
-
-//   PowerSupply.EEPROMread(PowerSupply.Voltage.adjEEPROMAddress + 8 * 11, PowerSupply.Voltage.measured.NofAvgs);
-
-//   PowerSupply.Voltage.measured.SetWindowSize(PowerSupply.Voltage.measured.NofAvgs);
-
-//   uint8_t adc_decimalPoints;
-//   PowerSupply.EEPROMread(PowerSupply.Voltage.adjEEPROMAddress + 8 * 12, adc_decimalPoints); // PowerSupply.Voltage.adjValue
-
-//   switch (adc_decimalPoints)
-//   {
-//   case 1:
-//     PowerSupply.Voltage.restrict = "%+05.1f";
-//     PowerSupply.Current.restrict = "%+05.1f";
-//     PowerSupply.Power.restrict = "%+05.1f";
-//     break;
-//   case 2:
-//     PowerSupply.Voltage.restrict = "%+06.2f";
-//     PowerSupply.Current.restrict = "%+06.2f";
-//     PowerSupply.Power.restrict = "%+06.2f";
-//     break;
-//   case 3:
-//     PowerSupply.Voltage.restrict = "%+07.3f";
-//     PowerSupply.Current.restrict = "%+07.3f";
-//     PowerSupply.Power.restrict = "%+07.3f";
-//     break;
-//   case 4:
-//     PowerSupply.Voltage.restrict = "%+08.4f";
-//     PowerSupply.Current.restrict = "%+08.4f";
-//     PowerSupply.Power.restrict = "%+08.4f";
-//     break;
-
-//   default:
-//     break;
-//   }
-// }
 
 void trackLoopExecution(const char *callerName)
 {
@@ -2578,7 +2654,7 @@ void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 }
 void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 {
-    bool histogramUpdated = false;  // Flag to indicate if histogram needs to be reset
+    bool histogramUpdated = false; // Flag to indicate if histogram needs to be reset
 
     // **Handle Vertical Shift/Zoom with Encoder 1**
     if (encoder1_last_value != encoder1_value)
@@ -2587,15 +2663,15 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
 
         // Determine the direction of encoder 1 rotation
         if (encoder1_last_value < encoder1_value)
-            _posY = 1;  // Rotated clockwise
+            _posY = 1; // Rotated clockwise
         else if (encoder1_last_value > encoder1_value)
             _posY = -1; // Rotated counter-clockwise
 
         if (keyChar == 'W' && msg == " HOLD.")
         {
             // **Shift the histogram window up or down**
-            double shiftAmountVoltage = 0.025;  // Adjust as needed
-            double shiftAmountCurrent = 0.025;  // Adjust as needed
+            double shiftAmountVoltage = 0.025; // Adjust as needed
+            double shiftAmountCurrent = 0.025; // Adjust as needed
 
             if (_posY > 0)
             {
@@ -2622,146 +2698,42 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
             if (_posY > 0)
             {
                 // Zoom in (reduce range)
-                double midValueVoltage = (PowerSupply.Voltage.hist.histWinMin + PowerSupply.Voltage.hist.histWinMax) / 2.0;
-                double rangeVoltage = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / 2.0;
-                double newRangeVoltage = rangeVoltage * 0.5; // Zoom in by reducing the range by half
-                PowerSupply.Voltage.hist.histWinMin = midValueVoltage - newRangeVoltage;
-                PowerSupply.Voltage.hist.histWinMax = midValueVoltage + newRangeVoltage;
-
-                double midValueCurrent = (PowerSupply.Current.hist.histWinMin + PowerSupply.Current.hist.histWinMax) / 2.0;
-                double rangeCurrent = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / 2.0;
-                double newRangeCurrent = rangeCurrent * 0.5;
-                PowerSupply.Current.hist.histWinMin = midValueCurrent - newRangeCurrent;
-                PowerSupply.Current.hist.histWinMax = midValueCurrent + newRangeCurrent;
+                if (PowerSupply.stats.serV->hidden == 0)
+                {
+                    double midValueVoltage = (PowerSupply.Voltage.hist.histWinMin + PowerSupply.Voltage.hist.histWinMax) / 2.0;
+                    double rangeVoltage = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / 2.0;
+                    double newRangeVoltage = rangeVoltage * 0.5; // Zoom in by reducing the range by half
+                    PowerSupply.Voltage.hist.histWinMin = midValueVoltage - newRangeVoltage;
+                    PowerSupply.Voltage.hist.histWinMax = midValueVoltage + newRangeVoltage;
+                }
+                if (PowerSupply.stats.serI->hidden == 0)
+                {
+                    double midValueCurrent = (PowerSupply.Current.hist.histWinMin + PowerSupply.Current.hist.histWinMax) / 2.0;
+                    double rangeCurrent = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / 2.0;
+                    double newRangeCurrent = rangeCurrent * 0.5;
+                    PowerSupply.Current.hist.histWinMin = midValueCurrent - newRangeCurrent;
+                    PowerSupply.Current.hist.histWinMax = midValueCurrent + newRangeCurrent;
+                }
             }
             else if (_posY < 0)
             {
                 // Zoom out (increase range)
-                double midValueVoltage = (PowerSupply.Voltage.hist.histWinMin + PowerSupply.Voltage.hist.histWinMax) / 2.0;
-                double rangeVoltage = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / 2.0;
-                double newRangeVoltage = rangeVoltage * 2.0; // Zoom out by doubling the range
-                PowerSupply.Voltage.hist.histWinMin = midValueVoltage - newRangeVoltage;
-                PowerSupply.Voltage.hist.histWinMax = midValueVoltage + newRangeVoltage;
-
-                double midValueCurrent = (PowerSupply.Current.hist.histWinMin + PowerSupply.Current.hist.histWinMax) / 2.0;
-                double rangeCurrent = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / 2.0;
-                double newRangeCurrent = rangeCurrent * 2.0;
-                PowerSupply.Current.hist.histWinMin = midValueCurrent - newRangeCurrent;
-                PowerSupply.Current.hist.histWinMax = midValueCurrent + newRangeCurrent;
-            }
-        }
-
-        encoder1_last_value = encoder1_value;
-        histogramUpdated = true;  // Mark histogram as updated
-    }
-
-    // **Handle Horizontal Shift with Encoder 2**
-    if (encoder2_last_value != encoder2_value)
-    {
-        int32_t _posX = 0;
-
-        // Determine the direction of encoder 2 rotation
-        if (encoder2_last_value < encoder2_value)
-            _posX = 1;  // Rotated clockwise
-        else if (encoder2_last_value > encoder2_value)
-            _posX = -1; // Rotated counter-clockwise
-
-        // Shift the histogram window left or right by 10% of the window size
-        double windowSizeVoltage = PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin;
-        double shiftAmountVoltage = 0.10 * windowSizeVoltage;  // 10% of voltage window size
-
-        double windowSizeCurrent = PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin;
-        double shiftAmountCurrent = 0.10 * windowSizeCurrent;  // 10% of current window size
-
-        if (_posX > 0)
-        {
-            // Shift right
-            PowerSupply.Voltage.hist.histWinMin += shiftAmountVoltage;
-            PowerSupply.Voltage.hist.histWinMax += shiftAmountVoltage;
-
-            PowerSupply.Current.hist.histWinMin += shiftAmountCurrent;
-            PowerSupply.Current.hist.histWinMax += shiftAmountCurrent;
-        }
-        else if (_posX < 0)
-        {
-            // Shift left
-            PowerSupply.Voltage.hist.histWinMin -= shiftAmountVoltage;
-            PowerSupply.Voltage.hist.histWinMax -= shiftAmountVoltage;
-
-            PowerSupply.Current.hist.histWinMin -= shiftAmountCurrent;
-            PowerSupply.Current.hist.histWinMax -= shiftAmountCurrent;
-        }
-
-        encoder2_last_value = encoder2_value;
-        histogramUpdated = true;  // Mark histogram as updated
-    }
-
-    // **Reset Histograms if Updated**
-    if (histogramUpdated)
-    {
-        // Reset histograms to apply new window settings
-        PowerSupply.Voltage.hist.Reset();
-        PowerSupply.Current.hist.Reset();
-    }
-}
-
-void handleHistogramPage3(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
-{
-    bool histogramUpdated = false; // Flag to indicate if histogram needs to be reset
-
-    // **Handle Vertical Shift/Zoom with Encoder 1**
-    if (encoder1_last_value != encoder1_value)
-    {
-        int32_t _posY = 0;
-
-        // Determine the direction of encoder 1 rotation
-        if (encoder1_last_value < encoder1_value)
-            _posY = 1; // Rotated clockwise
-        else if (encoder1_last_value > encoder1_value)
-            _posY = -1; // Rotated counter-clockwise
-
-        if (keyChar == 'W' && msg == " HOLD.")
-        {
-            // **Shift the histogram window up or down**
-            if (_posY > 0)
-            {
-                // Shift up
-                PowerSupply.Voltage.hist.histWinMin += 0.025;
-                PowerSupply.Voltage.hist.histWinMax += 0.025;
-
-                PowerSupply.Current.hist.histWinMin += 0.025;
-                PowerSupply.Current.hist.histWinMax += 0.025;
-            }
-            else if (_posY < 0)
-            {
-                // Shift down
-                PowerSupply.Voltage.hist.histWinMin -= 0.025;
-                PowerSupply.Voltage.hist.histWinMax -= 0.025;
-
-                PowerSupply.Current.hist.histWinMin -= 0.025;
-                PowerSupply.Current.hist.histWinMax -= 0.025;
-            }
-        }
-        else
-        {
-            // **Zoom the histogram window vertically**
-            if (_posY > 0 && PowerSupply.Voltage.hist.histWinMax > 0.001)
-            {
-                // Zoom in (reduce range)
-                PowerSupply.Voltage.hist.histWinMin *= 0.5;
-                PowerSupply.Voltage.hist.histWinMax *= 0.5;
-
-                PowerSupply.Current.hist.histWinMin *= 0.5;
-                PowerSupply.Current.hist.histWinMax *= 0.5;
-            }
-            else if (_posY < 0 && PowerSupply.Voltage.hist.histWinMax < 33)
-            {
-                // Zoom out (increase range)
-                PowerSupply.Voltage.hist.histWinMin *= 2;
-                PowerSupply.Voltage.hist.histWinMax *= 2;
-
-                PowerSupply.Current.hist.histWinMin *= 2;
-                PowerSupply.Current.hist.histWinMax *= 2;
+                if (PowerSupply.stats.serV->hidden == 0)
+                {
+                    double midValueVoltage = (PowerSupply.Voltage.hist.histWinMin + PowerSupply.Voltage.hist.histWinMax) / 2.0;
+                    double rangeVoltage = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / 2.0;
+                    double newRangeVoltage = rangeVoltage * 2.0; // Zoom out by doubling the range
+                    PowerSupply.Voltage.hist.histWinMin = midValueVoltage - newRangeVoltage;
+                    PowerSupply.Voltage.hist.histWinMax = midValueVoltage + newRangeVoltage;
+                }
+                if (PowerSupply.stats.serI->hidden == 0)
+                {
+                    double midValueCurrent = (PowerSupply.Current.hist.histWinMin + PowerSupply.Current.hist.histWinMax) / 2.0;
+                    double rangeCurrent = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / 2.0;
+                    double newRangeCurrent = rangeCurrent * 2.0;
+                    PowerSupply.Current.hist.histWinMin = midValueCurrent - newRangeCurrent;
+                    PowerSupply.Current.hist.histWinMax = midValueCurrent + newRangeCurrent;
+                }
             }
         }
 
@@ -2790,97 +2762,45 @@ void handleHistogramPage3(int32_t &encoder1_last_value, int32_t &encoder2_last_v
         if (_posX > 0)
         {
             // Shift right
-            PowerSupply.Voltage.hist.histWinMin += shiftAmountVoltage;
-            PowerSupply.Voltage.hist.histWinMax += shiftAmountVoltage;
-
-            PowerSupply.Current.hist.histWinMin += shiftAmountCurrent;
-            PowerSupply.Current.hist.histWinMax += shiftAmountCurrent;
+            if (PowerSupply.stats.serV->hidden == 0)
+            {
+                PowerSupply.Voltage.hist.histWinMin += shiftAmountVoltage;
+                PowerSupply.Voltage.hist.histWinMax += shiftAmountVoltage;
+            }
+            if (PowerSupply.stats.serI->hidden == 0)
+            {
+                PowerSupply.Current.hist.histWinMin += shiftAmountCurrent;
+                PowerSupply.Current.hist.histWinMax += shiftAmountCurrent;
+            }
         }
         else if (_posX < 0)
         {
             // Shift left
-            PowerSupply.Voltage.hist.histWinMin -= shiftAmountVoltage;
-            PowerSupply.Voltage.hist.histWinMax -= shiftAmountVoltage;
+            if (PowerSupply.stats.serV->hidden == 0)
+            {
+                PowerSupply.Voltage.hist.histWinMin -= shiftAmountVoltage;
+                PowerSupply.Voltage.hist.histWinMax -= shiftAmountVoltage;
+            }
+            if (PowerSupply.stats.serI->hidden == 0)
+            {
 
-            PowerSupply.Current.hist.histWinMin -= shiftAmountCurrent;
-            PowerSupply.Current.hist.histWinMax -= shiftAmountCurrent;
+                PowerSupply.Current.hist.histWinMin -= shiftAmountCurrent;
+                PowerSupply.Current.hist.histWinMax -= shiftAmountCurrent;
+            }
         }
 
         encoder2_last_value = encoder2_value;
         histogramUpdated = true; // Mark histogram as updated
     }
+
     // **Reset Histograms if Updated**
     if (histogramUpdated)
     {
         // Reset histograms to apply new window settings
-        PowerSupply.Voltage.hist.Reset();
-        PowerSupply.Current.hist.Reset();
-    }
-}
-
-void handleHistogramPage2(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
-{
-    if (encoder1_last_value != encoder1_value)
-    {
-        static int32_t _posY = 0;
-
-        if (encoder1_last_value < encoder1_value)
-            _posY = 1;
-        else if (encoder1_last_value > encoder1_value)
-            _posY = -1;
-
-        if (keyChar == 'W' && msg == " HOLD.")
-        {
-            // Shift the histogram window up or down
-            if (_posY > 0)
-            {
-                PowerSupply.Voltage.hist.histWinMin += 0.025;
-                PowerSupply.Voltage.hist.histWinMax += 0.025;
-
-                PowerSupply.Current.hist.histWinMin += 0.025;
-                PowerSupply.Current.hist.histWinMax += 0.025;
-            }
-            else if (_posY < 0)
-            {
-                PowerSupply.Voltage.hist.histWinMin -= 0.025;
-                PowerSupply.Voltage.hist.histWinMax -= 0.025;
-
-                PowerSupply.Current.hist.histWinMin -= 0.025;
-                PowerSupply.Current.hist.histWinMax -= 0.025;
-            }
-        }
-        else
-        {
-            // Zoom the histogram window
-            if (_posY > 0 && PowerSupply.Voltage.hist.histWinMax > .001)
-            {
-                // Zoom in
-                PowerSupply.Voltage.hist.histWinMin *= 0.5;
-                PowerSupply.Voltage.hist.histWinMax *= 0.5;
-
-                PowerSupply.Current.hist.histWinMin *= 0.5;
-                PowerSupply.Current.hist.histWinMax *= 0.5;
-            }
-            else if (_posY < 0 && PowerSupply.Voltage.hist.histWinMax < 33)
-            {
-                // Zoom out
-                PowerSupply.Voltage.hist.histWinMin *= 2;
-                PowerSupply.Voltage.hist.histWinMax *= 2;
-
-                PowerSupply.Current.hist.histWinMin *= 2;
-                PowerSupply.Current.hist.histWinMax *= 2;
-            }
-        }
-
-        // Ensure the voltage histogram range is from -1 to 33
-        // PowerSupply.Voltage.hist.histWinMin = -1;
-        // PowerSupply.Voltage.hist.histWinMax = 33;
-
-        encoder1_last_value = encoder1_value;
-
-        // Reset histograms to apply new window settings
-        PowerSupply.Voltage.hist.Reset();
-        PowerSupply.Current.hist.Reset();
+        if (PowerSupply.stats.serV->hidden == 0)
+            PowerSupply.Voltage.hist.Reset();
+        if (PowerSupply.stats.serI->hidden == 0)
+            PowerSupply.Current.hist.Reset();
     }
 }
 

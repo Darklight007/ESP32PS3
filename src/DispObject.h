@@ -82,7 +82,7 @@ public:
         }
     }
 
-    void operator[](double &value)
+    void operator[](const double &value)
     {
         int Length_=328;
         const int index = 10+static_cast<int>(std::round((value - histWinMin) / (histWinMax - histWinMin) * Length_));
