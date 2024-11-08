@@ -241,6 +241,8 @@ void setupPowerSupply()
     GraphChart(PowerSupply.page[1], 22, -6); // Page 2: Graph chart
     StatsChart(PowerSupply.page[0], 22, -6); // Page 1: Statistics chart
 
+    stat_measure(PowerSupply.page[0], 10, 167); 
+
     // Turn on power supply initially
     PowerSupply.turn(SWITCH::ON);
 

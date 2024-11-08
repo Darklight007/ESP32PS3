@@ -24,7 +24,7 @@ void Device::setupADC(uint8_t pin, void func(void), TwoWire *_awire)
                                                  // adc.ads1219->readDifferential_0_1();
                                                  // adc.ads1219->_wire= _awire;
 
-    adc.startConversion(VOLTAGE,REF_EXTERNAL);
+    adc.startConversion(VOLTAGE, REF_EXTERNAL);
     adcDataReady = false;
     adc.dataReady = false;
 }
@@ -315,8 +315,7 @@ void Device::readVoltage()
 
         Voltage.rawValue = adc.readConversion();
 
-        
-        adc.startConversion(CURRENT,REF_EXTERNAL);
+        adc.startConversion(CURRENT, REF_EXTERNAL);
         adcDataReady = false;
 
         v = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
@@ -339,7 +338,7 @@ void Device::readCurrent()
     {
         static double c;
         Current.rawValue = adc.readConversion();
-        adc.startConversion(VOLTAGE,REF_EXTERNAL);
+        adc.startConversion(VOLTAGE, REF_EXTERNAL);
         adcDataReady = false;
 
         double currentOfR11R12 = 1.0 * Voltage.measured.Mean() / 100.0e3; // Current consuming by R11 & R12
@@ -521,7 +520,7 @@ void Device::toggle(void)
         turn(SWITCH::OFF);
     else
         turn(SWITCH::ON);
-        delay(40);
+    delay(40);
 };
 
 void Device::setupDisplay(lv_obj_t *scr)
@@ -562,7 +561,8 @@ void Device::setupPages(const char *page0, const char *page1, const char *page2,
 
 void Device::setPagesCallback(lv_event_cb_t event_cb)
 {
-    lv_obj_add_event_cb(tab.tabview, event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    // lv_obj_add_event_cb(tab.tabview, event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(tab.tabview, event_cb, LV_EVENT_DRAW_MAIN, NULL);
 }
 
 void Device::setupSwitch(lv_obj_t *parent, lv_align_t align, lv_coord_t x_ofs, lv_coord_t y_ofs, lv_event_cb_t event_cb)

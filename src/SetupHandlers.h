@@ -52,6 +52,7 @@ extern void IRAM_ATTR CurrentEnc(void *arg);
 extern void IRAM_ATTR ADCPinISR(void *arg);
 extern void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y);
 extern void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y);
+extern void stat_measure(lv_obj_t *parent, lv_coord_t x, lv_coord_t y);
 extern void textarea(lv_obj_t *parent);
 extern void Utility_tabview(lv_obj_t *parent);
 extern void SettingMenu(lv_obj_t *parent);

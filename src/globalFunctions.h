@@ -22,6 +22,7 @@ void KeyCheckInterval(unsigned long interval);
 void DACInterval(unsigned long interval);
 void trackLoopExecution(const char *);
 void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value);
+void updateObjectParrents();
 /**********************
  *   GLOBAL VARIABLES
  **********************/
@@ -192,6 +193,7 @@ static void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_col
     //   lv_obj_set_size(label, 150, 50);
     lv_obj_add_event_cb(label, drag_event_handler, LV_EVENT_PRESSING, NULL);
 }
+
 lv_obj_t *slider_x;
 void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 { /*Create a chart*/
@@ -307,83 +309,83 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     lv_obj_set_parent(PowerSupply.Current.statLabels.label_fft, parent);
     // lv_obj_add_event_cb(PowerSupply.Voltage.statLabels.label_fft, drag_event_handler, LV_EVENT_PRESSING, NULL);
 
-    /******************************
-     **   Stats
-     ******************************/
-    auto stat_ = [](lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
-    {
-        static lv_style_t style_stats;
-        lv_style_init(&style_stats);
-        lv_style_set_text_font(&style_stats, &lv_font_unscii_8);
-        lv_style_set_text_letter_space(&style_stats, 1);
-        lv_style_set_text_color(&style_stats, lv_palette_main(LV_PALETTE_GREY));
-        lv_style_set_text_letter_space(&style_stats, -1);
+    // /******************************
+    //  **   Stats
+    //  ******************************/
+    // auto stat_ = [](lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
+    // {
+    //     static lv_style_t style_stats;
+    //     lv_style_init(&style_stats);
+    //     lv_style_set_text_font(&style_stats, &lv_font_unscii_8);
+    //     lv_style_set_text_letter_space(&style_stats, 1);
+    //     lv_style_set_text_color(&style_stats, lv_palette_main(LV_PALETTE_GREY));
+    //     lv_style_set_text_letter_space(&style_stats, -1);
 
-        lv_obj_set_parent(PowerSupply.Voltage.statLabels.label_legend, parent);
-        lv_label_set_text(PowerSupply.Voltage.statLabels.label_legend, " Set      Mean     STD      Max      Min");
-        //                                                            "+00.0000 +00.0000 +00.0000 +00.0000 +00.0000
-        lv_obj_align(PowerSupply.Voltage.statLabels.label_legend, LV_ALIGN_DEFAULT, x, y);
-        lv_obj_remove_style(PowerSupply.Voltage.statLabels.label_legend, &style_stats, LV_STATE_DEFAULT);
-        lv_obj_add_style(PowerSupply.Voltage.statLabels.label_legend, &style_stats, LV_STATE_DEFAULT);
+    //     lv_obj_set_parent(PowerSupply.Voltage.statLabels.label_legend, parent);
+    //     lv_label_set_text(PowerSupply.Voltage.statLabels.label_legend, " Set      Mean     STD      Max      Min");
+    //     //                                                            "+00.0000 +00.0000 +00.0000 +00.0000 +00.0000
+    //     lv_obj_align(PowerSupply.Voltage.statLabels.label_legend, LV_ALIGN_DEFAULT, x, y);
+    //     lv_obj_remove_style(PowerSupply.Voltage.statLabels.label_legend, &style_stats, LV_STATE_DEFAULT);
+    //     lv_obj_add_style(PowerSupply.Voltage.statLabels.label_legend, &style_stats, LV_STATE_DEFAULT);
 
-        // int offset = x;  unused variable
-        int offsetY = 10 + y;
+    //     // int offset = x;  unused variable
+    //     int offsetY = 10 + y;
 
-        lv_style_init(&PowerSupply.graph.style_statsVolt);
-        lv_style_set_text_color(&PowerSupply.graph.style_statsVolt, lv_palette_main(LV_PALETTE_BLUE));
+    //     lv_style_init(&PowerSupply.graph.style_statsVolt);
+    //     lv_style_set_text_color(&PowerSupply.graph.style_statsVolt, lv_palette_main(LV_PALETTE_BLUE));
 
-        lv_style_init(&PowerSupply.graph.style_statsCurrent);
-        lv_style_set_text_color(&PowerSupply.graph.style_statsCurrent, lv_palette_main(LV_PALETTE_AMBER));
-        // Display mean max min ...
-        auto stat_obj = [](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
-        {
-            lv_style_set_text_font(style_, &lv_font_unscii_8);
-            lv_style_set_text_letter_space(style_, 1);
-            lv_style_set_text_letter_space(style_, -1);
+    //     lv_style_init(&PowerSupply.graph.style_statsCurrent);
+    //     lv_style_set_text_color(&PowerSupply.graph.style_statsCurrent, lv_palette_main(LV_PALETTE_AMBER));
+    //     // Display mean max min ...
+    //     auto stat_obj = [](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
+    //     {
+    //         lv_style_set_text_font(style_, &lv_font_unscii_8);
+    //         lv_style_set_text_letter_space(style_, 1);
+    //         lv_style_set_text_letter_space(style_, -1);
 
-            int space = 61;
+    //         int space = 61;
 
-            lv_obj_remove_style_all(dObj.statLabels.label_unit);
-            lv_obj_set_parent(dObj.statLabels.label_unit, parent);
-            lv_label_set_text(dObj.statLabels.label_unit, lv_label_get_text(dObj.label_unit));
-            lv_obj_align(dObj.statLabels.label_unit, LV_ALIGN_DEFAULT, x + -10, y);
-            lv_obj_add_style(dObj.statLabels.label_unit, style_, LV_STATE_DEFAULT);
+    //         lv_obj_remove_style_all(dObj.statLabels.label_unit);
+    //         lv_obj_set_parent(dObj.statLabels.label_unit, parent);
+    //         lv_label_set_text(dObj.statLabels.label_unit, lv_label_get_text(dObj.label_unit));
+    //         lv_obj_align(dObj.statLabels.label_unit, LV_ALIGN_DEFAULT, x + -10, y);
+    //         lv_obj_add_style(dObj.statLabels.label_unit, style_, LV_STATE_DEFAULT);
 
-            lv_obj_remove_style_all(dObj.statLabels.label_value);
-            lv_obj_set_parent(dObj.statLabels.label_value, parent);
-            lv_obj_align(dObj.statLabels.label_value, LV_ALIGN_DEFAULT, 0, -500);
-            lv_obj_add_style(dObj.statLabels.label_value, style_, LV_STATE_DEFAULT);
+    //         lv_obj_remove_style_all(dObj.statLabels.label_value);
+    //         lv_obj_set_parent(dObj.statLabels.label_value, parent);
+    //         lv_obj_align(dObj.statLabels.label_value, LV_ALIGN_DEFAULT, 0, -500);
+    //         lv_obj_add_style(dObj.statLabels.label_value, style_, LV_STATE_DEFAULT);
 
-            lv_obj_remove_style_all(dObj.statLabels.label_setSmallFont);
-            lv_obj_set_parent(dObj.statLabels.label_setSmallFont, parent);
-            lv_obj_align(dObj.statLabels.label_setSmallFont, LV_ALIGN_DEFAULT, x + space * 0, y);
-            lv_obj_add_style(dObj.statLabels.label_setSmallFont, style_, LV_STATE_DEFAULT);
+    //         lv_obj_remove_style_all(dObj.statLabels.label_setSmallFont);
+    //         lv_obj_set_parent(dObj.statLabels.label_setSmallFont, parent);
+    //         lv_obj_align(dObj.statLabels.label_setSmallFont, LV_ALIGN_DEFAULT, x + space * 0, y);
+    //         lv_obj_add_style(dObj.statLabels.label_setSmallFont, style_, LV_STATE_DEFAULT);
 
-            lv_obj_remove_style_all(dObj.statLabels.label_mean);
-            lv_obj_set_parent(dObj.statLabels.label_mean, parent);
-            lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, x + space * 1, y);
-            lv_obj_add_style(dObj.statLabels.label_mean, style_, LV_STATE_DEFAULT);
+    //         lv_obj_remove_style_all(dObj.statLabels.label_mean);
+    //         lv_obj_set_parent(dObj.statLabels.label_mean, parent);
+    //         lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, x + space * 1, y);
+    //         lv_obj_add_style(dObj.statLabels.label_mean, style_, LV_STATE_DEFAULT);
 
-            lv_obj_remove_style_all(dObj.statLabels.label_std);
-            lv_obj_set_parent(dObj.statLabels.label_std, parent);
-            lv_obj_align(dObj.statLabels.label_std, LV_ALIGN_DEFAULT, x + space * 2 + 4, y);
-            lv_obj_add_style(dObj.statLabels.label_std, style_, LV_STATE_DEFAULT);
+    //         lv_obj_remove_style_all(dObj.statLabels.label_std);
+    //         lv_obj_set_parent(dObj.statLabels.label_std, parent);
+    //         lv_obj_align(dObj.statLabels.label_std, LV_ALIGN_DEFAULT, x + space * 2 + 4, y);
+    //         lv_obj_add_style(dObj.statLabels.label_std, style_, LV_STATE_DEFAULT);
 
-            lv_obj_remove_style_all(dObj.statLabels.label_max);
-            lv_obj_set_parent(dObj.statLabels.label_max, parent);
-            lv_obj_align(dObj.statLabels.label_max, LV_ALIGN_DEFAULT, x + space * 3, y);
-            lv_obj_add_style(dObj.statLabels.label_max, style_, LV_STATE_DEFAULT);
+    //         lv_obj_remove_style_all(dObj.statLabels.label_max);
+    //         lv_obj_set_parent(dObj.statLabels.label_max, parent);
+    //         lv_obj_align(dObj.statLabels.label_max, LV_ALIGN_DEFAULT, x + space * 3, y);
+    //         lv_obj_add_style(dObj.statLabels.label_max, style_, LV_STATE_DEFAULT);
 
-            lv_obj_remove_style_all(dObj.statLabels.label_min);
-            lv_obj_set_parent(dObj.statLabels.label_min, parent);
-            lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, x + space * 4, y);
-            lv_obj_add_style(dObj.statLabels.label_min, style_, LV_STATE_DEFAULT);
-        };
+    //         lv_obj_remove_style_all(dObj.statLabels.label_min);
+    //         lv_obj_set_parent(dObj.statLabels.label_min, parent);
+    //         lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, x + space * 4, y);
+    //         lv_obj_add_style(dObj.statLabels.label_min, style_, LV_STATE_DEFAULT);
+    //     };
 
-        stat_obj(parent, PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, x - 8, offsetY);
-        stat_obj(parent, PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, x - 8, offsetY + 10);
-    };
-    stat_(parent, 10, 167);
+    //     stat_obj(parent, PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, x - 8, offsetY);
+    //     stat_obj(parent, PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, x - 8, offsetY + 10);
+    // };
+    // stat_(parent, 10, 167);
 }
 
 static void draw_event_stat_chart_cb(lv_event_t *e)
@@ -405,10 +407,10 @@ static void draw_event_stat_chart_cb(lv_event_t *e)
             VI_hidden = 2;
 
         // Number of ticks is 7
-        const int numTicks = 7;
+        const int numTicks = 3;
 
         // Arrays to hold tick labels for 7 ticks
-        char tickLabels[7][80]; // Adjust size as needed
+        char tickLabels[3][80]; // Adjust size as needed
 
         // Calculate the step sizes for voltage and current
         double voltageStep = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / (numTicks - 1);
@@ -475,15 +477,17 @@ static void draw_event_stat_chart_cb(lv_event_t *e)
             switch (VI_hidden)
             {
             case 1:
+                lv_obj_set_size(PowerSupply.stats.chart, 260, 150);
                 snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s", voltageStr);
                 break;
 
             case 2:
+                lv_obj_set_size(PowerSupply.stats.chart, 260, 150);
                 snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s", currentStr);
                 break;
 
             case 3:
-
+                lv_obj_set_size(PowerSupply.stats.chart, 260, 140);
                 snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s\n%s", voltageStr, currentStr);
                 break;
 
@@ -533,131 +537,6 @@ static void draw_event_stat_chart_cb(lv_event_t *e)
             default:
                 break;
             }
-        }
-    }
-}
-
-static void draw_event_stat_chart_cb_OK2(lv_event_t *e)
-{
-    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
-
-    // Check if the event is for tick labels on the X-axis
-    if (dsc->part == LV_PART_TICKS && dsc->id == LV_CHART_AXIS_PRIMARY_X ||
-        dsc->id == LV_CHART_AXIS_SECONDARY_X)
-    {
-        // Number of ticks is 7
-        const int numTicks = 7;
-
-        // Arrays to hold tick labels for 7 ticks
-        char tickLabels[7][20]; // Adjust size as needed
-
-        // Calculate the step sizes for voltage and current
-        double voltageStep = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / (numTicks - 1);
-        double currentStep = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / (numTicks - 1);
-
-        // Generate tick labels
-        for (int i = 0; i < numTicks; i++)
-        {
-            // **Set labels at positions 1, 2, 4, and 5 to empty strings**
-            if (i == 1 || i == 2 || i == 4 || i == 5)
-            {
-                strcpy(tickLabels[i], "");
-                continue; // Skip to the next iteration
-            }
-
-            double voltageValue = PowerSupply.Voltage.hist.histWinMin + i * voltageStep;
-            double currentValue = PowerSupply.Current.hist.histWinMin + i * currentStep;
-
-            // Initialize units as empty strings
-            char v_unit[3] = "V";
-            char c_unit[3] = "A";
-
-            // Format the voltage value with appropriate precision
-            char voltageStr[10];
-            if (fabs(voltageStep) >= 1.0)
-                snprintf(voltageStr, sizeof(voltageStr), "%3.0f", voltageValue);
-            else if (fabs(voltageStep) >= 0.1)
-                snprintf(voltageStr, sizeof(voltageStr), "%3.1f", voltageValue);
-            else if (fabs(voltageStep) >= 0.01)
-                snprintf(voltageStr, sizeof(voltageStr), "%3.2f", voltageValue);
-            else
-            {
-                // Convert to millivolts if the step is very small
-                voltageValue *= 1000;
-                snprintf(voltageStr, sizeof(voltageStr), "%3.1f", voltageValue);
-                strcpy(v_unit, "mV");
-            }
-
-            // Format the current value with appropriate precision
-            char currentStr[10];
-            if (fabs(currentStep) >= 1.0)
-                snprintf(currentStr, sizeof(currentStr), "%3.0f", currentValue);
-            else if (fabs(currentStep) >= 0.1)
-                snprintf(currentStr, sizeof(currentStr), "%3.1f", currentValue);
-            else if (fabs(currentStep) >= 0.01)
-                snprintf(currentStr, sizeof(currentStr), "%3.2f", currentValue);
-            else
-            {
-                // Convert to milliamps if the step is very small
-                currentValue *= 1000;
-                snprintf(currentStr, sizeof(currentStr), "%3.1f", currentValue);
-                strcpy(c_unit, "mA");
-            }
-
-            // **Add units only to the middle tick label (position 3)**
-            if (i == 3)
-            {
-                // if (strlen(v_unit) == 0)
-                //     strcpy(v_unit, "V"); // Default voltage unit
-                // if (strlen(c_unit) == 0)
-                //     strcpy(c_unit, "A"); // Default current unit
-
-                strcat(voltageStr, v_unit);
-                strcat(currentStr, c_unit);
-            }
-
-            // Combine voltage and current strings into one label
-            snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s\n%s ", voltageStr, currentStr);
-            // snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s", voltageStr);
-        }
-
-        // **Boundary Check to Prevent Out-of-Bounds Access**
-        if (dsc->value >= 0 && dsc->value < numTicks)
-        {
-            // Set the tick label for the current value
-            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabels[dsc->value]);
-        }
-        else
-        {
-            // If out of bounds, set an empty label
-            lv_snprintf(dsc->text, dsc->text_length, "");
-        }
-
-        // Set the tick label for the current value
-        // **Change the font size of the tick labels**
-        // Ensure that the label_dsc is valid before modifying it
-        if (dsc->label_dsc) //&& dsc->id == LV_CHART_AXIS_PRIMARY_X
-        {
-            // Set the desired font
-            // You can use one of the built-in fonts or a custom font
-            // Example using a built-in font: &lv_font_montserrat_14
-            dsc->label_dsc->font = &lv_font_montserrat_10; // Replace with your desired font
-
-            // Optionally, adjust other text properties
-            dsc->label_dsc->color = lv_palette_main(LV_PALETTE_BLUE); // Change text color to blue
-            dsc->label_dsc->align = LV_TEXT_ALIGN_CENTER;             // Center-align the text
-        }
-
-        else if (dsc->label_dsc && dsc->id == LV_CHART_AXIS_SECONDARY_X)
-        {
-            // Set the desired font
-            // You can use one of the built-in fonts or a custom font
-            // Example using a built-in font: &lv_font_montserrat_14
-            dsc->label_dsc->font = &lv_font_montserrat_10; // Replace with your desired font
-
-            // Optionally, adjust other text properties
-            dsc->label_dsc->color = lv_palette_main(LV_PALETTE_YELLOW); // Change text color to blue
-            dsc->label_dsc->align = LV_TEXT_ALIGN_CENTER;               // Center-align the text
         }
     }
 }
@@ -735,11 +614,93 @@ static void draw_event_stat_chart_cb_old(lv_event_t *e)
     }
 };
 
+void stat_measure(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
+{
+
+    /******************************}
+     **   Stats
+     ******************************/
+    // auto stat_ = [](lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
+    // {
+    static lv_style_t style_stats;
+    lv_style_init(&style_stats);
+    lv_style_set_text_font(&style_stats, &lv_font_unscii_8);
+    lv_style_set_text_letter_space(&style_stats, 1);
+    lv_style_set_text_color(&style_stats, lv_palette_main(LV_PALETTE_GREY));
+    lv_style_set_text_letter_space(&style_stats, -1);
+
+    lv_obj_set_parent(PowerSupply.Voltage.statLabels.label_legend, parent);
+    lv_label_set_text(PowerSupply.Voltage.statLabels.label_legend, " Set      Mean     STD      Max      Min");
+    //                                                            "+00.0000 +00.0000 +00.0000 +00.0000 +00.0000
+    lv_obj_align(PowerSupply.Voltage.statLabels.label_legend, LV_ALIGN_DEFAULT, x, y);
+    lv_obj_remove_style(PowerSupply.Voltage.statLabels.label_legend, &style_stats, LV_STATE_DEFAULT);
+    lv_obj_add_style(PowerSupply.Voltage.statLabels.label_legend, &style_stats, LV_STATE_DEFAULT);
+
+    // int offset = x;  unused variable
+    int offsetY = 10 + y;
+
+    lv_style_init(&PowerSupply.graph.style_statsVolt);
+    lv_style_set_text_color(&PowerSupply.graph.style_statsVolt, lv_palette_main(LV_PALETTE_BLUE));
+
+    lv_style_init(&PowerSupply.graph.style_statsCurrent);
+    lv_style_set_text_color(&PowerSupply.graph.style_statsCurrent, lv_palette_main(LV_PALETTE_AMBER));
+    // Display mean max min ...
+    auto stat_obj = [](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
+    {
+        lv_style_set_text_font(style_, &lv_font_unscii_8);
+        lv_style_set_text_letter_space(style_, 1);
+        lv_style_set_text_letter_space(style_, -1);
+
+        int space = 61;
+
+        lv_obj_remove_style_all(dObj.statLabels.label_unit);
+        lv_obj_set_parent(dObj.statLabels.label_unit, parent);
+        lv_label_set_text(dObj.statLabels.label_unit, lv_label_get_text(dObj.label_unit));
+        lv_obj_align(dObj.statLabels.label_unit, LV_ALIGN_DEFAULT, x + -10, y);
+        lv_obj_add_style(dObj.statLabels.label_unit, style_, LV_STATE_DEFAULT);
+
+        lv_obj_remove_style_all(dObj.statLabels.label_value);
+        lv_obj_set_parent(dObj.statLabels.label_value, parent);
+        lv_obj_align(dObj.statLabels.label_value, LV_ALIGN_DEFAULT, 0, -500);
+        lv_obj_add_style(dObj.statLabels.label_value, style_, LV_STATE_DEFAULT);
+
+        lv_obj_remove_style_all(dObj.statLabels.label_setSmallFont);
+        lv_obj_set_parent(dObj.statLabels.label_setSmallFont, parent);
+        lv_obj_align(dObj.statLabels.label_setSmallFont, LV_ALIGN_DEFAULT, x + space * 0, y);
+        lv_obj_add_style(dObj.statLabels.label_setSmallFont, style_, LV_STATE_DEFAULT);
+
+        lv_obj_remove_style_all(dObj.statLabels.label_mean);
+        lv_obj_set_parent(dObj.statLabels.label_mean, parent);
+        lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, x + space * 1, y);
+        lv_obj_add_style(dObj.statLabels.label_mean, style_, LV_STATE_DEFAULT);
+
+        lv_obj_remove_style_all(dObj.statLabels.label_std);
+        lv_obj_set_parent(dObj.statLabels.label_std, parent);
+        lv_obj_align(dObj.statLabels.label_std, LV_ALIGN_DEFAULT, x + space * 2 + 4, y);
+        lv_obj_add_style(dObj.statLabels.label_std, style_, LV_STATE_DEFAULT);
+
+        lv_obj_remove_style_all(dObj.statLabels.label_max);
+        lv_obj_set_parent(dObj.statLabels.label_max, parent);
+        lv_obj_align(dObj.statLabels.label_max, LV_ALIGN_DEFAULT, x + space * 3, y);
+        lv_obj_add_style(dObj.statLabels.label_max, style_, LV_STATE_DEFAULT);
+
+        lv_obj_remove_style_all(dObj.statLabels.label_min);
+        lv_obj_set_parent(dObj.statLabels.label_min, parent);
+        lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, x + space * 4, y);
+        lv_obj_add_style(dObj.statLabels.label_min, style_, LV_STATE_DEFAULT);
+    };
+
+    stat_obj(parent, PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, x - 8, offsetY);
+    stat_obj(parent, PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, x - 8, offsetY + 10);
+    // };
+    // stat_(parent, 10, 167);
+}
+
 void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 { /*Create a chart*/
 
     PowerSupply.stats.chart = lv_chart_create(parent);
-    lv_obj_set_size(PowerSupply.stats.chart, 260, 150);
+    lv_obj_set_size(PowerSupply.stats.chart, 260, 140);
     lv_obj_center(PowerSupply.stats.chart);
     lv_obj_align(PowerSupply.stats.chart, LV_ALIGN_DEFAULT, x, y + 0);
 
@@ -772,55 +733,6 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 
     legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V", lv_palette_main(LV_PALETTE_AMBER), "A", 25, 0);
 }
-/*
-static void draw_event_cb(lv_event_t *e)
-{
-    // lv_obj_t *obj = lv_event_get_target(e);  //unused variable 'obj'
-    lv_event_get_target(e);
-    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
-    //Hook the division lines too
-    if (dsc->part == LV_PART_MAIN)
-    {
-        if (dsc->line_dsc == NULL || dsc->p1 == NULL || dsc->p2 == NULL)
-            return;
-
-        dsc->line_dsc->color = lv_palette_lighten(LV_PALETTE_GREY, 1);
-        //Vertical line
-        if (dsc->p1->x == dsc->p2->x)
-        {
-
-            if (dsc->id == 0)
-            {
-                dsc->line_dsc->width = 1;
-                dsc->line_dsc->dash_gap = 0;
-                dsc->line_dsc->dash_width = 0;
-            }
-            else
-            {
-                dsc->line_dsc->width = 1;
-                dsc->line_dsc->dash_gap = 6;
-                dsc->line_dsc->dash_width = 6;
-            }
-        }
-        //Horizontal line
-        else
-        {
-            if (dsc->id == 4)
-            {
-                dsc->line_dsc->width = 1;
-                dsc->line_dsc->dash_gap = 0;
-                dsc->line_dsc->dash_width = 0;
-            }
-            else
-            {
-                dsc->line_dsc->width = 1;
-                dsc->line_dsc->dash_gap = 6;
-                dsc->line_dsc->dash_width = 6;
-            }
-        }
-    }
-}
-*/
 
 static void draw_event_cb2(lv_event_t *e)
 {
@@ -1653,77 +1565,6 @@ void Utility_tabview(lv_obj_t *parent)
     // lv_label_set_text(label, "Fourth tab");
 }
 
-void UpdateTabs(void)
-{
-    if (Tabs::getCurrentPage() == 3)
-    {
-        if (!Utility_tabview_flag)
-        {
-            // Utility = lv_obj_create(PowerSupply.page[3]);
-            // Utility_tabview2(Utility);
-            // delay(10);
-            // Utility_tabview_flag = true;
-            // LV_LOG_USER("\nafter creation, Utility:%i", Utility);
-            return;
-        }
-    }
-    else if (Tabs::getCurrentPage() != 3)
-    {
-        if (Utility_tabview_flag)
-        {
-            // lv_obj_del(Utility);
-            if (0)
-            {
-                lv_obj_del_delayed(Utility, 1);
-                Utility = NULL;
-                delay(5);
-                Utility_tabview_flag = false;
-                lv_obj_clean(PowerSupply.page[3]);
-            }
-            // LV_LOG_USER("after NULL deletion, Utility:%i", Utility);
-            // return;
-        }
-    }
-    return;
-    if (Tabs::getCurrentPage() == 4)
-    {
-        if (!Setting_tabview_flag)
-        {
-            LV_LOG_USER("before creation, Setting:%i", Utility);
-            Utility = lv_obj_create(PowerSupply.page[4]);
-            lv_obj_set_size(Utility, 295, 190);
-            SettingMenu(Utility);
-            delay(5);
-            //     Utility = lv_obj_create(PowerSupply.page[3]);
-            //     Utility_tabview(Utility);
-            Setting_tabview_flag = true;
-            // LV_LOG_USER("after creation, Setting:%i", Utility);
-            return;
-        }
-    }
-    else if (Tabs::getCurrentPage() != 4)
-    {
-        if (Setting_tabview_flag)
-        {
-
-            // LV_LOG_USER("before cleaning, Setting:%i", Utility);
-            Setting_tabview_flag = false;
-            delay(2);
-            // lv_obj_clean(PowerSupply.page[4]);
-            lv_obj_del_delayed(Utility, 1);
-            Utility = NULL;
-            delay(5);
-
-            delay(2);
-
-            // lv_obj_del(Utility);
-            // lv_obj_del_delayed(Utility, 1);
-            // PowerSupply.page[4] = NULL;
-            delay(10);
-            LV_LOG_USER("after cleaning Utility:%i", Utility);
-        }
-    }
-}
 void keyCheckLoop()
 {
     // unsigned long mi = micros();
@@ -1754,20 +1595,6 @@ void keyCheckLoop()
                 PowerSupply.SaveSetting(); 
                 return; });
 
-    // next page
-    keyMenus('k', " RELEASED.",
-             [&]
-             {
-                 if (!lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN))
-                     return;
-                 Tabs::nextPage();
-                 UpdateTabs();
-             });
-    keyMenus('k', " RELEASED.", []
-             {  if (lv_obj_is_visible(voltageCurrentCalibration)) {
-                lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN); 
-                 } });
-
     // Previous Page
     keyMenus('l', " RELEASED.",
              [&]
@@ -1775,24 +1602,43 @@ void keyCheckLoop()
                  if (!lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN))
                      return;
                  Tabs::previousPage();
-                 UpdateTabs();
+                 //  UpdateTabs();
+                 //  updateObjectParrents();
              });
 
+    // next page
+    keyMenus('k', " RELEASED.",
+             [&]
+             {
+                 if (!lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN))
+                     return;
+                 Tabs::nextPage();
+                 //  UpdateTabs();
+                 //  updateObjectParrents();
+             });
+
+    keyMenus('k', " RELEASED.", []
+             {  if (lv_obj_is_visible(voltageCurrentCalibration)) {
+                lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN); 
+                 } });
+
     keyMenus('H', " RELEASED.", []
-             { Tabs::goToHomeTab();
-               lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN); 
-               UpdateTabs(); });
+             {
+                 Tabs::goToHomeTab();
+                 lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
+             });
     keyMenus('M', " RELEASED.", []
-             { 
-                Tabs::setCurrentPage(4); 
-                UpdateTabs(); });
+             {
+                 Tabs::setCurrentPage(4);
+
+             });
 
     keyMenus('m', " RELEASED.", []
              {
-                 if(!lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN)) return;
+                 if (!lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN))
+                     return;
                  Tabs::setCurrentPage(3);
-                //  delay(10);
-                UpdateTabs(); }
+             }
 
     );
 
@@ -2085,7 +1931,7 @@ void keyCheckLoop()
     }
 }
 
-auto StatsPositions = [&](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
+void StatsPositions(lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
 {
     lv_obj_set_parent(dObj.statLabels.label_unit, parent);
     lv_obj_set_parent(dObj.statLabels.label_setSmallFont, parent);
@@ -2101,18 +1947,71 @@ auto StatsPositions = [&](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style
 void updateObjectPos_cb(lv_event_t *e)
 {
     // Serial.printf("Page Changed to %i!\n", Tabs::getCurrentPage());
+    // updateObjectParrents();
+    if (Tabs::getCurrentPage() > 1)
+        return;
+
+    StatsPositions(PowerSupply.page[Tabs::getCurrentPage()], PowerSupply.Voltage, &PowerSupply.stats.style_statsVolt, 0, 177);
+    StatsPositions(PowerSupply.page[Tabs::getCurrentPage()], PowerSupply.Current, &PowerSupply.stats.style_statsCurrent, 0, 187);
+
+    // switch (Tabs::getCurrentPage())
+    // {
+
+    // case 0:
+    //     StatsPositions(PowerSupply.page[0], PowerSupply.Voltage, &PowerSupply.stats.style_statsVolt, 0, 177);
+    //     StatsPositions(PowerSupply.page[0], PowerSupply.Current, &PowerSupply.stats.style_statsCurrent, 0, 187);
+    //     PowerSupply.SaveSetting();
+    //     break;
+    // case 1:
+    //     StatsPositions(PowerSupply.page[1], PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, 0, 177);
+    //     StatsPositions(PowerSupply.page[1], PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, 0, 187);
+    //     PowerSupply.SaveSetting();
+    //     break;
+    // case 4:
+    //     PowerSupply.SaveSetting();
+    //     break;
+    // }
+}
+
+void updateObjectParrents()
+{
+    // Serial.printf("Page Changed to %i!\n", Tabs::getCurrentPage());
+
+    auto StatsPositions = [&](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
+    {
+        int space = 61;
+
+        // lv_obj_set_parent(dObj.statLabels.label_mean, parent);
+        // lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, x, y);
+
+        lv_obj_set_parent(dObj.statLabels.label_value, parent);
+        lv_obj_align(dObj.statLabels.label_value, LV_ALIGN_DEFAULT, x, y);
+
+        lv_obj_set_parent(dObj.statLabels.label_mean, parent);
+        lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, x + space * 1, y);
+
+        lv_obj_set_parent(dObj.statLabels.label_std, parent);
+        lv_obj_align(dObj.statLabels.label_std, LV_ALIGN_DEFAULT, x + space * 2 + 4, y);
+
+        lv_obj_set_parent(dObj.statLabels.label_max, parent);
+        lv_obj_align(dObj.statLabels.label_max, LV_ALIGN_DEFAULT, x + space * 3, y);
+
+        lv_obj_set_parent(dObj.statLabels.label_min, parent);
+        lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, x + space * 4, y);
+    };
+
     switch (Tabs::getCurrentPage())
     {
 
     case 0:
         StatsPositions(PowerSupply.page[0], PowerSupply.Voltage, &PowerSupply.stats.style_statsVolt, 0, 177);
         StatsPositions(PowerSupply.page[0], PowerSupply.Current, &PowerSupply.stats.style_statsCurrent, 0, 187);
-        PowerSupply.SaveSetting();
+        // PowerSupply.SaveSetting();
         break;
     case 1:
         StatsPositions(PowerSupply.page[1], PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, 0, 177);
         StatsPositions(PowerSupply.page[1], PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, 0, 187);
-        PowerSupply.SaveSetting();
+        // PowerSupply.SaveSetting();
         break;
     case 4:
         PowerSupply.SaveSetting();
@@ -2223,22 +2122,6 @@ void StatusBar()
         lv_obj_set_parent(dObj.statLabels.label_min, parent);
         lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, x + space * 4, y);
     };
-
-    // switch (Tabs::getCurrentPage())
-    // {
-    // lv_obj_add_event_cb(slider, slider_x_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    //  case 0:
-    //      StatsPositions(PowerSupply.page[0], PowerSupply.Voltage, &PowerSupply.stats.style_statsVolt, 0, 177);
-    //      StatsPositions(PowerSupply.page[0], PowerSupply.Current, &PowerSupply.stats.style_statsCurrent,0, 187);
-    //      break;
-    //  case 1:
-    //      StatsPositions(PowerSupply.page[1], PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, 0, 177);
-    //      StatsPositions(PowerSupply.page[1], PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, 0, 187);
-    //      break;
-    // case 4:
-    //     PowerSupply.SaveSetting();
-    //     break;
-    // }
 
     lv_obj_t *vin1_ = lv_obj_get_child(voltageCurrentCalibration, spinboxes.ids[0]);
     lv_obj_t *code1_ = lv_obj_get_child(voltageCurrentCalibration, spinboxes.ids[1]);
