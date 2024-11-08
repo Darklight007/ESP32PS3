@@ -385,12 +385,165 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     };
     stat_(parent, 10, 167);
 }
+
 static void draw_event_stat_chart_cb(lv_event_t *e)
 {
     lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
 
+    // Check if the part being drawn is a tick label on the primary X-axis
+    if (dsc->part == LV_PART_TICKS && dsc->id == LV_CHART_AXIS_PRIMARY_X && dsc->text)
+    {
+
+        int VI_hidden = 0;
+
+        if (PowerSupply.stats.serV->hidden == PowerSupply.stats.serI->hidden &&
+            PowerSupply.stats.serV->hidden == false)
+            VI_hidden = 3;
+        else if (PowerSupply.stats.serV->hidden == false)
+            VI_hidden = 1;
+        else if (PowerSupply.stats.serI->hidden == false)
+            VI_hidden = 2;
+
+        // Number of ticks is 7
+        const int numTicks = 7;
+
+        // Arrays to hold tick labels for 7 ticks
+        char tickLabels[7][80]; // Adjust size as needed
+
+        // Calculate the step sizes for voltage and current
+        double voltageStep = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / (numTicks - 1);
+        double currentStep = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / (numTicks - 1);
+
+        // Generate tick labels
+        for (int i = 0; i < numTicks; i++)
+        {
+            // **Set labels at positions 1, 2, 4, and 5 to empty strings**
+            // if (i == 1 || i == 2 || i == 4 || i == 5)
+            // {
+            //     strcpy(tickLabels[i], "");
+            //     continue; // Skip to the next iteration
+            // }
+
+            double voltageValue = PowerSupply.Voltage.hist.histWinMin + i * voltageStep;
+            double currentValue = PowerSupply.Current.hist.histWinMin + i * currentStep;
+
+            // Initialize units as empty strings
+            char v_unit[3] = "V";
+            char c_unit[3] = "A";
+
+            // Format the voltage value with appropriate precision
+            char voltageStr[20];
+            if (fabs(voltageStep) >= 1.0)
+                snprintf(voltageStr, sizeof(voltageStr), "%3.4f", voltageValue);
+            else if (fabs(voltageStep) >= 0.1)
+                snprintf(voltageStr, sizeof(voltageStr), "%3.1f", voltageValue);
+            else if (fabs(voltageStep) >= 0.01)
+                snprintf(voltageStr, sizeof(voltageStr), "%3.2f", voltageValue);
+            else
+            {
+                // Convert to millivolts if the step is very small
+                voltageValue *= 1000;
+                snprintf(voltageStr, sizeof(voltageStr), "%3.2f", voltageValue);
+                strcpy(v_unit, "mV");
+            }
+
+            // Format the current value with appropriate precision
+            char currentStr[20];
+            if (fabs(currentStep) >= 1.0)
+                snprintf(currentStr, sizeof(currentStr), "%3.0f", currentValue);
+            else if (fabs(currentStep) >= 0.1)
+                snprintf(currentStr, sizeof(currentStr), "%3.1f", currentValue);
+            else if (fabs(currentStep) >= 0.01)
+                snprintf(currentStr, sizeof(currentStr), "%3.2f", currentValue);
+            else
+            {
+                // Convert to milliamps if the step is very small
+                currentValue *= 1000;
+                snprintf(currentStr, sizeof(currentStr), "%3.2f", currentValue);
+                strcpy(c_unit, "mA");
+            }
+
+            // **Add units only to the middle tick label (position 3)**
+            if (i == 1)
+            {
+                strcat(voltageStr, v_unit);
+                strcat(currentStr, c_unit);
+            }
+
+            // Combine voltage and current strings into one label
+
+            switch (VI_hidden)
+            {
+            case 1:
+                snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s", voltageStr);
+                break;
+
+            case 2:
+                snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s", currentStr);
+                break;
+
+            case 3:
+
+                snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s\n%s", voltageStr, currentStr);
+                break;
+
+            default:
+                snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s", "");
+                break;
+            }
+        }
+
+        // **Boundary Check to Prevent Out-of-Bounds Access**
+        if (dsc->value >= 0 && dsc->value < numTicks)
+        {
+            // Set the tick label for the current value
+            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabels[dsc->value]);
+        }
+        else
+        {
+            // If out of bounds, set an empty label
+            lv_snprintf(dsc->text, dsc->text_length, "");
+        }
+
+        // **Change the font size of the tick labels**
+        // Ensure that the label_dsc is valid before modifying it
+        if (dsc->label_dsc)
+        {
+            // Set the desired font
+            // You can use one of the built-in fonts or a custom font
+            // Example using a built-in font: &lv_font_montserrat_14
+            dsc->label_dsc->font = &lv_font_montserrat_10; // Replace with your desired font
+                                                           // Optionally, adjust other text properties
+
+            switch (VI_hidden)
+            {
+            case 1:
+                dsc->label_dsc->color = lv_palette_main(LV_PALETTE_BLUE);
+                break;
+
+            case 2:
+                dsc->label_dsc->color = lv_palette_main(LV_PALETTE_AMBER);
+                break;
+
+            case 3:
+
+                dsc->label_dsc->color = lv_color_hex(0xFFFFFF);
+                break;
+
+            default:
+                break;
+            }
+        }
+    }
+}
+
+static void draw_event_stat_chart_cb_OK2(lv_event_t *e)
+{
+    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
+
     // Check if the event is for tick labels on the X-axis
-    if (dsc->part == LV_PART_TICKS && dsc->id == LV_CHART_AXIS_PRIMARY_X)
+    if (dsc->part == LV_PART_TICKS && dsc->id == LV_CHART_AXIS_PRIMARY_X ||
+        dsc->id == LV_CHART_AXIS_SECONDARY_X)
     {
         // Number of ticks is 7
         const int numTicks = 7;
@@ -465,6 +618,7 @@ static void draw_event_stat_chart_cb(lv_event_t *e)
 
             // Combine voltage and current strings into one label
             snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s\n%s ", voltageStr, currentStr);
+            // snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s", voltageStr);
         }
 
         // **Boundary Check to Prevent Out-of-Bounds Access**
@@ -478,80 +632,33 @@ static void draw_event_stat_chart_cb(lv_event_t *e)
             // If out of bounds, set an empty label
             lv_snprintf(dsc->text, dsc->text_length, "");
         }
-    }
-}
-
-static void draw_event_stat_chart_cb2(lv_event_t *e)
-{
-    /* Hook the division lines too */
-    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
-
-    // Check if the event is for tick labels on the X-axis
-    if (dsc->text && dsc->id == LV_CHART_AXIS_PRIMARY_X)
-    {
-        // Number of ticks (assumed to be 7 based on your code)
-        const int numTicks = 7;
-
-        // Arrays to hold tick labels
-        static char tickLabels[7][20]; // Adjust size as needed
-        static const char *tickLabelPtrs[7];
-
-        // Calculate the step sizes for voltage and current
-        double voltageStep = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / (numTicks - 1);
-        double currentStep = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / (numTicks - 1);
-
-        // Generate tick labels
-        for (int i = 0; i < numTicks; i++)
-        {
-            double voltageValue = PowerSupply.Voltage.hist.histWinMin + i * voltageStep;
-            double currentValue = PowerSupply.Current.hist.histWinMin + i * currentStep;
-
-            // Format the voltage value with appropriate precision
-            char voltageStr[12];
-            char *v_unit = "[V] ";
-            char *c_unit = "[A] ";
-
-            if (voltageStep >= 1.0)
-                sprintf(voltageStr, "%3.0f", voltageValue);
-            else if (voltageStep >= 0.1)
-                sprintf(voltageStr, "%3.1f", voltageValue);
-            else if (voltageStep >= 0.01)
-                sprintf(voltageStr, "%3.2f", voltageValue);
-            else
-            {
-                sprintf(voltageStr, "%3.1f", voltageValue);
-                v_unit = "[mV]";
-            }
-
-            // Format the current value with appropriate precision
-            char currentStr[12];
-            if (currentStep >= 1.0)
-                sprintf(currentStr, "%4.0f", currentValue);
-            else if (currentStep >= 0.1)
-                sprintf(currentStr, "%4.1f", currentValue);
-            else if (currentStep >= 0.01)
-                sprintf(currentStr, "%4.2f", currentValue);
-            else
-            {
-                sprintf(currentStr, "%4.1f", currentValue * 1000);
-                c_unit = "[mA]";
-            }
-            // Add units to the last tick label
-            if (i == numTicks - 1)
-            {
-                strcat(voltageStr, v_unit);
-                strcat(currentStr, c_unit);
-            }
-
-            // Combine voltage and current strings into one label
-            sprintf(tickLabels[i], "%s\n%s", voltageStr, currentStr);
-
-            // Assign the label pointer
-            tickLabelPtrs[i] = tickLabels[i];
-        }
 
         // Set the tick label for the current value
-        lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabelPtrs[dsc->value]);
+        // **Change the font size of the tick labels**
+        // Ensure that the label_dsc is valid before modifying it
+        if (dsc->label_dsc) //&& dsc->id == LV_CHART_AXIS_PRIMARY_X
+        {
+            // Set the desired font
+            // You can use one of the built-in fonts or a custom font
+            // Example using a built-in font: &lv_font_montserrat_14
+            dsc->label_dsc->font = &lv_font_montserrat_10; // Replace with your desired font
+
+            // Optionally, adjust other text properties
+            dsc->label_dsc->color = lv_palette_main(LV_PALETTE_BLUE); // Change text color to blue
+            dsc->label_dsc->align = LV_TEXT_ALIGN_CENTER;             // Center-align the text
+        }
+
+        else if (dsc->label_dsc && dsc->id == LV_CHART_AXIS_SECONDARY_X)
+        {
+            // Set the desired font
+            // You can use one of the built-in fonts or a custom font
+            // Example using a built-in font: &lv_font_montserrat_14
+            dsc->label_dsc->font = &lv_font_montserrat_10; // Replace with your desired font
+
+            // Optionally, adjust other text properties
+            dsc->label_dsc->color = lv_palette_main(LV_PALETTE_YELLOW); // Change text color to blue
+            dsc->label_dsc->align = LV_TEXT_ALIGN_CENTER;               // Center-align the text
+        }
     }
 }
 
@@ -632,19 +739,21 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 { /*Create a chart*/
 
     PowerSupply.stats.chart = lv_chart_create(parent);
-    lv_obj_set_size(PowerSupply.stats.chart, 260, 130);
+    lv_obj_set_size(PowerSupply.stats.chart, 260, 150);
     lv_obj_center(PowerSupply.stats.chart);
     lv_obj_align(PowerSupply.stats.chart, LV_ALIGN_DEFAULT, x, y + 0);
 
-    lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_Y, 0, 80);   // 40000mv
-    lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_SECONDARY_Y, 0, 80); // 8000ma
+    lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_Y, 0, 160);   // 40000mv
+    lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_SECONDARY_Y, 0, 160); // 8000ma
     lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_X, 0, 350);
+    // lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_SECONDARY_X, -10, 50);
 
     lv_chart_set_div_line_count(PowerSupply.stats.chart, 5, 13);
     lv_obj_set_style_text_color(PowerSupply.stats.chart, lv_palette_main(LV_PALETTE_GREY), LV_PART_TICKS);
 
     lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_Y, 5, 3, 5, 4, true, 40);
-    lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_X, 5, 3, 7, 10, true, 50);
+    lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_X, 5, 3, 3, 10, true, 50);
+    // lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_SECONDARY_X, 5, 3, 7, 10, true, 50);
 
     lv_chart_set_type(PowerSupply.stats.chart, LV_CHART_TYPE_LINE);
     lv_chart_set_update_mode(PowerSupply.stats.chart, LV_CHART_UPDATE_MODE_CIRCULAR);

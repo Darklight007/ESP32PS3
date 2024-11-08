@@ -45,7 +45,7 @@ public:
     int maxHist;
     float histWinMin;
     float histWinMax;
-    uint16_t cap = 88;
+    uint16_t cap = 164;
 
     Histogram() {};
     ~Histogram() {}
@@ -70,7 +70,7 @@ public:
             // data[i] = data[i] * cap / maxHist;
             // data[i] -= 10;
             //  if (data[i] < 0) data[i]=0;
-            data[i] = std::max(0, data[i] - 4); // Decrement by 10 and clamp to 0 in one step
+            data[i] = std::max(0, data[i] - 3); // Decrement by 3 and clamp to 0 in one step
 
             if (data[i] != 0)
             {
@@ -93,7 +93,7 @@ public:
         data[index]++;
         updateMinMax(index);
 
-        if (data[index] > (cap + 4))
+        if (data[index] > (cap + 3))
         {
             rescaleHistogram();
         }
