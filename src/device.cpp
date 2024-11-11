@@ -562,7 +562,7 @@ void Device::setupPages(const char *page0, const char *page1, const char *page2,
 void Device::setPagesCallback(lv_event_cb_t event_cb)
 {
     // lv_obj_add_event_cb(tab.tabview, event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_add_event_cb(tab.tabview, event_cb, LV_EVENT_DRAW_MAIN, NULL);
+    lv_obj_add_event_cb(tab.tabview, event_cb, LV_EVENT_DRAW_POST_END, NULL);
 }
 
 void Device::setupSwitch(lv_obj_t *parent, lv_align_t align, lv_coord_t x_ofs, lv_coord_t y_ofs, lv_event_cb_t event_cb)

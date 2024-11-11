@@ -53,6 +53,8 @@ public:
     lv_style_t style_legend2;
     lv_style_t style_statsVolt;
     lv_style_t style_statsCurrent;
+    int y_min = 0.0;
+    int y_max = 30.0;
 };
 struct Stats_
 {
@@ -225,7 +227,7 @@ public:
         // ads1219->setVoltageReference(REF_EXTERNAL);
     }
 
-    void startConversion(int channel,adsRef_t vref=REF_INTERNAL,adsGain_t gain=ONE)
+    void startConversion(int channel, adsRef_t vref = REF_INTERNAL, adsGain_t gain = ONE)
     {
 
         // ads1219->setVoltageReference(REF_INTERNAL);
@@ -234,7 +236,7 @@ public:
 
         if (channel == VOLTAGE)
             ads1219->readDifferential_0_1();
-       else if (channel == CURRENT)
+        else if (channel == CURRENT)
             ads1219->readDifferential_2_3();
         // ads1219->readSingleEnded(channel);
         busyChannel = channel;
