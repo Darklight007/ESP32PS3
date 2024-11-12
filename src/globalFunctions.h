@@ -147,7 +147,7 @@ static void legend(lv_obj_t *parent, lv_color16_t c1, const char *ser1, lv_color
     lv_style_set_text_letter_space(&PowerSupply.graph.style_legend2, -2);
     lv_style_set_text_color(&PowerSupply.graph.style_legend2, c2);
     lv_style_set_text_font(&PowerSupply.graph.style_legend2, &Undertale_16b);
-    lv_style_set_bg_color(&PowerSupply.graph.style_legend2,lv_palette_darken(LV_PALETTE_GREY, 4));
+    lv_style_set_bg_color(&PowerSupply.graph.style_legend2, lv_palette_darken(LV_PALETTE_GREY, 4));
     lv_style_set_bg_opa(&PowerSupply.graph.style_legend2, LV_OPA_50);
     lv_style_set_border_opa(&PowerSupply.graph.style_legend2, LV_OPA_50);
     lv_style_set_border_width(&PowerSupply.graph.style_legend2, 2);
@@ -1703,8 +1703,8 @@ void autoScrollY()
     if (PowerSupply.graph.serV->hidden == PowerSupply.graph.serI->hidden &&
         PowerSupply.graph.serV->hidden == false)
 
-        ratio = .5*((PowerSupply.Current.measured.Mean() / PowerSupply.Current.maxValue) +
-                 PowerSupply.Voltage.measured.Mean() / PowerSupply.Voltage.maxValue);
+        ratio = .5 * ((PowerSupply.Current.measured.Mean() / PowerSupply.Current.maxValue) +
+                      PowerSupply.Voltage.measured.Mean() / PowerSupply.Voltage.maxValue);
 
     else if (PowerSupply.graph.serV->hidden == false)
         ratio = (PowerSupply.Voltage.measured.Mean() / PowerSupply.Voltage.maxValue);
@@ -1774,8 +1774,10 @@ void keyCheckLoop()
              });
 
     keyMenus('k', " RELEASED.", []
-             {  if (lv_obj_is_visible(voltageCurrentCalibration)) {
-                lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN); 
+             {
+                 if (lv_obj_is_visible(voltageCurrentCalibration))
+                 {
+                     lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
                  } });
 
     keyMenus('H', " RELEASED.", []
@@ -1819,20 +1821,35 @@ void keyCheckLoop()
 
     keyMenusPage('V', " RELEASED.", 0, []
                  {
-                     static bool show = false;
-                     show = !show;
-                                          lv_chart_hide_series( PowerSupply.stats.chart,  PowerSupply.stats.serV,show); });
+                     static bool hide = false;
+                     hide = !hide;
+                     lv_chart_hide_series(PowerSupply.stats.chart, PowerSupply.stats.serV, hide); 
+                     lv_chart_hide_series(PowerSupply.graph.chart, PowerSupply.graph.serV, hide);
+                     
+                     if (!hide)
+                         lv_obj_clear_flag(label_legend1, LV_OBJ_FLAG_HIDDEN);
+
+                     else
+                         lv_obj_add_flag(label_legend1, LV_OBJ_FLAG_HIDDEN); });
 
     keyMenusPage('A', " RELEASED.", 0, []
                  {
-                     static bool show = false;
-                     show = !show;
-                     lv_chart_hide_series( PowerSupply.stats.chart,  PowerSupply.stats.serI,show); });
+                     static bool hide = false;
+                     hide = !hide;
+                     lv_chart_hide_series( PowerSupply.stats.chart,  PowerSupply.stats.serI,hide); 
+                     lv_chart_hide_series(PowerSupply.graph.chart, PowerSupply.graph.serI, hide);
+                     
+                     if (!hide)
+                         lv_obj_clear_flag(label_legend2, LV_OBJ_FLAG_HIDDEN);
+
+                     else
+                         lv_obj_add_flag(label_legend2, LV_OBJ_FLAG_HIDDEN); });
 
     keyMenusPage('V', " RELEASED.", 1, []
                  {
                      static bool hide = false;
                      hide = !hide;
+                     lv_chart_hide_series(PowerSupply.stats.chart, PowerSupply.stats.serV, hide); 
                      lv_chart_hide_series(PowerSupply.graph.chart, PowerSupply.graph.serV, hide);
 
                      if (!hide)
@@ -1846,12 +1863,12 @@ void keyCheckLoop()
                      static bool hide = false;
                      hide = !hide;
                      lv_chart_hide_series(PowerSupply.graph.chart, PowerSupply.graph.serI, hide);
+                     lv_chart_hide_series( PowerSupply.stats.chart,  PowerSupply.stats.serI,hide); 
                      if (!hide)
                          lv_obj_clear_flag(label_legend2, LV_OBJ_FLAG_HIDDEN);
 
                      else
-                         lv_obj_add_flag(label_legend2, LV_OBJ_FLAG_HIDDEN);
-                 });
+                         lv_obj_add_flag(label_legend2, LV_OBJ_FLAG_HIDDEN); });
 
     // Statistics Reset and auto ajdust histogram window
     keyMenusPage('j', " RELEASED.", 0, []
@@ -1901,7 +1918,7 @@ void keyCheckLoop()
 
                          autoScrollY();
 
-                        //  lv_chart_refresh(PowerSupply.graph.chart);
+                         //  lv_chart_refresh(PowerSupply.graph.chart);
                          lvglChartIsBusy = false;
                      }
 
@@ -2023,36 +2040,35 @@ void keyCheckLoop()
                          lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
                          key_event_handler_readBack(PowerSupply.Voltage);
                          ismyTextHiddenChange = true;
+                         delay(100);
                      }
                      else if (strcmp(lv_label_get_text(unit_label), "V") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-                         key_event_handler(8);
 
-                     //  lv_obj_move_foreground(PowerSupply.stats.chart);
-                     static bool show = false;
-                     show = !show;
-                     lv_chart_hide_series(PowerSupply.stats.chart, PowerSupply.stats.serV, show); });
+                         key_event_handler(8); });
 
     keyMenusPage('v', " RELEASED.", 2, []
                  {
-            if (!lv_obj_is_visible(myTextBox))
-            {
-                lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
-                key_event_handler_readBack_k(PowerSupply.Voltage);
-                ismyTextHiddenChange = true;
-            }
-            else if (strcmp(lv_label_get_text(unit_label), "mV") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-                key_event_handler(9); });
+                     if (!lv_obj_is_visible(myTextBox))
+                     {
+                         lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                         key_event_handler_readBack_k(PowerSupply.Voltage);
+                         ismyTextHiddenChange = true;
+                         delay(100);
+                     }
+                     else if (strcmp(lv_label_get_text(unit_label), "mV") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
+                         key_event_handler(9); });
 
     keyMenusPage('A', " RELEASED.", 2, []
                  {
-            if (!lv_obj_is_visible(myTextBox))
-            {
-                lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
-                key_event_handler_readBack(PowerSupply.Current);
-                ismyTextHiddenChange = true;
-            }
-            else if (strcmp(lv_label_get_text(unit_label), "A") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-                key_event_handler(13); });
+                     if (!lv_obj_is_visible(myTextBox))
+                     {
+                         lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                         key_event_handler_readBack(PowerSupply.Current);
+                         ismyTextHiddenChange = true;
+                           delay(100);
+                     }
+                     else if (strcmp(lv_label_get_text(unit_label), "A") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
+                         key_event_handler(13); });
 
     keyMenusPage('a', " RELEASED.", 2, []
                  {
@@ -2061,6 +2077,7 @@ void keyCheckLoop()
                 lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
                 key_event_handler_readBack_k(PowerSupply.Current);
                 ismyTextHiddenChange = true;
+                  delay(100);
             }
             else if (strcmp(lv_label_get_text(unit_label), "mA") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
                 key_event_handler(14); });
@@ -2161,7 +2178,8 @@ void updateObjectPos_cb(lv_event_t *e)
 
     StatsPositions(PowerSupply.page[Tabs::getCurrentPage()], PowerSupply.Voltage, &PowerSupply.stats.style_statsVolt, 0, 177);
     StatsPositions(PowerSupply.page[Tabs::getCurrentPage()], PowerSupply.Current, &PowerSupply.stats.style_statsCurrent, 0, 187);
-
+    lv_obj_set_parent(label_legend1, PowerSupply.page[Tabs::getCurrentPage()]);
+    lv_obj_set_parent(label_legend2, PowerSupply.page[Tabs::getCurrentPage()]);
 }
 
 void StatusBar()
