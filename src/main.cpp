@@ -88,7 +88,7 @@ void loop()
   statisticUpdateInterval(333);
   FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?
-  managePageInteraction();
+  managePageEncoderInteraction();
   // DACInterval(100);
   // VCCCInterval(250);
   // KeyCheckInterval(45);

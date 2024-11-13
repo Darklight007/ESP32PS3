@@ -184,6 +184,8 @@ void setupPreferences()
 // Setup the power supply
 void setupPowerSupply()
 {
+    #define LV_EVENT_REFR_EXT_DRAW_SIZE 
+
     // Setup code for power supply
     pinMode(PowerSupply.CCCVPin, INPUT);  // Configure CCCV pin as input
     // pinMode(PowerSupply.CCCVPin, INPUT_PULLUP);  // Alternative configuration
@@ -271,6 +273,9 @@ void setupPowerSupply()
     // fmemory.putUShort("pi", 314);
     // Serial.printf("\nPreferences Memory test get: %i", fmemory.getUShort("pi", 0));
     // fmemory.end();
+
+    PowerSupply.Voltage.SetUpdate(PowerSupply.Voltage.adjValue);
+    PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue);
 }
 
 // Setup the calibration page
