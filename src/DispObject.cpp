@@ -77,7 +77,7 @@ void DispObjects::displayUpdate(void)
 void DispObjects::statUpdate(void)
 {
 
-    lv_label_set_text_fmt(statLabels.label_setSmallFont, "%+08.4f", adjValue + adjOffset);
+    lv_label_set_text_fmt(statLabels.label_setSmallFont, "%+08.4f", adjValue );
     lv_label_set_text_fmt(statLabels.label_value, "%+08.4f", Statistics.value);
     lv_label_set_text_fmt(statLabels.label_mean, "%+08.4f", Statistics.Mean());
     lv_label_set_text_fmt(statLabels.label_std, "%07.4f", Statistics.StandardDeviation());
@@ -160,9 +160,9 @@ void DispObjects::SetUpdate(double value)
     // if (!lvglIsBusy)
     if (strcmp(lv_label_get_text(label_unit), "A"))
 
-        lv_label_set_text_fmt(label_setValue, "%+08.4fV", adjValue + adjOffset);
+        lv_label_set_text_fmt(label_setValue, "%+08.4fV", adjValue );
     else
-        lv_label_set_text_fmt(label_setValue, "%+08.4fA", adjValue + adjOffset);
+        lv_label_set_text_fmt(label_setValue, "%+08.4fA", adjValue );
 
     // lv_disp_enable_invalidation(lv_disp_get_default(), true);
     // lv_obj_invalidate(label_setValue);
@@ -182,15 +182,15 @@ void DispObjects::Flush(void)
         // lv_label_set_text_fmt(label_setValue, a, adjValue +adjOffset);
         if (strcmp(lv_label_get_text(label_unit), "A"))
 
-            lv_label_set_text_fmt(label_setValue, "%+08.4fV", adjValue + adjOffset);
+            lv_label_set_text_fmt(label_setValue, "%+08.4fV", adjValue );
         else
-            lv_label_set_text_fmt(label_setValue, "%+08.4fA", adjValue + adjOffset);
+            lv_label_set_text_fmt(label_setValue, "%+08.4fA", adjValue );
 
         // update bar setting shadaow
-        lv_obj_set_width(Bar.bar_adjValue, (adjValue + adjOffset) / maxValue * lv_bar_get_max_value(Bar.bar));
+        lv_obj_set_width(Bar.bar_adjValue, (adjValue ) / maxValue * lv_bar_get_max_value(Bar.bar));
         adjValueChanged = false;
         // lv_obj_invalidate(label_setValue);
-        Serial.printf("\n%10.4f", adjValue + adjOffset);
+        Serial.printf("\n%10.4f", adjValue );
     }
     // _lv_disp_refr_timer(NULL);
 }

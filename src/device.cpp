@@ -1,5 +1,6 @@
 #include "device.h"
 
+
 extern Calibration StoreData;
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
 
@@ -219,8 +220,8 @@ void Device::LoadSetting(void)
         settingParameters.adcNumberOfAvgs = 1;
         settingParameters.adcNumberOfDigits = 4;
 
-        Voltage.adjValue = 5.0 - Voltage.adjOffset;
-        Current.adjValue = .2 - Current.adjOffset;
+        Voltage.adjValue = 5.0 - 0*Voltage.adjOffset;
+        Current.adjValue = .2 - 0*Current.adjOffset;
 
         memory.putUShort("pi", 314);
 
@@ -287,8 +288,8 @@ void Device::LoadSetting(void)
     // EEPROMread(Voltage.adjEEPROMAddress + 8 * 0, Voltage.adjValue); // PowerSupply.Voltage.adjValue
     // EEPROMread(Current.adjEEPROMAddress + 8 * 1, Current.adjValue); // PowerSupply.Voltage.adjValue
 
-    Serial.printf("\nLast Voltage Value:% +8.4f", Voltage.adjValue + Voltage.adjOffset);
-    Serial.printf("\nLast Current Value:% +8.4f", Current.adjValue + Current.adjOffset);
+    Serial.printf("\nLast Voltage Value:% +8.4f", Voltage.adjValue + 0*Voltage.adjOffset);
+    Serial.printf("\nLast Current Value:% +8.4f", Current.adjValue + 0*Current.adjOffset);
 };
 
 void Device::SaveSetting(void)
@@ -302,6 +303,25 @@ void Device::SaveSetting(void)
     Device::SaveSettingData("setting_param", settingParameters);
     // Serial.print("\nSetting saved.");
 }
+
+void Device::SaveDataArrays(const String &key, const DataArrays &data) {
+    StoreMem.begin("my-app", false);
+    StoreMem.putBytes(key.c_str(), &data, sizeof(DataArrays));
+    StoreMem.end();
+}
+
+DataArrays Device::LoadDataArrays(const String &key) {
+    DataArrays data;
+    StoreMem.begin("my-app", false);
+    StoreMem.getBytes(key.c_str(), &data, sizeof(DataArrays));
+    StoreMem.end();
+    return data;
+}
+
+
+
+
+
 
 // Reference:https://training.ti.com/ti-precision-labs-adcs-understanding-and-calibrating-offset-and-gain-adc-systems
 //  Time @ 05:41

@@ -1,11 +1,11 @@
-#include "SetupHandlers.h"  // Include the setup handlers header
+#include "SetupHandlers.h" // Include the setup handlers header
 
 // **Pin Definitions**
-#define SDA_1_ADC 17  // SDA pin for I2C bus 1 (ADC)
-#define SCL_1_ADC 18  // SCL pin for I2C bus 1 (ADC)
+#define SDA_1_ADC 17 // SDA pin for I2C bus 1 (ADC)
+#define SCL_1_ADC 18 // SCL pin for I2C bus 1 (ADC)
 
-#define SDA_2_KEY 15  // SDA pin for I2C bus 2 (Keypad)
-#define SCL_2_KEY 16  // SCL pin for I2C bus 2 (Keypad)
+#define SDA_2_KEY 15 // SDA pin for I2C bus 2 (Keypad)
+#define SCL_2_KEY 16 // SCL pin for I2C bus 2 (Keypad)
 
 // **I2C Interface Speeds**
 // High-Speed I^2C Interface (MCP23017):
@@ -22,12 +22,12 @@
 
 // **I2C Clock Rate Definitions**
 #define I2C_CLKRATE_400K 400000UL  // Speed of I2C bus 400 KHz
-#define I2C_CLKRATE_1M   1000000UL // Speed of I2C bus 1 MHz
+#define I2C_CLKRATE_1M 1000000UL   // Speed of I2C bus 1 MHz
 #define I2C_CLKRATE_1_7M 1700000UL // Speed of I2C bus 1.7 MHz
 
 // **Global Variables and External Declarations**
-extern bool wireConnected;   // Flag indicating if device is connected on Wire
-extern bool wire1Connected;  // Flag indicating if device is connected on Wire1
+extern bool wireConnected;  // Flag indicating if device is connected on Wire
+extern bool wire1Connected; // Flag indicating if device is connected on Wire1
 // size_t memory;               // Global variable to hold free heap memory size
 
 // **Initialization Functions**
@@ -43,7 +43,7 @@ void initializeSerial()
 // Initialize and display memory usage information
 void initialMemory()
 {
-    heepMemory = ESP.getFreeHeap();  // Get free heap memory
+    heepMemory = ESP.getFreeHeap(); // Get free heap memory
     Serial.printf("Total heap: %d\n", ESP.getHeapSize());
     Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
     Serial.printf("Total PSRAM: %d\n", ESP.getPsramSize());
@@ -102,8 +102,8 @@ void initializeI2C()
 // Initialize the display
 void initializeDisplay()
 {
-    tft.init();           // Initialize the TFT display
-    tft.setRotation(3);   // Set landscape orientation
+    tft.init();         // Initialize the TFT display
+    tft.setRotation(3); // Set landscape orientation
     Serial.println("Display Initialized.");
 }
 
@@ -119,9 +119,9 @@ void initializeTouch()
 // Initialize LVGL graphics library
 void setupLVGL()
 {
-    lv_init();           // Initialize LVGL library
-    init_display();      // Initialize the display driver for LVGL
-    init_touch();        // Initialize the touch driver for LVGL
+    lv_init();      // Initialize LVGL library
+    init_display(); // Initialize the display driver for LVGL
+    init_touch();   // Initialize the touch driver for LVGL
 
     // Display LVGL version
     String LVGL_Arduino = "Hello ESP32! ";
@@ -184,10 +184,10 @@ void setupPreferences()
 // Setup the power supply
 void setupPowerSupply()
 {
-    #define LV_EVENT_REFR_EXT_DRAW_SIZE 
+#define LV_EVENT_REFR_EXT_DRAW_SIZE
 
     // Setup code for power supply
-    pinMode(PowerSupply.CCCVPin, INPUT);  // Configure CCCV pin as input
+    pinMode(PowerSupply.CCCVPin, INPUT); // Configure CCCV pin as input
     // pinMode(PowerSupply.CCCVPin, INPUT_PULLUP);  // Alternative configuration
 
     // Initialize the power supply display and pages
@@ -243,7 +243,7 @@ void setupPowerSupply()
     GraphChart(PowerSupply.page[1], 22, -6); // Page 2: Graph chart
     StatsChart(PowerSupply.page[0], 22, -6); // Page 1: Statistics chart
 
-    stat_measure(PowerSupply.page[0], 10, 167); 
+    stat_measure(PowerSupply.page[0], 10, 167);
 
     // Turn on power supply initially
     PowerSupply.turn(SWITCH::ON);
@@ -267,15 +267,15 @@ void setupPowerSupply()
     // Serial.println("\nSetup done");
     // PowerSupply.turn(SWITCH::ON);
 
-    // Preferences memory test (commented)
-    // Preferences fmemory;
-    // fmemory.begin("param", false);
-    // fmemory.putUShort("pi", 314);
-    // Serial.printf("\nPreferences Memory test get: %i", fmemory.getUShort("pi", 0));
-    // fmemory.end();
+ 
 
     PowerSupply.Voltage.SetUpdate(PowerSupply.Voltage.adjValue);
     PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue);
+    DataArrays myData;
+    // for (int i = 0; i < 20; ++i)
+        // myData.doubles[i] = i ; // Example values
+
+    // PowerSupply.SaveDataArrays("myDataKey", myData);
 }
 
 // Setup the calibration page
@@ -350,7 +350,7 @@ bool scanI2CBus(TwoWire &i2cBus, uint8_t address)
     uint8_t error = i2cBus.endTransmission();
 
     if (error == 0)
-        return true;  // Device found
+        return true; // Device found
     else
         return false; // No device found
 }
@@ -392,5 +392,5 @@ void init_display()
     disp_drv.ver_res = screenHeight;   // Set vertical resolution
     lv_disp_drv_register(&disp_drv);   // Finally register the driver
 
-    lv_disp = lv_disp_get_default();   // Get the default display
+    lv_disp = lv_disp_get_default(); // Get the default display
 }

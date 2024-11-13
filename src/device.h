@@ -19,6 +19,29 @@
 #define DAC_VOLTAGE CHANNEL_D
 #define DAC_CURRENT CHANNEL_B
 
+
+// #pragma pack(push, 1)
+struct DataArrays {
+    double doubles[20];
+    bool bools[20];
+};
+// #pragma pack(pop)
+
+#pragma pack(push, 1)
+struct DataPoint {
+    double voltage;
+    double current;
+    bool V_isLocked;
+    bool I_isLocked;
+};
+
+struct DataArray {
+    DataPoint dataPoints[20];
+};
+#pragma pack(pop)
+
+
+
 extern lv_disp_t *lv_disp;
 extern volatile bool adcDataReady;
 // extern volatile bool dataReady;
@@ -337,6 +360,7 @@ public:
     void LoadCalibrationData(void);
     void LoadSetting(void);
     void SaveSetting(void);
+    
 
     void SaveCalibData(const String &key, const Calibration &data);
     Calibration LoadCalibData(const String &key);
@@ -344,6 +368,9 @@ public:
 
     void SaveSettingData(const String &key, const SettingParameters &data);
     SettingParameters LoadSettingData(const String &key);
+
+ void SaveDataArrays(const String &key, const DataArrays &data);
+DataArrays LoadDataArrays(const String &key);
 
     void ResetStats(void)
     {

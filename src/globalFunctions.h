@@ -22,6 +22,7 @@ void KeyCheckInterval(unsigned long interval);
 void DACInterval(unsigned long interval);
 void trackLoopExecution(const char *);
 void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value);
+void Utility_tabview(lv_obj_t *parent);
 /**********************
  *   GLOBAL VARIABLES
  **********************/
@@ -1364,7 +1365,7 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Voltage.SetUpdate(round(strtod(txt, NULL) * 2000.0) / 2000.0 - PowerSupply.Voltage.adjOffset);
+        PowerSupply.Voltage.SetUpdate(round(strtod(txt, NULL) * 2000.0) / 2000.0 - 0 * PowerSupply.Voltage.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
     }
@@ -1374,7 +1375,7 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Voltage.SetUpdate(round(strtod(txt, NULL) * 2.0) / 2000.0 - PowerSupply.Voltage.adjOffset);
+        PowerSupply.Voltage.SetUpdate(round(strtod(txt, NULL) * 2.0) / 2000.0 - 0 * PowerSupply.Voltage.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
     }
@@ -1384,7 +1385,7 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Current.SetUpdate(strtod(txt, NULL) - PowerSupply.Current.adjOffset);
+        PowerSupply.Current.SetUpdate(strtod(txt, NULL) - 0 * PowerSupply.Current.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
     }
@@ -1394,7 +1395,7 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Current.SetUpdate(strtod(txt, NULL) / 1000.0 - PowerSupply.Current.adjOffset);
+        PowerSupply.Current.SetUpdate(strtod(txt, NULL) / 1000.0 - 0 * PowerSupply.Current.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
     }
@@ -1420,12 +1421,12 @@ static void key_event_handler_readBack(DispObjects dp)
 {
     if (strcmp(lv_label_get_text(dp.label_unit), "V") == 0)
     {
-        lv_textarea_set_text(ta, std::to_string(dp.adjValue + PowerSupply.Voltage.adjOffset).c_str());
+        lv_textarea_set_text(ta, std::to_string(dp.adjValue + 0 * PowerSupply.Voltage.adjOffset).c_str());
         lv_label_set_text(unit_label, "V");
     }
     else
     {
-        lv_textarea_set_text(ta, std::to_string(dp.adjValue + PowerSupply.Current.adjOffset).c_str());
+        lv_textarea_set_text(ta, std::to_string(dp.adjValue + 0 * PowerSupply.Current.adjOffset).c_str());
         lv_label_set_text(unit_label, "A");
     }
 
@@ -1437,12 +1438,12 @@ static void key_event_handler_readBack_k(DispObjects dp)
 {
     if (strcmp(lv_label_get_text(dp.label_unit), "V") == 0)
     {
-        lv_textarea_set_text(ta, std::to_string((dp.adjValue + PowerSupply.Voltage.adjOffset) * 1000.0).c_str());
+        lv_textarea_set_text(ta, std::to_string((dp.adjValue + 0 * PowerSupply.Voltage.adjOffset) * 1000.0).c_str());
         lv_label_set_text(unit_label, "mV");
     }
     else
     {
-        lv_textarea_set_text(ta, std::to_string((dp.adjValue + PowerSupply.Current.adjOffset) * 1000.0).c_str());
+        lv_textarea_set_text(ta, std::to_string((dp.adjValue + 0 * PowerSupply.Current.adjOffset) * 1000.0).c_str());
         lv_label_set_text(unit_label, "mA");
     }
 
@@ -1554,11 +1555,36 @@ static void mem_btn_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t *btn = lv_event_get_target(e);
-    if (code == LV_EVENT_CLICKED)
+
+    int a = (int)btn->user_data;
+    if (code == LV_EVENT_RELEASED)
     {
+        DataArrays loadedData = PowerSupply.LoadDataArrays("myDataKey");
         /*Get the first child of the button which is the label and change its text*/
-        lv_obj_t *label = lv_obj_get_child(btn, 0);
+        // lv_obj_t *label = lv_obj_get_child(btn, 0);
         // lv_label_set_text_fmt(label, "");
+        PowerSupply.Voltage.SetUpdate(loadedData.doubles[a * 2]);
+        PowerSupply.Current.SetUpdate(loadedData.doubles[a * 2 + 1]);
+        Tabs::setCurrentPage(2);
+        Serial.printf("\n ****** Load from : %i ", a);
+        myTone(NOTE_A4, 50, true);
+    }
+
+    if (code == LV_EVENT_LONG_PRESSED)
+    {
+        DataArrays myData = PowerSupply.LoadDataArrays("myDataKey");
+        myData.doubles[a * 2] = PowerSupply.Voltage.adjValue;     // Example values
+        myData.doubles[a * 2 + 1] = PowerSupply.Current.adjValue; // Example values
+        Serial.printf("\n ****** Saved to : %i ", a);
+        PowerSupply.SaveDataArrays("myDataKey", myData);
+        myTone(NOTE_A4, 150, true);
+        lvglChartIsBusy = true;
+        lvglIsBusy = true;
+        lv_obj_clean(PowerSupply.page[3]);
+        Utility_tabview(PowerSupply.page[3]);
+        // delay(100);
+        lvglChartIsBusy = false;
+        lvglIsBusy = false;
     }
 }
 void Utility_tabview(lv_obj_t *parent)
@@ -1575,7 +1601,10 @@ void Utility_tabview(lv_obj_t *parent)
     lv_style_set_text_letter_space(&style_utility, 0);
     lv_style_set_text_color(&style_utility, lv_palette_main(LV_PALETTE_GREY));
     lv_style_set_text_font(&style_utility, &monofont_R_16);
+
     lv_style_set_pad_all(&style_btn, 0);
+    lv_style_set_bg_color(&style_btn, lv_palette_darken(LV_PALETTE_INDIGO, 2));
+    lv_style_set_text_color(&style_btn, lv_palette_main(LV_PALETTE_AMBER));
 
     // lv_style_set_pad_top(&style_btn,0);
 
@@ -1613,18 +1642,18 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_t *labelV;
     lv_obj_t *labelI;
     int8_t yOff = 32, verOff = 125, yStart = -2, xStart = 38;
+    DataArrays loadedData = PowerSupply.LoadDataArrays("myDataKey");
     for (int i = 0; i < 10; i++)
     {
 
         btn = lv_btn_create(tab1);
         lv_obj_set_pos(btn, xStart + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
         lv_obj_set_size(btn, 92, 29);
-        lv_style_set_bg_color(&style_btn, lv_palette_darken(LV_PALETTE_GREY, 3));
-        lv_style_set_text_color(&style_btn, lv_palette_main(LV_PALETTE_YELLOW));
 
         lv_obj_add_event_cb(btn, mem_btn_event_cb, LV_EVENT_ALL, NULL);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
         lv_obj_add_style(btn, &style_btn, LV_STATE_DEFAULT);
+        btn->user_data = (void *)i;
 
         label = lv_label_create(tab1);
         lv_label_set_text_fmt(label, "%i", i);
@@ -1640,12 +1669,12 @@ void Utility_tabview(lv_obj_t *parent)
         // PowerSupply.EEPROMread(90 + i * 4, adjValue);
         // lv_obj_remove_style_all(labelV);
         // lv_obj_add_style(labelV, &style_utility, LV_STATE_DEFAULT);
-        lv_label_set_text_fmt(labelV, "%+08.4fV", (i * 2000.0 * 3.5555) / 2000.0);
+        lv_label_set_text_fmt(labelV, "%+08.4fV", loadedData.doubles[i * 2]);
         lv_obj_align(labelV, LV_ALIGN_CENTER, 0, -6);
         lv_obj_add_flag(labelV, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
 
         labelI = lv_label_create(labelV);
-        lv_label_set_text_fmt(labelI, "%+08.4fA", i * 8000 / 10000.0);
+        lv_label_set_text_fmt(labelI, "%+08.4fA", (loadedData.doubles[i * 2 + 1]));
         lv_obj_align(labelI, LV_ALIGN_BOTTOM_MID, 0, 14);
 
         lv_obj_set_parent(labelV, btn);
@@ -1966,7 +1995,46 @@ void keyCheckLoop()
     keyMenusPage('-', " RELEASED.", 4, []
                  {  if (lv_obj_is_visible(voltageCurrentCalibration)) {
                     lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);} });
+    if ((Tabs::getCurrentPage() == 3))
+    {
+        int a = -1;
+        keyMenus('7', " RELEASED.", [&]
+                 { a = 7; });
+        keyMenus('8', " RELEASED.", [&]
+                 { a = 8; });
+        keyMenus('9', " RELEASED.", [&]
+                 { a = 9; });
 
+        keyMenus('4', " RELEASED.", [&]
+                 { a = 4; });
+        keyMenus('5', " RELEASED.", [&]
+                 { a = 5; });
+        keyMenus('6', " RELEASED.", [&]
+                 { a = 6; });
+
+        keyMenus('3', " RELEASED.", [&]
+                 { a = 3; });
+        keyMenus('2', " RELEASED.", [&]
+                 { a = 2; });
+        keyMenus('1', " RELEASED.", [&]
+                 { a = 1; });
+        keyMenus('0', " RELEASED.", [&]
+                 { a = 0; });
+
+
+        if (a >= 0)
+        {
+            DataArrays loadedData = PowerSupply.LoadDataArrays("myDataKey");
+            /*Get the first child of the button which is the label and change its text*/
+            // lv_obj_t *label = lv_obj_get_child(btn, 0);
+            // lv_label_set_text_fmt(label, "");
+            PowerSupply.Voltage.SetUpdate(loadedData.doubles[a * 2]);
+            PowerSupply.Current.SetUpdate(loadedData.doubles[a * 2 + 1]);
+            Tabs::setCurrentPage(2);
+            Serial.printf("\n ****** Load from : %i ", a);
+            myTone(NOTE_A4, 50, true);
+        }
+    }
     if ((Tabs::getCurrentPage() == 2) || (Tabs::getCurrentPage() == 4 && lv_obj_is_visible(voltageCurrentCalibration)))
     {
         keyMenus('7', " RELEASED.", []
@@ -3073,7 +3141,7 @@ void MiscPriority()
         pinMode(PowerSupply.CCCVPin, INPUT_PULLDOWN);
         digitalWrite(PowerSupply.CCCVPin, INPUT_PULLDOWN);
         PowerSupply.turn(SWITCH::OFF);
-        PowerSupply.Current.SetUpdate(-0.001 - PowerSupply.Current.adjOffset);
+        PowerSupply.Current.SetUpdate(-0.001 - 0 * PowerSupply.Current.adjOffset);
     }
     // LV_LOG_USER("%i",digitalRead(PowerSupply.CCCVPin));
     // if (g_wifiConnection)
