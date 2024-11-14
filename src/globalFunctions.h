@@ -1560,9 +1560,6 @@ static void mem_btn_event_cb(lv_event_t *e)
     if (code == LV_EVENT_RELEASED)
     {
         DataArrays loadedData = PowerSupply.LoadDataArrays("myDataKey");
-        /*Get the first child of the button which is the label and change its text*/
-        // lv_obj_t *label = lv_obj_get_child(btn, 0);
-        // lv_label_set_text_fmt(label, "");
         PowerSupply.Voltage.SetUpdate(loadedData.doubles[a * 2]);
         PowerSupply.Current.SetUpdate(loadedData.doubles[a * 2 + 1]);
         Tabs::setCurrentPage(2);
@@ -1578,13 +1575,15 @@ static void mem_btn_event_cb(lv_event_t *e)
         Serial.printf("\n ****** Saved to : %i ", a);
         PowerSupply.SaveDataArrays("myDataKey", myData);
         myTone(NOTE_A4, 150, true);
-        lvglChartIsBusy = true;
-        lvglIsBusy = true;
-        lv_obj_clean(PowerSupply.page[3]);
-        Utility_tabview(PowerSupply.page[3]);
-        // delay(100);
-        lvglChartIsBusy = false;
-        lvglIsBusy = false;
+
+        lv_obj_t *labelV = lv_obj_get_child(btn, 0);
+        // Serial.println(lv_label_get_text(labelV));
+        lv_label_set_text_fmt(labelV, "");
+        lv_obj_t *labelI = lv_obj_get_child(labelV, 0);
+        lv_label_set_text_fmt(labelI, "");
+
+        lv_label_set_text_fmt(labelV, "%+08.4fV", myData.doubles[a * 2]);
+        lv_label_set_text_fmt(labelI, "%+08.4fA", (myData.doubles[a * 2 + 1]));
     }
 }
 void Utility_tabview(lv_obj_t *parent)
@@ -1998,20 +1997,19 @@ void keyCheckLoop()
     if ((Tabs::getCurrentPage() == 3))
     {
         int a = -1;
-        keyMenus('7', " RELEASED.", [&]
-                 { a = 7; });
-        keyMenus('8', " RELEASED.", [&]
-                 { a = 8; });
+
         keyMenus('9', " RELEASED.", [&]
                  { a = 9; });
-
-        keyMenus('4', " RELEASED.", [&]
-                 { a = 4; });
-        keyMenus('5', " RELEASED.", [&]
-                 { a = 5; });
+        keyMenus('8', " RELEASED.", [&]
+                 { a = 8; });
+        keyMenus('7', " RELEASED.", [&]
+                 { a = 7; });
         keyMenus('6', " RELEASED.", [&]
                  { a = 6; });
-
+        keyMenus('5', " RELEASED.", [&]
+                 { a = 5; });
+        keyMenus('4', " RELEASED.", [&]
+                 { a = 4; });
         keyMenus('3', " RELEASED.", [&]
                  { a = 3; });
         keyMenus('2', " RELEASED.", [&]
@@ -2021,20 +2019,64 @@ void keyCheckLoop()
         keyMenus('0', " RELEASED.", [&]
                  { a = 0; });
 
-
         if (a >= 0)
         {
             DataArrays loadedData = PowerSupply.LoadDataArrays("myDataKey");
-            /*Get the first child of the button which is the label and change its text*/
-            // lv_obj_t *label = lv_obj_get_child(btn, 0);
-            // lv_label_set_text_fmt(label, "");
             PowerSupply.Voltage.SetUpdate(loadedData.doubles[a * 2]);
             PowerSupply.Current.SetUpdate(loadedData.doubles[a * 2 + 1]);
             Tabs::setCurrentPage(2);
-            Serial.printf("\n ****** Load from : %i ", a);
-            myTone(NOTE_A4, 50, true);
+            Serial.printf("\n ****** Load from memory %i ", a);
+            myTone(NOTE_A5, 50);
+        }
+
+        keyMenus('0', " HOLD.", [&]
+                 { a = 0; });
+        keyMenus('1', " HOLD.", [&]
+                 { a = 1; });
+        keyMenus('2', " HOLD.", [&]
+                 { a = 2; });
+        keyMenus('3', " HOLD.", [&]
+                 { a = 3; });
+        keyMenus('4', " HOLD.", [&]
+                 { a = 4; });
+        keyMenus('5', " HOLD.", [&]
+                 { a = 5; });
+        keyMenus('6', " HOLD.", [&]
+                 { a = 6; });
+        keyMenus('7', " HOLD.", [&]
+                 { a = 7; });
+        keyMenus('8', " HOLD.", [&]
+                 { a = 8; });
+        keyMenus('9', " HOLD.", [&]
+                 { a = 9; });
+
+        if (a >= 0)
+        {
+
+            DataArrays myData = PowerSupply.LoadDataArrays("myDataKey");
+            myData.doubles[a * 2] = PowerSupply.Voltage.adjValue;     // Example values
+            myData.doubles[a * 2 + 1] = PowerSupply.Current.adjValue; // Example values
+            Serial.printf("\n ****** Saved to memory %i ", a);
+            PowerSupply.SaveDataArrays("myDataKey", myData);
+            myTone(NOTE_A4, 150);
+
+            // lv_obj_add_state(btn, LV_STATE_CHECKED);
+            lv_obj_t *tab = lv_obj_get_child(lv_obj_get_child(lv_obj_get_child(PowerSupply.page[3], 0), 1), 0);
+            uint32_t child_count = lv_obj_get_child_cnt(tab);
+            // Serial.println(child_count);
+            lv_obj_t *btn = lv_obj_get_child(tab, a * 2 + 0);
+            // Serial.printf("lv_label_get_text(btn) : %s ", lv_label_get_text( lv_obj_get_child(btn,0)));
+            lv_obj_t *labelV = lv_obj_get_child(btn, 0);
+            // Serial.println(lv_label_get_text(labelV));
+            // lv_label_set_text_fmt(labelV, "");
+            lv_obj_t *labelI = lv_obj_get_child(labelV, 0);
+            // lv_label_set_text_fmt(labelI, "");
+
+            lv_label_set_text_fmt(labelV, "%+08.4fV", myData.doubles[a * 2]);
+            lv_label_set_text_fmt(labelI, "%+08.4fA", (myData.doubles[a * 2 + 1]));
         }
     }
+
     if ((Tabs::getCurrentPage() == 2) || (Tabs::getCurrentPage() == 4 && lv_obj_is_visible(voltageCurrentCalibration)))
     {
         keyMenus('7', " RELEASED.", []
