@@ -7,6 +7,7 @@
 #include "input_device.h"
 #include "setting_menu.h"
 #include <string>
+#include <math.h>
 
 /**********************
  *   PROTOTYPES
@@ -1588,7 +1589,7 @@ static void mem_btn_event_cb(lv_event_t *e)
 }
 void Utility_tabview(lv_obj_t *parent)
 {
-    lv_obj_set_size(parent, 320, 209);
+    lv_obj_set_size(parent, 320, 216);
 
     static lv_style_t style_utility;
     static lv_style_t style_btn;
@@ -1613,6 +1614,8 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_add_event_cb(lv_tabview_get_content(tabview), scroll_begin_event, LV_EVENT_SCROLL_BEGIN, NULL);
 
     // lv_obj_set_style_bg_color(tabview, lv_palette_darken(LV_PALETTE_DEEP_PURPLE, 3), 0);
+
+    lv_obj_set_style_pad_all(tabview, 0, LV_PART_MAIN);
 
     lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tabview);
     // lv_obj_set_style_bg_color(tab_btns, lv_palette_darken(LV_PALETTE_GREY, 3), 0);
@@ -1642,32 +1645,28 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_t *labelI;
     int8_t yOff = 32, verOff = 125, yStart = -2, xStart = 38;
     DataArrays loadedData = PowerSupply.LoadDataArrays("myDataKey");
+    lv_obj_set_flex_flow(tab1, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_column(tab1, 13, LV_PART_MAIN); // 10px horizontal gap
+    lv_obj_set_style_pad_row(tab1, 9, LV_PART_MAIN);     // 10px vertical gap
+
+    // lv_obj_set_flex_align(tab1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_flex_align(tab1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
     for (int i = 0; i < 10; i++)
     {
 
         btn = lv_btn_create(tab1);
-        lv_obj_set_pos(btn, xStart + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
-        lv_obj_set_size(btn, 92, 29);
+        lv_obj_set_style_pad_all(btn, 0, LV_PART_MAIN);
+        // lv_obj_set_pos(btn, xStart + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
+        lv_obj_set_size(btn, 89, 34);
 
         lv_obj_add_event_cb(btn, mem_btn_event_cb, LV_EVENT_ALL, NULL);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
         lv_obj_add_style(btn, &style_btn, LV_STATE_DEFAULT);
         btn->user_data = (void *)i;
 
-        label = lv_label_create(tab1);
-        lv_label_set_text_fmt(label, "%i", i);
-        lv_obj_remove_style_all(label);
-        lv_obj_add_style(label, &style_utility, LV_STATE_DEFAULT);
-        lv_obj_set_style_text_font(label, &graph_R_8, 0);
-        lv_obj_set_pos(label, -8 + xStart + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
-        lv_obj_add_flag(label, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+        labelV = lv_label_create(btn);
 
-        labelV = lv_label_create(tab1);
-        uint16_t adjValue;
-        // PowerSupply.EEPROMwrite(90 + i * 4, i);
-        // PowerSupply.EEPROMread(90 + i * 4, adjValue);
-        // lv_obj_remove_style_all(labelV);
-        // lv_obj_add_style(labelV, &style_utility, LV_STATE_DEFAULT);
         lv_label_set_text_fmt(labelV, "%+08.4fV", loadedData.doubles[i * 2]);
         lv_obj_align(labelV, LV_ALIGN_CENTER, 0, -6);
         lv_obj_add_flag(labelV, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
@@ -1676,9 +1675,29 @@ void Utility_tabview(lv_obj_t *parent)
         lv_label_set_text_fmt(labelI, "%+08.4fA", (loadedData.doubles[i * 2 + 1]));
         lv_obj_align(labelI, LV_ALIGN_BOTTOM_MID, 0, 14);
 
-        lv_obj_set_parent(labelV, btn);
+        // lv_obj_set_parent(labelV, btn);
+
+        label = lv_label_create(btn);
+        lv_label_set_text_fmt(label, "%i", i);
+        lv_obj_remove_style_all(label);
+        lv_obj_add_style(label, &style_utility, LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(label, &graph_R_8, 0);
+        // lv_obj_set_pos(label, -8 + xStart + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
+        // lv_obj_add_flag(label, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+        lv_obj_align(label, LV_ALIGN_OUT_TOP_LEFT, -8, 2);
     }
 
+    // for (int i = 0; i < 10; i++)
+    // {
+    //     label = lv_label_create(btn);
+    //     lv_label_set_text_fmt(label, "%i", i);
+    //     // lv_obj_remove_style_all(label);
+    //     lv_obj_add_style(label, &style_utility, LV_STATE_DEFAULT);
+    //     lv_obj_set_style_text_font(label, &graph_R_8, 0);
+    //     // lv_obj_set_pos(label, -8 + xStart + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
+    //     lv_obj_add_flag(label, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+    //      lv_obj_align(label, LV_ALIGN_OUT_TOP_LEFT, -4, -4);
+    // }
     lv_obj_set_style_pad_ver(tabview, 0, LV_PART_ITEMS);
     lv_obj_t *table = lv_table_create(tab4);
     lv_obj_set_pos(table, -4, -4);
@@ -2656,7 +2675,7 @@ void trackLoopExecution(const char *callerName)
     if ((currentTime - lastLoopTime) >= loopInterval)
     {
         // Print the caller's name along with the loop count and time
-        Serial.printf("\n%s: Loop Count: %5.0f @ %07.2f seconds", callerName, loopCount * 1000.0 / loopInterval, currentTime / 1000.0);
+        Serial.printf("\n%s: Loop Count: %5.0f @ %07.2f seconds.%c", callerName, loopCount * 1000.0 / loopInterval, currentTime / 1000.0, keyChar);
         lastLoopTime = currentTime;
         loopCount = 0;
         // Serial.printf("\n%i", digitalRead(PowerSupply.CCCVPin));
@@ -2782,8 +2801,10 @@ void DACInterval(unsigned long interval)
 
 // **Helper Functions**
 
-void handleCalibrationPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
+void handleCalibrationPage()
 {
+    static int32_t encoder1_last_value = 0;
+    static int32_t encoder2_last_value = 0;
     if (lv_obj_is_visible(voltageCurrentCalibration))
     {
         static int32_t cursor_pos = 0;
@@ -2851,8 +2872,11 @@ void handleCalibrationPage(int32_t &encoder1_last_value, int32_t &encoder2_last_
     }
 }
 
-void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
+void handleGraphPage()
 {
+
+    static int32_t encoder1_last_value = 0;
+    static int32_t encoder2_last_value = 0;
     // Handle horizontal scrolling and zooming with encoder 2
     if (encoder2_last_value != encoder2_value)
     {
@@ -2934,6 +2958,9 @@ void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 }
 void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 {
+
+    // static int32_t encoder1_last_value = 0;
+    // static int32_t encoder2_last_value = 0;
     bool histogramUpdated = false; // Flag to indicate if histogram needs to be reset
 
     // **Handle Vertical Shift/Zoom with Encoder 1**
@@ -3099,8 +3126,10 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
             PowerSupply.Current.hist.Reset();
     }
 }
-void handleUtilityPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
+void handleUtilityPage()
 {
+    static int32_t encoder1_last_value = 0;
+    static int32_t encoder2_last_value = 0;
     // int32_t  encoder2_last_value;
 
     // **Handle Vertical Shift/Zoom with Encoder 1**
@@ -3126,7 +3155,7 @@ void handleUtilityPage(int32_t &encoder1_last_value, int32_t &encoder2_last_valu
 
 void managePageEncoderInteraction()
 {
-    // Variables to store the last encoder values
+    // // Variables to store the last encoder values
     static int32_t encoder1_last_value = 0;
     static int32_t encoder2_last_value = 0;
 
@@ -3138,15 +3167,15 @@ void managePageEncoderInteraction()
         break;
 
     case 1: // Graph Page
-        handleGraphPage(encoder1_last_value, encoder2_last_value);
+        handleGraphPage();
         break;
 
     case 3:
-        handleUtilityPage(encoder1_last_value, encoder2_last_value);
+        handleUtilityPage();
         break;
 
     case 4: // Calibration Page
-        handleCalibrationPage(encoder1_last_value, encoder2_last_value);
+        handleCalibrationPage();
         break;
 
     default:
@@ -3189,4 +3218,168 @@ void MiscPriority()
     // if (g_wifiConnection)
     // ArduinoOTA.handle();
     // Serial.printf("3 \n");
+}
+
+// Waveform functions
+double sineWave(double t)
+{
+    return sin(2.0 * PI * t);
+}
+
+double squareWave(double t)
+{
+    return (t < 0.5) ? 1.0 : -1.0;
+}
+
+double triangularWave(double t)
+{
+    return (t < 0.5) ? (4.0 * t - 1.0) : (-4.0 * t + 3.0);
+}
+
+double pulseWave(double t)
+{
+    double dutyCycle = 0.1;
+    return (t < dutyCycle) ? 1.0 : -1.0;
+}
+
+double sawtoothWave(double t)
+{
+    return 2.0 * t - 1.0;
+}
+
+double invertedSawtoothWave(double t)
+{
+    return -2.0 * t + 1.0;
+}
+
+double exponentialDecay(double t)
+{
+    return exp(-5.0 * t) * 2.0 - 1.0; // Adjusted to range from -1 to 1
+}
+
+double randomNoise(double t)
+{
+    return random(-1000, 1001) / 1000.0;
+}
+
+double cosineWave(double t)
+{
+    return cos(2.0 * PI * t);
+}
+
+double halfSineWave(double t)
+{
+    return sin(PI * t);
+}
+
+double fullWaveRectifiedSine(double t)
+{
+    return fabs(sin(2.0 * PI * t));
+}
+
+double stepFunction(double t)
+{
+    return (t < 0.5) ? -1.0 : 1.0;
+}
+
+double parabolicWave(double t)
+{
+    return -4.0 * (t - 0.5) * (t - 0.5) + 1.0;
+}
+
+double gaussianPulse(double t)
+{
+    return exp(-((t - 0.5) * (t - 0.5)) * 32.0);
+}
+
+double sincFunction(double t)
+{
+    double x = (t - 0.5) * 8.0;
+    return (x == 0.0) ? 1.0 : sin(PI * x) / (PI * x);
+}
+
+// Additional waveforms
+double exponentialRise(double t)
+{
+    return (exp(5.0 * t) - 1.0) / (exp(5.0) - 1.0) * 2.0 - 1.0;
+}
+
+double logarithmicCurve(double t)
+{
+    return log10(t * 9.0 + 1.0) * 2.0 - 1.0;
+}
+
+double pwmWave(double t)
+{
+    double dutyCycle = 0.3; // Adjust duty cycle as needed
+    return (fmod(t * 3.0, 1.0) < dutyCycle) ? 1.0 : -1.0;
+}
+
+double linearChirp(double t)
+{
+    double f0 = 0.0; // Start frequency
+    double f1 = 5.0; // End frequency
+    double beta = f1 - f0;
+    return sin(2.0 * PI * (f0 * t + (beta / 2.0) * t * t));
+}
+
+// Function pointer type
+typedef double (*WaveformFunction)(double);
+
+void functionGenerator()
+{
+
+    static const unsigned long periodTotal = 10000000UL;     // 10 seconds in microseconds
+    static const unsigned long periodWave = periodTotal / 3; // ~3.333 seconds per period
+    static unsigned long startTime = micros();
+
+    unsigned long currentTime = micros();
+    unsigned long elapsedTime = currentTime - startTime;
+
+    // Array of waveform functions
+    WaveformFunction waveforms[] = {
+        sineWave,
+        squareWave,
+        triangularWave,
+        pulseWave,
+        sawtoothWave,
+        invertedSawtoothWave,
+        exponentialDecay,
+        exponentialRise,
+        logarithmicCurve,
+        pwmWave,
+        linearChirp,
+        cosineWave,
+        halfSineWave,
+        fullWaveRectifiedSine,
+        stepFunction,
+        parabolicWave,
+        gaussianPulse,
+        sincFunction,
+        randomNoise // Moved random noise to the end
+                    // Add more waveform functions here
+    };
+
+    int numWaveforms = sizeof(waveforms) / sizeof(waveforms[0]);
+    unsigned long totalDuration = numWaveforms * periodTotal;
+    unsigned long timeInTotal = elapsedTime % totalDuration;
+
+    int currentWaveformIndex = timeInTotal / periodTotal;
+    unsigned long timeInWave = timeInTotal % periodTotal;
+    unsigned long timeInPeriod = timeInWave % periodWave;
+    double t = (double)timeInPeriod / (double)periodWave;
+
+    double amplitude = 16.0;
+    double offset = 16.0;
+
+    // Get the current waveform function
+    WaveformFunction currentWaveform = waveforms[currentWaveformIndex];
+    double value = currentWaveform(t);
+    double outputValue = value * amplitude + offset;
+
+    // Print the output value
+    Serial.println(outputValue);
+
+    // Reduce delay to improve smoothness
+    delay(1);
 }

@@ -95,4 +95,5 @@ void loop()
   // Serial.printf("\nVoltage.encoder.getCount %l",PowerSupply.Voltage.encoder.getCount());
   // KeyCheckInterval(0); // moved to adc taskse
   // delay(10);
+  
 }
