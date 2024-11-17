@@ -267,15 +267,17 @@ void setupPowerSupply()
     // Serial.println("\nSetup done");
     // PowerSupply.turn(SWITCH::ON);
 
- 
-
     PowerSupply.Voltage.SetUpdate(PowerSupply.Voltage.adjValue);
     PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue);
-    DataArrays myData;
+    // MemArray mem;
     // for (int i = 0; i < 20; ++i)
-        // myData.doubles[i] = i ; // Example values
-
-    // PowerSupply.SaveDataArrays("myDataKey", myData);
+    // {
+    //     // myData.doubles[i] = i;
+    //  mem.memory[i].voltage=0;
+    //  mem.memory[i].current=0;
+     
+    // }
+    // PowerSupply.SaveMemory("myDataKey", mem);
 }
 
 // Setup the calibration page

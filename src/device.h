@@ -19,28 +19,29 @@
 #define DAC_VOLTAGE CHANNEL_D
 #define DAC_CURRENT CHANNEL_B
 
-
 // #pragma pack(push, 1)
-struct DataArrays {
+struct DataArrays
+{
     double doubles[20];
     bool bools[20];
 };
 // #pragma pack(pop)
 
-#pragma pack(push, 1)
-struct DataPoint {
+// #pragma pack(push, 1)
+struct mem
+{
     double voltage;
     double current;
     bool V_isLocked;
     bool I_isLocked;
 };
 
-struct DataArray {
-    DataPoint dataPoints[20];
+struct MemArray
+{
+    mem memory[10];
 };
-#pragma pack(pop)
 
-
+// #pragma pack(pop)
 
 extern lv_disp_t *lv_disp;
 extern volatile bool adcDataReady;
@@ -330,6 +331,9 @@ public:
     const byte CCCVPin = 12;
 
     SettingParameters settingParameters;
+
+    mem memory[10];
+
     /***************
      * @param pin MCU interrupt pin for ADC drdy
      * @param func interrupt routine
@@ -360,7 +364,6 @@ public:
     void LoadCalibrationData(void);
     void LoadSetting(void);
     void SaveSetting(void);
-    
 
     void SaveCalibData(const String &key, const Calibration &data);
     Calibration LoadCalibData(const String &key);
@@ -369,8 +372,11 @@ public:
     void SaveSettingData(const String &key, const SettingParameters &data);
     SettingParameters LoadSettingData(const String &key);
 
- void SaveDataArrays(const String &key, const DataArrays &data);
-DataArrays LoadDataArrays(const String &key);
+    // void SaveDataArrays(const String &key, const DataArrays &data);
+    void SaveMemory(const String &key, const MemArray &data);
+    // DataArrays LoadDataArrays(const String &key);
+    MemArray LoadMemory(const String &key);
+    
 
     void ResetStats(void)
     {

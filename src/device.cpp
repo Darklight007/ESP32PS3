@@ -304,20 +304,33 @@ void Device::SaveSetting(void)
     // Serial.print("\nSetting saved.");
 }
 
-void Device::SaveDataArrays(const String &key, const DataArrays &data) {
+// void Device::SaveDataArrays(const String &key, const DataArrays &data) {
+//     StoreMem.begin("my-app", false);
+//     StoreMem.putBytes(key.c_str(), &data, sizeof(DataArrays));
+//     StoreMem.end();
+// }
+
+// DataArrays Device::LoadDataArrays(const String &key) {
+//     DataArrays data;
+//     StoreMem.begin("my-app", false);
+//     StoreMem.getBytes(key.c_str(), &data, sizeof(DataArrays));
+//     StoreMem.end();
+//     return data;
+// }
+
+void Device::SaveMemory(const String &key, const MemArray &data) {
     StoreMem.begin("my-app", false);
-    StoreMem.putBytes(key.c_str(), &data, sizeof(DataArrays));
+    StoreMem.putBytes(key.c_str(), &data, sizeof(MemArray));
     StoreMem.end();
 }
 
-DataArrays Device::LoadDataArrays(const String &key) {
-    DataArrays data;
+MemArray Device::LoadMemory(const String &key) {
+    MemArray data;
     StoreMem.begin("my-app", false);
-    StoreMem.getBytes(key.c_str(), &data, sizeof(DataArrays));
+    StoreMem.getBytes(key.c_str(), &data, sizeof(MemArray));
     StoreMem.end();
     return data;
 }
-
 
 
 

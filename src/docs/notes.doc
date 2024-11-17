@@ -293,3 +293,16 @@ g = lv_group_create();
     lv_group_add_obj(g, cont);
 
     lv_indev_set_group(my_indev, g);
+
+    //    lv_obj_t *label_Vset;
+//     label_Vset = lv_label_create(tab1);
+//     lv_obj_set_style_text_font(label_Vset, &graph_R_16, 0);
+//     lv_label_set_text_fmt(label_Vset, "V-Set:%+8.4f", 32.7675);
+//     lv_obj_set_pos(label_Vset, 150, 160);
+    
+//     lv_obj_t* label_Iset = lv_label_create(label_Vset);
+//     lv_obj_set_style_text_font(label_Iset, &graph_R_16, 0);
+//     lv_label_set_text_fmt(label_Iset, "I-Set:%+8.4f", +6.5535);
+//     lv_obj_align(label_Iset, LV_ALIGN_BOTTOM_LEFT, 0, 16);
+    //  lv_obj_set_pos(label, 150, 160);
+    
