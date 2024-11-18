@@ -25,10 +25,53 @@ void trackLoopExecution(const char *);
 void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value);
 void Utility_tabview(lv_obj_t *parent);
 lv_obj_t *find_btn_by_tag(lv_obj_t *parent, uint32_t tag);
+
+#define PI 3.14159265358979323846
+
+// Function prototypes for waveform functions
+double sineWave(double t);
+double squareWave(double t);
+double triangularWave(double t);
+double pulseWave(double t);
+double sawtoothWave(double t);
+double invertedSawtoothWave(double t);
+double exponentialDecay(double t);
+double exponentialRise(double t);
+double logarithmicCurve(double t);
+double pwmWave(double t);
+double linearChirp(double t);
+double cosineWave(double t);
+double halfSineWave(double t);
+double fullWaveRectifiedSine(double t);
+double stepFunction(double t);
+double parabolicWave(double t);
+double gaussianPulse(double t);
+double sincFunction(double t);
+double randomNoise(double t);
+
+// Function pointer type
+typedef double (*WaveformFunction)(double);
+
+// Struct for waveform function and name
+typedef struct
+{
+    const char *name;
+    WaveformFunction function;
+} Waveform;
+
+// Array of waveform structs (declaration)
+extern Waveform waveforms[];
+
+// Number of waveforms
+extern int numWaveforms;
+
+// Function prototype for the function generator
+void functionGenerator(void);
+
 /**********************
  *   GLOBAL VARIABLES
  **********************/
-
+lv_obj_t *table_signals;
 // volatile long chartInterruptCounter;
 int globalSliderXValue;
 int32_t encoder1_value = 0, encoder2_value = 0;
@@ -1610,6 +1653,76 @@ static void mem_btn_event_cb(lv_event_t *e)
     if (code == LV_EVENT_LONG_PRESSED)
         saveMemory(btn);
 }
+//**********************************************************************************/
+// Define the style for the selected row
+static uint16_t selected_row = 0xFFFF; // Initialize to an invalid row
+
+// Event callback to handle row selection
+static void table_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+    {
+        lv_obj_t *table = lv_event_get_target(e);
+        uint16_t row, col;
+        lv_table_get_selected_cell(table, &row, &col);
+        selected_row = row;
+        lv_obj_invalidate(table); // Redraw the table to apply changes
+    }
+}
+
+// Custom draw callback for the table
+static void table_draw_cell_event_cb(lv_event_t *e)
+{
+    lv_obj_draw_part_dsc_t *draw_part_dsc = (lv_obj_draw_part_dsc_t *)lv_event_get_param(e);
+
+    if (draw_part_dsc->part == LV_PART_ITEMS)
+    {
+        lv_obj_t *table = lv_event_get_target(e);
+        uint32_t id = draw_part_dsc->id;
+        uint16_t col_cnt = lv_table_get_col_cnt(table);
+
+        // Calculate row and column from cell id
+        uint16_t row = id / col_cnt;
+        uint16_t col = id % col_cnt;
+
+        if (row == selected_row)
+        {
+            draw_part_dsc->rect_dsc->bg_color = lv_color_hex(0x0000FF); // Highlight color
+            draw_part_dsc->rect_dsc->bg_opa = LV_OPA_COVER;
+        }
+    }
+}
+
+// Function to select the next row
+void select_next_row(lv_obj_t * table)
+{
+    uint16_t row_cnt = lv_table_get_row_cnt(table);
+    if(selected_row < row_cnt - 1)
+    {
+        selected_row++;
+    }
+    else
+    {
+        selected_row = 0; // Loop back to the first row
+    }
+    lv_obj_invalidate(table);
+}
+
+// Function to select the previous row
+void select_previous_row(lv_obj_t * table)
+{
+    uint16_t row_cnt = lv_table_get_row_cnt(table);
+    if(selected_row > 0)
+    {
+        selected_row--;
+    }
+    else
+    {
+        selected_row = row_cnt - 1; // Loop back to the last row
+    }
+    lv_obj_invalidate(table);
+}
+
 
 void Utility_tabview(lv_obj_t *parent)
 {
@@ -1724,8 +1837,72 @@ void Utility_tabview(lv_obj_t *parent)
     lv_label_set_text_fmt(label_Iset, "I-Set:%+08.4f", +6.5535);
     lv_obj_align(label_Iset, LV_ALIGN_BOTTOM_LEFT, 0, 18);
 
-    // lv_obj_set_pos(label, 0, 0);
+    // Tab 2 ****************************************************************************************************************************
 
+    lv_obj_set_style_pad_ver(tabview, 0, LV_PART_ITEMS);
+    table_signals = lv_table_create(tab2);
+    lv_obj_set_pos(table_signals, 3, 3);
+    // lv_obj_clear_flag(tab2, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_ver(table_signals, 5, LV_PART_ITEMS);
+    lv_obj_set_style_pad_hor(table_signals, 5, LV_PART_ITEMS);
+    lv_obj_set_style_pad_all(tab2, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(table_signals, 0, LV_PART_MAIN);
+
+
+    static lv_style_t style_func;
+    lv_style_init(&style_func);
+    lv_style_set_text_font(&style_func, &lv_font_montserrat_12);
+
+    lv_obj_remove_style(table_signals, &style_func, LV_STATE_DEFAULT);
+    lv_obj_add_style(table_signals, &style_func, LV_STATE_DEFAULT);
+
+    // Set positions, styles, and flags as needed
+    // Initialize the table cells
+    for (int i = 0; i < numWaveforms; i++)
+    {
+        lv_table_set_cell_value_fmt(table_signals, i, 0, "%i", i);
+        lv_table_set_cell_value_fmt(table_signals, i, 1, "%s", waveforms[i].name);
+    }
+    // Set column widths
+    lv_table_set_col_width(table_signals, 0, 26);
+    lv_table_set_col_width(table_signals, 1, 160);
+    // Add the event callbacks
+    lv_obj_add_event_cb(table_signals, table_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(table_signals, table_draw_cell_event_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
+
+    if (0)
+    {
+        // create_styles();
+        lv_obj_set_style_pad_ver(tabview, 0, LV_PART_ITEMS);
+        lv_obj_t *table_signals = lv_table_create(tab2);
+        lv_obj_set_pos(table_signals, 3, 3);
+        lv_obj_clear_flag(tab2, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_pad_ver(table_signals, 0, LV_PART_ITEMS);
+        lv_obj_set_style_pad_hor(table_signals, 0, LV_PART_ITEMS);
+        lv_obj_set_style_pad_all(tab2, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(table_signals, 0, LV_PART_MAIN);
+        // lv_obj_add_event_cb(table_signals, change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+        for (int i = 0; i < numWaveforms; i++)
+        {
+            lv_table_set_cell_value_fmt(table_signals, i, 0, "%i", i);
+            // lv_table_set_cell_value_fmt(table_signals, i, 1, "%06.3fV", i * 2000.0 * 3.5555 / 2000.0);
+            lv_table_set_cell_value_fmt(table_signals, i, 1, "%s", waveforms[i].name);
+            // lv_table_set_cell_value_fmt(table_signals, i, 2, "%06.3fA", i * 2000.0 * 3.5555 / 10000.0);
+        }
+
+        lv_obj_set_height(table_signals, 172);
+        lv_obj_set_width(table_signals, 200);
+        lv_table_set_col_width(table_signals, 0, 26);
+        lv_table_set_col_width(table_signals, 1, 160);
+        // lv_table_set_col_width(table_signals, 2, 80);
+        // Add the event callbacks
+        lv_obj_add_event_cb(table_signals, table_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+        lv_obj_add_event_cb(table_signals, table_draw_cell_event_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
+    }
+
+    // Tab 4 ****************************************************************************************************************************
+    // lv_obj_set_pos(label, 0, 0);
     lv_obj_set_style_pad_ver(tabview, 0, LV_PART_ITEMS);
     lv_obj_t *table = lv_table_create(tab4);
     lv_obj_set_pos(table, -4, -4);
@@ -1742,7 +1919,10 @@ void Utility_tabview(lv_obj_t *parent)
     {
         lv_table_set_cell_value_fmt(table, i, 0, "%0i", i);
         lv_table_set_cell_value_fmt(table, i, 1, "%06.3fV", i * 2000.0 * 3.5555 / 2000.0);
+
         lv_table_set_cell_value_fmt(table, i, 2, "%06.3fA", i * 2000.0 * 3.5555 / 10000.0);
+
+        //  lv_list_add_text(waveform_list, waveforms[i].name);
     }
 
     static lv_style_t style_stats;
@@ -1929,12 +2109,10 @@ void keyCheckLoop()
                      PowerSupply.Voltage.hist.Reset(); });
 
     keyMenusPage('+', " RELEASED.", 1, [&]
-                
-                {
-                   
-                     
-                     
-                });
+
+                 {
+
+                 });
 
     keyMenusPage('V', " RELEASED.", 0, []
                  {
@@ -3369,12 +3547,42 @@ double linearChirp(double t)
     return sin(2.0 * PI * (f0 * t + (beta / 2.0) * t * t));
 }
 
-// Function pointer type
-typedef double (*WaveformFunction)(double);
+// // Function pointer type
+// typedef double (*WaveformFunction)(double);
 
+// // Struct to hold a waveform function and its name
+// typedef struct {
+//     const char* name;
+//     WaveformFunction function;
+// } Waveform;
+
+// Array of waveform structs
+Waveform waveforms[] = {
+    {"Sine Wave", sineWave},
+    {"Square Wave", squareWave},
+    {"Triangular Wave", triangularWave},
+    {"Pulse Wave", pulseWave},
+    {"Sawtooth Wave", sawtoothWave},
+    {"Inverted Sawtooth Wave", invertedSawtoothWave},
+    {"Exponential Decay", exponentialDecay},
+    {"Exponential Rise", exponentialRise},
+    {"Logarithmic Curve", logarithmicCurve},
+    {"PWM Wave", pwmWave},
+    {"Linear Chirp", linearChirp},
+    {"Cosine Wave", cosineWave},
+    {"Half Sine Wave", halfSineWave},
+    {"Full Wave Rectified Sine", fullWaveRectifiedSine},
+    {"Step Function", stepFunction},
+    {"Parabolic Wave", parabolicWave},
+    {"Gaussian Pulse", gaussianPulse},
+    {"Sinc Function", sincFunction},
+    {"Random Noise", randomNoise}
+    // Add more waveform structs here
+};
+
+int numWaveforms = sizeof(waveforms) / sizeof(waveforms[0]);
 void functionGenerator()
 {
-
     static const unsigned long periodTotal = 10000000UL;     // 10 seconds in microseconds
     static const unsigned long periodWave = periodTotal / 3; // ~3.333 seconds per period
     static unsigned long startTime = micros();
@@ -3382,31 +3590,6 @@ void functionGenerator()
     unsigned long currentTime = micros();
     unsigned long elapsedTime = currentTime - startTime;
 
-    // Array of waveform functions
-    WaveformFunction waveforms[] = {
-        sineWave,
-        squareWave,
-        triangularWave,
-        pulseWave,
-        sawtoothWave,
-        invertedSawtoothWave,
-        exponentialDecay,
-        exponentialRise,
-        logarithmicCurve,
-        pwmWave,
-        linearChirp,
-        cosineWave,
-        halfSineWave,
-        fullWaveRectifiedSine,
-        stepFunction,
-        parabolicWave,
-        gaussianPulse,
-        sincFunction,
-        randomNoise // Moved random noise to the end
-                    // Add more waveform functions here
-    };
-
-    int numWaveforms = sizeof(waveforms) / sizeof(waveforms[0]);
     unsigned long totalDuration = numWaveforms * periodTotal;
     unsigned long timeInTotal = elapsedTime % totalDuration;
 
@@ -3418,12 +3601,18 @@ void functionGenerator()
     double amplitude = 16.0;
     double offset = 16.0;
 
-    // Get the current waveform function
-    WaveformFunction currentWaveform = waveforms[currentWaveformIndex];
-    double value = currentWaveform(t);
+    // Get the current waveform struct
+    Waveform currentWaveform = waveforms[currentWaveformIndex];
+    double value = currentWaveform.function(t);
     double outputValue = value * amplitude + offset;
 
-    // Print the output value
+    // Get the current waveform name
+    const char *currentWaveformName = currentWaveform.name;
+
+    // Print the output value and waveform name
+    Serial.print("Waveform: ");
+    Serial.print(currentWaveformName);
+    Serial.print(" - Value: ");
     Serial.println(outputValue);
 
     // Reduce delay to improve smoothness
