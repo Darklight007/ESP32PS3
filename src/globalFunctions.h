@@ -8,6 +8,7 @@
 #include "setting_menu.h"
 #include <string>
 #include <math.h>
+#include "spinbox_pro.h"
 
 /**********************
  *   PROTOTYPES
@@ -1694,10 +1695,10 @@ static void table_draw_cell_event_cb(lv_event_t *e)
 }
 
 // Function to select the next row
-void select_next_row(lv_obj_t * table)
+void select_next_row(lv_obj_t *table)
 {
     uint16_t row_cnt = lv_table_get_row_cnt(table);
-    if(selected_row < row_cnt - 1)
+    if (selected_row < row_cnt - 1)
     {
         selected_row++;
     }
@@ -1709,10 +1710,10 @@ void select_next_row(lv_obj_t * table)
 }
 
 // Function to select the previous row
-void select_previous_row(lv_obj_t * table)
+void select_previous_row(lv_obj_t *table)
 {
     uint16_t row_cnt = lv_table_get_row_cnt(table);
-    if(selected_row > 0)
+    if (selected_row > 0)
     {
         selected_row--;
     }
@@ -1722,7 +1723,6 @@ void select_previous_row(lv_obj_t * table)
     }
     lv_obj_invalidate(table);
 }
-
 
 void Utility_tabview(lv_obj_t *parent)
 {
@@ -1842,12 +1842,14 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_set_style_pad_ver(tabview, 0, LV_PART_ITEMS);
     table_signals = lv_table_create(tab2);
     lv_obj_set_pos(table_signals, 3, 3);
+    int table_signals_width = 186;
+    lv_obj_set_size(table_signals, table_signals_width, 186);
     // lv_obj_clear_flag(tab2, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_pad_ver(table_signals, 5, LV_PART_ITEMS);
-    lv_obj_set_style_pad_hor(table_signals, 5, LV_PART_ITEMS);
+    lv_obj_set_style_pad_left(table_signals, 5, LV_PART_ITEMS);
+    // lv_obj_set_style_pad_hor(table_signals, 5, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(tab2, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(table_signals, 0, LV_PART_MAIN);
-
 
     static lv_style_t style_func;
     lv_style_init(&style_func);
@@ -1864,42 +1866,62 @@ void Utility_tabview(lv_obj_t *parent)
         lv_table_set_cell_value_fmt(table_signals, i, 1, "%s", waveforms[i].name);
     }
     // Set column widths
-    lv_table_set_col_width(table_signals, 0, 26);
-    lv_table_set_col_width(table_signals, 1, 160);
+    lv_table_set_col_width(table_signals, 0, 30);
+    lv_table_set_col_width(table_signals, 1, table_signals_width - 50);
     // Add the event callbacks
     lv_obj_add_event_cb(table_signals, table_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(table_signals, table_draw_cell_event_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
-    if (0)
-    {
-        // create_styles();
-        lv_obj_set_style_pad_ver(tabview, 0, LV_PART_ITEMS);
-        lv_obj_t *table_signals = lv_table_create(tab2);
-        lv_obj_set_pos(table_signals, 3, 3);
-        lv_obj_clear_flag(tab2, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_style_pad_ver(table_signals, 0, LV_PART_ITEMS);
-        lv_obj_set_style_pad_hor(table_signals, 0, LV_PART_ITEMS);
-        lv_obj_set_style_pad_all(tab2, 0, LV_PART_MAIN);
-        lv_obj_set_style_pad_all(table_signals, 0, LV_PART_MAIN);
-        // lv_obj_add_event_cb(table_signals, change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    // lv_obj_t *label_Amplitude;
+    // label_Amplitude = lv_label_create(tab2);
+    // lv_obj_set_style_text_font(label_Amplitude, &lv_font_montserrat_16, 0);
+    // lv_label_set_text_fmt(label_Amplitude, "Amplitude\n%+08.4f", 32.767);
+    // lv_obj_align(label_Amplitude, LV_ALIGN_RIGHT_MID, -5, -70);
+    // label_Amplitude->user_data = (void *)(14);
+    // lv_example_spinbox_1(tab3);
 
-        for (int i = 0; i < numWaveforms; i++)
-        {
-            lv_table_set_cell_value_fmt(table_signals, i, 0, "%i", i);
-            // lv_table_set_cell_value_fmt(table_signals, i, 1, "%06.3fV", i * 2000.0 * 3.5555 / 2000.0);
-            lv_table_set_cell_value_fmt(table_signals, i, 1, "%s", waveforms[i].name);
-            // lv_table_set_cell_value_fmt(table_signals, i, 2, "%06.3fA", i * 2000.0 * 3.5555 / 10000.0);
-        }
+    // lv_obj_t *what;
+    // what = lv_label_create(tab2);
+    // lv_obj_set_style_text_font(label_Frequency, &lv_font_montserrat_16, 0);
+    // lv_label_set_text_fmt(label_Frequency, "Frequency\n%+04.2fHz", 4.31);
+    // lv_obj_align(label_Frequency, LV_ALIGN_RIGHT_MID, -5, -30);
+    // label_Frequency->user_data = (void *)(15);
 
-        lv_obj_set_height(table_signals, 172);
-        lv_obj_set_width(table_signals, 200);
-        lv_table_set_col_width(table_signals, 0, 26);
-        lv_table_set_col_width(table_signals, 1, 160);
-        // lv_table_set_col_width(table_signals, 2, 80);
-        // Add the event callbacks
-        lv_obj_add_event_cb(table_signals, table_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-        lv_obj_add_event_cb(table_signals, table_draw_cell_event_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
-    }
+    /********************
+     * Spinbox
+     ********************/
+
+    int verPad = 42;
+    int verOffset = -50;
+    int XOffset = -5;
+
+    // createSpinbox(tab3, "#FFFFF7 Amplitude:#", -10000, 400000, 6, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0);
+    // createSpinbox(tab3, "#FFFFFF Frequency:#", 0000, 100000, 7, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1);
+    // createSpinbox(tab3, "#FFFFF7 Offset:#", -10000, 400000, 6, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2);
+    // createSpinbox(tab3, "#FFFFF7 Code2:#", -10000, 8388608, 7, 0, LV_ALIGN_RIGHT_MID, XOffset , verOffset + verPad * 3);
+
+    spinbox_pro(tab2, "#FFFFF7 Amplitude:#", 0, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0, 98);
+    spinbox_pro(tab2, "#FFFFF7 Frequency [Hz]:#", 0, 10000, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1, 98);
+    spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -1000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98);
+    spinbox_pro(tab2, "#FFFFF7 Duty [%]:#", 0, 10000, 5, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 3, 98);
+
+
+    // lv_event_send(lv_obj_get_child(tab2, spinboxes.ids[0]), LV_EVENT_PRESSED, NULL);
+
+    // lv_obj_t *vin1_ = lv_obj_get_child(tab2, spinboxes.ids[0]);
+    // lv_obj_t *code1_ = lv_obj_get_child(tab2, spinboxes.ids[1]);
+    // lv_obj_t *vin2_ = lv_obj_get_child(tab2, spinboxes.ids[2]);
+    // lv_obj_t *code2_ = lv_obj_get_child(tab2, spinboxes.ids[3]);
+
+    // lv_spinbox_set_value(vin1_, 1234);
+    // lv_spinbox_set_value(code2_, 1.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2);
+    // lv_spinbox_set_value(vin1_, 10000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_1);
+    // lv_spinbox_set_value(vin2_, 10000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_2);
+
+    // lv_obj_t *lbl_raw = lv_label_create(tab2);
+    // lv_obj_t *lbl_calibValue = lv_label_create(tab2);
+
+    // lv_label_set_text(lbl_raw, "Raw Code:");
 
     // Tab 4 ****************************************************************************************************************************
     // lv_obj_set_pos(label, 0, 0);
@@ -3042,6 +3064,8 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
         lv_spinbox_set_cursor_pos(spinBox, 0);
         lv_spinbox_set_cursor_pos(spinBox, width - cursor_pos);
 
+        Serial.printf("\ndata->cursor_pos: %i", width - cursor_pos);
+
         encoder2_last_value = encoder2_value;
 
         // Adjust spinbox value based on encoder 1
@@ -3389,7 +3413,33 @@ void managePageEncoderInteraction()
     case 2: // main Page
         break;
     case 3:
-        handleUtilityPage(encoder1_last_value, encoder2_last_value);
+        if (!obj_old)
+            handleUtilityPage(encoder1_last_value, encoder2_last_value);
+        else
+        {
+            static int32_t cursor_pos = 0;
+
+            // Check if encoder values have changed
+            if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
+                return;
+
+            // Update cursor position based on encoder 2
+            if (encoder2_last_value < encoder2_value)
+                move_spinbox_cursor_left(obj_old);
+
+            else if (encoder2_last_value > encoder2_value)
+                move_spinbox_cursor_right(obj_old);
+
+            encoder2_last_value = encoder2_value;
+
+            if (encoder1_last_value < encoder1_value)
+            {
+                lv_spinbox_increment(obj_old);
+            }
+            else if (encoder1_last_value > encoder1_value){
+                lv_spinbox_decrement(obj_old);
+            }
+        }
         break;
 
     case 4: // Calibration Page
@@ -3558,12 +3608,12 @@ double linearChirp(double t)
 
 // Array of waveform structs
 Waveform waveforms[] = {
-    {"Sine Wave", sineWave},
-    {"Square Wave", squareWave},
-    {"Triangular Wave", triangularWave},
+    {"Sine ", sineWave},
+    {"Square ", squareWave},
+    {"Triangular", triangularWave},
     {"Pulse Wave", pulseWave},
     {"Sawtooth Wave", sawtoothWave},
-    {"Inverted Sawtooth Wave", invertedSawtoothWave},
+    {"Inverted Sawtooth", invertedSawtoothWave},
     {"Exponential Decay", exponentialDecay},
     {"Exponential Rise", exponentialRise},
     {"Logarithmic Curve", logarithmicCurve},
@@ -3571,7 +3621,7 @@ Waveform waveforms[] = {
     {"Linear Chirp", linearChirp},
     {"Cosine Wave", cosineWave},
     {"Half Sine Wave", halfSineWave},
-    {"Full Wave Rectified Sine", fullWaveRectifiedSine},
+    {"Full Wave Rectified", fullWaveRectifiedSine},
     {"Step Function", stepFunction},
     {"Parabolic Wave", parabolicWave},
     {"Gaussian Pulse", gaussianPulse},
