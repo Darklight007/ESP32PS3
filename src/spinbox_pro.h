@@ -20,6 +20,7 @@ typedef struct
 {
     uint8_t cursor_pos;
     uint8_t digit_count;
+    uint8_t id;
 } SpinboxData;
 
 // Initialize styles
@@ -103,6 +104,35 @@ void set_spinbox_pro_styles(lv_obj_t *spinbox)
 {
 }
 
+lv_obj_t *find_spinbox_with_id(lv_obj_t *parent, uint32_t id)
+{
+    uint32_t child_cnt = lv_obj_get_child_cnt(parent);
+    Serial.printf("\nchild_cnt:%i", child_cnt);
+    for (uint32_t i = 0; i < child_cnt; i++)
+    {
+        lv_obj_t *child = lv_obj_get_child(parent, i);
+        SpinboxData *data = static_cast<SpinboxData *>(lv_obj_get_user_data(child));
+
+        if (data && data->id == id)
+        {
+            Serial.printf("\nlv_obj_get_child:%i id:%i", i, data->id);
+            return child; // Found the child with the matchin  g tag
+        }
+        else if (data)
+            Serial.printf("\nlv_obj_get_child:%i id:%i", i, data->id);
+    }
+    return NULL; // No child with the specified tag found
+}
+
+int32_t get_spinbox_data_by_id(lv_obj_t *parent, uint32_t id)
+{
+    lv_obj_t *obj = find_spinbox_with_id(parent, id);
+    if (obj)
+        return lv_spinbox_get_value(obj);
+    else
+        return NULL;
+}
+
 // Function to move cursor left
 void move_spinbox_cursor_left(lv_obj_t *spinbox)
 {
@@ -143,9 +173,9 @@ void spinbox_del_event_cb(lv_event_t *e)
     }
 }
 
- lv_obj_t * spinbox_pro(lv_obj_t *parent, const char *labelText, int32_t range_min, int32_t range_max,
-                 uint8_t digit_count, uint8_t separator_position, lv_align_t align,
-                 lv_coord_t x_ofs, lv_coord_t y_ofs, lv_coord_t width)
+lv_obj_t *spinbox_pro(lv_obj_t *parent, const char *labelText, int32_t range_min, int32_t range_max,
+                      uint8_t digit_count, uint8_t separator_position, lv_align_t align,
+                      lv_coord_t x_ofs, lv_coord_t y_ofs, lv_coord_t width, uint8_t id)
 {
     init_spinbox_pro_styles();
 
@@ -184,6 +214,7 @@ void spinbox_del_event_cb(lv_event_t *e)
     {
         data->cursor_pos = 0;
         data->digit_count = digit_count - 1;
+        data->id = id;
         lv_obj_set_user_data(spinbox, data);
     }
 
@@ -193,5 +224,5 @@ void spinbox_del_event_cb(lv_event_t *e)
     // Add delete event callback to free user data
     lv_obj_add_event_cb(spinbox, spinbox_del_event_cb, LV_EVENT_DELETE, NULL);
 
-return spinbox;
+    return spinbox;
 }

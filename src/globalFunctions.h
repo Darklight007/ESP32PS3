@@ -1900,11 +1900,10 @@ void Utility_tabview(lv_obj_t *parent)
     // createSpinbox(tab3, "#FFFFF7 Offset:#", -10000, 400000, 6, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2);
     // createSpinbox(tab3, "#FFFFF7 Code2:#", -10000, 8388608, 7, 0, LV_ALIGN_RIGHT_MID, XOffset , verOffset + verPad * 3);
 
-    spinbox_pro(tab2, "#FFFFF7 Amplitude:#", 0, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0, 98);
-    spinbox_pro(tab2, "#FFFFF7 Frequency [Hz]:#", 0, 10000, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1, 98);
-    spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -1000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98);
-    spinbox_pro(tab2, "#FFFFF7 Duty [%]:#", 0, 10000, 5, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 3, 98);
-
+    spinbox_pro(tab2, "#FFFFF7 Amplitude:#", 0, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0, 98, 0);
+    spinbox_pro(tab2, "#FFFFF7 Frequency [Hz]:#", 0, 10000, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1, 98, 1);
+    spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -1000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2);
+    spinbox_pro(tab2, "#FFFFF7 Duty [%]:#", 0, 10000, 5, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 3, 98, 3);
 
     // lv_event_send(lv_obj_get_child(tab2, spinboxes.ids[0]), LV_EVENT_PRESSED, NULL);
 
@@ -3392,6 +3391,136 @@ void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
     }
 }
 
+// Declare external class pointers for the object types you are interested in
+// extern const lv_obj_class_t lv_btn_class;
+// extern const lv_obj_class_t lv_label_class;
+// extern const lv_obj_class_t lv_tabview_class;
+// Add other classes as needed
+
+typedef struct {
+    const lv_obj_class_t * class_p;
+    const char * class_name;
+} class_map_t;
+
+static const class_map_t class_map[] = {
+    { &lv_obj_class, "lv_obj" },
+    { &lv_btn_class, "lv_btn" },
+    { &lv_label_class, "lv_label" },
+    { &lv_img_class, "lv_img" },
+    { &lv_line_class, "lv_line" },
+    { &lv_arc_class, "lv_arc" },
+    { &lv_bar_class, "lv_bar" },
+    { &lv_slider_class, "lv_slider" },
+    { &lv_switch_class, "lv_switch" },
+    { &lv_checkbox_class, "lv_checkbox" },
+    { &lv_list_class, "lv_list" },
+    { &lv_dropdown_class, "lv_dropdown" },
+    { &lv_roller_class, "lv_roller" },
+    { &lv_textarea_class, "lv_textarea" },
+    { &lv_keyboard_class, "lv_keyboard" },
+    { &lv_table_class, "lv_table" },
+    { &lv_tabview_class, "lv_tabview" },
+    // { &lv_tabview_tab_class, "lv_tabview_tab" },
+    { &lv_tileview_class, "lv_tileview" },
+    { &lv_tileview_tile_class, "lv_tileview_tile" },
+    { &lv_led_class, "lv_led" },
+    { &lv_imgbtn_class, "lv_imgbtn" },
+    { &lv_spinner_class, "lv_spinner" },
+    { &lv_msgbox_class, "lv_msgbox" },
+    { &lv_colorwheel_class, "lv_colorwheel" },
+    { &lv_calendar_class, "lv_calendar" },
+    { &lv_meter_class, "lv_meter" },
+    { &lv_chart_class, "lv_chart" },
+    { &lv_canvas_class, "lv_canvas" },
+    { &lv_win_class, "lv_win" },
+    { &lv_spangroup_class, "lv_spangroup" },
+    { &lv_menu_class, "lv_menu" },
+    { &lv_spinbox_class, "lv_spinbox" },
+    { &lv_btnmatrix_class, "lv_btnmatrix" },
+    // Add any other mappings as needed
+    { NULL, NULL } // Sentinel to mark the end of the array
+};
+
+void print_obj_type(lv_obj_t * obj) {
+    const lv_obj_class_t * obj_class = lv_obj_get_class(obj);
+    const class_map_t * map = class_map;
+
+    while (map->class_p != NULL) {
+        if (obj_class == map->class_p) {
+            printf("Object class name: %s\n", map->class_name);
+            return;
+        }
+        map++;
+    }
+
+    printf("Unknown object class\n");
+}
+
+// void print_obj_type(lv_obj_t * obj) {
+//     const lv_obj_class_t * obj_class = lv_obj_get_class(obj);
+
+//     if(obj_class == &lv_btn_class) {
+//         printf("Object is a button\n");
+//     } else if(obj_class == &lv_label_class) {
+//         printf("Object is a label\n");
+//     } else if(obj_class == &lv_tabview_class) {
+//         printf("Object is a tabview\n");
+//     } else {
+//         printf("Unknown object class\n");
+//     }
+// }
+
+
+
+
+
+void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_last_value)
+{
+    if (!obj_old)
+        handleUtilityPage(encoder1_last_value, encoder2_last_value);
+    else
+    {
+        static int32_t cursor_pos = 0;
+
+        // Check if encoder values have changed
+        if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
+            return;
+
+        // Update cursor position based on encoder 2
+        if (encoder2_last_value < encoder2_value)
+            move_spinbox_cursor_left(obj_old);
+
+        else if (encoder2_last_value > encoder2_value)
+            move_spinbox_cursor_right(obj_old);
+
+        encoder2_last_value = encoder2_value;
+
+        if (encoder1_last_value < encoder1_value)
+            lv_spinbox_increment(obj_old);
+
+        else if (encoder1_last_value > encoder1_value)
+            lv_spinbox_decrement(obj_old);
+
+        encoder1_last_value = encoder2_value;
+
+
+
+
+        static lv_obj_t *tabview_main = lv_obj_get_child(PowerSupply.page[3], 0);
+        static lv_obj_t *tabview_second = lv_obj_get_child(tabview_main, 1);
+        static lv_obj_t *fgen_tabview = lv_obj_get_child(tabview_second, 1);
+        Serial.printf("\n***********************************");
+        print_obj_type(fgen_tabview); // Output: Object is************ a button
+        Serial.printf("\nSpinbox_pro%i", get_spinbox_data_by_id(fgen_tabview, 2));
+
+ 
+        // Serial.printf("\n********************");
+        // print_obj_type(parent); // Output: Object is a button
+        // Serial.printf("\nSpinbox_pro%i", get_spinbox_data_by_id(parent, 2));
+
+    }
+}
+
 void managePageEncoderInteraction()
 {
     // // Variables to store the last encoder values
@@ -3413,33 +3542,7 @@ void managePageEncoderInteraction()
     case 2: // main Page
         break;
     case 3:
-        if (!obj_old)
-            handleUtilityPage(encoder1_last_value, encoder2_last_value);
-        else
-        {
-            static int32_t cursor_pos = 0;
-
-            // Check if encoder values have changed
-            if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
-                return;
-
-            // Update cursor position based on encoder 2
-            if (encoder2_last_value < encoder2_value)
-                move_spinbox_cursor_left(obj_old);
-
-            else if (encoder2_last_value > encoder2_value)
-                move_spinbox_cursor_right(obj_old);
-
-            encoder2_last_value = encoder2_value;
-
-            if (encoder1_last_value < encoder1_value)
-            {
-                lv_spinbox_increment(obj_old);
-            }
-            else if (encoder1_last_value > encoder1_value){
-                lv_spinbox_decrement(obj_old);
-            }
-        }
+        handleUtility_function_Page(encoder1_last_value, encoder2_last_value);
         break;
 
     case 4: // Calibration Page
