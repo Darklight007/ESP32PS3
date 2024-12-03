@@ -78,7 +78,7 @@ lv_obj_t *Utility;
 
   
 extern bool buzzerSound;
-TaskHandle_t Task_adc,Task1, LVGL;
+TaskHandle_t Task_adc,Task1, LVGL,Task_dac;
 bool ismyTextHiddenChange = false;
 
 bool lvglIsBusy,lvglChartIsBusy,emergencyRefresh;

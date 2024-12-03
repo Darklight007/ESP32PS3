@@ -1,7 +1,7 @@
 #include "device.h"
 
-
 extern Calibration StoreData;
+FunGen funGen; // Definition
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
 
 void Device::setupADC(uint8_t pin, void func(void), TwoWire *_awire)
@@ -220,8 +220,8 @@ void Device::LoadSetting(void)
         settingParameters.adcNumberOfAvgs = 1;
         settingParameters.adcNumberOfDigits = 4;
 
-        Voltage.adjValue = 5.0 - 0*Voltage.adjOffset;
-        Current.adjValue = .2 - 0*Current.adjOffset;
+        Voltage.adjValue = 5.0 - 0 * Voltage.adjOffset;
+        Current.adjValue = .2 - 0 * Current.adjOffset;
 
         memory.putUShort("pi", 314);
 
@@ -288,8 +288,8 @@ void Device::LoadSetting(void)
     // EEPROMread(Voltage.adjEEPROMAddress + 8 * 0, Voltage.adjValue); // PowerSupply.Voltage.adjValue
     // EEPROMread(Current.adjEEPROMAddress + 8 * 1, Current.adjValue); // PowerSupply.Voltage.adjValue
 
-    Serial.printf("\nLast Voltage Value:% +8.4f", Voltage.adjValue + 0*Voltage.adjOffset);
-    Serial.printf("\nLast Current Value:% +8.4f", Current.adjValue + 0*Current.adjOffset);
+    Serial.printf("\nLast Voltage Value:% +8.4f", Voltage.adjValue + 0 * Voltage.adjOffset);
+    Serial.printf("\nLast Current Value:% +8.4f", Current.adjValue + 0 * Current.adjOffset);
 };
 
 void Device::SaveSetting(void)
@@ -318,13 +318,15 @@ void Device::SaveSetting(void)
 //     return data;
 // }
 
-void Device::SaveMemory(const String &key, const MemArray &data) {
+void Device::SaveMemory(const String &key, const MemArray &data)
+{
     StoreMem.begin("my-app", false);
     StoreMem.putBytes(key.c_str(), &data, sizeof(MemArray));
     StoreMem.end();
 }
 
-MemArray Device::LoadMemory(const String &key) {
+MemArray Device::LoadMemory(const String &key)
+{
     MemArray data;
     StoreMem.begin("my-app", false);
     StoreMem.getBytes(key.c_str(), &data, sizeof(MemArray));
@@ -332,9 +334,21 @@ MemArray Device::LoadMemory(const String &key) {
     return data;
 }
 
+void Device::SaveMemoryFgen(const String &key, const FunGen &data)
+{
+    StoreMem.begin("my-app", false);
+    StoreMem.putBytes(key.c_str(), &data, sizeof(FunGen));
+    StoreMem.end();
+}
 
-
-
+FunGen Device::LoadMemoryFgen(const String &key)
+{
+    FunGen data;
+    StoreMem.begin("my-app", false);
+    StoreMem.getBytes(key.c_str(), &data, sizeof(FunGen));
+    StoreMem.end();
+    return data;
+}
 
 // Reference:https://training.ti.com/ti-precision-labs-adcs-understanding-and-calibrating-offset-and-gain-adc-systems
 //  Time @ 05:41
@@ -343,13 +357,10 @@ void Device::readVoltage()
 
     if ((adcDataReady || false) && (adc.busyChannel == VOLTAGE) /*&& ads.checkDataReady()*/) // ||  adc.checkDataReady()
     {
-
         static double v;
-
         Voltage.rawValue = adc.readConversion();
-
-        adc.startConversion(CURRENT, REF_EXTERNAL);
         adcDataReady = false;
+        adc.startConversion(CURRENT, REF_EXTERNAL);
 
         v = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
 
@@ -371,8 +382,8 @@ void Device::readCurrent()
     {
         static double c;
         Current.rawValue = adc.readConversion();
-        adc.startConversion(VOLTAGE, REF_EXTERNAL);
         adcDataReady = false;
+        adc.startConversion(VOLTAGE, REF_EXTERNAL);
 
         double currentOfR11R12 = 1.0 * Voltage.measured.Mean() / 100.0e3; // Current consuming by R11 & R12
         // double currentOfADCRate = 1.0 * Voltage.measured.Mean() / (32.0 / (0.0019 - 0.0012));-> Based on ADC rate
@@ -501,30 +512,18 @@ void Device::DACUpdate(void)
 
         static double dac_last_Voltage = -1, dac_last_Current = -1;
 
-        // if (dac_last_Voltage != v || dac_last_Current != c)
-
+        if (dac_last_Voltage != v)
         {
-            //  setupDAC(0x41);
-            //  DAC.powerDown(DAC_VOLTAGE);
-            // DAC.writeUpdate(DAC_VOLTeAGE, v);
-            // DAC.setVoltageReference(REFR_INTERNAL);
-
-            // DAC.write(DAC_VOLTAGE, uint16_t(v));
-            // DAC.write(DAC_CURRENT, uint16_t(c));
-            // DAC.update(DAC_VOLTAGE, v);
-            // writeAndPowerAll
             DAC.writeAndPowerAll(DAC_VOLTAGE, uint16_t(v));
-            DAC.writeAndPowerAll(DAC_CURRENT, uint16_t(c));
-            // DAC.writeUpdate(DAC_VOLTAGE, uint16_t(v));
-
-            // DAC.writeUpdate(DAC_VOLTAGE, v);
             dac_last_Voltage = v;
-            dac_last_Current = c;
-
-            // Wire.setClock(1700000UL);
-
-            // Serial.printf("\nDAC update @ %i", millis());
         }
+
+        if (dac_last_Current != c)
+        {
+            DAC.writeAndPowerAll(DAC_CURRENT, uint16_t(c));
+            dac_last_Current = c;
+        }
+
     }
     else // if (getStatus() == DEVICE::OFF)
     {

@@ -107,7 +107,7 @@ void set_spinbox_pro_styles(lv_obj_t *spinbox)
 lv_obj_t *find_spinbox_with_id(lv_obj_t *parent, uint32_t id)
 {
     uint32_t child_cnt = lv_obj_get_child_cnt(parent);
-    Serial.printf("\nchild_cnt:%i", child_cnt);
+    // Serial.printf("\nchild_cnt:%i", child_cnt);
     for (uint32_t i = 0; i < child_cnt; i++)
     {
         lv_obj_t *child = lv_obj_get_child(parent, i);
@@ -115,11 +115,12 @@ lv_obj_t *find_spinbox_with_id(lv_obj_t *parent, uint32_t id)
 
         if (data && data->id == id)
         {
-            Serial.printf("\nlv_obj_get_child:%i id:%i", i, data->id);
+            // Serial.printf("\nlv_obj_get_child:%i id:%i", i, data->id);
             return child; // Found the child with the matchin  g tag
         }
         else if (data)
-            Serial.printf("\nlv_obj_get_child:%i id:%i", i, data->id);
+            // Serial.printf("\nlv_obj_get_child:%i id:%i", i, data->id);
+            ;
     }
     return NULL; // No child with the specified tag found
 }
@@ -132,6 +133,14 @@ int32_t get_spinbox_data_by_id(lv_obj_t *parent, uint32_t id)
     else
         return NULL;
 }
+
+void set_spinbox_data_by_id(lv_obj_t *parent, uint32_t id, int32_t value)
+{
+    lv_obj_t *obj = find_spinbox_with_id(parent, id);
+    if (obj)
+        lv_spinbox_set_value(obj, value);
+}
+
 
 // Function to move cursor left
 void move_spinbox_cursor_left(lv_obj_t *spinbox)

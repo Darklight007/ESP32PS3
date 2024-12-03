@@ -41,6 +41,17 @@ struct MemArray
     mem memory[10];
 };
 
+struct FunGen
+{
+    double frequency;
+    double amplitude;
+    double offset;
+    double dutyCycle;
+    uint16_t selected_signal;
+
+} ;
+// extern FunGen funGen; // Declaration
+
 // #pragma pack(pop)
 
 extern lv_disp_t *lv_disp;
@@ -50,7 +61,7 @@ extern volatile bool adcDataReady;
 static void IRAM_ATTR ADCPinISR()
 {
     adcDataReady = true;
-    // dataReady = true;
+    // dataReady = true;  
     // Device::readVoltage();
     // Device::readCurrent();
 }
@@ -377,6 +388,10 @@ public:
     // DataArrays LoadDataArrays(const String &key);
     MemArray LoadMemory(const String &key);
     
+    void SaveMemoryFgen(const String &key, const FunGen &data);
+    FunGen LoadMemoryFgen(const String &key);
+
+
 
     void ResetStats(void)
     {

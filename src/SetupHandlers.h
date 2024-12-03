@@ -65,7 +65,7 @@ extern lv_obj_t *myTextBox;
 
 extern TaskHandle_t Task_adc; 
 extern TaskHandle_t Task1; 
-
+extern TaskHandle_t Task_dac; 
 
 // extern lv_obj_t *dd_calibration;
 // extern lv_obj_t *lbl_voltageCalib_m;
@@ -79,6 +79,7 @@ extern int heepMemory;
 
 extern void Task_BarGraph(void *pvParameters);
 extern void Task_ADC(void *pvParameters);
+extern void Task_DAC(void *pvParameters);
 extern void  init_touch();
 
 

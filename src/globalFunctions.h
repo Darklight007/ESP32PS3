@@ -17,6 +17,7 @@ void init_display(void);
 void init_touch(void);
 void ChartUpdate();
 void HistPush();
+void GraphPush();
 void StatusBar();
 void schedule(std::function<void(void)> func, unsigned long &&interval, unsigned long &startTime);
 void keyCheckLoop();
@@ -26,7 +27,8 @@ void trackLoopExecution(const char *);
 void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value);
 void Utility_tabview(lv_obj_t *parent);
 lv_obj_t *find_btn_by_tag(lv_obj_t *parent, uint32_t tag);
-
+void functionGenerator2(int waveformIndex, double frequency, double amplitude, double offset, double dutyCycleParam);
+void functionGenerator();
 #define PI 3.14159265358979323846
 
 // Function prototypes for waveform functions
@@ -50,6 +52,7 @@ double gaussianPulse(double t);
 double sincFunction(double t);
 double randomNoise(double t);
 
+lv_obj_t *btn_function_gen;
 // Function pointer type
 typedef double (*WaveformFunction)(double);
 
@@ -67,15 +70,18 @@ extern Waveform waveforms[];
 extern int numWaveforms;
 
 // Function prototype for the function generator
-void functionGenerator(void);
+void functionGenerator_demo(void);
 
 /**********************
  *   GLOBAL VARIABLES
  **********************/
+FunGen funGenMem;
 lv_obj_t *table_signals;
 // volatile long chartInterruptCounter;
 int globalSliderXValue;
 int32_t encoder1_value = 0, encoder2_value = 0;
+// lv_coord_t graph_data_I[600] = {0};
+lv_coord_t graph_data_V[1200] = {0};
 
 // extern std::map<DEVICE, deviceColors> stateColor;
 
@@ -83,6 +89,16 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data);
 
 static void draw_event_cb(lv_event_t *e);
 static void draw_event_cb2(lv_event_t *e);
+
+// struct FunGen
+// {
+//     double frequency;
+//     double amplitude;
+//     double offset;
+//     double dutyCycle;
+
+// };
+// FunGen funGen;
 
 // bool chartPause = false;
 
@@ -282,15 +298,17 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     // lv_obj_set_style_size(PowerSupply.graph.chart, 0, LV_PART_INDICATOR);
     lv_chart_set_type(PowerSupply.graph.chart, LV_CHART_TYPE_LINE);
 
-    lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_SHIFT);
+    lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_CIRCULAR);
     lv_obj_add_event_cb(PowerSupply.graph.chart, draw_event_cb2, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
     PowerSupply.graph.serI = lv_chart_add_series(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_AMBER), LV_CHART_AXIS_SECONDARY_Y);
     PowerSupply.graph.serV = lv_chart_add_series(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_BLUE), LV_CHART_AXIS_PRIMARY_Y);
 
     // uint32_t pcnt = sizeof(ecg_sample) / sizeof(ecg_sample[0]);
-    lv_chart_set_point_count(PowerSupply.graph.chart, 600 * 2);
+    lv_chart_set_point_count(PowerSupply.graph.chart, 600);
     // lv_chart_set_ext_y_array(PowerSupply.graph.chart, ser, (lv_coord_t *)ecg_sample);
+    PowerSupply.graph.serV->y_points = graph_data_V;
+    // PowerSupply.graph.serI->y_points = graph_data_V;
 
     static lv_style_t style_slider;
     lv_style_init(&style_slider);
@@ -788,7 +806,6 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 
     lv_chart_set_div_line_count(PowerSupply.stats.chart, 5, 13);
     lv_obj_set_style_text_color(PowerSupply.stats.chart, lv_palette_main(LV_PALETTE_GREY), LV_PART_TICKS);
-
     lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_Y, 5, 3, 5, 4, true, 40);
     lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_X, 5, 3, 3, 10, true, 50);
     // lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_SECONDARY_X, 5, 3, 7, 10, true, 50);
@@ -1212,9 +1229,28 @@ void Task_BarGraph(void *pvParameters)
         //     vTaskDelay(3);
         // }
         // trackLoopExecution(__func__);
+        // functionGenerator();
     }
 }
+void Task_DAC(void *pvParameters)
+{
 
+    for (;;)
+    {
+        functionGenerator();
+        static unsigned long timer_ = {0};
+        if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+        {
+            schedule([]
+                     {
+                         // functionGenerator_demo();
+                         PowerSupply.DACUpdate(); },
+                     50, timer_);
+            // Serial.print("\nTask_DAC running on core ");
+        }
+        delay(1);
+    }
+}
 void Task_ADC(void *pvParameters)
 {
 
@@ -1234,7 +1270,17 @@ void Task_ADC(void *pvParameters)
         // vTaskDelay(1);
 
         // }
-        // Serial.printf("\nMeasured adcDataReady :%i",adcDataReady);
+        // Serial.printf("\nMeasured adcDataReady :%i Channel:%i", adcDataReady, PowerSupply.adc.busyChannel);
+
+        // static unsigned long timer_2 = {0};
+        // schedule([]
+        //          {
+        //              // functionGenerator_demo();
+        //              functionGenerator();
+        //             //  PowerSupply.DACUpdate();
+        //          },
+        //          1, timer_2);
+
         if (!adcDataReady)
         {
             toneOff();
@@ -1254,11 +1300,14 @@ void Task_ADC(void *pvParameters)
             getSettingEncoder(NULL, NULL);
 
             // DACInterval(49);
-
             static unsigned long timer_ = {0};
-            schedule([]
-                     { PowerSupply.DACUpdate(); },
-                     100, timer_);
+            if (!lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+                schedule([]
+                         {
+                             // functionGenerator_demo();
+                             //  functionGenerator();
+                             PowerSupply.DACUpdate(); },
+                         50, timer_);
 
             // trackLoopExecution(__func__);
 
@@ -1302,6 +1351,7 @@ void Task_ADC(void *pvParameters)
         }
 
         HistPush();
+        // GraphPush();
 
         if (!lvglIsBusy && Tabs::getCurrentPage() == 0)
 
@@ -1309,6 +1359,14 @@ void Task_ADC(void *pvParameters)
             {
                 lvglChartIsBusy = true;
                 lv_chart_refresh(PowerSupply.stats.chart);
+                lvglChartIsBusy = false;
+            }
+        if (!lvglIsBusy && Tabs::getCurrentPage() == 1)
+
+            if (!lvglChartIsBusy)
+            {
+                lvglChartIsBusy = true;
+                   lv_chart_refresh( PowerSupply.graph.chart);
                 lvglChartIsBusy = false;
             }
 
@@ -1320,8 +1378,9 @@ void Task_ADC(void *pvParameters)
                          if (!lvglChartIsBusy)
                          {
                              lvglChartIsBusy = true;
-                             lv_chart_set_next_value(PowerSupply.graph.chart, PowerSupply.graph.serV, PowerSupply.Voltage.measured.value * 1000.0);
-                             lv_chart_set_next_value(PowerSupply.graph.chart, PowerSupply.graph.serI, PowerSupply.Current.measured.value * 1000.0);
+                            //  lv_chart_set_next_value(PowerSupply.graph.chart, PowerSupply.graph.serV, PowerSupply.Voltage.measured.value * 1000.0);
+                            //  lv_chart_set_next_vale(PowerSupply.graph.chart, PowerSupply.graph.serI, PowerSupply.Current.measured.value * 1000.0);
+                        GraphPush();
                              lvglChartIsBusy = false;
                          } },
                      PowerSupply.Voltage.measured.NofAvgs * 1000 / /* pixels per point*/ ((double)PowerSupply.adc.realADCSpeed), NoAvgTime);
@@ -1656,7 +1715,7 @@ static void mem_btn_event_cb(lv_event_t *e)
 }
 //**********************************************************************************/
 // Define the style for the selected row
-static uint16_t selected_row = 0xFFFF; // Initialize to an invalid row
+static uint16_t selected_row = 0; // Initialize to first row
 
 // Event callback to handle row selection
 static void table_event_cb(lv_event_t *e)
@@ -1668,6 +1727,12 @@ static void table_event_cb(lv_event_t *e)
         lv_table_get_selected_cell(table, &row, &col);
         selected_row = row;
         lv_obj_invalidate(table); // Redraw the table to apply changes
+
+        if (obj_old)
+        {
+            remove_red_border(obj_old);
+            obj_old = nullptr;
+        }
     }
 }
 
@@ -1702,10 +1767,20 @@ void select_next_row(lv_obj_t *table)
     {
         selected_row++;
     }
-    else
-    {
-        selected_row = 0; // Loop back to the first row
-    }
+    // else
+    // {
+    //     selected_row = 0; // Loop back to the first row
+    // }
+    int row_height = 25; // Define your row height
+    lv_coord_t scroll_y = lv_obj_get_scroll_y(table);
+    lv_coord_t visible_h = lv_obj_get_height(table);
+    int y_pos = selected_row * row_height;
+
+    if (y_pos < scroll_y)
+        lv_obj_scroll_to_y(table, y_pos, LV_ANIM_OFF);
+    else if (y_pos + row_height > scroll_y + visible_h)
+        lv_obj_scroll_to_y(table, y_pos + row_height - visible_h, LV_ANIM_OFF);
+
     lv_obj_invalidate(table);
 }
 
@@ -1717,11 +1792,40 @@ void select_previous_row(lv_obj_t *table)
     {
         selected_row--;
     }
-    else
-    {
-        selected_row = row_cnt - 1; // Loop back to the last row
-    }
+    // else
+    // {
+    //     selected_row = row_cnt - 1; // Loop back to the last row
+    // }
+    int row_height = 25; // Define your row height
+    lv_coord_t scroll_y = lv_obj_get_scroll_y(table);
+    lv_coord_t visible_h = lv_obj_get_height(table);
+    int y_pos = selected_row * row_height;
+
+    if (y_pos < scroll_y)
+        lv_obj_scroll_to_y(table, y_pos, LV_ANIM_OFF);
+    else if (y_pos + row_height > scroll_y + visible_h)
+        lv_obj_scroll_to_y(table, y_pos + row_height - visible_h, LV_ANIM_OFF);
+
     lv_obj_invalidate(table);
+}
+
+void btn_function_gen_event_cb(lv_event_t *e)
+{
+
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_obj_t *btn = lv_event_get_target(e);
+    lv_obj_t *label = lv_obj_get_child(btn, 0);
+
+    if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+        lv_label_set_text(label, "ON");
+    else
+        lv_label_set_text(label, "OFF");
+
+    if (obj_old)
+    {
+        remove_red_border(obj_old);
+        obj_old = nullptr;
+    }
 }
 
 void Utility_tabview(lv_obj_t *parent)
@@ -1843,7 +1947,7 @@ void Utility_tabview(lv_obj_t *parent)
     table_signals = lv_table_create(tab2);
     lv_obj_set_pos(table_signals, 3, 3);
     int table_signals_width = 186;
-    lv_obj_set_size(table_signals, table_signals_width, 186);
+    lv_obj_set_size(table_signals, table_signals_width, 130);
     // lv_obj_clear_flag(tab2, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_pad_ver(table_signals, 5, LV_PART_ITEMS);
     lv_obj_set_style_pad_left(table_signals, 5, LV_PART_ITEMS);
@@ -1891,8 +1995,8 @@ void Utility_tabview(lv_obj_t *parent)
      * Spinbox
      ********************/
 
-    int verPad = 42;
-    int verOffset = -50;
+    int verPad = 46;
+    int verOffset = -58;
     int XOffset = -5;
 
     // createSpinbox(tab3, "#FFFFF7 Amplitude:#", -10000, 400000, 6, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0);
@@ -1905,23 +2009,30 @@ void Utility_tabview(lv_obj_t *parent)
     spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -1000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2);
     spinbox_pro(tab2, "#FFFFF7 Duty [%]:#", 0, 10000, 5, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 3, 98, 3);
 
-    // lv_event_send(lv_obj_get_child(tab2, spinboxes.ids[0]), LV_EVENT_PRESSED, NULL);
+    funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
 
-    // lv_obj_t *vin1_ = lv_obj_get_child(tab2, spinboxes.ids[0]);
-    // lv_obj_t *code1_ = lv_obj_get_child(tab2, spinboxes.ids[1]);
-    // lv_obj_t *vin2_ = lv_obj_get_child(tab2, spinboxes.ids[2]);
-    // lv_obj_t *code2_ = lv_obj_get_child(tab2, spinboxes.ids[3]);
+    set_spinbox_data_by_id(tab2, 0, funGenMem.amplitude * 1000);
+    set_spinbox_data_by_id(tab2, 1, funGenMem.frequency * 1000);
+    set_spinbox_data_by_id(tab2, 2, funGenMem.offset * 1000);
+    set_spinbox_data_by_id(tab2, 3, funGenMem.dutyCycle * 10000);
 
-    // lv_spinbox_set_value(vin1_, 1234);
-    // lv_spinbox_set_value(code2_, 1.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2);
-    // lv_spinbox_set_value(vin1_, 10000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_1);
-    // lv_spinbox_set_value(vin2_, 10000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_2);
+    // PowerSupply.setupSwitch(tab2, 0, 0, 20, nullptr);
 
-    // lv_obj_t *lbl_raw = lv_label_create(tab2);
-    // lv_obj_t *lbl_calibValue = lv_label_create(tab2);
+    btn_function_gen = lv_btn_create(tab2);
 
-    // lv_label_set_text(lbl_raw, "Raw Code:");
+    lv_obj_align(btn_function_gen, LV_ALIGN_DEFAULT, 10, 140);
+    lv_obj_add_flag(btn_function_gen, LV_OBJ_FLAG_CHECKABLE);
 
+    lv_obj_set_style_radius(btn_function_gen, 2, LV_PART_MAIN);
+    lv_obj_set_size(btn_function_gen, 70, 35);
+
+    label = lv_label_create(btn_function_gen);
+    lv_label_set_text(label, "OFF");
+    lv_obj_center(label);
+
+    lv_obj_add_event_cb(btn_function_gen, btn_function_gen_event_cb, LV_EVENT_ALL, NULL);
+
+    // Tab 3 ****************************************************************************************************************************
     // Tab 4 ****************************************************************************************************************************
     // lv_obj_set_pos(label, 0, 0);
     lv_obj_set_style_pad_ver(tabview, 0, LV_PART_ITEMS);
@@ -2469,7 +2580,12 @@ void keyCheckLoop()
                      lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 10 * 12, -1000); });
 
     keyMenusPage('W', " RELEASED.", 1, []
-                 { ; });
+                 {
+                     static bool mode = false;
+                     if (false)
+                         lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_SHIFT);
+                     else
+                         lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_CIRCULAR); });
 
     keyMenusPage('X', " RELEASED.", 2, []
                  {
@@ -2810,8 +2926,26 @@ void ChartUpdate()
     // PowerSupply.Current.hist[PowerSupply.Current.measured.value];
     // lv_chart_refresh(PowerSupply.stats.chart);
 }
-void HistPush()
 
+void GraphPush()
+
+{
+    static uint16_t graph_v_i = 0;
+
+    graph_data_V[graph_v_i++] = PowerSupply.Voltage.measured.value * 1000.0;
+    // for (int i = 0; i < 600 - 1; i++)
+    // {
+    //     graph_data_V[i] = graph_data_V[i + 1];
+    // }
+
+    if (graph_v_i == 600)
+        graph_v_i = 0;
+
+    if (Tabs::getCurrentPage() == 1 && graph_v_i % 10 == 0)
+        lv_chart_refresh(PowerSupply.graph.chart);
+}
+
+void HistPush()
 {
     // Histogram
     PowerSupply.Current.hist[PowerSupply.Current.measured.Mean()];
@@ -3023,15 +3157,16 @@ void VCCCInterval(unsigned long interval)
              interval, timer_);
 }
 
-void DACInterval(unsigned long interval)
-{
-    static unsigned long timer_ = {0};
-    schedule([]
-             {
-                // if (!lvglChartIsBusy)
-             PowerSupply.DACUpdate(); },
-             interval, timer_);
-}
+// void DACInterval(unsigned long interval)
+// {
+//     static unsigned long timer_ = {0};
+//     schedule([]
+//              {
+//                  // if (!lvglChartIsBusy)
+
+//                  PowerSupply.DACUpdate(); },
+//              interval, timer_);
+// }
 
 // **Helper Functions**
 
@@ -3378,16 +3513,34 @@ void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
 
         // // Determine the direction of encoder 1 rotation
         if (encoder1_last_value < encoder1_value)
+
             _posY++; // Rotated clockwise
+
         else if (encoder1_last_value > encoder1_value)
+
             _posY--; // Rotated counter-clockwise
 
-        // encoder1_last_value = encoder1_value;
-        // lv_event_send(lv_obj_get_child(PowerSupply.page[1], 2), LV_EVENT_VALUE_CHANGED, NULL);
-
         static lv_obj_t *table = lv_obj_get_child(PowerSupply.page[3], 0);
-
         lv_tabview_set_act(table, _posY % 4, LV_ANIM_ON);
+    }
+
+    if (encoder2_last_value != encoder2_value)
+    {
+
+        static u8_t _posX = 0;
+        // // Determine the direction of encoder 1 rotation
+        if (encoder2_last_value < encoder2_value)
+        {
+            select_previous_row(table_signals);
+        }
+        else if (encoder2_last_value > encoder2_value)
+        {
+            select_next_row(table_signals);
+        }
+
+        // static lv_obj_t *table = lv_obj_get_child(PowerSupply.page[3], 0);
+
+        // lv_tabview_set_act(table, _posY % 4, LV_ANIM_ON);
     }
 }
 
@@ -3397,56 +3550,60 @@ void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
 // extern const lv_obj_class_t lv_tabview_class;
 // Add other classes as needed
 
-typedef struct {
-    const lv_obj_class_t * class_p;
-    const char * class_name;
+typedef struct
+{
+    const lv_obj_class_t *class_p;
+    const char *class_name;
 } class_map_t;
 
 static const class_map_t class_map[] = {
-    { &lv_obj_class, "lv_obj" },
-    { &lv_btn_class, "lv_btn" },
-    { &lv_label_class, "lv_label" },
-    { &lv_img_class, "lv_img" },
-    { &lv_line_class, "lv_line" },
-    { &lv_arc_class, "lv_arc" },
-    { &lv_bar_class, "lv_bar" },
-    { &lv_slider_class, "lv_slider" },
-    { &lv_switch_class, "lv_switch" },
-    { &lv_checkbox_class, "lv_checkbox" },
-    { &lv_list_class, "lv_list" },
-    { &lv_dropdown_class, "lv_dropdown" },
-    { &lv_roller_class, "lv_roller" },
-    { &lv_textarea_class, "lv_textarea" },
-    { &lv_keyboard_class, "lv_keyboard" },
-    { &lv_table_class, "lv_table" },
-    { &lv_tabview_class, "lv_tabview" },
+    {&lv_obj_class, "lv_obj"},
+    {&lv_btn_class, "lv_btn"},
+    {&lv_label_class, "lv_label"},
+    {&lv_img_class, "lv_img"},
+    {&lv_line_class, "lv_line"},
+    {&lv_arc_class, "lv_arc"},
+    {&lv_bar_class, "lv_bar"},
+    {&lv_slider_class, "lv_slider"},
+    {&lv_switch_class, "lv_switch"},
+    {&lv_checkbox_class, "lv_checkbox"},
+    {&lv_list_class, "lv_list"},
+    {&lv_dropdown_class, "lv_dropdown"},
+    {&lv_roller_class, "lv_roller"},
+    {&lv_textarea_class, "lv_textarea"},
+    {&lv_keyboard_class, "lv_keyboard"},
+    {&lv_table_class, "lv_table"},
+    {&lv_tabview_class, "lv_tabview"},
     // { &lv_tabview_tab_class, "lv_tabview_tab" },
-    { &lv_tileview_class, "lv_tileview" },
-    { &lv_tileview_tile_class, "lv_tileview_tile" },
-    { &lv_led_class, "lv_led" },
-    { &lv_imgbtn_class, "lv_imgbtn" },
-    { &lv_spinner_class, "lv_spinner" },
-    { &lv_msgbox_class, "lv_msgbox" },
-    { &lv_colorwheel_class, "lv_colorwheel" },
-    { &lv_calendar_class, "lv_calendar" },
-    { &lv_meter_class, "lv_meter" },
-    { &lv_chart_class, "lv_chart" },
-    { &lv_canvas_class, "lv_canvas" },
-    { &lv_win_class, "lv_win" },
-    { &lv_spangroup_class, "lv_spangroup" },
-    { &lv_menu_class, "lv_menu" },
-    { &lv_spinbox_class, "lv_spinbox" },
-    { &lv_btnmatrix_class, "lv_btnmatrix" },
+    {&lv_tileview_class, "lv_tileview"},
+    {&lv_tileview_tile_class, "lv_tileview_tile"},
+    {&lv_led_class, "lv_led"},
+    {&lv_imgbtn_class, "lv_imgbtn"},
+    {&lv_spinner_class, "lv_spinner"},
+    {&lv_msgbox_class, "lv_msgbox"},
+    {&lv_colorwheel_class, "lv_colorwheel"},
+    {&lv_calendar_class, "lv_calendar"},
+    {&lv_meter_class, "lv_meter"},
+    {&lv_chart_class, "lv_chart"},
+    {&lv_canvas_class, "lv_canvas"},
+    {&lv_win_class, "lv_win"},
+    {&lv_spangroup_class, "lv_spangroup"},
+    {&lv_menu_class, "lv_menu"},
+    {&lv_spinbox_class, "lv_spinbox"},
+    {&lv_btnmatrix_class, "lv_btnmatrix"},
     // Add any other mappings as needed
-    { NULL, NULL } // Sentinel to mark the end of the array
+    {NULL, NULL} // Sentinel to mark the end of the array
 };
 
-void print_obj_type(lv_obj_t * obj) {
-    const lv_obj_class_t * obj_class = lv_obj_get_class(obj);
-    const class_map_t * map = class_map;
+void print_obj_type(lv_obj_t *obj)
+{
+    const lv_obj_class_t *obj_class = lv_obj_get_class(obj);
+    const class_map_t *map = class_map;
 
-    while (map->class_p != NULL) {
-        if (obj_class == map->class_p) {
+    while (map->class_p != NULL)
+    {
+        if (obj_class == map->class_p)
+        {
             printf("Object class name: %s\n", map->class_name);
             return;
         }
@@ -3469,10 +3626,6 @@ void print_obj_type(lv_obj_t * obj) {
 //         printf("Unknown object class\n");
 //     }
 // }
-
-
-
-
 
 void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_last_value)
 {
@@ -3503,21 +3656,22 @@ void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_l
 
         encoder1_last_value = encoder2_value;
 
-
-
-
         static lv_obj_t *tabview_main = lv_obj_get_child(PowerSupply.page[3], 0);
         static lv_obj_t *tabview_second = lv_obj_get_child(tabview_main, 1);
         static lv_obj_t *fgen_tabview = lv_obj_get_child(tabview_second, 1);
-        Serial.printf("\n***********************************");
-        print_obj_type(fgen_tabview); // Output: Object is************ a button
-        Serial.printf("\nSpinbox_pro%i", get_spinbox_data_by_id(fgen_tabview, 2));
+        // Serial.printf("\n***********************************");
+        // print_obj_type(fgen_tabview); // Output: Object is************ a button
+        // Serial.printf("\nSpinbox_pro%i", get_spinbox_data_by_id(fgen_tabview, 2));
+        // FunGen funGen;
+        funGenMem.amplitude = double(get_spinbox_data_by_id(fgen_tabview, 0) / 1000.0);
+        funGenMem.frequency = double(get_spinbox_data_by_id(fgen_tabview, 1) / 1000.0);
+        funGenMem.offset = double(get_spinbox_data_by_id(fgen_tabview, 2) / 1000.0);
+        funGenMem.dutyCycle = double(get_spinbox_data_by_id(fgen_tabview, 3) / 10000.0);
 
- 
+        PowerSupply.SaveMemoryFgen("FunGen", funGenMem);
         // Serial.printf("\n********************");
         // print_obj_type(parent); // Output: Object is a button
         // Serial.printf("\nSpinbox_pro%i", get_spinbox_data_by_id(parent, 2));
-
     }
 }
 
@@ -3598,6 +3752,7 @@ void MiscPriority()
 }
 
 // Waveform functions
+double dutyCycle = .5;
 double sineWave(double t)
 {
     return sin(2.0 * PI * t);
@@ -3607,7 +3762,6 @@ double squareWave(double t)
 {
     return (t < 0.5) ? 1.0 : -1.0;
 }
-
 double triangularWave(double t)
 {
     return (t < 0.5) ? (4.0 * t - 1.0) : (-4.0 * t + 3.0);
@@ -3688,8 +3842,8 @@ double logarithmicCurve(double t)
 
 double pwmWave(double t)
 {
-    double dutyCycle = 0.3; // Adjust duty cycle as needed
-    return (fmod(t * 3.0, 1.0) < dutyCycle) ? 1.0 : -1.0;
+
+    return (fmod(t * 3.0, 1.0) < funGenMem.dutyCycle) ? 1.0 : -1.0;
 }
 
 double linearChirp(double t)
@@ -3714,27 +3868,81 @@ Waveform waveforms[] = {
     {"Sine ", sineWave},
     {"Square ", squareWave},
     {"Triangular", triangularWave},
-    {"Pulse Wave", pulseWave},
-    {"Sawtooth Wave", sawtoothWave},
+    {"Pulse ", pulseWave},
+    {"Sawtooth ", sawtoothWave},
     {"Inverted Sawtooth", invertedSawtoothWave},
     {"Exponential Decay", exponentialDecay},
     {"Exponential Rise", exponentialRise},
     {"Logarithmic Curve", logarithmicCurve},
-    {"PWM Wave", pwmWave},
+    {"PWM ", pwmWave},
     {"Linear Chirp", linearChirp},
-    {"Cosine Wave", cosineWave},
-    {"Half Sine Wave", halfSineWave},
+    {"Cosine ", cosineWave},
+    {"Half Sine ", halfSineWave},
     {"Full Wave Rectified", fullWaveRectifiedSine},
     {"Step Function", stepFunction},
-    {"Parabolic Wave", parabolicWave},
+    {"Parabolic ", parabolicWave},
     {"Gaussian Pulse", gaussianPulse},
     {"Sinc Function", sincFunction},
     {"Random Noise", randomNoise}
     // Add more waveform structs here
 };
 
-int numWaveforms = sizeof(waveforms) / sizeof(waveforms[0]);
+// double dutyCycle = 0.5; // Default duty cycle
+void functionGenerator2(int waveformIndex, double frequency, double amplitude, double offset, double dutyCycleParam)
+{
+    if (!lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+        return;
+
+    waveformIndex = selected_row;
+
+    static lv_obj_t *tabview_main = lv_obj_get_child(PowerSupply.page[3], 0);
+    static lv_obj_t *tabview_second = lv_obj_get_child(tabview_main, 1);
+    static lv_obj_t *fgen_tabview = lv_obj_get_child(tabview_second, 1);
+
+    amplitude = double(get_spinbox_data_by_id(fgen_tabview, 0) / 1000.0);
+    frequency = double(get_spinbox_data_by_id(fgen_tabview, 1) / 1000.0);
+    offset = double(get_spinbox_data_by_id(fgen_tabview, 2) / 1000.0);
+    dutyCycle = double(get_spinbox_data_by_id(fgen_tabview, 3) / 10000.0);
+
+    static unsigned long startTime = micros();
+    unsigned long currentTime = micros();
+    double t = fmod((currentTime - startTime) / 1000000.0 * frequency, 1.0);
+    double value = waveforms[selected_row].function(t);
+    double outputValue = value * amplitude + offset;
+    PowerSupply.Voltage.SetUpdate(outputValue);
+}
+
+// Function to generate waveform based on parameters
 void functionGenerator()
+{
+    if (!lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+        return;
+
+    static unsigned long startTime = micros();
+    unsigned long currentTime = micros();
+    double elapsedTime = (currentTime - startTime) / 1000000.0;
+    double t = fmod(elapsedTime * funGenMem.frequency, 1.0);
+
+    Waveform currentWaveform = waveforms[selected_row];
+    double value = currentWaveform.function(t);
+    double outputValue = value * funGenMem.amplitude + funGenMem.offset;
+
+    static double lastOutputValue = 0.0;
+    if (outputValue != lastOutputValue)
+    {
+        PowerSupply.Voltage.SetUpdate(outputValue);
+        lastOutputValue = outputValue;
+    }
+
+    return;
+    Serial.print("Waveform: ");
+    Serial.print(currentWaveform.name);
+    Serial.print(" - Value: ");
+    Serial.println(outputValue);
+}
+
+int numWaveforms = sizeof(waveforms) / sizeof(waveforms[0]);
+void functionGenerator_demo()
 {
     static const unsigned long periodTotal = 10000000UL;     // 10 seconds in microseconds
     static const unsigned long periodWave = periodTotal / 3; // ~3.333 seconds per period
@@ -3763,6 +3971,9 @@ void functionGenerator()
     const char *currentWaveformName = currentWaveform.name;
 
     // Print the output value and waveform name
+    if (!lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+        return;
+
     Serial.print("Waveform: ");
     Serial.print(currentWaveformName);
     Serial.print(" - Value: ");

@@ -332,12 +332,24 @@ void createTasks()
     xTaskCreatePinnedToCore(
         Task_ADC,                /* Task function */
         "Voltage & Current ADC", /* Name of task */
-        18000,                   /* Stack size of task */
+        14000,                   /* Stack size of task */
         NULL,                    /* Parameter of the task */
         1,                       /* Priority of the task */
         &Task_adc,               /* Task handle */
         0                        /* Pin task to core 0 */
     );
+
+    // Create a task for ADC reading, with priority 1, pinned to core 0
+    // xTaskCreatePinnedToCore(
+    //     Task_DAC,                /* Task function */
+    //     "DAC set", /* Name of task */
+    //     4000,                   /* Stack size of task */
+    //     NULL,                    /* Parameter of the task */
+    //     10,                       /* Priority of the task */
+    //     &Task_dac,               /* Task handle */
+    //     0                        /* Pin task to core 0 */
+    // );
+
 
     Serial.print("\nReal-time tasks created and pinned to cores.");
 }
