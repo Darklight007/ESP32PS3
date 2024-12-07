@@ -372,6 +372,9 @@ void Device::readVoltage()
         // Serial.println(v);
         // Serial.print("Voltage:");
         // Serial.printf("%9.5f", Voltage.measured.Mean());
+
+        *Voltage.Bar.curValuePtr = v * Voltage.Bar.scaleFactor;
+        // lv_obj_invalidate(Voltage.Bar.bar);
     }
 }
 double internalCurrentConsumption;
@@ -408,7 +411,8 @@ void Device::readCurrent()
         // Serial.print(":");
         // Serial.print(Current.measured.sum_);
         // Serial.print("\n");
-
+        *Current.Bar.curValuePtr = c * Current.Bar.scaleFactor;
+        // lv_obj_invalidate(Current.Bar.bar);
         static unsigned long loopCount = 0;
         static unsigned long startTime = millis();
 
@@ -523,7 +527,6 @@ void Device::DACUpdate(void)
             DAC.writeAndPowerAll(DAC_CURRENT, uint16_t(c));
             dac_last_Current = c;
         }
-
     }
     else // if (getStatus() == DEVICE::OFF)
     {

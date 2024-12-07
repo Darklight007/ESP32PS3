@@ -561,6 +561,8 @@ struct _bar
     lv_obj_t *label_measureValue;
     bool changed = true;
     double oldValue;
+    double scaleFactor;
+    int32_t *curValuePtr; // = &((lv_bar_t *)PowerSupply.Voltage.Bar.bar)->cur_value;
 };
 
 struct _statisticsSmallLabels

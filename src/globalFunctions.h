@@ -81,7 +81,12 @@ lv_obj_t *table_signals;
 int globalSliderXValue;
 int32_t encoder1_value = 0, encoder2_value = 0;
 // lv_coord_t graph_data_I[600] = {0};
-lv_coord_t graph_data_V[1200] = {0};
+#define CHART_SIZE 240 * 1
+lv_coord_t graph_data_V[CHART_SIZE] = {0};
+lv_coord_t graph_data_I[CHART_SIZE] = {0};
+
+int32_t barGraph_V[1];
+int32_t barGraph_I[1];
 
 // extern std::map<DEVICE, deviceColors> stateColor;
 
@@ -298,17 +303,17 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     // lv_obj_set_style_size(PowerSupply.graph.chart, 0, LV_PART_INDICATOR);
     lv_chart_set_type(PowerSupply.graph.chart, LV_CHART_TYPE_LINE);
 
-    lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_CIRCULAR);
+    lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_SHIFT);
     lv_obj_add_event_cb(PowerSupply.graph.chart, draw_event_cb2, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
     PowerSupply.graph.serI = lv_chart_add_series(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_AMBER), LV_CHART_AXIS_SECONDARY_Y);
     PowerSupply.graph.serV = lv_chart_add_series(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_BLUE), LV_CHART_AXIS_PRIMARY_Y);
 
     // uint32_t pcnt = sizeof(ecg_sample) / sizeof(ecg_sample[0]);
-    lv_chart_set_point_count(PowerSupply.graph.chart, 600);
+    lv_chart_set_point_count(PowerSupply.graph.chart, CHART_SIZE);
     // lv_chart_set_ext_y_array(PowerSupply.graph.chart, ser, (lv_coord_t *)ecg_sample);
     PowerSupply.graph.serV->y_points = graph_data_V;
-    // PowerSupply.graph.serI->y_points = graph_data_V;
+    PowerSupply.graph.serI->y_points = graph_data_I;
 
     static lv_style_t style_slider;
     lv_style_init(&style_slider);
@@ -1207,11 +1212,11 @@ void init_touch()
 
 void Task_BarGraph(void *pvParameters)
 {
+
     for (;;)
     {
 
         if (Tabs::getCurrentPage() != 2)
-        // trackLoopExecution(__func__);
         {
             vTaskDelay(1);
             continue;
@@ -1219,10 +1224,17 @@ void Task_BarGraph(void *pvParameters)
 
         // if (!lvglIsBusy)
         {
+
+            // lv_obj_invalidate(PowerSupply.Voltage.Bar.bar);
+            // lv_obj_invalidate(PowerSupply.Current.Bar.bar);
+
+            // trackLoopExecution(__func__);
+            // lv_bar_set_value_with_anim(obj, value, &bar->cur_value, &bar->cur_value_anim, anim);
             PowerSupply.Voltage.barUpdate();
             PowerSupply.Current.barUpdate();
             //   getSettingEncoder(NULL, NULL);
         }
+
         // else
         // {
         //     toneOff();
@@ -1230,6 +1242,7 @@ void Task_BarGraph(void *pvParameters)
         // }
         // trackLoopExecution(__func__);
         // functionGenerator();
+        // vTaskDelay(3);
     }
 }
 void Task_DAC(void *pvParameters)
@@ -1259,6 +1272,9 @@ void Task_ADC(void *pvParameters)
     //   const size_t stackSize = (size_t)pvParameters;
     // const size_t stackUsage = stackSize - uxTaskGetStackHighWaterMark(NULL);
     // printf("Stack usage: %d bytes\n", stackUsage);
+    // lv_bar_t *v_bar = (lv_bar_t *)PowerSupply.Voltage.Bar.bar;
+    // int32_t *curValuePtr = &v_bar->cur_value;
+    // int32_t *curValuePtr = &((lv_bar_t *)PowerSupply.Voltage.Bar.bar)->cur_value;
 
     // ************************ Temperature DS18B20 Sensor ********************************************************
     for (;;)
@@ -1305,7 +1321,7 @@ void Task_ADC(void *pvParameters)
                 schedule([]
                          {
                              // functionGenerator_demo();
-                             //  functionGenerator();
+                            //   functionGenerator();
                              PowerSupply.DACUpdate(); },
                          50, timer_);
 
@@ -1351,9 +1367,9 @@ void Task_ADC(void *pvParameters)
         }
 
         HistPush();
-        // GraphPush();
+        GraphPush();
 
-        if (!lvglIsBusy && Tabs::getCurrentPage() == 0)
+        if (Tabs::getCurrentPage() == 0 && !lvglIsBusy)
 
             if (!lvglChartIsBusy)
             {
@@ -1361,29 +1377,20 @@ void Task_ADC(void *pvParameters)
                 lv_chart_refresh(PowerSupply.stats.chart);
                 lvglChartIsBusy = false;
             }
-        if (!lvglIsBusy && Tabs::getCurrentPage() == 1)
-
-            if (!lvglChartIsBusy)
-            {
-                lvglChartIsBusy = true;
-                   lv_chart_refresh( PowerSupply.graph.chart);
-                lvglChartIsBusy = false;
-            }
 
         static unsigned long NoAvgTime;
 
-        if (!lvglIsBusy)
+        if (Tabs::getCurrentPage() == 1 && !lvglIsBusy)
             schedule([]
                      {
                          if (!lvglChartIsBusy)
                          {
                              lvglChartIsBusy = true;
-                            //  lv_chart_set_next_value(PowerSupply.graph.chart, PowerSupply.graph.serV, PowerSupply.Voltage.measured.value * 1000.0);
-                            //  lv_chart_set_next_vale(PowerSupply.graph.chart, PowerSupply.graph.serI, PowerSupply.Current.measured.value * 1000.0);
-                        GraphPush();
+                             lv_chart_refresh(PowerSupply.graph.chart);
                              lvglChartIsBusy = false;
                          } },
-                     PowerSupply.Voltage.measured.NofAvgs * 1000 / /* pixels per point*/ ((double)PowerSupply.adc.realADCSpeed), NoAvgTime);
+                     //  PowerSupply.Voltage.measured.NofAvgs * 100000 / /* pixels per point*/ ((double)PowerSupply.adc.realADCSpeed), NoAvgTime);
+                     125, NoAvgTime);
 
         if (Tabs::getCurrentPage() == 1)
         {
@@ -2581,11 +2588,13 @@ void keyCheckLoop()
 
     keyMenusPage('W', " RELEASED.", 1, []
                  {
-                     static bool mode = false;
-                     if (false)
+                     static bool chart_mode = false;
+                     if (chart_mode)
                          lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_SHIFT);
                      else
-                         lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_CIRCULAR); });
+                         lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_CIRCULAR);
+
+                     chart_mode = !chart_mode; });
 
     keyMenusPage('X', " RELEASED.", 2, []
                  {
@@ -2930,19 +2939,18 @@ void ChartUpdate()
 void GraphPush()
 
 {
-    static uint16_t graph_v_i = 0;
+    // // graph_data_V[graph_v_i++] = PowerSupply.Voltage.measured.value * 1000.0;
+    // graph_data_V[CHART_SIZE - 1] = PowerSupply.Voltage.measured.value * 1000.0;
+    // for (int i = 1; i < CHART_SIZE; i++)
+    // graph_data_V[i - 1] = graph_data_V[i];
 
-    graph_data_V[graph_v_i++] = PowerSupply.Voltage.measured.value * 1000.0;
-    // for (int i = 0; i < 600 - 1; i++)
-    // {
-    //     graph_data_V[i] = graph_data_V[i + 1];
-    // }
+    // First shift everything left by one position
+    memcpy(&graph_data_V[0], &graph_data_V[1], (CHART_SIZE - 1) * sizeof(graph_data_V[0]));
+    memcpy(&graph_data_I[0], &graph_data_I[1], (CHART_SIZE - 1) * sizeof(graph_data_I[0]));
 
-    if (graph_v_i == 600)
-        graph_v_i = 0;
-
-    if (Tabs::getCurrentPage() == 1 && graph_v_i % 10 == 0)
-        lv_chart_refresh(PowerSupply.graph.chart);
+    // Now place the new value at the end
+    graph_data_V[CHART_SIZE - 1] = PowerSupply.Voltage.measured.value * 1000.0;
+    graph_data_I[CHART_SIZE - 1] = PowerSupply.Current.measured.value * 1000.0;
 }
 
 void HistPush()

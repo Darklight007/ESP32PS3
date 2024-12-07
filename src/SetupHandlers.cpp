@@ -29,6 +29,7 @@
 extern bool wireConnected;  // Flag indicating if device is connected on Wire
 extern bool wire1Connected; // Flag indicating if device is connected on Wire1
 // size_t memory;               // Global variable to hold free heap memory size
+extern int32_t *barGraph_V;
 
 // **Initialization Functions**
 
@@ -275,7 +276,17 @@ void setupPowerSupply()
     //     // myData.doubles[i] = i;
     //  mem.memory[i].voltage=0;
     //  mem.memory[i].current=0;
-     
+
+    PowerSupply.Voltage.Bar.bar;
+    lv_bar_t *bar = (lv_bar_t *)PowerSupply.Voltage.Bar.bar;
+
+
+    // Assuming 'bar' is a pointer to lv_bar_t
+    // lv_bar_t *bar = /* your bar object initialization */;
+
+    // Get the address of cur_value
+    int32_t *curValuePtr = &bar->cur_value;
+    curValuePtr = barGraph_V;
     // }
     // PowerSupply.SaveMemory("myDataKey", mem);
 }
@@ -334,7 +345,7 @@ void createTasks()
         "Voltage & Current ADC", /* Name of task */
         14000,                   /* Stack size of task */
         NULL,                    /* Parameter of the task */
-        1,                       /* Priority of the task */
+        10,                       /* Priority of the task */
         &Task_adc,               /* Task handle */
         0                        /* Pin task to core 0 */
     );
@@ -349,7 +360,6 @@ void createTasks()
     //     &Task_dac,               /* Task handle */
     //     0                        /* Pin task to core 0 */
     // );
-
 
     Serial.print("\nReal-time tasks created and pinned to cores.");
 }

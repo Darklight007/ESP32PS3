@@ -20,14 +20,13 @@ void DispObjects::measureUpdate(double value)
 {
     measured(value);
 
-// ignore the rest for Power measurement
+    // ignore the rest for Power measurement
     if (!strcmp(lv_label_get_text(label_unit), "W"))
         return;
 
     double rv = round(value * 320);
-    if (Bar.oldValue != rv)
+    if (Bar.oldValue != rv ) //&& (Bar.oldValue+3) < rv || (Bar.oldValue-3) > rv
     {
-
         Bar.changed = true;
         Bar.oldValue = rv;
     }
@@ -36,8 +35,8 @@ void DispObjects::measureUpdate(double value)
         oldValue = value;
         changed = true;
     }
-
 }
+
 void DispObjects::StatisticsUpdate(double value)
 {
     Statistics(value);
@@ -45,7 +44,6 @@ void DispObjects::StatisticsUpdate(double value)
     double er_sample = Statistics.ER(2 * maxValue);
     if (!std::isinf(er_sample))
         effectiveResolution(er_sample);
-
 }
 
 void DispObjects::displayUpdate(void)
@@ -77,7 +75,7 @@ void DispObjects::displayUpdate(void)
 void DispObjects::statUpdate(void)
 {
 
-    lv_label_set_text_fmt(statLabels.label_setSmallFont, "%+08.4f", adjValue );
+    lv_label_set_text_fmt(statLabels.label_setSmallFont, "%+08.4f", adjValue);
     lv_label_set_text_fmt(statLabels.label_value, "%+08.4f", Statistics.value);
     lv_label_set_text_fmt(statLabels.label_mean, "%+08.4f", Statistics.Mean());
     lv_label_set_text_fmt(statLabels.label_std, "%07.4f", Statistics.StandardDeviation());
@@ -88,16 +86,11 @@ void DispObjects::statUpdate(void)
 void DispObjects::barUpdate(void)
 {
 
+         
     if (Bar.changed)
     {
-        lv_bar_set_value(Bar.bar, measured.value / maxValue * lv_bar_get_max_value(Bar.bar), LV_ANIM_OFF);
-        // lv_obj_invalidate(Bar.bar); // it will update only when lv_timer_handler is called so no matter how offen this is called
-
-        // lv_obj_set_width(Bar.bar_adjValue, adjValue / maxValue * lv_bar_get_max_value(Bar.bar));
-
-        // lv_obj_align(Bar.bar_minMarker, LV_ALIGN_TOP_LEFT, lv_obj_get_x(Bar.bar) + int(measured.absMin / denum) - 3, lv_obj_get_y(Bar.bar) + 4);
-        // lv_obj_align(Bar.bar_maxMarker, LV_ALIGN_TOP_LEFT, lv_obj_get_x(Bar.bar) + int(measured.absMax /denum) - 3, lv_obj_get_y(Bar.bar) + 4);
-
+        // lv_bar_set_value(Bar.bar, measured.value / maxValue * lv_bar_get_max_value(Bar.bar), LV_ANIM_OFF);
+        lv_obj_invalidate(Bar.bar);
         static double oldMaxValue{0};
         if (measured.absMax != oldMaxValue)
         {
@@ -112,7 +105,7 @@ void DispObjects::barUpdate(void)
             oldMinValue = measured.absMin;
         }
         // LV_LOG_USER("Voltage max bar:%f",Statistics.value);
-        // Bar.changed = false;
+        Bar.changed = false;
         // oldMaxValue=-INFINITY;
         // oldMinValue = INFINITY;
     }
@@ -160,9 +153,9 @@ void DispObjects::SetUpdate(double value)
     // if (!lvglIsBusy)
     if (strcmp(lv_label_get_text(label_unit), "A"))
 
-        lv_label_set_text_fmt(label_setValue, "%+08.4fV", adjValue );
+        lv_label_set_text_fmt(label_setValue, "%+08.4fV", adjValue);
     else
-        lv_label_set_text_fmt(label_setValue, "%+08.4fA", adjValue );
+        lv_label_set_text_fmt(label_setValue, "%+08.4fA", adjValue);
 
     // lv_disp_enable_invalidation(lv_disp_get_default(), true);
     // lv_obj_invalidate(label_setValue);
@@ -182,15 +175,15 @@ void DispObjects::Flush(void)
         // lv_label_set_text_fmt(label_setValue, a, adjValue +adjOffset);
         if (strcmp(lv_label_get_text(label_unit), "A"))
 
-            lv_label_set_text_fmt(label_setValue, "%+08.4fV", adjValue );
+            lv_label_set_text_fmt(label_setValue, "%+08.4fV", adjValue);
         else
-            lv_label_set_text_fmt(label_setValue, "%+08.4fA", adjValue );
+            lv_label_set_text_fmt(label_setValue, "%+08.4fA", adjValue);
 
         // update bar setting shadaow
-        lv_obj_set_width(Bar.bar_adjValue, (adjValue ) / maxValue * lv_bar_get_max_value(Bar.bar));
+        lv_obj_set_width(Bar.bar_adjValue, (adjValue) / maxValue * lv_bar_get_max_value(Bar.bar));
         adjValueChanged = false;
         // lv_obj_invalidate(label_setValue);
-        Serial.printf("\n%10.4f", adjValue );
+        Serial.printf("\n%10.4f", adjValue);
     }
     // _lv_disp_refr_timer(NULL);
 }
@@ -546,6 +539,11 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     lv_obj_remove_style(Bar.bar_maxValue, &style_barMaxValue, LV_STATE_DEFAULT);
     lv_obj_add_style(Bar.bar_maxValue, &style_barMaxValue, LV_STATE_DEFAULT);
     lv_obj_align(Bar.bar_maxValue, LV_ALIGN_DEFAULT, x + barLength + 26, 70 - 2);
+    // voltageScaleFactor
+    Bar.scaleFactor = lv_bar_get_max_value(Bar.bar) / maxValue;
+    Bar.curValuePtr = &((lv_bar_t *)Bar.bar)->cur_value;
+
+    //  int32_t *curValuePtr = &((lv_bar_t *)PowerSupply.Voltage.Bar.bar)->cur_value;
 
     /******************************
      **   Bar min Marker
