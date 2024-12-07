@@ -81,7 +81,7 @@ lv_obj_t *table_signals;
 int globalSliderXValue;
 int32_t encoder1_value = 0, encoder2_value = 0;
 // lv_coord_t graph_data_I[600] = {0};
-#define CHART_SIZE 240 * 1
+#define CHART_SIZE 240 * 5
 lv_coord_t graph_data_V[CHART_SIZE] = {0};
 lv_coord_t graph_data_I[CHART_SIZE] = {0};
 
@@ -1227,22 +1227,11 @@ void Task_BarGraph(void *pvParameters)
 
             // lv_obj_invalidate(PowerSupply.Voltage.Bar.bar);
             // lv_obj_invalidate(PowerSupply.Current.Bar.bar);
-
-            // trackLoopExecution(__func__);
-            // lv_bar_set_value_with_anim(obj, value, &bar->cur_value, &bar->cur_value_anim, anim);
             PowerSupply.Voltage.barUpdate();
             PowerSupply.Current.barUpdate();
-            //   getSettingEncoder(NULL, NULL);
         }
 
-        // else
-        // {
-        //     toneOff();
-        //     vTaskDelay(3);
-        // }
         // trackLoopExecution(__func__);
-        // functionGenerator();
-        // vTaskDelay(3);
     }
 }
 void Task_DAC(void *pvParameters)
@@ -1288,18 +1277,21 @@ void Task_ADC(void *pvParameters)
         // }
         // Serial.printf("\nMeasured adcDataReady :%i Channel:%i", adcDataReady, PowerSupply.adc.busyChannel);
 
-        // static unsigned long timer_2 = {0};
-        // schedule([]
-        //          {
-        //              // functionGenerator_demo();
-        //              functionGenerator();
-        //             //  PowerSupply.DACUpdate();
-        //          },
-        //          1, timer_2);
-
         if (!adcDataReady)
         {
             toneOff();
+
+            static unsigned long timer_ = {0};
+            if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+                schedule([]
+                        {
+                             // functionGenerator_demo();
+                             functionGenerator();
+                             PowerSupply.DACUpdate(); 
+                             
+                        },
+
+                         5, timer_);
 
             // if (!lvglIsBusy)
 
@@ -1316,14 +1308,6 @@ void Task_ADC(void *pvParameters)
             getSettingEncoder(NULL, NULL);
 
             // DACInterval(49);
-            static unsigned long timer_ = {0};
-            if (!lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
-                schedule([]
-                         {
-                             // functionGenerator_demo();
-                            //   functionGenerator();
-                             PowerSupply.DACUpdate(); },
-                         50, timer_);
 
             // trackLoopExecution(__func__);
 

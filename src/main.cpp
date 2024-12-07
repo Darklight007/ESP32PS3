@@ -95,19 +95,18 @@ void loop()
   // Serial.printf("\nVoltage.encoder.getCount %l",PowerSupply.Voltage.encoder.getCount());
   // KeyCheckInterval(0); // moved to adc taskse
   // delay(10);
-  functionGenerator();
-  // static unsigned long timer_ = {0};
-PowerSupply.DACUpdate(); 
 
-  // static unsigned long timer_2 = {0};
+  // static unsigned long timer_ = {0};
+  
+  
+  // static unsigned long timer_ = {0};
+  // if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
   //   schedule([]
   //            {
-  //             // PowerSupply.adc.ads1219->powerDown();
-  //               // PowerSupply.adc.ads1219->resetConfig();
-  //             // PowerSupply.adc.ads1219->start();
-  //             // PowerSupply.adc.ads1219->begin();
+  //                        // functionGenerator_demo();
+  //                        functionGenerator();
+  //                        PowerSupply.DACUpdate(); },
+  //            2, timer_);
 
-  //            },
-  //           1000, timer_2 );
   //  Serial.printf("\nADC_loopCounter %l",PowerSupply.adc.ADC_loopCounter);
 }
