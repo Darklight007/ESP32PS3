@@ -592,6 +592,16 @@ void Device::setupPages(const char *page0, const char *page1, const char *page2,
                                           lv_palette_main(LV_PALETTE_YELLOW),
                                           lv_palette_main(LV_PALETTE_ORANGE),
                                           lv_color_hex(0x001A3C)};
+    //Function generator mode
+    stateColor[DEVICE::FUN] = deviceColors{lv_palette_main(LV_PALETTE_RED),
+                                          lv_palette_main(LV_PALETTE_RED),
+                                          lv_palette_main(LV_PALETTE_ORANGE),
+                                        //   lv_palette_darken(LV_PALETTE_DEEP_ORANGE, 4)
+                                            lv_color_hex(0x3C1A00) 
+
+                                          };
+
+
 }
 
 void Device::setPagesCallback(lv_event_cb_t event_cb)

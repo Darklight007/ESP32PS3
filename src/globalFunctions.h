@@ -9,6 +9,7 @@
 #include <string>
 #include <math.h>
 #include "spinbox_pro.h"
+#include "table_pro.h"
 
 /**********************
  *   PROTOTYPES
@@ -27,9 +28,8 @@ void trackLoopExecution(const char *);
 void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value);
 void Utility_tabview(lv_obj_t *parent);
 lv_obj_t *find_btn_by_tag(lv_obj_t *parent, uint32_t tag);
-void functionGenerator2(int waveformIndex, double frequency, double amplitude, double offset, double dutyCycleParam);
+
 void functionGenerator();
-#define PI 3.14159265358979323846
 
 // Function prototypes for waveform functions
 double sineWave(double t);
@@ -76,7 +76,26 @@ void functionGenerator_demo(void);
  *   GLOBAL VARIABLES
  **********************/
 FunGen funGenMem;
-lv_obj_t *table_signals;
+// lv_obj_t *table_signals;
+
+struct function
+{
+    lv_obj_t *Amplitude;
+    lv_obj_t *Frequency;
+    lv_obj_t *Offset;
+    lv_obj_t *Duty;
+};
+
+struct objs_list
+{
+    lv_obj_t *table_fun_gen_list;
+    function fun;
+    lv_obj_t *table_point_list;
+    lv_obj_t *table_spinbox_value;
+    double table_current_value;
+    // double table_points[100];
+} Utility_objs;
+
 // volatile long chartInterruptCounter;
 int globalSliderXValue;
 int32_t encoder1_value = 0, encoder2_value = 0;
@@ -127,8 +146,13 @@ void btn_event_cb(lv_event_t *e)
         {
             myTone(NOTE_A5, 200);
             lv_label_set_text(label, "ON");
-            PowerSupply.setStatus(DEVICE::ON);
             PowerSupply.settingParameters.isPowerSupplyOn = true;
+            PowerSupply.setStatus(DEVICE::ON);
+            if (btn_function_gen)
+                if (!lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+                    PowerSupply.setStatus(DEVICE::ON);
+                else
+                    PowerSupply.setStatus(DEVICE::FUN);
         }
         else
         {
@@ -394,8 +418,11 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V-Set", lv_palette_main(LV_PALETTE_AMBER), "I-set", 25, 0);
 
     static lv_style_t style_FFT;
-    overlay(PowerSupply.Voltage.statLabels.label_fft, "", &style_FFT, lv_palette_lighten(LV_PALETTE_AMBER, 4), 160, 0);
-    overlay(PowerSupply.Current.statLabels.label_fft, "", &style_FFT, lv_palette_lighten(LV_PALETTE_AMBER, 4), 160, 14);
+    if (false)
+    {
+        overlay(PowerSupply.Voltage.statLabels.label_fft, "", &style_FFT, lv_palette_lighten(LV_PALETTE_AMBER, 4), 160, 0);
+        overlay(PowerSupply.Current.statLabels.label_fft, "", &style_FFT, lv_palette_lighten(LV_PALETTE_AMBER, 4), 160, 14);
+    }
 
     lv_obj_set_parent(PowerSupply.Voltage.statLabels.label_fft, parent);
     lv_obj_set_parent(PowerSupply.Current.statLabels.label_fft, parent);
@@ -832,6 +859,11 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 
     // legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V", lv_palette_main(LV_PALETTE_AMBER), "A", 25, 0);
 }
+
+#define NUM_LABELS 7
+
+char tickLabels_x[NUM_LABELS][10]; // 7 labels, max 9 characters each
+
 static void draw_event_cb2(lv_event_t *e)
 {
     lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
@@ -888,8 +920,22 @@ static void draw_event_cb2(lv_event_t *e)
         /* Handle LV_CHART_AXIS_PRIMARY_X */
         if (dsc->id == LV_CHART_AXIS_PRIMARY_X)
         {
+            for (int i = 0; i < NUM_LABELS; i++)
+            {
+                if (i == NUM_LABELS - 1)
+                {
+                    strcpy(tickLabels_x[i], "0 pts");
+                }
+                else
+                {
+                    int value = CHART_SIZE * (NUM_LABELS - 1 - i) / (NUM_LABELS - 1);
+                    sprintf(tickLabels_x[i], "%d", value);
+                }
+            }
+
             static int index_x = 0;
-            static char *tickLabels_x[] = {"300", "250", "200", "150", "100", "50", "0 pts"};
+            // static char *tickLabels_x[] = {"300", "250", "200", "150", "100", "50", "0 pts"};
+            // Initialize tick labels based on CHART_SIZE and fractions
 
             if (index_x == 7)
                 index_x = 0;
@@ -1234,36 +1280,11 @@ void Task_BarGraph(void *pvParameters)
         // trackLoopExecution(__func__);
     }
 }
-void Task_DAC(void *pvParameters)
-{
 
-    for (;;)
-    {
-        functionGenerator();
-        static unsigned long timer_ = {0};
-        if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
-        {
-            schedule([]
-                     {
-                         // functionGenerator_demo();
-                         PowerSupply.DACUpdate(); },
-                     50, timer_);
-            // Serial.print("\nTask_DAC running on core ");
-        }
-        delay(1);
-    }
-}
+
 void Task_ADC(void *pvParameters)
 {
 
-    // Serial.print("\nTask1 running on core ");
-    // Serial.println(xPortGetCoreID());
-    //   const size_t stackSize = (size_t)pvParameters;
-    // const size_t stackUsage = stackSize - uxTaskGetStackHighWaterMark(NULL);
-    // printf("Stack usage: %d bytes\n", stackUsage);
-    // lv_bar_t *v_bar = (lv_bar_t *)PowerSupply.Voltage.Bar.bar;
-    // int32_t *curValuePtr = &v_bar->cur_value;
-    // int32_t *curValuePtr = &((lv_bar_t *)PowerSupply.Voltage.Bar.bar)->cur_value;
 
     // ************************ Temperature DS18B20 Sensor ********************************************************
     for (;;)
@@ -1277,24 +1298,21 @@ void Task_ADC(void *pvParameters)
         // }
         // Serial.printf("\nMeasured adcDataReady :%i Channel:%i", adcDataReady, PowerSupply.adc.busyChannel);
 
+        toneOff();
+        static unsigned long timer_ = {0};
+        if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+            schedule([]
+                     {
+                            functionGenerator();
+                             PowerSupply.DACUpdate(); },
+                     4, timer_);
+        else
+            schedule([]
+                     { PowerSupply.DACUpdate(); },
+                     100, timer_);
+
         if (!adcDataReady)
         {
-            toneOff();
-
-            static unsigned long timer_ = {0};
-            if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
-                schedule([]
-                        {
-                             // functionGenerator_demo();
-                             functionGenerator();
-                             PowerSupply.DACUpdate(); 
-                             
-                        },
-
-                         5, timer_);
-
-            // if (!lvglIsBusy)
-
             if (wireConnected)
             {
                 isMyTextBoxHidden = lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
@@ -1380,13 +1398,13 @@ void Task_ADC(void *pvParameters)
         {
             if (V.sampleReady)
             {
-                V.push(PowerSupply.Voltage.measured.Mean());
+                V.push(PowerSupply.Voltage.measured.value);
                 V.sampleReady = false;
             }
 
             if (I.sampleReady)
             {
-                I.push(PowerSupply.Current.measured.Mean());
+                I.push(PowerSupply.Current.measured.value);
                 I.sampleReady = false;
             }
         }
@@ -1706,18 +1724,38 @@ static void mem_btn_event_cb(lv_event_t *e)
 }
 //**********************************************************************************/
 // Define the style for the selected row
-static uint16_t selected_row = 0; // Initialize to first row
-
 // Event callback to handle row selection
-static void table_event_cb(lv_event_t *e)
+static void table_get_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
     {
         lv_obj_t *table = lv_event_get_target(e);
         uint16_t row, col;
         lv_table_get_selected_cell(table, &row, &col);
-        selected_row = row;
+        // table->user_data = (void *)row;
+        // lv_obj_invalidate(table); // Redraw the table to apply changes
+        const char *cell_str = lv_table_get_cell_value(table, row, 1);
+        Utility_objs.table_current_value = atof(cell_str);
+        lv_spinbox_set_value(Utility_objs.table_spinbox_value, Utility_objs.table_current_value);
+    }
+}
+
+// Event callback to handle row selection
+static void table_touch_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+    {
+        lv_obj_t *table = lv_event_get_target(e);
+        uint16_t row, col;
+        lv_table_get_selected_cell(table, &row, &col);
+        table->user_data = (void *)row;
         lv_obj_invalidate(table); // Redraw the table to apply changes
+        lv_table_get_cell_value(table, row, col);
+
+        const char *cell_str = lv_table_get_cell_value(table, row, 1);
+        Utility_objs.table_current_value = atof(cell_str);
+        lv_spinbox_set_value(Utility_objs.table_spinbox_value, Utility_objs.table_current_value * 10000.0);
+        lv_obj_invalidate(Utility_objs.table_spinbox_value);
 
         if (obj_old)
         {
@@ -1741,6 +1779,7 @@ static void table_draw_cell_event_cb(lv_event_t *e)
         // Calculate row and column from cell id
         uint16_t row = id / col_cnt;
         uint16_t col = id % col_cnt;
+        uint16_t selected_row = (int)table->user_data;
 
         if (row == selected_row)
         {
@@ -1751,21 +1790,24 @@ static void table_draw_cell_event_cb(lv_event_t *e)
 }
 
 // Function to select the next row
-void select_next_row(lv_obj_t *table)
+void select_next_row(lv_obj_t *table, lv_coord_t row_height)
 {
     uint16_t row_cnt = lv_table_get_row_cnt(table);
-    if (selected_row < row_cnt - 1)
-    {
-        selected_row++;
-    }
-    // else
+    // if (selected_row < row_cnt - 1)
     // {
-    //     selected_row = 0; // Loop back to the first row
+    //     selected_row++;
     // }
-    int row_height = 25; // Define your row height
+    uint16_t cur_row_number = (int)table->user_data;
+
+    if (cur_row_number < row_cnt - 1)
+    {
+        cur_row_number++;
+        table->user_data = (void *)cur_row_number;
+    }
+
     lv_coord_t scroll_y = lv_obj_get_scroll_y(table);
     lv_coord_t visible_h = lv_obj_get_height(table);
-    int y_pos = selected_row * row_height;
+    lv_coord_t y_pos = cur_row_number * row_height;
 
     if (y_pos < scroll_y)
         lv_obj_scroll_to_y(table, y_pos, LV_ANIM_OFF);
@@ -1773,24 +1815,33 @@ void select_next_row(lv_obj_t *table)
         lv_obj_scroll_to_y(table, y_pos + row_height - visible_h, LV_ANIM_OFF);
 
     lv_obj_invalidate(table);
+
+    const char *cell_str = lv_table_get_cell_value(table, cur_row_number, 1);
+    Utility_objs.table_current_value = atof(cell_str);
+    lv_spinbox_set_value(Utility_objs.table_spinbox_value, Utility_objs.table_current_value * 10000.0);
+    lv_obj_invalidate(Utility_objs.table_spinbox_value);
 }
 
 // Function to select the previous row
-void select_previous_row(lv_obj_t *table)
+void select_previous_row(lv_obj_t *table, lv_coord_t row_height)
 {
-    uint16_t row_cnt = lv_table_get_row_cnt(table);
-    if (selected_row > 0)
-    {
-        selected_row--;
-    }
-    // else
+    // uint16_t row_cnt = lv_table_get_row_cnt(table);
+    // if (selected_row > 0)
     // {
-    //     selected_row = row_cnt - 1; // Loop back to the last row
+    //     selected_row--;
     // }
-    int row_height = 25; // Define your row height
+
+    int cur_row_number = (int)table->user_data;
+
+    if (cur_row_number > 0)
+    {
+        cur_row_number--;
+        table->user_data = (void *)cur_row_number;
+    }
+
     lv_coord_t scroll_y = lv_obj_get_scroll_y(table);
     lv_coord_t visible_h = lv_obj_get_height(table);
-    int y_pos = selected_row * row_height;
+    lv_coord_t y_pos = cur_row_number * row_height;
 
     if (y_pos < scroll_y)
         lv_obj_scroll_to_y(table, y_pos, LV_ANIM_OFF);
@@ -1798,6 +1849,11 @@ void select_previous_row(lv_obj_t *table)
         lv_obj_scroll_to_y(table, y_pos + row_height - visible_h, LV_ANIM_OFF);
 
     lv_obj_invalidate(table);
+
+    const char *cell_str = lv_table_get_cell_value(table, cur_row_number, 1);
+    Utility_objs.table_current_value = atof(cell_str);
+    lv_spinbox_set_value(Utility_objs.table_spinbox_value, Utility_objs.table_current_value * 10000.0);
+    lv_obj_invalidate(Utility_objs.table_spinbox_value);
 }
 
 void btn_function_gen_event_cb(lv_event_t *e)
@@ -1808,9 +1864,15 @@ void btn_function_gen_event_cb(lv_event_t *e)
     lv_obj_t *label = lv_obj_get_child(btn, 0);
 
     if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+    {
         lv_label_set_text(label, "ON");
+        PowerSupply.setStatus(DEVICE::FUN);
+    }
     else
+    {
         lv_label_set_text(label, "OFF");
+        PowerSupply.setStatus(DEVICE::ON);
+    }
 
     if (obj_old)
     {
@@ -1819,6 +1881,19 @@ void btn_function_gen_event_cb(lv_event_t *e)
     }
 }
 
+static void spinbox_change_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+    {
+        lv_obj_t *spinbox = lv_event_get_target(e);
+        double value = lv_spinbox_get_value(spinbox) / 10000.0;
+
+        int row = (int)Utility_objs.table_point_list->user_data;
+        lv_table_set_cell_value_fmt(Utility_objs.table_point_list, row, 1, "%06.4f", value);
+        // Utility_objs.table_points[row] = value;
+        funGenMem.table_points[row] = value;
+    }
+}
 void Utility_tabview(lv_obj_t *parent)
 {
     lv_obj_set_size(parent, 320, 216);
@@ -1935,52 +2010,26 @@ void Utility_tabview(lv_obj_t *parent)
     // Tab 2 ****************************************************************************************************************************
 
     lv_obj_set_style_pad_ver(tabview, 0, LV_PART_ITEMS);
-    table_signals = lv_table_create(tab2);
-    lv_obj_set_pos(table_signals, 3, 3);
-    int table_signals_width = 186;
-    lv_obj_set_size(table_signals, table_signals_width, 130);
-    // lv_obj_clear_flag(tab2, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_pad_ver(table_signals, 5, LV_PART_ITEMS);
-    lv_obj_set_style_pad_left(table_signals, 5, LV_PART_ITEMS);
-    // lv_obj_set_style_pad_hor(table_signals, 5, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(tab2, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(table_signals, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(tab2, LV_OBJ_FLAG_SCROLLABLE);
 
     static lv_style_t style_func;
     lv_style_init(&style_func);
-    lv_style_set_text_font(&style_func, &lv_font_montserrat_12);
 
-    lv_obj_remove_style(table_signals, &style_func, LV_STATE_DEFAULT);
-    lv_obj_add_style(table_signals, &style_func, LV_STATE_DEFAULT);
+    Utility_objs.table_fun_gen_list = table_pro(tab2, &style_func, &lv_font_montserrat_12, LV_ALIGN_DEFAULT, 3, 3, 20, 130, 5, 5);
 
-    // Set positions, styles, and flags as needed
-    // Initialize the table cells
     for (int i = 0; i < numWaveforms; i++)
     {
-        lv_table_set_cell_value_fmt(table_signals, i, 0, "%i", i);
-        lv_table_set_cell_value_fmt(table_signals, i, 1, "%s", waveforms[i].name);
+        lv_table_set_cell_value_fmt(Utility_objs.table_fun_gen_list, i, 0, "%i", i + 1);
+        lv_table_set_cell_value_fmt(Utility_objs.table_fun_gen_list, i, 1, "%s", waveforms[i].name);
     }
     // Set column widths
-    lv_table_set_col_width(table_signals, 0, 30);
-    lv_table_set_col_width(table_signals, 1, table_signals_width - 50);
+    int table_signals_width = 186;
+    lv_table_set_col_width(Utility_objs.table_fun_gen_list, 0, 30);
+    lv_table_set_col_width(Utility_objs.table_fun_gen_list, 1, table_signals_width - 50);
     // Add the event callbacks
-    lv_obj_add_event_cb(table_signals, table_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_add_event_cb(table_signals, table_draw_cell_event_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
-
-    // lv_obj_t *label_Amplitude;
-    // label_Amplitude = lv_label_create(tab2);
-    // lv_obj_set_style_text_font(label_Amplitude, &lv_font_montserrat_16, 0);
-    // lv_label_set_text_fmt(label_Amplitude, "Amplitude\n%+08.4f", 32.767);
-    // lv_obj_align(label_Amplitude, LV_ALIGN_RIGHT_MID, -5, -70);
-    // label_Amplitude->user_data = (void *)(14);
-    // lv_example_spinbox_1(tab3);
-
-    // lv_obj_t *what;
-    // what = lv_label_create(tab2);
-    // lv_obj_set_style_text_font(label_Frequency, &lv_font_montserrat_16, 0);
-    // lv_label_set_text_fmt(label_Frequency, "Frequency\n%+04.2fHz", 4.31);
-    // lv_obj_align(label_Frequency, LV_ALIGN_RIGHT_MID, -5, -30);
-    // label_Frequency->user_data = (void *)(15);
+    lv_obj_add_event_cb(Utility_objs.table_fun_gen_list, table_touch_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(Utility_objs.table_fun_gen_list, table_draw_cell_event_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
     /********************
      * Spinbox
@@ -1995,10 +2044,10 @@ void Utility_tabview(lv_obj_t *parent)
     // createSpinbox(tab3, "#FFFFF7 Offset:#", -10000, 400000, 6, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2);
     // createSpinbox(tab3, "#FFFFF7 Code2:#", -10000, 8388608, 7, 0, LV_ALIGN_RIGHT_MID, XOffset , verOffset + verPad * 3);
 
-    spinbox_pro(tab2, "#FFFFF7 Amplitude:#", 0, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0, 98, 0);
-    spinbox_pro(tab2, "#FFFFF7 Frequency [Hz]:#", 0, 10000, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1, 98, 1);
-    spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -1000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2);
-    spinbox_pro(tab2, "#FFFFF7 Duty [%]:#", 0, 10000, 5, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 3, 98, 3);
+    Utility_objs.fun.Amplitude = spinbox_pro(tab2, "#FFFFF7 Amplitude:#", 0, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0, 98, 0);
+    Utility_objs.fun.Frequency = spinbox_pro(tab2, "#FFFFF7 Frequency [Hz]:#", 0, 10000, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1, 98, 1);
+    Utility_objs.fun.Offset = spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -1000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2);
+    Utility_objs.fun.Duty = spinbox_pro(tab2, "#FFFFF7 Duty [%]:#", 0, 10000, 5, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 3, 98, 3);
 
     funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
 
@@ -2025,72 +2074,72 @@ void Utility_tabview(lv_obj_t *parent)
 
     // Tab 3 ****************************************************************************************************************************
     // Tab 4 ****************************************************************************************************************************
-    // lv_obj_set_pos(label, 0, 0);
-    lv_obj_set_style_pad_ver(tabview, 0, LV_PART_ITEMS);
-    lv_obj_t *table = lv_table_create(tab4);
-    lv_obj_set_pos(table, -4, -4);
-    // lv_table_set_cell_value(table, 0, 0, "#");
-    // lv_table_set_cell_value(table, 0, 1, "V");
-    // lv_table_set_cell_value(table, 0, 2, "C");
-
-    // lv_table_set_row_cnt(table, 2);
+    lv_obj_clear_flag(lv_tabview_get_content(tabview), LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(tab4, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_pad_ver(tab4, 0, LV_PART_ITEMS);
-    lv_obj_set_style_pad_ver(table, 3, LV_PART_ITEMS);
-
-    for (int i = 0; i < 100; i++)
-    {
-        lv_table_set_cell_value_fmt(table, i, 0, "%0i", i);
-        lv_table_set_cell_value_fmt(table, i, 1, "%06.3fV", i * 2000.0 * 3.5555 / 2000.0);
-
-        lv_table_set_cell_value_fmt(table, i, 2, "%06.3fA", i * 2000.0 * 3.5555 / 10000.0);
-
-        //  lv_list_add_text(waveform_list, waveforms[i].name);
-    }
+    lv_obj_set_style_pad_all(tab4, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(tab4, 0, LV_PART_ITEMS);
 
     static lv_style_t style_stats;
     lv_style_init(&style_stats);
-    lv_style_set_text_font(&style_stats, &graph_R_16);
-    lv_style_set_text_letter_space(&style_stats, 1);
-    lv_style_set_text_color(&style_stats, lv_palette_main(LV_PALETTE_GREY));
-    lv_style_set_text_letter_space(&style_stats, -1);
 
-    lv_obj_remove_style(table, &style_stats, LV_STATE_DEFAULT);
-    lv_obj_add_style(table, &style_stats, LV_STATE_DEFAULT);
+    Utility_objs.table_point_list = table_pro(tab4, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 3, 20, 180, 0, 5);
 
-    // lv_obj_add_style(table, LV_TABLE_DRAW_PART_CELL, &style_cellx);
-    /*Set a smaller height to the table. It'll make it scrollable*/
-    lv_obj_set_height(table, 172);
-    //  lv_obj_clear_flag(lv_tabview_get_content(table), LV_OBJ_FLAG_SCROLLABLE);
-    // lv_obj_set_width(tab1, 25);
-    // lv_obj_set_width(table, 294);
-    // lv_obj_center(table);
+    for (int i = 0; i < 100; i++)
+    {
+        // Utility_objs.table_points[i] = funGenMem.table_points[i];
+        lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 0, "%0i", i);
+        lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%1.4f", funGenMem.table_points[i]);
+    }
 
-    lv_table_set_col_width(table, 0, 27 * 2);
-    lv_table_set_col_width(table, 1, 140);
-    lv_table_set_col_width(table, 2, 140);
+    lv_table_set_col_width(Utility_objs.table_point_list, 0, 40);
+    lv_table_set_col_width(Utility_objs.table_point_list, 1, 100);
 
-    lv_obj_clear_flag(lv_tabview_get_content(tabview), LV_OBJ_FLAG_SCROLLABLE);
-    return;
-    const lv_font_t *font_set{&lv_font_montserrat_16}; // graph_R_16 dseg_b_20
+    lv_obj_add_event_cb(Utility_objs.table_point_list, table_touch_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(Utility_objs.table_point_list, table_draw_cell_event_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
-    static lv_style_t style_set;
-    lv_style_init(&style_set);
-    lv_style_set_text_color(&style_set, lv_palette_main(LV_PALETTE_YELLOW));
-    lv_style_set_text_font(&style_set, font_set);
-    lv_obj_add_style(label, &style_set, LV_STATE_DEFAULT);
+    // lv_obj_add_event_cb(Utility_objs.table_point_list, table_get_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    label = lv_label_create(tab2);
-    lv_label_set_text(label, "Second tab");
+    Utility_objs.table_spinbox_value = spinbox_pro(tab4, "#FFFFF7 Value:#", 0, 10000, 5, 1, LV_ALIGN_RIGHT_MID, -35, -50, 98, 0);
+    lv_obj_add_event_cb(Utility_objs.table_spinbox_value, spinbox_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    label = lv_label_create(tab3);
-    lv_label_set_text(label, "Third tab");
+    // Saving  ************************************************************
+    lv_obj_t *saveButton = lv_btn_create(tab4);
+    label = lv_label_create(saveButton);
+    lv_label_set_text(label, "Save");
+    lv_obj_align(saveButton, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align_to(saveButton, Utility_objs.table_spinbox_value, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
 
-    label = lv_label_create(tab3);
-    lv_label_set_text(label, "Third tab");
+    auto save_table_data_cb = [](lv_event_t *e)
+    {
+        lv_event_code_t code = lv_event_get_code(e);
+        if (code == LV_EVENT_CLICKED)
+            PowerSupply.SaveMemoryFgen("FunGen", funGenMem);
+    };
+    lv_obj_add_event_cb(saveButton, save_table_data_cb, LV_EVENT_CLICKED, NULL);
 
-    // label = lv_label_create(tab4);
-    // lv_label_set_text(label, "Fourth tab");
+    // Loading  ************************************************************
+    lv_obj_t *loadButton = lv_btn_create(tab4);
+    label = lv_label_create(loadButton);
+    lv_label_set_text(label, "Load");
+    lv_obj_align(loadButton, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align_to(loadButton, saveButton, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+
+    auto load_table_data_cb = [](lv_event_t *e)
+    {
+        lv_event_code_t code = lv_event_get_code(e);
+        if (code == LV_EVENT_CLICKED)
+        {
+            funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
+            for (int i = 0; i < 100; i++)
+            {
+                lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%06.4f", funGenMem.table_points[i]);
+            }
+            lv_obj_invalidate(Utility_objs.table_point_list);
+        }
+    };
+
+    lv_obj_add_event_cb(loadButton, load_table_data_cb, LV_EVENT_CLICKED, NULL);
 }
 
 void autoScrollY()
@@ -3100,8 +3149,8 @@ void FFTUpdateInterval(unsigned long interval)
              {
                  /*FFT_v*/
 
-                 V.computeFFT(PowerSupply.adc.realADCSpeed * 0.495049505 /*2.02*/);
-                 I.computeFFT(PowerSupply.adc.realADCSpeed * 0.495049505 /**/);
+                 V.computeFFT(PowerSupply.adc.realADCSpeed /* 1/2.02 */);
+                 I.computeFFT(PowerSupply.adc.realADCSpeed /**/);
 
                  lv_label_set_text_fmt(PowerSupply.Voltage.statLabels.label_fft, "V-FFT:%5.1f Hz", V.peak);
                  lv_label_set_text_fmt(PowerSupply.Current.statLabels.label_fft, "I-FFT:%5.1f Hz", I.peak);
@@ -3190,7 +3239,7 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
         lv_spinbox_set_cursor_pos(spinBox, 0);
         lv_spinbox_set_cursor_pos(spinBox, width - cursor_pos);
 
-        Serial.printf("\ndata->cursor_pos: %i", width - cursor_pos);
+        // Serial.printf("\ndata->cursor_pos: %i", width - cursor_pos);
 
         encoder2_last_value = encoder2_value;
 
@@ -3523,11 +3572,19 @@ void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
         // // Determine the direction of encoder 1 rotation
         if (encoder2_last_value < encoder2_value)
         {
-            select_previous_row(table_signals);
+
+            if (lv_tabview_get_tab_act(lv_obj_get_child(PowerSupply.page[3], 0)) == 1)
+                select_previous_row(Utility_objs.table_fun_gen_list, 25);
+            else
+                select_previous_row(Utility_objs.table_point_list, 2 * 7 + 2 * 5);
         }
         else if (encoder2_last_value > encoder2_value)
         {
-            select_next_row(table_signals);
+
+            if (lv_tabview_get_tab_act(lv_obj_get_child(PowerSupply.page[3], 0)) == 1)
+                select_next_row(Utility_objs.table_fun_gen_list, 25);
+            else
+                select_next_row(Utility_objs.table_point_list, 2 * 7 + 2 * 5);
         }
 
         // static lv_obj_t *table = lv_obj_get_child(PowerSupply.page[3], 0);
@@ -3633,12 +3690,18 @@ void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_l
 
         // Update cursor position based on encoder 2
         if (encoder2_last_value < encoder2_value)
+        {
             move_spinbox_cursor_left(obj_old);
+            encoder2_last_value = encoder2_value;
+            return;
+        }
 
         else if (encoder2_last_value > encoder2_value)
+        {
             move_spinbox_cursor_right(obj_old);
-
-        encoder2_last_value = encoder2_value;
+            encoder2_last_value = encoder2_value;
+            return;
+        }
 
         if (encoder1_last_value < encoder1_value)
             lv_spinbox_increment(obj_old);
@@ -3648,19 +3711,28 @@ void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_l
 
         encoder1_last_value = encoder2_value;
 
-        static lv_obj_t *tabview_main = lv_obj_get_child(PowerSupply.page[3], 0);
-        static lv_obj_t *tabview_second = lv_obj_get_child(tabview_main, 1);
-        static lv_obj_t *fgen_tabview = lv_obj_get_child(tabview_second, 1);
         // Serial.printf("\n***********************************");
         // print_obj_type(fgen_tabview); // Output: Object is************ a button
         // Serial.printf("\nSpinbox_pro%i", get_spinbox_data_by_id(fgen_tabview, 2));
-        // FunGen funGen;
-        funGenMem.amplitude = double(get_spinbox_data_by_id(fgen_tabview, 0) / 1000.0);
-        funGenMem.frequency = double(get_spinbox_data_by_id(fgen_tabview, 1) / 1000.0);
-        funGenMem.offset = double(get_spinbox_data_by_id(fgen_tabview, 2) / 1000.0);
-        funGenMem.dutyCycle = double(get_spinbox_data_by_id(fgen_tabview, 3) / 10000.0);
 
-        PowerSupply.SaveMemoryFgen("FunGen", funGenMem);
+        funGenMem.amplitude = lv_spinbox_get_value(Utility_objs.fun.Amplitude) / 1000.0;
+        funGenMem.frequency = lv_spinbox_get_value(Utility_objs.fun.Frequency) / 1000.0;
+        funGenMem.offset = lv_spinbox_get_value(Utility_objs.fun.Offset) / 1000.0;
+        funGenMem.dutyCycle = lv_spinbox_get_value(Utility_objs.fun.Duty) / 10000.0;
+
+        // funGenMem.amplitude = double(get_spinbox_data_by_id(fgen_tabview, 0) / 1000.0);
+        // funGenMem.frequency = double(get_spinbox_data_by_id(fgen_tabview, 1) / 1000.0);
+        // funGenMem.offset = double(get_spinbox_data_by_id(fgen_tabview, 2) / 1000.0);
+        // funGenMem.dutyCycle = double(get_spinbox_data_by_id(fgen_tabview, 3) / 10000.0);
+
+        if (lv_tabview_get_tab_act(lv_obj_get_child(PowerSupply.page[3], 0)) == 1)
+            PowerSupply.SaveMemoryFgen("FunGen", funGenMem);
+
+        // Serial.printf("\n********************");
+        // Serial.printf("\namplitude %f", funGenMem.amplitude);
+        // Serial.printf("\nfrequency %f", funGenMem.frequency);
+        // Serial.printf("\noffset %f", funGenMem.offset);
+        // Serial.printf("\ndutyCycle %f", funGenMem.dutyCycle);
         // Serial.printf("\n********************");
         // print_obj_type(parent); // Output: Object is a button
         // Serial.printf("\nSpinbox_pro%i", get_spinbox_data_by_id(parent, 2));
@@ -3745,105 +3817,156 @@ void MiscPriority()
 
 // Waveform functions
 double dutyCycle = .5;
+// #include <math.h>   // for sin, cos, exp, fabs, log10
+// #include <stdlib.h> // for random if needed
+
+#define PI 3.14159265358979323846
 double sineWave(double t)
 {
-    return sin(2.0 * PI * t);
+    // sin(...) ranges from -1 to 1, shift to [0,1]
+    return (sin(2.0 * PI * t) + 1.0) / 2.0;
 }
 
 double squareWave(double t)
 {
-    return (t < 0.5) ? 1.0 : -1.0;
+    // Original: (t < 0.5) ? 1.0 : -1.0 => replace -1.0 with 0.0
+    return (t < 0.5) ? 1.0 : 0.0;
 }
+
 double triangularWave(double t)
 {
-    return (t < 0.5) ? (4.0 * t - 1.0) : (-4.0 * t + 3.0);
+    // Original: goes from -1 to 1, now shift to [0,1]
+    double val = (t < 0.5) ? (4.0 * t - 1.0) : (-4.0 * t + 3.0);
+    return (val + 1.0) / 2.0;
 }
 
 double pulseWave(double t)
 {
     double dutyCycle = 0.1;
-    return (t < dutyCycle) ? 1.0 : -1.0;
+    // Original: (t < dutyCycle) ? 1.0 : -1.0 => replace -1.0 with 0.0
+    return (t < dutyCycle) ? 1.0 : 0.0;
 }
 
 double sawtoothWave(double t)
 {
-    return 2.0 * t - 1.0;
+    // Original: 2.0 * t - 1.0 ranges [-1,1]
+    // Shift to [0,1]: (2*t -1 +1)/2 = t
+    return t;
 }
 
 double invertedSawtoothWave(double t)
 {
-    return -2.0 * t + 1.0;
+    // Original: -2.0 * t + 1.0 ranges from 1 at t=0 to -1 at t=1
+    // Shift to [0,1]: ((-2t+1)+1)/2 = (2 -2t)/2 = 1 - t
+    return 1.0 - t;
 }
 
 double exponentialDecay(double t)
 {
-    return exp(-5.0 * t) * 2.0 - 1.0; // Adjusted to range from -1 to 1
+    // Original: exp(-5.0*t)*2.0 -1.0 in [-1,1]
+    // Shift: (val +1)/2
+    double val = exp(-5.0 * t) * 2.0 - 1.0;
+    return (val + 1.0) / 2.0;
 }
 
 double randomNoise(double t)
 {
-    return random(-1000, 1001) / 1000.0;
+    // Original: random(-1000,1001)/1000.0 ~ [-1,1]
+    // Shift to [0,1]:
+    double val = (double)random() / (double)RAND_MAX * 2.0 - 1.0;
+    // If you previously used random(-1000, 1001), replace with a suitable function that returns an int in [-1000,1000].
+    // Then val = (int_random / 1000.0) in [-1,1].
+    // Shift:
+    return (val + 1.0) / 2.0;
 }
 
 double cosineWave(double t)
 {
-    return cos(2.0 * PI * t);
+    // cos(...) in [-1,1]
+    return (cos(2.0 * PI * t) + 1.0) / 2.0;
 }
 
 double halfSineWave(double t)
 {
+    // sin(PI*t) runs from 0 to 1 and back to 0 over [0,1], never negative
+    // No change needed
     return sin(PI * t);
 }
 
 double fullWaveRectifiedSine(double t)
 {
+    // fabs(sin(...)) is already [0,1], no negatives
     return fabs(sin(2.0 * PI * t));
 }
 
 double stepFunction(double t)
 {
-    return (t < 0.5) ? -1.0 : 1.0;
+    // Original: (t<0.5)? -1.0 : 1.0
+    // Now [0,1]: (t<0.5)?0.0:1.0
+    return (t < 0.5) ? 0.0 : 1.0;
 }
 
 double parabolicWave(double t)
 {
+    // Original: -4.0*(t-0.5)^2 +1.0
+    // This is already [0,1] (peak at 1, min at 0)
     return -4.0 * (t - 0.5) * (t - 0.5) + 1.0;
 }
 
 double gaussianPulse(double t)
 {
+    // exp(-((t-0.5)^2)*32.0) is always [0,1]
+    // No change needed
     return exp(-((t - 0.5) * (t - 0.5)) * 32.0);
 }
 
 double sincFunction(double t)
 {
+    // sin(PI*x)/(PI*x) can be negative
+    // Shift from [-1,1] to [0,1]:
     double x = (t - 0.5) * 8.0;
-    return (x == 0.0) ? 1.0 : sin(PI * x) / (PI * x);
+    double val = (x == 0.0) ? 1.0 : sin(PI * x) / (PI * x);
+    return (val + 1.0) / 2.0;
 }
 
-// Additional waveforms
 double exponentialRise(double t)
 {
-    return (exp(5.0 * t) - 1.0) / (exp(5.0) - 1.0) * 2.0 - 1.0;
+    // Original: ((exp(5.0*t)-1)/(exp(5)-1))*2.0 -1.0 in [-1,1]
+    // Shift to [0,1]:
+    double val = ((exp(5.0 * t) - 1.0) / (exp(5.0) - 1.0)) * 2.0 - 1.0;
+    return (val + 1.0) / 2.0;
 }
 
 double logarithmicCurve(double t)
 {
-    return log10(t * 9.0 + 1.0) * 2.0 - 1.0;
+    // Original: log10(t*9.0+1.0)*2.0 -0.0 = log10(t*9.0+1.0)*2.0
+    // At t=0: log10(1)=0*2=0
+    // At t=1: log10(10)=1*2=2
+    // Range [0,2], to get [0,1], divide by 2
+    return log10(t * 9.0 + 1.0); // now [0,1]
 }
 
 double pwmWave(double t)
 {
 
-    return (fmod(t * 3.0, 1.0) < funGenMem.dutyCycle) ? 1.0 : -1.0;
+    return (t < funGenMem.dutyCycle) ? 1.0 : 0;
 }
 
+double f0 = 0.0;  // Start frequency
+double f1 = 50.0; // End frequency
 double linearChirp(double t)
 {
-    double f0 = 0.0; // Start frequency
-    double f1 = 5.0; // End frequency
+
     double beta = f1 - f0;
-    return sin(2.0 * PI * (f0 * t + (beta / 2.0) * t * t));
+    double val = sin(2.0 * PI * (f0 * t + (beta / 2.0) * t * t));
+    // `val` ranges from -1 to 1, so shift it to [0,1]
+    return (val + 1.0) / 2.0;
+}
+
+double tablePoint(double t)
+{
+    // static uint64_t i;
+    return funGenMem.table_points[int(t * 100) % 100];
 }
 
 // // Function pointer type
@@ -3858,51 +3981,29 @@ double linearChirp(double t)
 // Array of waveform structs
 Waveform waveforms[] = {
     {"Sine ", sineWave},
+    {"Sawtooth ", sawtoothWave},
     {"Square ", squareWave},
     {"Triangular", triangularWave},
-    {"Pulse ", pulseWave},
-    {"Sawtooth ", sawtoothWave},
-    {"Inverted Sawtooth", invertedSawtoothWave},
+    {"PWM ", pwmWave},
+    // {"Cosine ", cosineWave},
     {"Exponential Decay", exponentialDecay},
     {"Exponential Rise", exponentialRise},
-    {"Logarithmic Curve", logarithmicCurve},
-    {"PWM ", pwmWave},
-    {"Linear Chirp", linearChirp},
-    {"Cosine ", cosineWave},
-    {"Half Sine ", halfSineWave},
     {"Full Wave Rectified", fullWaveRectifiedSine},
-    {"Step Function", stepFunction},
-    {"Parabolic ", parabolicWave},
     {"Gaussian Pulse", gaussianPulse},
+    // {"Half Sine ", halfSineWave},
+    {"Inverted Sawtooth", invertedSawtoothWave},
+    {"Linear Chirp", linearChirp},
+    {"Logarithmic Curve", logarithmicCurve},
+    // {"Pulse ", pulseWave},
+    {"Parabolic ", parabolicWave},
+    {"Random Noise", randomNoise},
+
     {"Sinc Function", sincFunction},
-    {"Random Noise", randomNoise}
+    // {"Step Function", stepFunction},
+    {"Table Points", tablePoint},
+
     // Add more waveform structs here
 };
-
-// double dutyCycle = 0.5; // Default duty cycle
-void functionGenerator2(int waveformIndex, double frequency, double amplitude, double offset, double dutyCycleParam)
-{
-    if (!lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
-        return;
-
-    waveformIndex = selected_row;
-
-    static lv_obj_t *tabview_main = lv_obj_get_child(PowerSupply.page[3], 0);
-    static lv_obj_t *tabview_second = lv_obj_get_child(tabview_main, 1);
-    static lv_obj_t *fgen_tabview = lv_obj_get_child(tabview_second, 1);
-
-    amplitude = double(get_spinbox_data_by_id(fgen_tabview, 0) / 1000.0);
-    frequency = double(get_spinbox_data_by_id(fgen_tabview, 1) / 1000.0);
-    offset = double(get_spinbox_data_by_id(fgen_tabview, 2) / 1000.0);
-    dutyCycle = double(get_spinbox_data_by_id(fgen_tabview, 3) / 10000.0);
-
-    static unsigned long startTime = micros();
-    unsigned long currentTime = micros();
-    double t = fmod((currentTime - startTime) / 1000000.0 * frequency, 1.0);
-    double value = waveforms[selected_row].function(t);
-    double outputValue = value * amplitude + offset;
-    PowerSupply.Voltage.SetUpdate(outputValue);
-}
 
 // Function to generate waveform based on parameters
 void functionGenerator()
@@ -3914,9 +4015,10 @@ void functionGenerator()
     unsigned long currentTime = micros();
     double elapsedTime = (currentTime - startTime) / 1000000.0;
     double t = fmod(elapsedTime * funGenMem.frequency, 1.0);
-
+    int selected_row = (int)Utility_objs.table_fun_gen_list->user_data;
     Waveform currentWaveform = waveforms[selected_row];
     double value = currentWaveform.function(t);
+    // Serial.println(t);
     double outputValue = value * funGenMem.amplitude + funGenMem.offset;
 
     static double lastOutputValue = 0.0;

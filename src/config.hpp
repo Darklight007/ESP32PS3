@@ -9,9 +9,9 @@
 #include "device.h"
 #include "FFTHandler.h"
 
-void IRAM_ATTR VoltageEnc(void* arg);
-void IRAM_ATTR CurrentEnc(void* arg);
-void IRAM_ATTR ADCPinISR(void* arg);
+void IRAM_ATTR VoltageEnc(void *arg);
+void IRAM_ATTR CurrentEnc(void *arg);
+void IRAM_ATTR ADCPinISR(void *arg);
 
 // Global variable to manage the timer
 // hw_timer_t *timer = NULL;
@@ -24,11 +24,8 @@ void IRAM_ATTR ADCPinISR(void* arg);
 // }
 
 // /*Change to your screen resolution*/
- uint16_t screenWidth{320};
- uint16_t screenHeight{240};
-
-
-
+uint16_t screenWidth{320};
+uint16_t screenHeight{240};
 
 lv_disp_t *lv_disp;
 Device PowerSupply;
@@ -38,9 +35,8 @@ int heepMemory;
 
 volatile bool adcDataReady{false};
 
-
 Calibration StoreData("", {0}, {0});
- 
+
 // extern Device PowerSupply;
 
 TFT_eSPI tft = TFT_eSPI();
@@ -65,29 +61,19 @@ lv_obj_t *Utility;
 // calMode = true,
 // toneIsOn = true;
 // digitalRead_19 = true;
-  // void *buffer = ps_malloc(BUFFER_SIZE);
- 
-  // configure LED PWM functionalities
-  // ledcSetup(lcdBacklightChannel, freq, resolution);
-  // attach the channel to the GPIO to be controlled
-  // ledcAttachPin(lcdBacklightPin, lcdBacklightChannel);
-  // ledcWrite(lcdBacklightChannel, 255);
+// Set up PWM channel
+// ledcAttachPin(BUZZER_PIN, SOUND_PWM_CHANNEL);
 
-  // ledcSetup(SOUND_PWM_CHANNEL, 1000, SOUND_RESOLUTION); // Set up PWM channel
-  // ledcAttachPin(BUZZER_PIN, SOUND_PWM_CHANNEL);
-
-  
 extern bool buzzerSound;
-TaskHandle_t Task_adc,Task1, LVGL,Task_dac;
+TaskHandle_t Task_adc, Task1;
 bool ismyTextHiddenChange = false;
 
-bool lvglIsBusy,lvglChartIsBusy,emergencyRefresh;
+bool lvglIsBusy, lvglChartIsBusy, emergencyRefresh;
 
-  bool wireConnected ;
-  bool wire1Connected;
-  
+bool wireConnected;
+bool wire1Connected;
+
 // #include "myMenu.h"
-
 
 #define I2CADDR 0x20 // address of MCP23017 chip on I2C bus
 
@@ -132,7 +118,6 @@ static lv_color_t buf[2][screenWidth * 10];
 #define LV_USE_LOG 1
 #if LV_USE_LOG != 0
 
-
 lv_disp_draw_buf_t draw_buf;
 
 /* Serial debugging */
@@ -142,8 +127,4 @@ void my_print(const char *buf)
   Serial.flush();
 }
 
-
-
 #endif
-
-

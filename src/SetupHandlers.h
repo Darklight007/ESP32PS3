@@ -79,7 +79,6 @@ extern int heepMemory;
 
 extern void Task_BarGraph(void *pvParameters);
 extern void Task_ADC(void *pvParameters);
-extern void Task_DAC(void *pvParameters);
 extern void  init_touch();
 
 

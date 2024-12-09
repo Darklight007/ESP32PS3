@@ -85,28 +85,22 @@ void loop()
 
   if ((millis() - encoderTimeStamp) > 33)
     FlushMeasuresInterval(75 + 60 * PowerSupply.Voltage.measured.NofAvgs); // PowerSupply.Voltage.measured.NofAvgs
+
   statisticUpdateInterval(333);
-  FFTUpdateInterval(1000);
+  // FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?
   managePageEncoderInteraction();
+
+     
   // DACInterval(100);
   // VCCCInterval(250);
   // KeyCheckInterval(45);
   // Serial.printf("\nVoltage.encoder.getCount %l",PowerSupply.Voltage.encoder.getCount());
   // KeyCheckInterval(0); // moved to adc taskse
   // delay(10);
+  
+  
 
-  // static unsigned long timer_ = {0};
-  
-  
-  // static unsigned long timer_ = {0};
-  // if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
-  //   schedule([]
-  //            {
-  //                        // functionGenerator_demo();
-  //                        functionGenerator();
-  //                        PowerSupply.DACUpdate(); },
-  //            2, timer_);
 
   //  Serial.printf("\nADC_loopCounter %l",PowerSupply.adc.ADC_loopCounter);
 }

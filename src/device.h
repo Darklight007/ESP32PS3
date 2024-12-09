@@ -47,9 +47,9 @@ struct FunGen
     double amplitude;
     double offset;
     double dutyCycle;
-    uint16_t selected_signal;
+    double table_points[100];
+ } ;
 
-} ;
 // extern FunGen funGen; // Declaration
 
 // #pragma pack(pop)
@@ -117,6 +117,7 @@ enum class DEVICE : int
     ON = 0x0001,
     VC = 0x0002,
     CC = 0x0004,
+    FUN = 0x0005,
     INFO = 0x0008,
 
     OVP = 0x0010,

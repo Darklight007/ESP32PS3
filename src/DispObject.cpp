@@ -25,7 +25,7 @@ void DispObjects::measureUpdate(double value)
         return;
 
     double rv = round(value * 320);
-    if (Bar.oldValue != rv ) //&& (Bar.oldValue+3) < rv || (Bar.oldValue-3) > rv
+    if (Bar.oldValue != rv) //&& (Bar.oldValue+3) < rv || (Bar.oldValue-3) > rv
     {
         Bar.changed = true;
         Bar.oldValue = rv;
@@ -86,7 +86,6 @@ void DispObjects::statUpdate(void)
 void DispObjects::barUpdate(void)
 {
 
-         
     if (Bar.changed)
     {
         // lv_bar_set_value(Bar.bar, measured.value / maxValue * lv_bar_get_max_value(Bar.bar), LV_ANIM_OFF);
@@ -151,16 +150,11 @@ void DispObjects::SetUpdate(double value)
     // LV_LOG_USER("LOG: %s", "Beep!");
     // lv_disp_enable_invalidation( lv_disp_get_default(), false);
     // if (!lvglIsBusy)
-    if (strcmp(lv_label_get_text(label_unit), "A"))
+    lv_label_set_text_fmt(label_setValue, "%+08.4f%s", adjValue, lv_label_get_text(label_unit));
 
-        lv_label_set_text_fmt(label_setValue, "%+08.4fV", adjValue);
-    else
-        lv_label_set_text_fmt(label_setValue, "%+08.4fA", adjValue);
 
-    // lv_disp_enable_invalidation(lv_disp_get_default(), true);
+    lv_obj_set_width(Bar.bar_adjValue, (adjValue) / maxValue * lv_bar_get_max_value(Bar.bar));
     // lv_obj_invalidate(label_setValue);
-    // toneOff();
-    // Serial.printf("\n%10.4f", adjValue + adjOffset);
 }
 
 void DispObjects::Flush(void)
