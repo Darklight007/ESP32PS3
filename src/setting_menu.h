@@ -1,6 +1,7 @@
 #ifndef SETTING_MENU_H
 #define SETTING_MENU_H
-
+#include "spinbox_pro.h"
+#include "version.h"
 /******************************************
  *
  * Menu example
@@ -9,10 +10,15 @@
 extern Device PowerSupply;
 extern bool buzzerSound;
 extern TFT_eSPI tft;
+extern FunGen funGenMem;
+extern DAC_codes dac_data_g;
 
 lv_obj_t *menu;
 lv_obj_t *voltageCurrentCalibration;
 lv_obj_t *myTextBox;
+
+lv_obj_t *win_DAC_calibration;
+static bool win_dac_already_created = false;
 bool isMyTextBoxHidden;
 enum
 {
@@ -47,8 +53,11 @@ static void RELEASED_event_cb(lv_event_t *e);
 static void MainMenu_event_cb(lv_event_t *e);
 
 static void switch_buzzer_event_cb(lv_event_t *e);
-static void RELEASED_event2_cb(lv_event_t *e);
+static void btn_calibration_ADC_event_cb(lv_event_t *e);
+static void btn_calibration_DAC_event_cb(lv_event_t *e);
 static void LCD_Calibration_cb(lv_event_t *e);
+
+static void btn_close_hide_obj_cb(lv_event_t *e);
 
 lv_obj_t *btn_load;
 
@@ -343,6 +352,7 @@ void voltage_current_calibration(void)
         lv_style_set_text_color(&style_spinbox, lv_color_hex(0xFFFF00));
 
         lv_obj_add_style(spinbox, &style_spinbox, LV_STATE_DEFAULT);
+
         lv_obj_add_flag(spinbox, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
         lv_obj_add_event_cb(spinbox, PRESSED_event_cb, LV_EVENT_SHORT_CLICKED, NULL);
         lv_spinbox_set_cursor_pos(spinbox, 0);
@@ -689,7 +699,8 @@ void SettingMenu(lv_obj_t *parent)
      ******************************/
     lv_obj_t *sub_calibration_page = lv_menu_page_create(menu, NULL);
     section = lv_menu_section_create(sub_calibration_page);
-    create_pushbutton(section, NULL, RELEASED_event2_cb, LV_SYMBOL_CHARGE, "V/I Calibration");
+    create_pushbutton(section, NULL, btn_calibration_ADC_event_cb, LV_SYMBOL_CHARGE, "V/I ADC");
+    create_pushbutton(section, NULL, btn_calibration_DAC_event_cb, LV_SYMBOL_CHARGE, "V/I DAC");
     create_pushbutton(section, NULL, LCD_Calibration_cb, "", "LCD Touch");
     create_pushbutton(section, NULL, NULL, "Statistics", "Reset Stats");
 
@@ -705,7 +716,13 @@ void SettingMenu(lv_obj_t *parent)
     lv_obj_t *sub_software_info_page = lv_menu_page_create(menu, NULL);
     section = lv_menu_section_create(sub_software_info_page);
     lv_obj_t *obj0;
-    create_text(section, NULL, "Version 1.0", LV_MENU_ITEM_BUILDER_VARIANT_1, obj0);
+    // create_text(section, NULL, "Version 1.0", LV_MENU_ITEM_BUILDER_VARIANT_1, obj0);
+    
+    // Use the SOFTWARE_VERSION macro
+    char version_text[50];
+    snprintf(version_text, sizeof(version_text), "Version %s", SOFTWARE_VERSION);
+    create_text(section, NULL, version_text, LV_MENU_ITEM_BUILDER_VARIANT_1, obj0);
+
     lv_obj_t *sub_about_page = lv_menu_page_create(menu, NULL);
     section = lv_menu_section_create(sub_about_page);
     obj0 = create_text(section, NULL, "Software information", LV_MENU_ITEM_BUILDER_VARIANT_1, obj0);
@@ -873,7 +890,6 @@ static void slider_adcRate_event_cb(lv_event_t *e)
 
     // Reset statistics too
     PowerSupply.ResetStats();
-    
 }
 
 static void slider_adcAVG_event_cb(lv_event_t *e)
@@ -988,10 +1004,187 @@ static void MainMenu_event_cb(lv_event_t *e)
     lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
 }
 
-static void RELEASED_event2_cb(lv_event_t *e)
+static void btn_calibration_ADC_event_cb(lv_event_t *e)
 {
 
     lv_obj_clear_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void btn_close_hide_obj_cb(lv_event_t *e)
+{
+    lv_obj_t *obj = lv_event_get_target(e);
+    //  lv_obj_add_flag(lv_obj_get_parent(lv_obj_get_parent(obj)), LV_OBJ_FLAG_HIDDEN);
+    // lv_obj_del(lv_obj_get_parent(lv_obj_get_parent(obj)));
+    lv_obj_add_flag(lv_obj_get_parent(lv_obj_get_parent(obj)), LV_OBJ_FLAG_HIDDEN);
+}
+static void event_handler(lv_event_t *e)
+{
+    lv_obj_t *obj = lv_event_get_target(e);
+    LV_LOG_USER("Button %d clicked", (int)lv_obj_get_index(obj));
+}
+
+static void btn_calibration_DAC_event_cb(lv_event_t *e)
+{
+
+    if (win_dac_already_created)
+    {
+        lv_obj_clear_flag(win_DAC_calibration, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+
+    win_DAC_calibration = lv_win_create(lv_scr_act(), 36);
+    lv_obj_set_size(win_DAC_calibration, 320, 226);
+    lv_obj_t *btn;
+    // btn = lv_win_add_btn(win_DAC_calibration, LV_SYMBOL_LEFT, 40);
+    // lv_obj_add_event_cb(btn, event_handler, LV_EVENT_CLICKED, NULL);
+
+    lv_win_add_title(win_DAC_calibration, "DAC Calibration");
+
+    // btn = lv_win_add_btn(win_DAC_calibration, LV_SYMBOL_RIGHT, 40);
+    // lv_obj_add_event_cb(btn, event_handler, LV_EVENT_CLICKED, NULL);
+
+    btn = lv_win_add_btn(win_DAC_calibration, LV_SYMBOL_CLOSE, 60);
+    // lv_obj_add_event_cb(btn, event_handler, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(btn, btn_close_hide_obj_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *cont = lv_win_get_content(win_DAC_calibration); /*Content can be added here*/
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *_label = lv_label_create(cont);
+    lv_label_set_text(_label, "DAC Code      Output V/C");
+    lv_obj_align(_label, LV_ALIGN_OUT_LEFT_TOP, 95, 10);
+    lv_obj_set_style_text_font(_label, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(_label, lv_color_hex(0x00FFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    int xPos = 94;
+    int yPos = 40;
+    int yOffset = 25;
+    static lv_obj_t *zv = spinbox_pro(cont, "#FFFFF7 Zero Voltage:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 86, 15);
+    static lv_obj_t *mv = spinbox_pro(cont, "#FFFFF7 Max Voltage:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 1, 86, 16);
+
+    static lv_obj_t *zc = spinbox_pro(cont, "#FFFFF7 Zero Current:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 2.3, 86, 17);
+    static lv_obj_t *mc = spinbox_pro(cont, "#FFFFF7 Max Current:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 3.3, 86, 18);
+
+    // lv_label_set_text(label, ":)");
+
+    auto addLabel_edit = [](lv_obj_t *parent, const char *fmt, double value, int color,
+                            lv_coord_t x, lv_coord_t y)
+    {
+        lv_obj_t *parent_child = lv_obj_get_child(parent, 1);
+
+        lv_obj_align(parent_child, LV_ALIGN_OUT_RIGHT_MID, -90, 0);
+
+        lv_obj_t *label_zero_volt = lv_label_create(parent);
+        lv_obj_add_flag(parent, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+        lv_obj_align_to(label_zero_volt, parent, LV_ALIGN_OUT_RIGHT_MID, x, y);
+        lv_label_set_text_fmt(label_zero_volt, fmt, value);
+
+        lv_obj_set_style_text_font(label_zero_volt, &graph_R_16, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_color(label_zero_volt, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+        return label_zero_volt;
+    };
+
+    int xOffset = 10;
+    addLabel_edit(zv, "+%07.4fV", 0.0, 0, xOffset, 0);
+    static lv_obj_t *label_maxV = addLabel_edit(mv, "+%07.4fV", 32.750, 0, xOffset, 0);
+
+    addLabel_edit(zc, "%+06.4fA", 0.0, 0, xOffset, 0);
+    static lv_obj_t *label_maxC = addLabel_edit(mc, "%+06.4fA", 6.5535, 0, xOffset, 0);
+    dac_data_g = PowerSupply.LoadDACdata("dac_data_");
+
+    static auto DAC_voltage_calib_change_event_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+        {
+            double zv_value = lv_spinbox_get_value(zv);
+            double mv_value = lv_spinbox_get_value(mv);
+            lv_label_set_text_fmt(label_maxV, "%+6.4fV", (mv_value - zv_value) / 2000.0);
+
+            dac_data_g.zero_voltage = lv_spinbox_get_value(zv);
+            dac_data_g.max_voltage = lv_spinbox_get_value(mv);
+            dac_data_g.zero_current = lv_spinbox_get_value(zc);
+            dac_data_g.max_current = lv_spinbox_get_value(mc);
+
+            PowerSupply.SaveDACdata("dac_data_", dac_data_g);
+        }
+    };
+
+    static auto DAC_current_calib_change_event_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+        {
+            double zc_value = lv_spinbox_get_value(zc);
+            double mc_value = lv_spinbox_get_value(mc);
+            lv_label_set_text_fmt(label_maxC, "%+6.4fV", (mc_value - zc_value) / 10000.0);
+
+            dac_data_g.zero_voltage = lv_spinbox_get_value(zv);
+            dac_data_g.max_voltage = lv_spinbox_get_value(mv);
+            dac_data_g.zero_current = lv_spinbox_get_value(zc);
+            dac_data_g.max_current = lv_spinbox_get_value(mc);
+
+            PowerSupply.SaveDACdata("dac_data_", dac_data_g);
+        }
+    };
+
+    dac_data_g = PowerSupply.LoadDACdata("dac_data_");
+
+    lv_spinbox_set_value(zv, dac_data_g.zero_voltage);
+    lv_spinbox_set_value(mv, dac_data_g.max_voltage);
+    lv_spinbox_set_value(zc, dac_data_g.zero_current);
+    lv_spinbox_set_value(mc, dac_data_g.max_current);
+
+    // lv_obj_add_event_cb(zv, spinbox_pro_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    // auto update_added_label = [](lv_obj_t *spinbox_pro_obj, const char *fmt, double value, int color,
+    //                    lv_coord_t x, lv_coord_t y)
+    // {
+    //     lv_obj_t *label_zero_volt = lv_label_create(parent);
+    //     lv_obj_add_flag(parent, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+    //     lv_obj_align_to(label_zero_volt, parent, LV_ALIGN_OUT_RIGHT_MID, x, y);
+    //     lv_label_set_text_fmt(label_zero_volt, fmt, value);
+
+    //     lv_obj_set_style_text_font(label_zero_volt, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+    //     lv_obj_set_style_text_color(label_zero_volt, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // };
+    lv_obj_add_event_cb(zv, DAC_voltage_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, label_maxV);
+    lv_obj_add_event_cb(mv, DAC_voltage_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, label_maxV);
+
+    lv_obj_add_event_cb(zc, DAC_current_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(mc, DAC_current_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    win_dac_already_created = true;
+
+    return;
+    lv_obj_t *DAC_Calibration = lv_obj_create(lv_scr_act());
+
+    lv_obj_set_size(DAC_Calibration, 320, 240);
+    lv_obj_align(DAC_Calibration, LV_ALIGN_CENTER, 0, 0);
+    // static lv_style_t style_panel;
+    // lv_style_init(&style_panel);
+    // remove all padding
+    // lv_style_set_pad_ver(&style_panel, 0);
+    // lv_style_set_pad_hor(&style_panel, 0);
+    // lv_obj_add_style(DAC_Calibration, &style_panel, LV_STATE_DEFAULT);
+
+    /********************
+     * close button
+     ********************/
+    lv_obj_t *close_btn = lv_btn_create(DAC_Calibration);
+    lv_obj_t *close_btn_label = lv_label_create(close_btn);
+    lv_obj_remove_style_all(close_btn_label);
+    // lv_obj_remove_style_all(close_btn);
+
+    lv_label_set_text(close_btn_label, " X ");
+    lv_obj_center(close_btn_label);
+
+    lv_obj_set_pos(close_btn, 0, 0);
+    lv_obj_add_event_cb(close_btn, btn_close_hide_obj_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_set_align(close_btn, LV_ALIGN_TOP_RIGHT);
+
+    lv_obj_set_content_width(close_btn_label, 20);  // The actual width: padding left + 50 + padding right
+    lv_obj_set_content_height(close_btn_label, 20); // The actual width: padding top + 30 + padding bottom
 }
 
 static void LCD_Calibration_cb(lv_event_t *e)
@@ -1154,7 +1347,7 @@ static lv_obj_t *create_pushbutton(lv_obj_t *parent, const char *icon, lv_event_
     // }
 
     lv_obj_t *btn = lv_btn_create(obj);
-    lv_obj_set_size(btn, 120, 45);
+    lv_obj_set_size(btn, 120, 30);
     lv_obj_t *label = lv_label_create(btn);
     lv_label_set_text(label, buttonTxt);
     lv_obj_center(label);

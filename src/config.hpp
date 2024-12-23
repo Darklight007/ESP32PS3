@@ -90,6 +90,7 @@ static char keys[ROWS][COLS] = {
 static byte rowPins[ROWS] = {0, 1, 2, 3, 4, 5};     // connect to the row pinouts of the kpd
 static byte colPins[COLS] = {8, 9, 10, 11, 12, 13}; // connect to the column pinouts of the kpd
 
+
 // modify constructor for I2C i/o
 Keypad_MC17 kpd(makeKeymap(keys), rowPins, colPins, ROWS, COLS, I2CADDR);
 

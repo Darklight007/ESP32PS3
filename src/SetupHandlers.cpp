@@ -94,7 +94,7 @@ void initializeI2C()
 
     // Initialize keypad (does not start Wire library now)
     kpd.begin();
-    kpd.setDebounceTime(33); // Set debounce time (no bouncing for this I2C)
+    kpd.setDebounceTime(33*2); // Set debounce time (no bouncing for this I2C)
     kpd.setHoldTime(1000);   // Set hold time
 
     Serial.println("I2C Initialized.");
@@ -345,7 +345,7 @@ void createTasks()
         "Voltage & Current ADC", /* Name of task */
         14000,                   /* Stack size of task */
         NULL,                    /* Parameter of the task */
-        10,                       /* Priority of the task */
+        14,                       /* Priority of the task */
         &Task_adc,               /* Task handle */
         0                        /* Pin task to core 0 */
     );

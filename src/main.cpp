@@ -74,6 +74,8 @@ void setup()
   createTasks();
   initialMemory();
   Serial.printf("\nSetup() run on core: #%i \n\n", xPortGetCoreID());
+
+
 }
 
 void loop()
@@ -91,16 +93,14 @@ void loop()
   EncoderRestartInterval(1000); //--> some bugs?
   managePageEncoderInteraction();
 
-     
+  // if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+  //   KeyCheckInterval(400);
   // DACInterval(100);
   // VCCCInterval(250);
   // KeyCheckInterval(45);
   // Serial.printf("\nVoltage.encoder.getCount %l",PowerSupply.Voltage.encoder.getCount());
   // KeyCheckInterval(0); // moved to adc taskse
   // delay(10);
-  
-  
-
 
   //  Serial.printf("\nADC_loopCounter %l",PowerSupply.adc.ADC_loopCounter);
 }

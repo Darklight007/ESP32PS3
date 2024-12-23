@@ -52,7 +52,7 @@ void remove_red_border(lv_obj_t *spinbox)
     // lv_obj_add_style(spinbox, &style_no_border, LV_PART_MAIN);
 }
 
-lv_obj_t *obj_old = nullptr;
+lv_obj_t *obj_selected_spinbox = nullptr;
 
 static void select_highlight(lv_event_t *e)
 {
@@ -60,10 +60,10 @@ static void select_highlight(lv_event_t *e)
 
     init_styles();
 
-    if (obj_old)
-        remove_red_border(obj_old);
+    if (obj_selected_spinbox)
+        remove_red_border(obj_selected_spinbox);
     set_red_border(obj);
-    obj_old = obj;
+    obj_selected_spinbox = obj;
 }
 
 /********************
@@ -141,7 +141,6 @@ void set_spinbox_data_by_id(lv_obj_t *parent, uint32_t id, int32_t value)
         lv_spinbox_set_value(obj, value);
 }
 
-
 // Function to move cursor left
 void move_spinbox_cursor_left(lv_obj_t *spinbox)
 {
@@ -209,10 +208,24 @@ lv_obj_t *spinbox_pro(lv_obj_t *parent, const char *labelText, int32_t range_min
     lv_spinbox_set_digit_format(spinbox, digit_count, separator_position);
     lv_spinbox_step_prev(spinbox);
     lv_obj_add_flag(spinbox, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+    lv_obj_clear_flag(spinbox, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+    lv_obj_clear_flag(spinbox, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_clear_flag(spinbox, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_clear_flag(spinbox, LV_OBJ_FLAG_SCROLLABLE);
+
     //*************************************************************************
     lv_obj_add_style(spinbox, &style_spinbox0, LV_STATE_DEFAULT);
     lv_obj_add_style(_label, &style_spinboxLbl0, LV_STATE_DEFAULT);
+
     //*************************************************************************
+
+    auto PRESSED_event_cb = [](lv_event_t *e)
+    {
+        lv_event_code_t code = lv_event_get_code(e);
+        if (code == LV_EVENT_CLICKED)
+            myTone(NOTE_A4, 5);
+    };
+
     lv_obj_add_event_cb(spinbox, PRESSED_event_cb, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_event_cb(spinbox, select_highlight, LV_EVENT_PRESSED, NULL);
     lv_obj_set_scrollbar_mode(spinbox, LV_SCROLLBAR_MODE_OFF);

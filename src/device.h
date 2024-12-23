@@ -48,7 +48,14 @@ struct FunGen
     double offset;
     double dutyCycle;
     double table_points[100];
- } ;
+};
+struct DAC_codes
+{
+    int32_t  zero_voltage;
+    int32_t  max_voltage;
+    int32_t  zero_current;
+    int32_t  max_current;
+};
 
 // extern FunGen funGen; // Declaration
 
@@ -61,7 +68,7 @@ extern volatile bool adcDataReady;
 static void IRAM_ATTR ADCPinISR()
 {
     adcDataReady = true;
-    // dataReady = true;  
+    // dataReady = true;
     // Device::readVoltage();
     // Device::readCurrent();
 }
@@ -388,11 +395,12 @@ public:
     void SaveMemory(const String &key, const MemArray &data);
     // DataArrays LoadDataArrays(const String &key);
     MemArray LoadMemory(const String &key);
-    
+
     void SaveMemoryFgen(const String &key, const FunGen &data);
     FunGen LoadMemoryFgen(const String &key);
 
-
+    void SaveDACdata(const String &key, const DAC_codes &data);
+    DAC_codes LoadDACdata(const String &key);
 
     void ResetStats(void)
     {

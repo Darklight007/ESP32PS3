@@ -29,7 +29,7 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
 void Utility_tabview(lv_obj_t *parent);
 lv_obj_t *find_btn_by_tag(lv_obj_t *parent, uint32_t tag);
 
-void functionGenerator();
+bool functionGenerator();
 
 // Function prototypes for waveform functions
 double sineWave(double t);
@@ -76,6 +76,8 @@ void functionGenerator_demo(void);
  *   GLOBAL VARIABLES
  **********************/
 FunGen funGenMem;
+DAC_codes dac_data_g;
+
 // lv_obj_t *table_signals;
 
 struct function
@@ -94,6 +96,8 @@ struct objs_list
     lv_obj_t *table_spinbox_value;
     double table_current_value;
     // double table_points[100];
+    lv_obj_t *switch_keys_scan;
+    lv_obj_t *switch_keys_label;
 } Utility_objs;
 
 // volatile long chartInterruptCounter;
@@ -1281,10 +1285,9 @@ void Task_BarGraph(void *pvParameters)
     }
 }
 
-
+double t = 0;
 void Task_ADC(void *pvParameters)
 {
-
 
     // ************************ Temperature DS18B20 Sensor ********************************************************
     for (;;)
@@ -1300,12 +1303,15 @@ void Task_ADC(void *pvParameters)
 
         toneOff();
         static unsigned long timer_ = {0};
+        static bool trigger = false;
         if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
-            schedule([]
+
+            schedule([&]
                      {
                             functionGenerator();
-                             PowerSupply.DACUpdate(); },
-                     4, timer_);
+                            PowerSupply.DACUpdate(); },
+                     5, timer_);
+
         else
             schedule([]
                      { PowerSupply.DACUpdate(); },
@@ -1317,9 +1323,18 @@ void Task_ADC(void *pvParameters)
             {
                 isMyTextBoxHidden = lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
                 if (!isMyTextBoxHidden)
-
                     KeyCheckInterval(10);
 
+                else if (!lv_obj_has_state(Utility_objs.switch_keys_scan, LV_STATE_CHECKED))
+                {
+                    // if (trigger)
+                    // {
+                    //     KeyCheckInterval(105);
+                    //     Serial.printf("\n Triggered *******************!");
+                    // }
+                    // else
+                    // KeyCheckInterval(105);
+                }
                 else
                     KeyCheckInterval(105);
             }
@@ -1343,14 +1358,14 @@ void Task_ADC(void *pvParameters)
         // }
 
         // New ADC sample is ready
-        if (Tabs::getCurrentPage() == 1)
-        {
-            if (adcDataReady && PowerSupply.adc.busyChannel == VOLTAGE)
-                V.shift(); // Shift for new sample
+        // if (Tabs::getCurrentPage() == 1)
+        // {
+        //     if (adcDataReady && PowerSupply.adc.busyChannel == VOLTAGE)
+        //         V.shift(); // Shift for new sample
 
-            if (adcDataReady && PowerSupply.adc.busyChannel == CURRENT)
-                I.shift(); // Shift for new sample
-        }
+        //     if (adcDataReady && PowerSupply.adc.busyChannel == CURRENT)
+        //         I.shift(); // Shift for new sample
+        // }
 
         PowerSupply.readVoltage();
         PowerSupply.readCurrent();
@@ -1360,8 +1375,8 @@ void Task_ADC(void *pvParameters)
             PowerSupply.Voltage.StatisticsUpdate(PowerSupply.Voltage.measured.value);
             PowerSupply.Current.StatisticsUpdate(PowerSupply.Current.measured.value);
         }
-        static bool lastCCCVStatus = false;
 
+        static bool lastCCCVStatus = false;
         if (lastCCCVStatus != digitalRead(PowerSupply.CCCVPin))
         {
             lastCCCVStatus = digitalRead(PowerSupply.CCCVPin);
@@ -1394,20 +1409,20 @@ void Task_ADC(void *pvParameters)
                      //  PowerSupply.Voltage.measured.NofAvgs * 100000 / /* pixels per point*/ ((double)PowerSupply.adc.realADCSpeed), NoAvgTime);
                      125, NoAvgTime);
 
-        if (Tabs::getCurrentPage() == 1)
-        {
-            if (V.sampleReady)
-            {
-                V.push(PowerSupply.Voltage.measured.value);
-                V.sampleReady = false;
-            }
+        // if (Tabs::getCurrentPage() == 1)
+        // {
+        //     if (V.sampleReady)
+        //     {
+        //         V.push(PowerSupply.Voltage.measured.value);
+        //         V.sampleReady = false;
+        //     }
 
-            if (I.sampleReady)
-            {
-                I.push(PowerSupply.Current.measured.value);
-                I.sampleReady = false;
-            }
-        }
+        //     if (I.sampleReady)
+        //     {
+        //         I.push(PowerSupply.Current.measured.value);
+        //         I.sampleReady = false;
+        //     }
+        // }
     }
 }
 
@@ -1757,10 +1772,10 @@ static void table_touch_event_cb(lv_event_t *e)
         lv_spinbox_set_value(Utility_objs.table_spinbox_value, Utility_objs.table_current_value * 10000.0);
         lv_obj_invalidate(Utility_objs.table_spinbox_value);
 
-        if (obj_old)
+        if (obj_selected_spinbox)
         {
-            remove_red_border(obj_old);
-            obj_old = nullptr;
+            remove_red_border(obj_selected_spinbox);
+            obj_selected_spinbox = nullptr;
         }
     }
 }
@@ -1874,10 +1889,10 @@ void btn_function_gen_event_cb(lv_event_t *e)
         PowerSupply.setStatus(DEVICE::ON);
     }
 
-    if (obj_old)
+    if (obj_selected_spinbox)
     {
-        remove_red_border(obj_old);
-        obj_old = nullptr;
+        remove_red_border(obj_selected_spinbox);
+        obj_selected_spinbox = nullptr;
     }
 }
 
@@ -2046,7 +2061,7 @@ void Utility_tabview(lv_obj_t *parent)
 
     Utility_objs.fun.Amplitude = spinbox_pro(tab2, "#FFFFF7 Amplitude:#", 0, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0, 98, 0);
     Utility_objs.fun.Frequency = spinbox_pro(tab2, "#FFFFF7 Frequency [Hz]:#", 0, 10000, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1, 98, 1);
-    Utility_objs.fun.Offset = spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -1000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2);
+    Utility_objs.fun.Offset = spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -32000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2);
     Utility_objs.fun.Duty = spinbox_pro(tab2, "#FFFFF7 Duty [%]:#", 0, 10000, 5, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 3, 98, 3);
 
     funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
@@ -2071,6 +2086,15 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_center(label);
 
     lv_obj_add_event_cb(btn_function_gen, btn_function_gen_event_cb, LV_EVENT_ALL, NULL);
+
+    Utility_objs.switch_keys_scan = lv_switch_create(tab2);
+    lv_obj_add_state(Utility_objs.switch_keys_scan, LV_STATE_CHECKED);
+    lv_obj_align(Utility_objs.switch_keys_scan, LV_ALIGN_DEFAULT, 100, 140);
+    lv_obj_set_size(Utility_objs.switch_keys_scan, 48, 22);
+
+    Utility_objs.switch_keys_label = lv_label_create(tab2);
+    lv_label_set_text(Utility_objs.switch_keys_label, "Keys scan");
+    lv_obj_align_to(Utility_objs.switch_keys_label, Utility_objs.switch_keys_scan, LV_ALIGN_BOTTOM_MID, 0, 14);
 
     // Tab 3 ****************************************************************************************************************************
     // Tab 4 ****************************************************************************************************************************
@@ -3166,7 +3190,6 @@ void EncoderRestartInterval(unsigned long interval)
     static unsigned long timer_ = {0};
     schedule([]
              {
-                 /*FFT_v*/
                  int64_t temp = PowerSupply.Voltage.encoder.getCount();
                  PowerSupply.Voltage.encoder.clearCount();
                  PowerSupply.Voltage.encoder.setCount(temp);
@@ -3181,11 +3204,11 @@ void EncoderRestartInterval(unsigned long interval)
 
 void KeyCheckInterval(unsigned long interval)
 {
-    static unsigned long timer_ = {0}; // Interval in milliseconds
+    static unsigned long timer_2 = {0}; // Interval in milliseconds
     // static unsigned long timer_;
     schedule([]
              { keyCheckLoop(); },
-             interval, timer_);
+             interval, timer_2);
 }
 
 void VCCCInterval(unsigned long interval)
@@ -3257,7 +3280,7 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
         // Update calibration label (if needed)
         // lv_label_set_text(lbl_voltageCalib_m, std::to_string(get_voltageCalib_m()).c_str());
     }
-    else
+    else if (win_dac_already_created && !lv_obj_is_visible(win_DAC_calibration))
     {
         // Handle menu navigation when calibration page is not visible
         // static int32_t lastValue = 0;
@@ -3282,6 +3305,17 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
 
         if (temp == lastButton)
             myTone(NOTE_A4, 3); // Play a tone if selection didn't change
+    }
+    else if (win_dac_already_created && lv_obj_is_visible(win_DAC_calibration))
+    {
+
+        if (encoder1_last_value < encoder1_value)
+            lv_spinbox_increment(obj_selected_spinbox);
+
+        else if (encoder1_last_value > encoder1_value)
+            lv_spinbox_decrement(obj_selected_spinbox);
+
+        encoder1_last_value = encoder1_value;
     }
 }
 
@@ -3678,7 +3712,7 @@ void print_obj_type(lv_obj_t *obj)
 
 void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_last_value)
 {
-    if (!obj_old)
+    if (!obj_selected_spinbox)
         handleUtilityPage(encoder1_last_value, encoder2_last_value);
     else
     {
@@ -3691,25 +3725,25 @@ void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_l
         // Update cursor position based on encoder 2
         if (encoder2_last_value < encoder2_value)
         {
-            move_spinbox_cursor_left(obj_old);
+            move_spinbox_cursor_left(obj_selected_spinbox);
             encoder2_last_value = encoder2_value;
             return;
         }
 
         else if (encoder2_last_value > encoder2_value)
         {
-            move_spinbox_cursor_right(obj_old);
+            move_spinbox_cursor_right(obj_selected_spinbox);
             encoder2_last_value = encoder2_value;
             return;
         }
 
         if (encoder1_last_value < encoder1_value)
-            lv_spinbox_increment(obj_old);
+            lv_spinbox_increment(obj_selected_spinbox);
 
         else if (encoder1_last_value > encoder1_value)
-            lv_spinbox_decrement(obj_old);
+            lv_spinbox_decrement(obj_selected_spinbox);
 
-        encoder1_last_value = encoder2_value;
+        encoder1_last_value = encoder1_value;
 
         // Serial.printf("\n***********************************");
         // print_obj_type(fgen_tabview); // Output: Object is************ a button
@@ -4005,11 +4039,64 @@ Waveform waveforms[] = {
     // Add more waveform structs here
 };
 
-// Function to generate waveform based on parameters
-void functionGenerator()
+#define CHANGE_THRESHOLD 0.09 / 32 / .5 // Adjust this for desired sensitivity
+
+double monitorMinChanges(double currentValue, double currentTimeMicros)
 {
-    if (!lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
-        return;
+    static double lastValue = 0.0;
+    static bool isFirstRun = true;
+    static bool isStable = false;
+    static double startStableTime = 0;
+    static double endStableTime = 0;
+    static double diff_min = 0;
+
+    // For the first run, just initialize lastValue and return
+    if (isFirstRun)
+    {
+        lastValue = currentValue;
+        isFirstRun = false;
+        return 10.0;
+    }
+
+    double diff = fabs(currentValue - lastValue);
+
+    if (diff < CHANGE_THRESHOLD)
+    {
+        // Value is nearly unchanged
+        if (!isStable)
+        {
+            // Just entered a stable period
+            startStableTime = currentTimeMicros;
+            Serial.printf("Stable period started at %1.3f\n", startStableTime);
+            isStable = true;
+        }
+        // If already stable, continue without printing
+    }
+
+    else
+    {
+        // Value changed significantly
+        if (isStable)
+        {
+            // We are leaving a stable period
+            endStableTime = currentTimeMicros;
+            // Serial.printf("Stable period ended at %1.3f  micros diff:%f\n", endStableTime, diff);
+
+            // Print the duration
+            double duration = endStableTime - startStableTime;
+            // Serial.printf("Stable period duration: %1.3f  micros\n", duration);
+            // triggerTime = startStableTime;
+            isStable = false;
+        }
+    }
+
+    lastValue = currentValue;
+    return fabs(startStableTime - currentTimeMicros);
+}
+
+// Function to generate waveform based on parameters
+bool functionGenerator()
+{
 
     static unsigned long startTime = micros();
     unsigned long currentTime = micros();
@@ -4025,10 +4112,14 @@ void functionGenerator()
     if (outputValue != lastOutputValue)
     {
         PowerSupply.Voltage.SetUpdate(outputValue);
+        // PowerSupply.Voltage.adjValue = outputValue;
         lastOutputValue = outputValue;
     }
 
-    return;
+    // Track minimal change intervals
+    //  Serial.printf("\nmonitor output: %1.3f ", monitorMinChanges(value, t) );
+    // return (monitorMinChanges(value, t) < (.008));
+    return true;
     Serial.print("Waveform: ");
     Serial.print(currentWaveform.name);
     Serial.print(" - Value: ");

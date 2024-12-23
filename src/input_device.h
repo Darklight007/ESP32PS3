@@ -23,9 +23,9 @@
 // void keyMenus(char item, String str, int x, std::function<void(int)> func);
 // void keyMenus(char item, String str, std::function<void(void)> func);
 
-volatile unsigned long encoder1Flag=true;
-volatile unsigned long encoder2Flag=true;
-long long encoderTimeStamp=0;
+volatile unsigned long encoder1Flag = true;
+volatile unsigned long encoder2Flag = true;
+long long encoderTimeStamp = 0;
 
 void IRAM_ATTR VoltageEnc(void *)
 {
@@ -47,6 +47,7 @@ char keyChar = ' ';
 
 void getKeys()
 {
+
     if (kpd.getKeys())
     {
         for (int i = 0; i < LIST_MAX; i++) // Scan the whole key list.
@@ -108,7 +109,7 @@ void keyMenus(char &&item, String &&str, std::function<void(void)> func) //  voi
     if ((keyChar == item) && (msg == str))
     {
         static String oldMsg = "";
-        //Ignore RELEASE after HOLD
+        // Ignore RELEASE after HOLD
         if (oldMsg == " HOLD." && str == " RELEASED.")
         {
             msg = "done!";

@@ -2,6 +2,9 @@
 
 extern Calibration StoreData;
 FunGen funGen; // Definition
+
+DAC_codes DAC_init_data;
+
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
 
 void Device::setupADC(uint8_t pin, void func(void), TwoWire *_awire)
@@ -346,6 +349,22 @@ FunGen Device::LoadMemoryFgen(const String &key)
     FunGen data;
     StoreMem.begin("my-app", false);
     StoreMem.getBytes(key.c_str(), &data, sizeof(FunGen));
+    StoreMem.end();
+    return data;
+}
+
+void Device::SaveDACdata(const String &key, const DAC_codes &data)
+{
+    StoreMem.begin("my-app", false);
+    StoreMem.putBytes(key.c_str(), &data, sizeof(DAC_codes));
+    StoreMem.end();
+}
+
+DAC_codes Device::LoadDACdata(const String &key)
+{ 
+    DAC_codes data;
+    StoreMem.begin("my-app", false);
+    StoreMem.getBytes(key.c_str(), &data, sizeof(DAC_codes));
     StoreMem.end();
     return data;
 }
