@@ -30,7 +30,7 @@ extern bool wireConnected;  // Flag indicating if device is connected on Wire
 extern bool wire1Connected; // Flag indicating if device is connected on Wire1
 // size_t memory;               // Global variable to hold free heap memory size
 extern int32_t *barGraph_V;
-
+extern DAC_codes dac_data_g;
 // **Initialization Functions**
 
 // Initialize serial communication
@@ -94,8 +94,8 @@ void initializeI2C()
 
     // Initialize keypad (does not start Wire library now)
     kpd.begin();
-    kpd.setDebounceTime(33*2); // Set debounce time (no bouncing for this I2C)
-    kpd.setHoldTime(1000);   // Set hold time
+    kpd.setDebounceTime(33 * 2); // Set debounce time (no bouncing for this I2C)
+    kpd.setHoldTime(1000);       // Set hold time
 
     Serial.println("I2C Initialized.");
 }
@@ -199,8 +199,23 @@ void setupPowerSupply()
     // Setup on/off touch switch on page 3
     PowerSupply.setupSwitch(PowerSupply.page[2], 0, 240, 160, btn_event_cb);
 
+    delay(500);
+    dac_data_g = PowerSupply.LoadDACdata("dac_data_");
+    delay(500);
+
+    PowerSupply.Voltage.adjOffset = dac_data_g.zero_voltage;
+    PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage) / 2000.0;
+    PowerSupply.Voltage.maxValue = (dac_data_g.max_voltage - dac_data_g.zero_voltage) / 2000.0;
+    PowerSupply.Voltage.adc_maxValue = 32.768;
+
+    PowerSupply.Current.adjOffset = dac_data_g.zero_current;
+    PowerSupply.Current.minValue = (-dac_data_g.zero_current) / 10000.0;
+    PowerSupply.Current.maxValue = (dac_data_g.max_current - dac_data_g.zero_current) / 10000.0;
+    PowerSupply.Current.adc_maxValue = 6.5536;
+
     // Setup voltage, current, and power parameters for page 3
-    PowerSupply.Voltage.setup(PowerSupply.page[2], "V-Set:", -14, -8, "V", 32.7675, 5.0, 0, 2000);
+    PowerSupply.Voltage.setup(PowerSupply.page[2], "V-Set:", -14, -8, "V", PowerSupply.Voltage.maxValue, PowerSupply.Voltage.minValue,
+                              5.0, dac_data_g.zero_voltage, 2000);
 
     // Set window sizes for measurements and statistics
     PowerSupply.Voltage.measured.SetWindowSize(MAX_NO_OF_AVG);
@@ -217,10 +232,12 @@ void setupPowerSupply()
     PowerSupply.Power.effectiveResolution.SetWindowSize(1);
 
     // Setup current parameters
-    PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", 6.5535, 1.0, -5.5, 2000);
+
+    PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", PowerSupply.Current.maxValue, PowerSupply.Current.minValue,
+                              1.0, dac_data_g.zero_current, 10000);
 
     // Setup power display parameters
-    PowerSupply.Power.setup(PowerSupply.page[2], "", -14, 144, "W", 0, 0, 0, 0, &dseg_b_24, &Tauri_R_28);
+    PowerSupply.Power.setup(PowerSupply.page[2], "", -14, 144, "W", 0, 0, 0, 0, 0, &dseg_b_24, &Tauri_R_28);
 
     Serial.println("Power Supply Setup Completed.");
 
@@ -279,7 +296,6 @@ void setupPowerSupply()
 
     PowerSupply.Voltage.Bar.bar;
     lv_bar_t *bar = (lv_bar_t *)PowerSupply.Voltage.Bar.bar;
-
 
     // Assuming 'bar' is a pointer to lv_bar_t
     // lv_bar_t *bar = /* your bar object initialization */;
@@ -345,7 +361,7 @@ void createTasks()
         "Voltage & Current ADC", /* Name of task */
         14000,                   /* Stack size of task */
         NULL,                    /* Parameter of the task */
-        14,                       /* Priority of the task */
+        14,                      /* Priority of the task */
         &Task_adc,               /* Task handle */
         0                        /* Pin task to core 0 */
     );

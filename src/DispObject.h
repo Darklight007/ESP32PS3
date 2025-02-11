@@ -606,11 +606,13 @@ public:
     double calib_b;
 
     double maxValue;
+    double dac_maxValue;
+    double adc_maxValue;
     double minValue;
-    double adjValue;
-    double adjOffset;
+    uint16_t adjValue;
+    uint16_t adjOffset;
     double adjFactor;
-    double adjValueOld;
+    uint16_t adjValueOld;
     double adjValueChanged = {true};
     uint16_t adjEEPROMAddress = 0;
 
@@ -635,7 +637,7 @@ public:
     lv_style_t style_set;
 
     // int tick = 1;
-    double rotaryEncoderStep{.0001};
+    double rotaryEncoderStep{1};
 
     bool lock = true;
     ESP32Encoder encoder;
@@ -655,14 +657,14 @@ public:
     void enableSetting(bool onOff);
     char *getValue();
     void SetRotaryStep(double val);
-    void SetUpdate(double value);
+    void SetUpdate(int value);
     void Flush(void);
     void SetEncoderUpdate(void);
     void setLock(bool lck);
     bool getLock();
     void setMeasureColor(lv_color_t color);
     void setStatsColor(lv_color_t color);
-    void setup(lv_obj_t *parent, const char *_text, int x, int y, const char *_unit, double maxValue_, double mTick,
+    void setup(lv_obj_t *parent, const char *_text, int x, int y, const char *_unit, double maxValue_, double minValue_, double mTick,
                double offset, double factor, const lv_font_t *font_measure = &dseg_b_48, const lv_font_t *font_unit = &Tauri_R_62);
     // const lv_font_t *font_measure, const lv_font_t *font_unit);
     void SetupStyles();

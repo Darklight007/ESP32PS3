@@ -1272,7 +1272,7 @@ void Task_BarGraph(void *pvParameters)
             continue;
         }
 
-        // if (!lvglIsBusy)
+        if (!lvglIsBusy && !blockAll)
         {
 
             // lv_obj_invalidate(PowerSupply.Voltage.Bar.bar);
@@ -1382,13 +1382,13 @@ void Task_ADC(void *pvParameters)
             lastCCCVStatus = digitalRead(PowerSupply.CCCVPin);
             // myTone(NOTE_A4, 50);
         }
-
+        // Serial.printf("\n%i", digitalRead(PowerSupply.CCCVPin));
         HistPush();
         GraphPush();
 
         if (Tabs::getCurrentPage() == 0 && !lvglIsBusy)
 
-            if (!lvglChartIsBusy)
+            if (!lvglChartIsBusy && !blockAll)
             {
                 lvglChartIsBusy = true;
                 lv_chart_refresh(PowerSupply.stats.chart);
@@ -1400,7 +1400,7 @@ void Task_ADC(void *pvParameters)
         if (Tabs::getCurrentPage() == 1 && !lvglIsBusy)
             schedule([]
                      {
-                         if (!lvglChartIsBusy)
+                         if (!lvglChartIsBusy && !blockAll)
                          {
                              lvglChartIsBusy = true;
                              lv_chart_refresh(PowerSupply.graph.chart);
@@ -1513,7 +1513,8 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Voltage.SetUpdate(round(strtod(txt, NULL) * 2000.0) / 2000.0 - 0 * PowerSupply.Voltage.adjOffset);
+        // PowerSupply.Voltage.SetUpdate(round(strtod(txt, NULL) * 2000.0)  - 0 * PowerSupply.Voltage.adjOffset);
+        PowerSupply.Voltage.SetUpdate((strtod(txt, NULL) * 2000.0)  - 0 * PowerSupply.Voltage.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
     }
@@ -1523,7 +1524,7 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Voltage.SetUpdate(round(strtod(txt, NULL) * 2.0) / 2000.0 - 0 * PowerSupply.Voltage.adjOffset);
+        PowerSupply.Voltage.SetUpdate((strtod(txt, NULL) * 2.0) - 0 * PowerSupply.Voltage.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
     }
@@ -1533,7 +1534,7 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Current.SetUpdate(strtod(txt, NULL) - 0 * PowerSupply.Current.adjOffset);
+        PowerSupply.Current.SetUpdate(strtod(txt, NULL)*10000.0 - 0 * PowerSupply.Current.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
     }
@@ -1543,7 +1544,7 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Current.SetUpdate(strtod(txt, NULL) / 1000.0 - 0 * PowerSupply.Current.adjOffset);
+        PowerSupply.Current.SetUpdate(strtod(txt, NULL)*10.0  - 0 * PowerSupply.Current.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
     }
@@ -2224,10 +2225,11 @@ void keyCheckLoop()
              });
 
     keyMenus('O', " HOLD.", [] // Output button
-             {myTone(NOTE_A5, 200, true);
-            myTone(NOTE_A3, 200, true);
-
-            ESP.restart(); });
+             {
+                //  myTone(NOTE_A5, 200, true);
+                //  myTone(NOTE_A3, 200, true);
+                //  ESP.restart();
+             });
 
     keyMenus('m', " HOLD.", [] // Output button
              {
@@ -2269,6 +2271,14 @@ void keyCheckLoop()
              {
                  Tabs::goToHomeTab();
                  lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN); });
+
+    keyMenus('H', " HOLD.", [] // Home button
+             {
+                 myTone(NOTE_A5, 200, true);
+                 myTone(NOTE_A3, 200, true);
+                 ESP.restart();
+             });
+
     keyMenus('M', " RELEASED.", []
              { Tabs::setCurrentPage(4); });
 
@@ -2638,8 +2648,8 @@ void keyCheckLoop()
 
     keyMenusPage('W', " RELEASED.", 2, []
                  {
-                     PowerSupply.Voltage.SetRotaryStep(0.0005);
-                     PowerSupply.Current.SetRotaryStep(0.0001);
+                     PowerSupply.Voltage.SetRotaryStep(1); //0.0005
+                     PowerSupply.Current.SetRotaryStep(1);
                      lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 10 * 12, -1000);
                      lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 10 * 12, -1000); });
 
@@ -2655,22 +2665,22 @@ void keyCheckLoop()
 
     keyMenusPage('X', " RELEASED.", 2, []
                  {
-                     PowerSupply.Voltage.SetRotaryStep(0.0005);
-                     PowerSupply.Current.SetRotaryStep(0.0001);
+                     PowerSupply.Voltage.SetRotaryStep(1); //0.0005
+                     PowerSupply.Current.SetRotaryStep(1);
                      lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 10 * 12, -1000);
                      lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 10 * 12, -1000); });
 
     keyMenusPage('Y', " RELEASED.", 2, []
                  {
-                     PowerSupply.Voltage.SetRotaryStep(0.0005);
-                     PowerSupply.Current.SetRotaryStep(0.0001);
+                     PowerSupply.Voltage.SetRotaryStep(1); //0.0005
+                     PowerSupply.Current.SetRotaryStep(1);
                      lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 10 * 12, -1000);
                      lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 10 * 12, -1000); });
 
     keyMenusPage('W', " HOLD.", 2, []
                  {
-            PowerSupply.Voltage.SetRotaryStep(1.0000);
-            PowerSupply.Current.SetRotaryStep(1.0000);
+            PowerSupply.Voltage.SetRotaryStep(2000.0000);
+            PowerSupply.Current.SetRotaryStep(10000.000);
             lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 7 * 12, -10);
             lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 7 * 12, 72);
             lv_obj_clear_flag(PowerSupply.Voltage.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
@@ -2678,8 +2688,8 @@ void keyCheckLoop()
 
     keyMenusPage('X', " HOLD.", 2, []
                  {
-            PowerSupply.Voltage.SetRotaryStep(0.1000);
-            PowerSupply.Current.SetRotaryStep(0.1000);
+            PowerSupply.Voltage.SetRotaryStep(200);
+            PowerSupply.Current.SetRotaryStep(1000.000);
             lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 9 * 12, -10);
             lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 9 * 12, 72);
             lv_obj_clear_flag(PowerSupply.Voltage.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
@@ -2687,8 +2697,8 @@ void keyCheckLoop()
 
     keyMenusPage('Y', " HOLD.", 2, []
                  {
-            PowerSupply.Voltage.SetRotaryStep(0.0100);
-            PowerSupply.Current.SetRotaryStep(0.0100);
+            PowerSupply.Voltage.SetRotaryStep(20);
+            PowerSupply.Current.SetRotaryStep(100.000);
             lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 10 * 12, -10);
             lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 10 * 12, 72);
             lv_obj_clear_flag(PowerSupply.Voltage.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
@@ -2748,8 +2758,8 @@ void updateObjectPos_cb(lv_event_t *e)
         lv_obj_t *labelVset = find_btn_by_tag(tab, 13);
         lv_obj_t *labelIset = lv_obj_get_child(labelVset, 0);
 
-        lv_label_set_text_fmt(labelVset, "V-Set%+08.4fV", PowerSupply.Voltage.adjValue);
-        lv_label_set_text_fmt(labelIset, "I-Set%+08.4fA", PowerSupply.Current.adjValue);
+        lv_label_set_text_fmt(labelVset, "V-Set%+08.4fV", PowerSupply.Voltage.adjValue/PowerSupply.Voltage.adjFactor);
+        lv_label_set_text_fmt(labelIset, "I-Set%+08.4fA", PowerSupply.Current.adjValue/PowerSupply.Current.adjFactor);
     }
 }
 
@@ -3030,15 +3040,12 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
 
         // encoder2_value = count;
         if (count > rotaryOldValue2)
-        {
             encoder2_value++;
-            // PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue + PowerSupply.Current.rotaryEncoderStep);
-        }
+        // PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue + PowerSupply.Current.rotaryEncoderStep);
+
         else if (count < rotaryOldValue2)
-        {
             encoder2_value--;
-            // PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue - PowerSupply.Current.rotaryEncoderStep);
-        }
+        // PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue - PowerSupply.Current.rotaryEncoderStep);
 
         rotaryOldValue2 = count;
         // encoder2_value = std::clamp(encoder2_value, -500, 500);
@@ -3048,8 +3055,8 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
         //   PowerSupply.Current.encoder.setCount(0);
         switch (Tabs::getCurrentPage())
         {
-        case 4:
-            break;
+        // case 4:
+        //     break;
         case 2:
             PowerSupply.Current.SetEncoderUpdate();
             // PowerSupply.FlushSettings();
@@ -3081,8 +3088,8 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
         encoder1Flag = 0;
         switch (Tabs::getCurrentPage())
         {
-        case 4:
-            break;
+        // case 4:
+        //     break;
         case 2:
             PowerSupply.Voltage.SetEncoderUpdate();
             // PowerSupply.FlushSettings();
@@ -3125,7 +3132,7 @@ void LvglUpdatesInterval(unsigned long interval)
     }
     schedule([]
              {
-                 //  if (!lvglChartIsBusy)
+                 if (!lvglChartIsBusy && !blockAll)
                  {
                      lvglIsBusy = 1;
                      lv_timer_handler();
@@ -3216,7 +3223,7 @@ void VCCCInterval(unsigned long interval)
     static unsigned long timer_ = {0};
     schedule([]
              {
-                if (!lvglChartIsBusy)
+                if (!lvglChartIsBusy && !blockAll)
                      PowerSupply.VCCCStatusUpdate(); },
              interval, timer_);
 }

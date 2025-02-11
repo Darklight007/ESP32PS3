@@ -717,7 +717,7 @@ void SettingMenu(lv_obj_t *parent)
     section = lv_menu_section_create(sub_software_info_page);
     lv_obj_t *obj0;
     // create_text(section, NULL, "Version 1.0", LV_MENU_ITEM_BUILDER_VARIANT_1, obj0);
-    
+
     // Use the SOFTWARE_VERSION macro
     char version_text[50];
     snprintf(version_text, sizeof(version_text), "Version %s", SOFTWARE_VERSION);
@@ -1094,6 +1094,15 @@ static void btn_calibration_DAC_event_cb(lv_event_t *e)
     static lv_obj_t *label_maxC = addLabel_edit(mc, "%+06.4fA", 6.5535, 0, xOffset, 0);
     dac_data_g = PowerSupply.LoadDACdata("dac_data_");
 
+    PowerSupply.Voltage.adjOffset = dac_data_g.zero_voltage;
+    PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage) / 2000.0;
+    PowerSupply.Voltage.maxValue = (dac_data_g.max_voltage - dac_data_g.zero_voltage) / 2000.0;
+
+
+    PowerSupply.Current.adjOffset = dac_data_g.zero_current;
+    PowerSupply.Current.minValue = (-dac_data_g.zero_current) / 10000.0;
+    PowerSupply.Current.maxValue = (dac_data_g.max_current - dac_data_g.zero_current) / 10000.0;
+
     static auto DAC_voltage_calib_change_event_cb = [](lv_event_t *e)
     {
         if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
@@ -1107,6 +1116,9 @@ static void btn_calibration_DAC_event_cb(lv_event_t *e)
             dac_data_g.zero_current = lv_spinbox_get_value(zc);
             dac_data_g.max_current = lv_spinbox_get_value(mc);
 
+            PowerSupply.Voltage.adjOffset = dac_data_g.zero_voltage;
+            PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage) / 2000.0;
+            PowerSupply.Voltage.maxValue = (mv_value - zv_value) / 2000.0;
             PowerSupply.SaveDACdata("dac_data_", dac_data_g);
         }
     };
@@ -1124,6 +1136,9 @@ static void btn_calibration_DAC_event_cb(lv_event_t *e)
             dac_data_g.zero_current = lv_spinbox_get_value(zc);
             dac_data_g.max_current = lv_spinbox_get_value(mc);
 
+            PowerSupply.Current.adjOffset = dac_data_g.zero_current;
+            PowerSupply.Current.minValue = (-dac_data_g.zero_current) / 10000.0;
+            PowerSupply.Current.maxValue = (mc_value - zc_value) / 10000.0;
             PowerSupply.SaveDACdata("dac_data_", dac_data_g);
         }
     };

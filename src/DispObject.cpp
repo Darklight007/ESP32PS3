@@ -1,6 +1,6 @@
 #include "DispObject.h"
 
-extern bool lvglIsBusy;
+extern bool lvglIsBusy,blockAll;
 void DispObjects::SetEncoderPins(int aPintNumber, int bPinNumber, enc_isr_cb_t enc_isr_cb = nullptr)
 {
     encoder = new ESP32Encoder;
@@ -41,7 +41,7 @@ void DispObjects::StatisticsUpdate(double value)
 {
     Statistics(value);
 
-    double er_sample = Statistics.ER(2 * maxValue);
+    double er_sample = Statistics.ER(2 * adc_maxValue); //maxValue
     if (!std::isinf(er_sample))
         effectiveResolution(er_sample);
 }
@@ -50,7 +50,7 @@ void DispObjects::displayUpdate(void)
 {
     static double mean_;
     mean_ = measured.Mean();
-    if (oldValue != mean_)
+    if (oldValue != mean_ && !blockAll)
     {
         // Display mean  of measured data not the value
         lv_label_set_text_fmt(label_measureValue, restrict, mean_);
@@ -75,7 +75,7 @@ void DispObjects::displayUpdate(void)
 void DispObjects::statUpdate(void)
 {
 
-    lv_label_set_text_fmt(statLabels.label_setSmallFont, "%+08.4f", adjValue);
+    lv_label_set_text_fmt(statLabels.label_setSmallFont, "%+08.4f", adjValue/adjFactor);
     lv_label_set_text_fmt(statLabels.label_value, "%+08.4f", Statistics.value);
     lv_label_set_text_fmt(statLabels.label_mean, "%+08.4f", Statistics.Mean());
     lv_label_set_text_fmt(statLabels.label_std, "%07.4f", Statistics.StandardDeviation());
@@ -127,16 +127,16 @@ void DispObjects::SetRotaryStep(double val)
     rotaryEncoderStep = val;
 }
 
-void DispObjects::SetUpdate(double value)
+void DispObjects::SetUpdate(int value)
 {
     // value+=-adjOffset;
-    if (lock || value < minValue || value > maxValue)
+    if (lock || value/adjFactor< minValue || value/adjFactor > maxValue)
     {
         myTone(NOTE_A5, 50);
         return;
     }
-
-    adjValue = std::max(std::min(value, maxValue), minValue);
+    // adjValue = std::max(std::min(value, maxValue), minValue);
+    adjValue = std::max(std::min(value, int(maxValue*adjFactor)),int(minValue*adjFactor));
     // adjValue = std::clamp(value, minValue, maxValue); => already taken care of
     adjValue = value;
 
@@ -150,10 +150,10 @@ void DispObjects::SetUpdate(double value)
     // LV_LOG_USER("LOG: %s", "Beep!");
     // lv_disp_enable_invalidation( lv_disp_get_default(), false);
     // if (!lvglIsBusy)
-    lv_label_set_text_fmt(label_setValue, "%+08.4f%s", adjValue, lv_label_get_text(label_unit));
+    lv_label_set_text_fmt(label_setValue, "%+08.4f%s", adjValue/adjFactor, lv_label_get_text(label_unit));
 
 
-    lv_obj_set_width(Bar.bar_adjValue, (adjValue) / maxValue * lv_bar_get_max_value(Bar.bar));
+    lv_obj_set_width(Bar.bar_adjValue, (adjValue/adjFactor) / maxValue * lv_bar_get_max_value(Bar.bar));
     // lv_obj_invalidate(label_setValue);
 }
 
@@ -169,15 +169,15 @@ void DispObjects::Flush(void)
         // lv_label_set_text_fmt(label_setValue, a, adjValue +adjOffset);
         if (strcmp(lv_label_get_text(label_unit), "A"))
 
-            lv_label_set_text_fmt(label_setValue, "%+08.4fV", adjValue);
+            lv_label_set_text_fmt(label_setValue, "%+08.4fV", adjValue/adjFactor);
         else
-            lv_label_set_text_fmt(label_setValue, "%+08.4fA", adjValue);
+            lv_label_set_text_fmt(label_setValue, "%+08.4fA", adjValue/adjFactor);
 
         // update bar setting shadaow
-        lv_obj_set_width(Bar.bar_adjValue, (adjValue) / maxValue * lv_bar_get_max_value(Bar.bar));
+        lv_obj_set_width(Bar.bar_adjValue, (adjValue/adjFactor) / maxValue * lv_bar_get_max_value(Bar.bar));
         adjValueChanged = false;
         // lv_obj_invalidate(label_setValue);
-        Serial.printf("\n%10.4f", adjValue);
+        Serial.printf("\n%10.4f", adjValue/adjFactor);
     }
     // _lv_disp_refr_timer(NULL);
 }
@@ -293,15 +293,17 @@ void DispObjects::SetupStyles()
     // lv_style_init(&style_set);
 }
 
-void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const char *_unit, double maxValue_, double mTick,
+void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const char *_unit, double maxValue_,double minValue_, double mTick,
                         double offset_, double factor_,
                         const lv_font_t *font_measure, const lv_font_t *font_unit)
 {
     maxValue = maxValue_;
-    minValue = 0.0;
+    minValue = minValue_;
+
+    
     SetRotaryStep(maxValue_ / 65535);
     measured.SetWindowSize(4);
-    adjOffset = offset_ / 1000.0; // Convert from milli volts/current to volt and current
+    adjOffset = offset_ ;// / 1000.0; // Convert from milli volts/current to volt and current
     adjFactor = factor_;
     // const lv_font_t *font_measure = &dseg_b_48;
     // const lv_font_t *font_set = &Undertale_16b1; // WindyCity_16b4; // Undertale_16b;

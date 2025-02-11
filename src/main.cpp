@@ -82,7 +82,7 @@ void loop()
 {
 
   LvglUpdatesInterval(33);
-  trackLoopExecution(__func__);
+  // trackLoopExecution(__func__);
   StatusBarUpdateInterval(333);
 
   if ((millis() - encoderTimeStamp) > 33)
@@ -96,7 +96,7 @@ void loop()
   // if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
   //   KeyCheckInterval(400);
   // DACInterval(100);
-  // VCCCInterval(250);
+  VCCCInterval(100);
   // KeyCheckInterval(45);
   // Serial.printf("\nVoltage.encoder.getCount %l",PowerSupply.Voltage.encoder.getCount());
   // KeyCheckInterval(0); // moved to adc taskse

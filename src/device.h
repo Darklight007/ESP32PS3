@@ -30,8 +30,8 @@ struct DataArrays
 // #pragma pack(push, 1)
 struct mem
 {
-    double voltage;
-    double current;
+    uint16_t voltage;
+    uint16_t current;
     bool V_isLocked;
     bool I_isLocked;
 };
@@ -78,8 +78,8 @@ struct SettingParameters
     uint8_t adcRate;
     uint16_t adcNumberOfAvgs;
     uint8_t adcNumberOfDigits;
-    double SetVoltage;
-    double SetCurrent;
+    uint16_t SetVoltage;
+    uint16_t SetCurrent;
     bool buzzer = false;
     bool isPowerSupplyOn = true;
 };
@@ -277,11 +277,14 @@ public:
         ads1219->setVoltageReference(vref);
         ads1219->setGain(gain);
 
-        if (channel == VOLTAGE)
-            ads1219->readDifferential_0_1();
-        else if (channel == CURRENT)
-            ads1219->readDifferential_2_3();
-        // ads1219->readSingleEnded(channel);
+        // if (channel == VOLTAGE)
+        //     // ads1219->readDifferential_0_1();
+        //     ads1219->readSingleEnded(1);
+        // else if (channel == CURRENT)
+        //     ads1219->readDifferential_2_3();
+        //     // ads1219->readSingleEnded(3);
+            
+        ads1219->readSingleEnded(channel);
         busyChannel = channel;
     }
 

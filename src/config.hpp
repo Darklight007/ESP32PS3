@@ -68,7 +68,7 @@ extern bool buzzerSound;
 TaskHandle_t Task_adc, Task1;
 bool ismyTextHiddenChange = false;
 
-bool lvglIsBusy, lvglChartIsBusy, emergencyRefresh;
+bool lvglIsBusy, lvglChartIsBusy, emergencyRefresh,blockAll=false;
 
 bool wireConnected;
 bool wire1Connected;
