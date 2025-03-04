@@ -1,7 +1,7 @@
 #include "device.h"
 
 extern Calibration StoreData;
-extern bool lvglIsBusy, lvglChartIsBusy,blockAll;
+extern bool lvglIsBusy, lvglChartIsBusy, blockAll;
 FunGen funGen; // Definition
 
 extern DAC_codes dac_data_g;
@@ -289,11 +289,8 @@ void Device::LoadSetting(void)
         Power.restrict = "%+07.3f";
     }
 
-    // EEPROMread(Voltage.adjEEPROMAddress + 8 * 0, Voltage.adjValue); // PowerSupply.Voltage.adjValue
-    // EEPROMread(Current.adjEEPROMAddress + 8 * 1, Current.adjValue); // PowerSupply.Voltage.adjValue
-
-    Serial.printf("\nLast Voltage Value:% +8.4f", Voltage.adjValue/2000.0 + 0 * Voltage.adjOffset);
-    Serial.printf("\nLast Current Value:% +8.4f", Current.adjValue/10000.0 + 0 * Current.adjOffset);
+    Serial.printf("\nLast Voltage Value:% +8.4f", Voltage.adjValue / 2000.0 + 0 * Voltage.adjOffset);
+    Serial.printf("\nLast Current Value:% +8.4f", Current.adjValue / 10000.0 + 0 * Current.adjOffset);
 };
 
 void Device::SaveSetting(void)
@@ -412,7 +409,7 @@ void Device::readCurrent()
         // double currentOfADCRate = 1.0 * Voltage.measured.Mean() / (32.0 / (0.0019 - 0.0012));-> Based on ADC rate
 
         // Current used by R11&R12 and maybe others?
-        static double diff_A = .00055 /(32.0-0.0);
+        static double diff_A = .00055 / (32.0 - 0.0);
         double currentOfUnknowSource = 1.0 * Voltage.measured.Mean() * diff_A;
         internalCurrentConsumption = currentOfUnknowSource +
                                      0.0 * 0.000180 * !digitalRead(CCCVPin); // Why?
@@ -504,12 +501,11 @@ void Device::VCCCStatusUpdate(void)
     if (last_status == digitalRead(CCCVPin))
         return;
 
-  
     if (digitalRead(CCCVPin) == false)
         setStatus(DEVICE::CC);
     else
         setStatus(DEVICE::VC);
-          last_status = digitalRead(CCCVPin);
+    last_status = digitalRead(CCCVPin);
 }
 
 void Device::DACUpdate(void)
@@ -531,29 +527,37 @@ void Device::DACUpdate(void)
 
     if (getStatus() != DEVICE::OFF)
     {
+        static double dac_last_Voltage = -1, dac_last_Current = -1;
+
         // Wire.setClock(400000UL);
-        double v = Voltage.adjValue * 2000.0 + Voltage.adjOffset;
+        /*  adjValued must be in the range of 0 to 65535
+            offset value should be only affect the display
+            the real offset must be set in hardware.
+            Bu the max value and min value should be check in software
+
+        */
+        uint16_t v = Voltage.adjValue; //  +0* Voltage.adjOffset;
+        // if (dac_last_Voltage != v)
+        {
+            DAC.writeAndPowerAll(DAC_VOLTAGE, v);
+            dac_last_Voltage = v;
+        }
+
         /*
         This current obtain experimentally by measurement.
         It is proportional  to voltage and it's measure at 32V
         */
+
         double otherInternalCurrentConsumer = 1.0 * Voltage.measured.Mean() / (32.0 / (0.00098 - 0.00025)); // -2.1 mm
-        double c = Current.adjValue * 10000.0 + Current.adjOffset + .5;
-        ; // 0 * internalCurrentConsumption + 0 * otherInternalCurrentConsumer) * 10000;
+        uint16_t c = Current.adjValue;                                                                      // + Current.adjOffset;
+        ;                                                                                                   // 0 * internalCurrentConsumption + 0 * otherInternalCurrentConsumer) * 10000;
 
-        static double dac_last_Voltage = -1, dac_last_Current = -1;
-
-        // if (dac_last_Voltage != v)
-        {
-            DAC.writeAndPowerAll(DAC_VOLTAGE, uint16_t(Voltage.adjValue));
-            dac_last_Voltage = Voltage.adjValue;
-        }
-
-        Serial.printf("\nc:%f ,uint16_t: %i  v:%f ,uint16_t: %i", Current.adjValue, uint16_t(c), Voltage.adjValue, uint16_t(v));
+        // Serial.printf("\n v_uint16_t: %i v:%f ", Voltage.adjValue, double((Voltage.adjValue - Voltage.adjOffset) / 2000.0));
+        // Serial.printf(" c_uint16_t: %i c:%f ", Current.adjValue, double((Current.adjValue - Current.adjOffset) / 10000.0));
 
         // if (dac_last_Current != c)
         {
-            DAC.writeAndPowerAll(DAC_CURRENT, uint16_t(Current.adjValue));
+            DAC.writeAndPowerAll(DAC_CURRENT, uint16_t(c));
             dac_last_Current = c;
         }
     }
@@ -579,12 +583,12 @@ void Device::turn(SWITCH onOff)
 
 void Device::toggle(void)
 {
-    delay(40);
+    delay(4);
     if (getStatus() != DEVICE::OFF)
         turn(SWITCH::OFF);
     else
         turn(SWITCH::ON);
-    delay(40);
+    delay(4);
 };
 
 void Device::setupDisplay(lv_obj_t *scr)
@@ -673,13 +677,12 @@ DEVICE Device::getStatus(void)
 void Device::setStatus(DEVICE status_)
 
 {
-        
-    blockAll= true;
 
-// lv_obj_invalidate(lv_scr_act()); // Force a full redraw before pausing
-// lv_disp_trig_activity(NULL); // Ensure display updates are handled
-// lv_disp_enable_invalidation(NULL, false); // Disable invalidation (pause updates)
+    blockAll = true;
 
+    // lv_obj_invalidate(lv_scr_act()); // Force a full redraw before pausing
+    // lv_disp_trig_activity(NULL); // Ensure display updates are handled
+    // lv_disp_enable_invalidation(NULL, false); // Disable invalidation (pause updates)
 
     // Set Colors
     Voltage.setMeasureColor(stateColor[status_].measured);
@@ -738,10 +741,8 @@ void Device::setStatus(DEVICE status_)
 
     status = status_;
     lv_disp_enable_invalidation(NULL, true); // Re-enable invalidation (resume updates)
-// lv_refr_now(NULL); // Force an immediate screen refresh
-    blockAll= false;
-
-
+                                             // lv_refr_now(NULL); // Force an immediate screen refresh
+    blockAll = false;
 };
 
 void Device::FlushSettings(void)

@@ -637,7 +637,7 @@ public:
     lv_style_t style_set;
 
     // int tick = 1;
-    double rotaryEncoderStep{1};
+    long rotaryEncoderStep{1};
 
     bool lock = true;
     ESP32Encoder encoder;

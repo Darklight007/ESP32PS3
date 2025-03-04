@@ -204,13 +204,13 @@ void setupPowerSupply()
     delay(500);
 
     PowerSupply.Voltage.adjOffset = dac_data_g.zero_voltage;
-    PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage) / 2000.0;
-    PowerSupply.Voltage.maxValue = (dac_data_g.max_voltage - dac_data_g.zero_voltage) / 2000.0;
+    PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage); // 2000.0;
+    PowerSupply.Voltage.maxValue = (dac_data_g.max_voltage - dac_data_g.zero_voltage); // 2000.0;
     PowerSupply.Voltage.adc_maxValue = 32.768;
 
     PowerSupply.Current.adjOffset = dac_data_g.zero_current;
-    PowerSupply.Current.minValue = (-dac_data_g.zero_current) / 10000.0;
-    PowerSupply.Current.maxValue = (dac_data_g.max_current - dac_data_g.zero_current) / 10000.0;
+    PowerSupply.Current.minValue = (-dac_data_g.zero_current); // 10000.0;
+    PowerSupply.Current.maxValue = (dac_data_g.max_current - dac_data_g.zero_current); // 10000.0;
     PowerSupply.Current.adc_maxValue = 6.5536;
 
     // Setup voltage, current, and power parameters for page 3

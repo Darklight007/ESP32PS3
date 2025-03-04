@@ -1095,13 +1095,13 @@ static void btn_calibration_DAC_event_cb(lv_event_t *e)
     dac_data_g = PowerSupply.LoadDACdata("dac_data_");
 
     PowerSupply.Voltage.adjOffset = dac_data_g.zero_voltage;
-    PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage) / 2000.0;
-    PowerSupply.Voltage.maxValue = (dac_data_g.max_voltage - dac_data_g.zero_voltage) / 2000.0;
+    PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage) ;/// 2000.0;
+    PowerSupply.Voltage.maxValue = (dac_data_g.max_voltage - dac_data_g.zero_voltage);// 2000.0;
 
 
     PowerSupply.Current.adjOffset = dac_data_g.zero_current;
-    PowerSupply.Current.minValue = (-dac_data_g.zero_current) / 10000.0;
-    PowerSupply.Current.maxValue = (dac_data_g.max_current - dac_data_g.zero_current) / 10000.0;
+    PowerSupply.Current.minValue = (-dac_data_g.zero_current); // 10000.0;
+    PowerSupply.Current.maxValue = (dac_data_g.max_current - dac_data_g.zero_current); // 10000.0;
 
     static auto DAC_voltage_calib_change_event_cb = [](lv_event_t *e)
     {
@@ -1117,8 +1117,8 @@ static void btn_calibration_DAC_event_cb(lv_event_t *e)
             dac_data_g.max_current = lv_spinbox_get_value(mc);
 
             PowerSupply.Voltage.adjOffset = dac_data_g.zero_voltage;
-            PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage) / 2000.0;
-            PowerSupply.Voltage.maxValue = (mv_value - zv_value) / 2000.0;
+            PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage); // 2000.0;
+            PowerSupply.Voltage.maxValue = (mv_value - zv_value);  // 2000.0;
             PowerSupply.SaveDACdata("dac_data_", dac_data_g);
         }
     };
