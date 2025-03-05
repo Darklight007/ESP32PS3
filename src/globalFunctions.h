@@ -1514,7 +1514,7 @@ static void btnm_event_handler(lv_event_t *e)
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
         // PowerSupply.Voltage.SetUpdate(round(strtod(txt, NULL) * 2000.0)  - 0 * PowerSupply.Voltage.adjOffset);
-        PowerSupply.Voltage.SetUpdate((strtod(txt, NULL) * PowerSupply.Voltage.adjFactor)  + PowerSupply.Voltage.adjOffset);
+        PowerSupply.Voltage.SetUpdate((strtod(txt, NULL) * PowerSupply.Voltage.adjFactor) + PowerSupply.Voltage.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
     }
@@ -1534,7 +1534,7 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Current.SetUpdate(strtod(txt, NULL)*PowerSupply.Current.adjFactor + PowerSupply.Current.adjOffset);
+        PowerSupply.Current.SetUpdate(strtod(txt, NULL) * PowerSupply.Current.adjFactor + PowerSupply.Current.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
     }
@@ -1544,7 +1544,7 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Current.SetUpdate(strtod(txt, NULL)*10.0  + PowerSupply.Current.adjOffset);
+        PowerSupply.Current.SetUpdate(strtod(txt, NULL) * 10.0 + PowerSupply.Current.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
     }
@@ -1570,12 +1570,12 @@ static void key_event_handler_readBack(DispObjects dp)
 {
     if (strcmp(lv_label_get_text(dp.label_unit), "V") == 0)
     {
-        lv_textarea_set_text(ta, std::to_string((dp.adjValue - PowerSupply.Voltage.adjOffset)/PowerSupply.Voltage.adjFactor).c_str());
+        lv_textarea_set_text(ta, std::to_string((dp.adjValue - PowerSupply.Voltage.adjOffset) / PowerSupply.Voltage.adjFactor).c_str());
         lv_label_set_text(unit_label, "V");
     }
     else
     {
-        lv_textarea_set_text(ta, std::to_string((dp.adjValue - PowerSupply.Current.adjOffset)/PowerSupply.Current.adjFactor).c_str());
+        lv_textarea_set_text(ta, std::to_string((dp.adjValue - PowerSupply.Current.adjOffset) / PowerSupply.Current.adjFactor).c_str());
         lv_label_set_text(unit_label, "A");
     }
 
@@ -1699,6 +1699,14 @@ static void scroll_begin_event(lv_event_t *e)
             a->time = 0;
     }
 }
+double scaleVoltage(uint16_t voltage) {
+    return (voltage - PowerSupply.Voltage.adjOffset) / PowerSupply.Voltage.adjFactor;
+}
+
+double scaleCurrent(uint16_t current) {
+    return (current - PowerSupply.Current.adjOffset) / PowerSupply.Current.adjFactor;
+}
+
 
 void loadMemory(lv_obj_t *btn)
 {
@@ -1719,13 +1727,16 @@ void saveMemory(lv_obj_t *btn)
     Serial.printf("\n ****** Save to : %i ", memAddress);
     MemArray mem = PowerSupply.LoadMemory("myDataKey");
     mem.memory[memAddress].voltage = PowerSupply.Voltage.adjValue;
+
     mem.memory[memAddress].current = PowerSupply.Current.adjValue;
     PowerSupply.SaveMemory("myDataKey", mem);
 
     lv_obj_t *labelV = lv_obj_get_child(btn, 0);
     lv_obj_t *labelI = lv_obj_get_child(labelV, 0);
-    lv_label_set_text_fmt(labelV, "%+08.4fV", mem.memory[memAddress].voltage);
-    lv_label_set_text_fmt(labelI, "%+08.4fA", mem.memory[memAddress].current);
+    lv_label_set_text_fmt(labelV, "%+08.4fV", scaleVoltage(mem.memory[memAddress].voltage));
+    lv_label_set_text_fmt(labelI, "%+08.4fA", scaleCurrent(mem.memory[memAddress].current));
+
+    Serial.printf("\n ****** Saved : %+08.4fV", scaleVoltage(mem.memory[memAddress].voltage));
 }
 
 static void mem_btn_event_cb(lv_event_t *e)
@@ -1990,12 +2001,12 @@ void Utility_tabview(lv_obj_t *parent)
         btn->user_data = (void *)(order[i]);
 
         labelV = lv_label_create(btn);
-        lv_label_set_text_fmt(labelV, "%+08.4fV", mem.memory[(int)btn->user_data].voltage);
+        lv_label_set_text_fmt(labelV, "%+08.4fV", scaleVoltage(mem.memory[(int)btn->user_data].voltage));
         lv_obj_align(labelV, LV_ALIGN_CENTER, 0, -6);
         lv_obj_add_flag(labelV, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
 
         labelI = lv_label_create(labelV);
-        lv_label_set_text_fmt(labelI, "%+08.4fA", mem.memory[(int)btn->user_data].current);
+        lv_label_set_text_fmt(labelI, "%+08.4fA", scaleCurrent(mem.memory[(int)btn->user_data].current));
         lv_obj_align(labelI, LV_ALIGN_BOTTOM_MID, 0, 15);
 
         // lv_obj_set_parent(labelV, btn);
@@ -2226,9 +2237,9 @@ void keyCheckLoop()
 
     keyMenus('O', " HOLD.", [] // Output button
              {
-                //  myTone(NOTE_A5, 200, true);
-                //  myTone(NOTE_A3, 200, true);
-                //  ESP.restart();
+                 //  myTone(NOTE_A5, 200, true);
+                 //  myTone(NOTE_A3, 200, true);
+                 //  ESP.restart();
              });
 
     keyMenus('m', " HOLD.", [] // Output button
@@ -2276,8 +2287,7 @@ void keyCheckLoop()
              {
                  myTone(NOTE_A5, 200, true);
                  myTone(NOTE_A3, 200, true);
-                 ESP.restart();
-             });
+                 ESP.restart(); });
 
     keyMenus('M', " RELEASED.", []
              { Tabs::setCurrentPage(4); });
@@ -2758,8 +2768,8 @@ void updateObjectPos_cb(lv_event_t *e)
         lv_obj_t *labelVset = find_btn_by_tag(tab, 13);
         lv_obj_t *labelIset = lv_obj_get_child(labelVset, 0);
 
-        lv_label_set_text_fmt(labelVset, "V-Set%+08.4fV", PowerSupply.Voltage.adjValue/PowerSupply.Voltage.adjFactor);
-        lv_label_set_text_fmt(labelIset, "I-Set%+08.4fA", PowerSupply.Current.adjValue/PowerSupply.Current.adjFactor);
+        lv_label_set_text_fmt(labelVset, "V-Set%+08.4fV", PowerSupply.Voltage.adjValue / PowerSupply.Voltage.adjFactor);
+        lv_label_set_text_fmt(labelIset, "I-Set%+08.4fA", PowerSupply.Current.adjValue / PowerSupply.Current.adjFactor);
     }
 }
 
@@ -4118,9 +4128,10 @@ bool functionGenerator()
     static double lastOutputValue = 0.0;
     if (outputValue != lastOutputValue)
     {
-        PowerSupply.Voltage.SetUpdate(outputValue);
+        PowerSupply.Voltage.SetUpdate(outputValue*PowerSupply.Voltage.adjFactor);
         // PowerSupply.Voltage.adjValue = outputValue;
         lastOutputValue = outputValue;
+        // Serial.printf("\nSet output: %8.4f ", outputValue*2000.0);
     }
 
     // Track minimal change intervals
