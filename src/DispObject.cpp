@@ -129,7 +129,7 @@ void DispObjects::SetRotaryStep(double val)
 
 void DispObjects::SetUpdate(int value)
 {
-    // value+=-adjOffset;
+    // value-= adjOffset;
     // if (lock || value / adjFactor < minValue || value / adjFactor > maxValue)
     if (lock || (value)  < 0 || (value-adjOffset) > maxValue)
     {

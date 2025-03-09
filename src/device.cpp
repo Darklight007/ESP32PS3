@@ -1,3 +1,4 @@
+#include "esp_task_wdt.h"
 #include "device.h"
 
 extern Calibration StoreData;
@@ -5,6 +6,7 @@ extern bool lvglIsBusy, lvglChartIsBusy, blockAll;
 FunGen funGen; // Definition
 
 extern DAC_codes dac_data_g;
+extern lv_obj_t *btn_function_gen;
 
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
 
@@ -211,7 +213,7 @@ void Device::LoadSetting(void)
     settingParameters.adcNumberOfDigits = std::clamp((int)settingParameters.adcNumberOfDigits, 1, 4);
     Voltage.adjValue = settingParameters.SetVoltage;
     Current.adjValue = settingParameters.SetCurrent;
-    Serial.printf("\n isPowerOn?:%i", settingParameters.isPowerSupplyOn);
+    // Serial.printf("\n is PowerOn?:%i", settingParameters.isPowerSupplyOn);
 
     Preferences memory;
     memory.begin("param", false);
@@ -234,7 +236,14 @@ void Device::LoadSetting(void)
     // memory.putUShort("pi", 0);
     memory.end();
 
-    Serial.printf("\nadcRate:           %i", settingParameters.adcRate);
+    static std::map<int, const char *> ADC_SPS;
+
+    ADC_SPS[0] = "  20";
+    ADC_SPS[1] = "  90";
+    ADC_SPS[2] = " 330";
+    ADC_SPS[3] = "1000";
+
+    Serial.printf("\nadcRate:           %sSPS", ADC_SPS[settingParameters.adcRate]);
     Serial.printf("\nadcNumberOfAvgs:   %f", pow(2, settingParameters.adcNumberOfAvgs));
     Serial.printf("\nadcNumberOfDigits: %i", settingParameters.adcNumberOfDigits);
     Serial.printf("\nSetVoltage: %f", settingParameters.SetVoltage);
@@ -260,34 +269,21 @@ void Device::LoadSetting(void)
 
     Voltage.measured.SetWindowSize(std::pow(2, settingParameters.adcNumberOfAvgs));
 
-    switch (settingParameters.adcNumberOfDigits)
-    {
-    case 1:
-        Voltage.restrict = "%+05.1f";
-        Current.restrict = "%+05.1f";
-        Power.restrict = "%+05.1f";
-        break;
-    case 2:
-        Voltage.restrict = "%+06.2f";
-        Current.restrict = "%+06.2f";
-        Power.restrict = "%+06.2f";
-        break;
-    case 3:
-        Voltage.restrict = "%+07.3f";
-        Current.restrict = "%+07.3f";
-        Power.restrict = "%+07.3f";
-        break;
-    case 4:
-        Voltage.restrict = "%+08.4f";
-        Current.restrict = "%+08.4f";
-        Power.restrict = "%+08.4f";
-        break;
+    static const char *formats[] = {
+        "%+07.3f", // fallback/default
+        "%+05.1f", // 1 digit
+        "%+06.2f", // 2 digits
+        "%+07.3f", // 3 digits
+        "%+08.4f"  // 4 digits
+    };
 
-    default:
-        Voltage.restrict = "%+07.3f";
-        Current.restrict = "%+07.3f";
-        Power.restrict = "%+07.3f";
-    }
+    int d = settingParameters.adcNumberOfDigits;
+    if (d < 1 || d > 4)
+        d = 3; // default if out of range
+
+    Voltage.restrict = formats[d];
+    Current.restrict = formats[d];
+    Power.restrict = formats[d];
 
     Serial.printf("\nLast Voltage Value:% +8.4f", Voltage.adjValue / 2000.0 + 0 * Voltage.adjOffset);
     Serial.printf("\nLast Current Value:% +8.4f", Current.adjValue / 10000.0 + 0 * Current.adjOffset);
@@ -516,6 +512,7 @@ void Device::DACUpdate(void)
 
         // DAC.writeAndPowerAll(DAC_CURRENT, Current.adjOffset+ 1*10000);
         DAC.writeAndPowerAll(DAC_CURRENT, (-Current.adjOffset - 0.001) * 10000);
+
         return;
     }
 
@@ -573,7 +570,6 @@ void Device::turn(SWITCH onOff)
 {
     // powerSwitch = onOff;
     powerSwitch.turn(onOff);
-
     if (onOff == SWITCH::ON)
         status = DEVICE::ON;
 
@@ -583,12 +579,12 @@ void Device::turn(SWITCH onOff)
 
 void Device::toggle(void)
 {
-    delay(4);
+    // delay(4);
     if (getStatus() != DEVICE::OFF)
         turn(SWITCH::OFF);
     else
         turn(SWITCH::ON);
-    delay(4);
+    // delay(4);
 };
 
 void Device::setupDisplay(lv_obj_t *scr)
@@ -683,6 +679,10 @@ void Device::setStatus(DEVICE status_)
     // lv_obj_invalidate(lv_scr_act()); // Force a full redraw before pausing
     // lv_disp_trig_activity(NULL); // Ensure display updates are handled
     // lv_disp_enable_invalidation(NULL, false); // Disable invalidation (pause updates)
+    TaskHandle_t idleTask1 = xTaskGetIdleTaskHandleForCPU(1);
+    esp_task_wdt_delete(idleTask1);
+    vTaskDelay(75);
+    // delay(20);
 
     // Set Colors
     Voltage.setMeasureColor(stateColor[status_].measured);
@@ -692,22 +692,22 @@ void Device::setStatus(DEVICE status_)
     Voltage.setStatsColor(stateColor[status_].plotColor1);
     Current.setStatsColor(stateColor[status_].plotColor2);
 
-    // Chart color
+    // graph Chart color
     lv_chart_set_series_color(graph.chart, graph.serV, stateColor[status_].plotColor1);
     lv_chart_set_series_color(graph.chart, graph.serI, stateColor[status_].plotColor2);
 
-    // Chart legend color
+    // graph chart legend color
     lv_style_set_text_color(&graph.style_legend1, stateColor[status_].plotColor1);
     lv_style_set_text_color(&graph.style_legend2, stateColor[status_].plotColor2);
 
     lv_style_set_text_color(&graph.style_statsVolt, stateColor[status_].plotColor1);
     lv_style_set_text_color(&graph.style_statsCurrent, stateColor[status_].plotColor2);
 
-    // Chart color
+    // Stats Chart color
     lv_chart_set_series_color(stats.chart, stats.serV, stateColor[status_].plotColor1);
     lv_chart_set_series_color(stats.chart, stats.serI, stateColor[status_].plotColor2);
 
-    // Chart legend color
+    // Stats chart legend color
     lv_style_set_text_color(&stats.style_legend1, stateColor[status_].plotColor1);
     lv_style_set_text_color(&stats.style_legend2, stateColor[status_].plotColor2);
 
@@ -720,6 +720,9 @@ void Device::setStatus(DEVICE status_)
     lv_obj_set_style_bg_color(page[2], stateColor[status_].pageColor, 0);
     lv_obj_set_style_bg_color(page[3], stateColor[status_].pageColor, 0);
     lv_obj_set_style_bg_color(page[4], stateColor[status_].pageColor, 0);
+
+    lv_obj_set_style_bg_color(lv_obj_get_child(page[3], 0), stateColor[status_].pageColor, 0);
+    // lv_obj_set_style_bg_color(lv_obj_get_child(lv_obj_get_child(page[3], 0), 0), stateColor[status_].pageColor, 0);
 
     lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tab.tabview);
     lv_style_set_bg_color(&style_tabview_df_btn, stateColor[status_].pageColor);
@@ -736,13 +739,50 @@ void Device::setStatus(DEVICE status_)
         lv_label_set_text(controlMode, "VC");
     else
         lv_label_set_text(controlMode, "CC");
+
+    if (status_ == DEVICE::FUN)
+        lv_label_set_text(controlMode, "Fun");
+
     if (status_ == DEVICE::OFF)
+    {
+        myTone(NOTE_A3, 200);
+        // Make sure function generator is also off
+        lv_obj_clear_state(btn_function_gen, LV_STATE_CHECKED);
+        lv_obj_add_state(btn_function_gen, LV_STATE_DISABLED);
+        lv_label_set_text(lv_obj_get_child(btn_function_gen, 0), "OFF");
+
         lv_label_set_text(controlMode, "OFF");
+        lv_label_set_text(lv_obj_get_child(powerSwitch.btn, 0), "OFF");
+
+
+
+
+
+        settingParameters.isPowerSupplyOn = false;
+        Serial.printf("\nThe switch and status set to %s", "Off.");
+    }
+    else
+    {
+
+        // if (btn_function_gen)
+        // {
+        lv_obj_clear_state(btn_function_gen, LV_STATE_DISABLED);
+        // if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+        // PowerSupply.setStatus(DEVICE::FUN);
+        // }
+
+        // myTone(NOTE_A5, 200);
+        settingParameters.isPowerSupplyOn = true;
+        lv_label_set_text(lv_obj_get_child(powerSwitch.btn, 0), "ON");
+
+        Serial.printf("\nThe switch and status set to %s", "On.");
+    }
 
     status = status_;
     lv_disp_enable_invalidation(NULL, true); // Re-enable invalidation (resume updates)
                                              // lv_refr_now(NULL); // Force an immediate screen refresh
     blockAll = false;
+    esp_task_wdt_add(idleTask1);
 };
 
 void Device::FlushSettings(void)

@@ -63,6 +63,8 @@ struct DAC_codes
 
 extern lv_disp_t *lv_disp;
 extern volatile bool adcDataReady;
+
+extern bool blockAll ;
 // extern volatile bool dataReady;
 
 static void IRAM_ATTR ADCPinISR()
@@ -150,14 +152,14 @@ public:
     SWITCH status = {SWITCH::OFF};
 
     lv_obj_t *label;
-    lv_obj_t *btn; // = lv_btn_create(lv_scr_act());
+    lv_obj_t *btn; // Front push button switch = lv_btn_create(lv_scr_act());
 
     void setup(lv_obj_t *parent, lv_align_t align, lv_coord_t x_ofs, lv_coord_t y_ofs, lv_event_cb_t event_cb)
     {
 
         btn = lv_btn_create(parent);
 
-        lv_obj_add_event_cb(btn, event_cb, LV_EVENT_ALL, NULL);
+        lv_obj_add_event_cb(btn, event_cb, LV_EVENT_VALUE_CHANGED, NULL);
         lv_obj_align(btn, align, x_ofs, y_ofs);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
 
@@ -201,7 +203,6 @@ public:
     void turn(SWITCH onOff)
     {
         // powerSwitch = onOff;
-
         if (onOff == SWITCH::ON)
         {
             lv_obj_add_state(btn, LV_STATE_CHECKED);
@@ -212,7 +213,6 @@ public:
             lv_obj_clear_state(btn, LV_STATE_CHECKED);
             status = SWITCH::OFF;
         }
-
         lv_event_send(btn, LV_EVENT_VALUE_CHANGED, NULL);
     }
 };

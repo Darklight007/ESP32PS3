@@ -38,7 +38,7 @@ void initializeSerial()
 {
     Serial.begin(115200);
     delay(1000); // Wait for serial connection to stabilize
-    Serial.println("Serial Connection Initialized.");
+    Serial.println("Serial connection initialized.");
 }
 
 // Initialize and display memory usage information
@@ -163,7 +163,7 @@ void setupTasks()
     Serial.println("Tasks Setup Completed.");
 }
 
-// Setup preferences (non-volatile storage)
+/* Setup preferences (non-volatile storage) */
 void setupPreferences()
 {
     Preferences preferences;
@@ -204,17 +204,18 @@ void setupPowerSupply()
     delay(500);
 
     PowerSupply.Voltage.adjOffset = dac_data_g.zero_voltage;
-    PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage); // 2000.0;
+    PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage);                         // 2000.0;
     PowerSupply.Voltage.maxValue = (dac_data_g.max_voltage - dac_data_g.zero_voltage); // 2000.0;
     PowerSupply.Voltage.adc_maxValue = 32.768;
 
     PowerSupply.Current.adjOffset = dac_data_g.zero_current;
-    PowerSupply.Current.minValue = (-dac_data_g.zero_current); // 10000.0;
+    PowerSupply.Current.minValue = (-dac_data_g.zero_current);                         // 10000.0;
     PowerSupply.Current.maxValue = (dac_data_g.max_current - dac_data_g.zero_current); // 10000.0;
     PowerSupply.Current.adc_maxValue = 6.5536;
 
     // Setup voltage, current, and power parameters for page 3
-    PowerSupply.Voltage.setup(PowerSupply.page[2], "V-Set:", -14, -8, "V", PowerSupply.Voltage.maxValue, PowerSupply.Voltage.minValue,
+    PowerSupply.Voltage.setup(PowerSupply.page[2], "V-Set:", -14, -8, "V",
+                              PowerSupply.Voltage.maxValue, PowerSupply.Voltage.minValue,
                               5.0, dac_data_g.zero_voltage, 2000);
 
     // Set window sizes for measurements and statistics
@@ -264,26 +265,24 @@ void setupPowerSupply()
     stat_measure(PowerSupply.page[0], 10, 167);
 
     // Turn on power supply initially
-    PowerSupply.turn(SWITCH::ON);
+    // PowerSupply.turn(SWITCH::ON);
+    lv_obj_add_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
 
     // Setup tabs and pages
     Tabs::setDefaultPage(2);
     textarea(PowerSupply.page[2]);
     Tabs::setCurrentPage(2);
 
-    // Setup utility tab view on page 3
-    Utility_tabview(PowerSupply.page[3]);
-
     // Load settings parameters for page 4
     PowerSupply.LoadSetting();
+
+    // Setup utility tab view on page 3
+    Utility_tabview(PowerSupply.page[3]);
 
     // Setting menu on page 4
     SettingMenu(PowerSupply.page[4]);
 
-    // Uncomment for testing
     // myTone(NOTE_A4, 100);
-    // Serial.println("\nSetup done");
-    // PowerSupply.turn(SWITCH::ON);
 
     PowerSupply.Voltage.SetUpdate(PowerSupply.Voltage.adjValue);
     PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue);
@@ -326,9 +325,8 @@ void setupADC()
         {"7C:9E:BD:4D:C7:08", {0.005000, 121, 32.7503, 3353431}, {0.0000, 124955, 3.000, 1746856}} // v1.6
     };
 
-    // Setup ADC with pin number, ISR function, and I2C bus
+    // Setup ADC with READY pin number, ISR function, and I2C bus
     PowerSupply.setupADC(9, ADCPinISR, &Wire);
-
     Serial.print("\nADC Setup & Calibration Completed.");
 }
 
@@ -337,7 +335,6 @@ void setupDAC()
 {
     PowerSupply.setupDAC(0x41);                       // Setup DAC with I2C address
     PowerSupply.DAC.writeAndPowerAll(DAC_VOLTAGE, 0); // Initialize DAC outputs
-
     Serial.print("\nDAC Setup Completed.");
 }
 
@@ -361,7 +358,7 @@ void createTasks()
         "Voltage & Current ADC", /* Name of task */
         14000,                   /* Stack size of task */
         NULL,                    /* Parameter of the task */
-        14,                      /* Priority of the task */
+        7,                      /* Priority of the task */
         &Task_adc,               /* Task handle */
         0                        /* Pin task to core 0 */
     );

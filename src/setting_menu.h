@@ -292,7 +292,7 @@ void voltage_current_calibration(void)
 
     lv_obj_align(dd_calibration, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_width(dd_calibration, 176);
-    lv_obj_add_event_cb(dd_calibration, set_spinbox_cb, LV_EVENT_ALL, NULL);
+    lv_obj_add_event_cb(dd_calibration, set_spinbox_cb, LV_EVENT_SHORT_CLICKED, NULL);
 
     static lv_style_t style_btn_loadSave;
     lv_style_init(&style_btn_loadSave);
@@ -368,7 +368,7 @@ void voltage_current_calibration(void)
         lv_obj_set_size(spinboxes.btn_plus[spinboxes.count], h / 2, h / 2);
         lv_obj_align_to(spinboxes.btn_plus[spinboxes.count], spinbox, LV_ALIGN_OUT_RIGHT_MID, h / 2, 0);
         // lv_obj_set_style_bg_img_src(spinboxes.btn_plus[spinboxes.count], LV_SYMBOL_PLUS, 0);
-        lv_obj_add_event_cb(spinboxes.btn_plus[spinboxes.count], lv_spinbox_increment_event_cb, LV_EVENT_ALL, NULL);
+        lv_obj_add_event_cb(spinboxes.btn_plus[spinboxes.count], lv_spinbox_increment_event_cb, LV_EVENT_SHORT_CLICKED, NULL);
         lv_obj_add_event_cb(spinboxes.btn_plus[spinboxes.count], PRESSED_event_cb, LV_EVENT_SHORT_CLICKED, NULL);
         lv_obj_add_event_cb(spinboxes.btn_plus[spinboxes.count], RELEASED_event_cb, LV_EVENT_CLICKED, NULL);
 
@@ -381,7 +381,7 @@ void voltage_current_calibration(void)
         lv_obj_set_size(spinboxes.btn_minus[spinboxes.count], h / 2, h / 2);
         lv_obj_align_to(spinboxes.btn_minus[spinboxes.count], spinbox, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
         // lv_obj_set_style_bg_img_src(spinboxes.btn_minus[spinboxes.count] , LV_SYMBOL_MINUS, 0);
-        lv_obj_add_event_cb(spinboxes.btn_minus[spinboxes.count], lv_spinbox_decrement_event_cb, LV_EVENT_ALL, NULL);
+        lv_obj_add_event_cb(spinboxes.btn_minus[spinboxes.count], lv_spinbox_decrement_event_cb, LV_EVENT_SHORT_CLICKED, NULL);
         lv_obj_add_event_cb(spinboxes.btn_minus[spinboxes.count], PRESSED_event_cb, LV_EVENT_SHORT_CLICKED, NULL);
         lv_obj_add_event_cb(spinboxes.btn_minus[spinboxes.count], RELEASED_event_cb, LV_EVENT_CLICKED, NULL);
 
@@ -682,7 +682,7 @@ void SettingMenu(lv_obj_t *parent)
      ******************************/
     lv_obj_t *sub_sound_page = lv_menu_page_create(menu, NULL);
     section = lv_menu_section_create(sub_sound_page);
-    create_switch_(section, LV_SYMBOL_AUDIO, "Buzzer", buzzerSound, switch_buzzer_event_cb, LV_EVENT_ALL, NULL);
+    create_switch_(section, LV_SYMBOL_AUDIO, "Buzzer", buzzerSound, switch_buzzer_event_cb, LV_EVENT_SHORT_CLICKED, NULL);
 
     /******************************
      ** ADC SPS, ADC # Avgs, Number of digits, Auto BAr-graph

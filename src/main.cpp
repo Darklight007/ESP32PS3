@@ -75,7 +75,6 @@ void setup()
   initialMemory();
   Serial.printf("\nSetup() run on core: #%i \n\n", xPortGetCoreID());
 
-
 }
 
 void loop()
@@ -94,6 +93,9 @@ void loop()
   managePageEncoderInteraction();
 
   // if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+  //  PowerSupply.toggle();
+
+  
   //   KeyCheckInterval(400);
   // DACInterval(100);
   VCCCInterval(100);

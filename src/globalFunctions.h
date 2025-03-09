@@ -11,6 +11,8 @@
 #include "spinbox_pro.h"
 #include "table_pro.h"
 
+#define PI 3.14159265358979323846
+
 /**********************
  *   PROTOTYPES
  **********************/
@@ -69,6 +71,7 @@ extern Waveform waveforms[];
 // Number of waveforms
 extern int numWaveforms;
 
+extern bool blockAll;
 // Function prototype for the function generator
 void functionGenerator_demo(void);
 
@@ -142,28 +145,18 @@ void btn_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t *btn = lv_event_get_target(e);
+    // Serial.printf("Code: %i",code );
     if (code == LV_EVENT_VALUE_CHANGED)
     {
-        lv_obj_t *label = lv_obj_get_child(btn, 0);
-
         if (lv_obj_get_state(btn) & LV_STATE_CHECKED)
         {
             myTone(NOTE_A5, 200);
-            lv_label_set_text(label, "ON");
-            PowerSupply.settingParameters.isPowerSupplyOn = true;
             PowerSupply.setStatus(DEVICE::ON);
-            if (btn_function_gen)
-                if (!lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
-                    PowerSupply.setStatus(DEVICE::ON);
-                else
-                    PowerSupply.setStatus(DEVICE::FUN);
         }
         else
         {
             myTone(NOTE_A3, 200);
-            lv_label_set_text(label, "OFF");
             PowerSupply.setStatus(DEVICE::OFF);
-            PowerSupply.settingParameters.isPowerSupplyOn = false;
         }
     }
 }
@@ -1699,14 +1692,15 @@ static void scroll_begin_event(lv_event_t *e)
             a->time = 0;
     }
 }
-double scaleVoltage(uint16_t voltage) {
+double scaleVoltage(uint16_t voltage)
+{
     return (voltage - PowerSupply.Voltage.adjOffset) / PowerSupply.Voltage.adjFactor;
 }
 
-double scaleCurrent(uint16_t current) {
+double scaleCurrent(uint16_t current)
+{
     return (current - PowerSupply.Current.adjOffset) / PowerSupply.Current.adjFactor;
 }
-
 
 void loadMemory(lv_obj_t *btn)
 {
@@ -1743,6 +1737,7 @@ static void mem_btn_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t *btn = lv_event_get_target(e);
+    // Serial.printf("Code: %i",code );
     if (code == LV_EVENT_SHORT_CLICKED)
         loadMemory(btn);
 
@@ -1893,7 +1888,8 @@ void btn_function_gen_event_cb(lv_event_t *e)
     if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
     {
         lv_label_set_text(label, "ON");
-        PowerSupply.setStatus(DEVICE::FUN);
+        if (PowerSupply.getStatus() != DEVICE::FUN)
+            PowerSupply.setStatus(DEVICE::FUN);
     }
     else
     {
@@ -1906,6 +1902,8 @@ void btn_function_gen_event_cb(lv_event_t *e)
         remove_red_border(obj_selected_spinbox);
         obj_selected_spinbox = nullptr;
     }
+    Serial.printf("\nDebug check points!");
+    trackLoopExecution(__func__);
 }
 
 static void spinbox_change_event_cb(lv_event_t *e)
@@ -1946,9 +1944,7 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_t *tabview;
     tabview = lv_tabview_create(parent, LV_DIR_TOP, 25);
     lv_obj_add_event_cb(lv_tabview_get_content(tabview), scroll_begin_event, LV_EVENT_SCROLL_BEGIN, NULL);
-
     // lv_obj_set_style_bg_color(tabview, lv_palette_darken(LV_PALETTE_DEEP_PURPLE, 3), 0);
-
     lv_obj_set_style_pad_all(tabview, 0, LV_PART_MAIN);
 
     lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tabview);
@@ -1956,7 +1952,7 @@ void Utility_tabview(lv_obj_t *parent)
     // lv_obj_set_style_text_color(tab_btns, lv_palette_lighten(LV_PALETTE_GREY, 5), 0);
     // lv_obj_set_style_border_side(tab_btns, LV_BORDER_SIDE_RIGHT, LV_PART_ITEMS | LV_STATE_CHECKED);
 
-    /*Add 3 tabs (the tabs are page (lv_page) and can be scrolled*/
+    /*Add 4 tabs (the tabs are page (lv_page) and can be scrolled*/
     lv_obj_t *tab1 = lv_tabview_add_tab(tabview, "Memory");
     lv_obj_t *tab2 = lv_tabview_add_tab(tabview, "F. Gen.");
     lv_obj_t *tab3 = lv_tabview_add_tab(tabview, "Arbit");
@@ -1972,6 +1968,8 @@ void Utility_tabview(lv_obj_t *parent)
     // lv_obj_set_style_bg_opa(tab2, LV_OPA_COVER, 0);
 
     // lv_label_set_text(label, "0: 0.000V\t\t0.000A\n1: 0.100V\t\t0.010A\n2: 2.048V\t\t0.050A\n3: 3.000V 0.050A\n4: 4.096V 0.050A\n5: 5.000V 0.050A\n6: 0.000V 0.000A\n7: 0.100V 0.010A\n8: 20.480V 0.050A\n9: 32.000V 0.050A");
+
+    // Utility page Tab 1 ****************************************************************************************************************************
     /*Add content to the tabs*/
     lv_obj_t *btn;
     lv_obj_t *label;
@@ -1995,7 +1993,9 @@ void Utility_tabview(lv_obj_t *parent)
         lv_obj_set_style_pad_all(btn, 0, LV_PART_MAIN);
         lv_obj_set_size(btn, 89, 34);
 
-        lv_obj_add_event_cb(btn, mem_btn_event_cb, LV_EVENT_ALL, NULL);
+        lv_obj_add_event_cb(btn, mem_btn_event_cb, LV_EVENT_SHORT_CLICKED, NULL);
+        lv_obj_add_event_cb(btn, mem_btn_event_cb, LV_EVENT_LONG_PRESSED, NULL);
+
         lv_obj_add_flag(btn, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
         lv_obj_add_style(btn, &style_btn, LV_STATE_DEFAULT);
         btn->user_data = (void *)(order[i]);
@@ -2034,7 +2034,7 @@ void Utility_tabview(lv_obj_t *parent)
     lv_label_set_text_fmt(label_Iset, "I-Set:%+08.4f", +6.5535);
     lv_obj_align(label_Iset, LV_ALIGN_BOTTOM_LEFT, 0, 18);
 
-    // Tab 2 ****************************************************************************************************************************
+    // Utility page Tab 2 ****************************************************************************************************************************
 
     lv_obj_set_style_pad_ver(tabview, 0, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(tab2, 0, LV_PART_MAIN);
@@ -2097,7 +2097,15 @@ void Utility_tabview(lv_obj_t *parent)
     lv_label_set_text(label, "OFF");
     lv_obj_center(label);
 
-    lv_obj_add_event_cb(btn_function_gen, btn_function_gen_event_cb, LV_EVENT_ALL, NULL);
+    lv_obj_add_event_cb(btn_function_gen, btn_function_gen_event_cb, LV_EVENT_SHORT_CLICKED, NULL);
+
+    static lv_style_t style_btn_red, style_btn_blue, style_btn_gray;
+    lv_style_init(&style_btn_red);
+    lv_style_init(&style_btn_blue);
+    lv_style_init(&style_btn_gray);
+
+    lv_style_set_bg_color(&style_btn_gray, lv_palette_darken(LV_PALETTE_GREY, 0));
+    lv_obj_add_style(btn_function_gen, &style_btn_gray, LV_PART_MAIN | LV_STATE_DISABLED);
 
     Utility_objs.switch_keys_scan = lv_switch_create(tab2);
     lv_obj_add_state(Utility_objs.switch_keys_scan, LV_STATE_CHECKED);
@@ -2108,8 +2116,9 @@ void Utility_tabview(lv_obj_t *parent)
     lv_label_set_text(Utility_objs.switch_keys_label, "Keys scan");
     lv_obj_align_to(Utility_objs.switch_keys_label, Utility_objs.switch_keys_scan, LV_ALIGN_BOTTOM_MID, 0, 14);
 
-    // Tab 3 ****************************************************************************************************************************
-    // Tab 4 ****************************************************************************************************************************
+    // Utility page Tab 3 ****************************************************************************************************************************
+
+    // Utility page Tab 4 ****************************************************************************************************************************
     lv_obj_clear_flag(lv_tabview_get_content(tabview), LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(tab4, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_pad_ver(tab4, 0, LV_PART_ITEMS);
@@ -2229,11 +2238,14 @@ void keyCheckLoop()
     }
     // Serial.printf(" time %i \n", micros() - mi);
     // return;
+    //   Serial.printf("\nkeyCheckLoop() run on core: #%i \n\n", xPortGetCoreID());
     keyMenus('O', " RELEASED.", []
-             {
+             { 
+                blockAll = true;
+                //  vTaskDelay(10);
                  PowerSupply.toggle();
                  //  lv_event_send(PowerSupply.powerSwitch.btn,LV_EVENT_LONG_PRESSED, NULL);
-             });
+                  blockAll =false; });
 
     keyMenus('O', " HOLD.", [] // Output button
              {
@@ -2285,8 +2297,8 @@ void keyCheckLoop()
 
     keyMenus('H', " HOLD.", [] // Home button
              {
-                 myTone(NOTE_A5, 200, true);
                  myTone(NOTE_A3, 200, true);
+                 myTone(NOTE_A5, 200, true);
                  ESP.restart(); });
 
     keyMenus('M', " RELEASED.", []
@@ -2768,8 +2780,8 @@ void updateObjectPos_cb(lv_event_t *e)
         lv_obj_t *labelVset = find_btn_by_tag(tab, 13);
         lv_obj_t *labelIset = lv_obj_get_child(labelVset, 0);
 
-        lv_label_set_text_fmt(labelVset, "V-Set%+08.4fV", PowerSupply.Voltage.adjValue / PowerSupply.Voltage.adjFactor);
-        lv_label_set_text_fmt(labelIset, "I-Set%+08.4fA", PowerSupply.Current.adjValue / PowerSupply.Current.adjFactor);
+        lv_label_set_text_fmt(labelVset, "V-Set%+08.4fV", scaleVoltage(PowerSupply.Voltage.adjValue));
+        lv_label_set_text_fmt(labelIset, "I-Set%+08.4fA", scaleCurrent(PowerSupply.Current.adjValue));
     }
 }
 
@@ -3857,7 +3869,8 @@ void MiscPriority()
 
         pinMode(PowerSupply.CCCVPin, INPUT_PULLDOWN);
         digitalWrite(PowerSupply.CCCVPin, INPUT_PULLDOWN);
-        PowerSupply.turn(SWITCH::OFF);
+        // PowerSupply.turn(SWITCH::OFF);
+        PowerSupply.powerSwitch.turn(SWITCH::OFF);
         PowerSupply.Current.SetUpdate(-0.001 - 0 * PowerSupply.Current.adjOffset);
     }
     // LV_LOG_USER("%i",digitalRead(PowerSupply.CCCVPin));
@@ -3871,7 +3884,6 @@ double dutyCycle = .5;
 // #include <math.h>   // for sin, cos, exp, fabs, log10
 // #include <stdlib.h> // for random if needed
 
-#define PI 3.14159265358979323846
 double sineWave(double t)
 {
     // sin(...) ranges from -1 to 1, shift to [0,1]
@@ -4128,7 +4140,7 @@ bool functionGenerator()
     static double lastOutputValue = 0.0;
     if (outputValue != lastOutputValue)
     {
-        PowerSupply.Voltage.SetUpdate(outputValue*PowerSupply.Voltage.adjFactor);
+        PowerSupply.Voltage.SetUpdate(outputValue * PowerSupply.Voltage.adjFactor);
         // PowerSupply.Voltage.adjValue = outputValue;
         lastOutputValue = outputValue;
         // Serial.printf("\nSet output: %8.4f ", outputValue*2000.0);
