@@ -45,6 +45,8 @@
 #include "esp_int_wdt.h"
 #include "esp_system.h"
 
+
+
 void setup()
 {
 
@@ -74,7 +76,8 @@ void setup()
   createTasks();
   initialMemory();
   Serial.printf("\nSetup() run on core: #%i \n\n", xPortGetCoreID());
-
+                 myTone(NOTE_A5, 200, true);
+                 myTone(NOTE_A3, 200, true);
 }
 
 void loop()
@@ -105,4 +108,5 @@ void loop()
   // delay(10);
 
   //  Serial.printf("\nADC_loopCounter %l",PowerSupply.adc.ADC_loopCounter);
+//  Serial.printf("\n Current utiltap%i", lv_tabview_get_tab_act(tabview_utility));
 }

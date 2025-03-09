@@ -341,6 +341,7 @@ public:
     lv_style_t style_controlMode;
     lv_style_t style_tabview_df_btn;
     Tabs tab;
+    Tabs utility_tab;
     lv_obj_t *page[5];
     std::map<DEVICE, deviceColors> stateColor;
     ADC adc;

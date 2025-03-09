@@ -969,7 +969,7 @@ static void switch_buzzer_event_cb(lv_event_t *e)
 
     lv_obj_get_parent(btn);
 
-    if (code == LV_EVENT_VALUE_CHANGED)
+    if (code == LV_EVENT_SHORT_CLICKED)
     {
         if (lv_obj_get_state(btn) & LV_STATE_CHECKED)
         {
@@ -986,6 +986,7 @@ static void switch_buzzer_event_cb(lv_event_t *e)
         }
     }
     /*Create a label below the slider*/
+    // Serial.printf("\nCode: %i Buzzer: %i State: %i",code,buzzerSound ,lv_obj_get_state(btn));
 
     // LV_UNUSED(obj);
     // LV_LOG_USER("Clicked: %s %i", label, lv_obj_get_state(btn));

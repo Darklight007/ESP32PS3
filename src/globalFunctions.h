@@ -54,6 +54,9 @@ double gaussianPulse(double t);
 double sincFunction(double t);
 double randomNoise(double t);
 
+/*Create a Tab view object*/
+lv_obj_t *tabview_utility;
+
 lv_obj_t *btn_function_gen;
 // Function pointer type
 typedef double (*WaveformFunction)(double);
@@ -1200,45 +1203,74 @@ struct TouchAttr_
 
 } TouchAttr;
 
+// Draw only if X changes, storing last coordinates internally
+void drawOneYPerX(TFT_eSPI &tft, uint16_t x, uint16_t y, uint32_t color = TFT_CYAN)
+{
+    static uint16_t lastX = 0, lastY = 0;
+    if (Tabs::getCurrentPage() == 3 && lv_tabview_get_tab_act(tabview_utility)==2 && y > 50)
+    {
+        lv_obj_clear_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
+
+        // Draw only if x differs
+        if (x != lastX)
+        {
+            tft.drawLine(lastX, lastY, x, y, color);
+            lastX = x;
+            lastY = y;
+        }
+    }
+}
+
+void plotToBucket(uint16_t x, uint16_t y, TFT_eSPI &tft, uint32_t color = TFT_CYAN)
+{
+    // Static array to store one y-value per x-bucket (x in [0..319])
+    static uint16_t data[320] = {0};
+    static bool initialized = false;
+
+    if (x >= 320)
+        return; // Out of range, do nothing
+
+    // Update the y-value for this x bucket
+    data[x] = y;
+
+    // Connect line from (x-1, data[x-1]) to (x, data[x]) if valid
+    if (initialized && x > 0)
+    {
+        tft.drawLine(x - 1, data[x - 1], x, data[x], color);
+    }
+
+    // Mark as initialized after the first data point
+    if (!initialized)
+    {
+        initialized = true;
+    }
+}
+
 /*Read the touchpad*/
 void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
 {
-    //   uint16_t x = 0, y = 0; // To store the touch coordinates
+    uint16_t x, y;
+    bool touched = tft.getTouch(&x, &y);
 
-    // Pressed will be set true is there is a valid touch on the screen
-    //   bool pressed = tft.getTouch(&x, &y);
-    //     Serial.println(pressed);
-    //   // Draw a white spot at the detected coordinates
-    //   if (pressed) {
-    //     tft.fillCircle(x, y, 2, TFT_WHITE);
-    //     Serial.print("x,y = ");
-    //     Serial.print(x);
-    //     Serial.print(",");
-    //     Serial.println(y);
-    //   }
-
-    // uint16_t touchX, touchY; unused variable
-    // bool touched = tft.getTouch(&touchX, &touchY, 600);
-    // Serial.print("\nTouches!!!! ");
+    // Retrieve and store LVGL data
     if (TouchAttr.getTouched(tft))
     {
         data->state = LV_INDEV_STATE_PR;
-
-        /*Set the coordinates*/
         data->point.x = TouchAttr.x;
         data->point.y = TouchAttr.y;
 
-        // Serial.print("Data x ");
-        // Serial.println(TouchAttr.x);
+        if (touched)
+        {
 
-        // Serial.print("Data y ");
-        // Serial.println(TouchAttr.y);
-        // myTone(NOTE_A4, 5);
-        // lv_tick_inc(5);
+            // Now do "one Y per X"
+            drawOneYPerX(tft, x, y, TFT_CYAN);
+            // plotToBucket(x, y, tft);
+        }
     }
     else
     {
         data->state = LV_INDEV_STATE_REL;
+        lv_obj_add_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
     }
 }
 
@@ -1902,8 +1934,8 @@ void btn_function_gen_event_cb(lv_event_t *e)
         remove_red_border(obj_selected_spinbox);
         obj_selected_spinbox = nullptr;
     }
-    Serial.printf("\nDebug check points!");
-    trackLoopExecution(__func__);
+    // Serial.printf("\nDebug check points!");
+    // trackLoopExecution(__func__);
 }
 
 static void spinbox_change_event_cb(lv_event_t *e)
@@ -1940,23 +1972,24 @@ void Utility_tabview(lv_obj_t *parent)
 
     // lv_style_set_pad_top(&style_btn,0);
 
-    /*Create a Tab view object*/
-    lv_obj_t *tabview;
-    tabview = lv_tabview_create(parent, LV_DIR_TOP, 25);
-    lv_obj_add_event_cb(lv_tabview_get_content(tabview), scroll_begin_event, LV_EVENT_SCROLL_BEGIN, NULL);
-    // lv_obj_set_style_bg_color(tabview, lv_palette_darken(LV_PALETTE_DEEP_PURPLE, 3), 0);
-    lv_obj_set_style_pad_all(tabview, 0, LV_PART_MAIN);
+    // /*Create a Tab view object*/
+    // lv_obj_t *tabview_utility;
 
-    lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tabview);
+    tabview_utility = lv_tabview_create(parent, LV_DIR_TOP, 25);
+    lv_obj_add_event_cb(lv_tabview_get_content(tabview_utility), scroll_begin_event, LV_EVENT_SCROLL_BEGIN, NULL);
+    // lv_obj_set_style_bg_color(tabview_utility, lv_palette_darken(LV_PALETTE_DEEP_PURPLE, 3), 0);
+    lv_obj_set_style_pad_all(tabview_utility, 0, LV_PART_MAIN);
+
+    lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tabview_utility);
     // lv_obj_set_style_bg_color(tab_btns, lv_palette_darken(LV_PALETTE_GREY, 3), 0);
     // lv_obj_set_style_text_color(tab_btns, lv_palette_lighten(LV_PALETTE_GREY, 5), 0);
     // lv_obj_set_style_border_side(tab_btns, LV_BORDER_SIDE_RIGHT, LV_PART_ITEMS | LV_STATE_CHECKED);
 
     /*Add 4 tabs (the tabs are page (lv_page) and can be scrolled*/
-    lv_obj_t *tab1 = lv_tabview_add_tab(tabview, "Memory");
-    lv_obj_t *tab2 = lv_tabview_add_tab(tabview, "F. Gen.");
-    lv_obj_t *tab3 = lv_tabview_add_tab(tabview, "Arbit");
-    lv_obj_t *tab4 = lv_tabview_add_tab(tabview, "Table");
+    lv_obj_t *tab1 = lv_tabview_add_tab(tabview_utility, "Memory");
+    lv_obj_t *tab2 = lv_tabview_add_tab(tabview_utility, "F. Gen.");
+    lv_obj_t *tab3 = lv_tabview_add_tab(tabview_utility, "Arbit");
+    lv_obj_t *tab4 = lv_tabview_add_tab(tabview_utility, "Table");
 
     // lv_obj_set_style_bg_color(tab1, lv_palette_darken(LV_PALETTE_BLUE, 3), 0);
     // lv_obj_set_style_bg_opa(tab1, LV_OPA_COVER, 10);
@@ -2036,7 +2069,7 @@ void Utility_tabview(lv_obj_t *parent)
 
     // Utility page Tab 2 ****************************************************************************************************************************
 
-    lv_obj_set_style_pad_ver(tabview, 0, LV_PART_ITEMS);
+    lv_obj_set_style_pad_ver(tabview_utility, 0, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(tab2, 0, LV_PART_MAIN);
     lv_obj_clear_flag(tab2, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -2118,8 +2151,23 @@ void Utility_tabview(lv_obj_t *parent)
 
     // Utility page Tab 3 ****************************************************************************************************************************
 
+    // lv_obj_t *util_Arbit = lv_obj_create(tab3);
+    // lv_obj_set_size(util_Arbit, 290, 160);
+    // lv_obj_align(util_Arbit, LV_ALIGN_DEFAULT, 0, 0);
+
+    // lv_obj_clear_flag(util_Arbit, LV_OBJ_FLAG_SCROLLABLE);
+
+    // lv_obj_clear_flag(util_Arbit, LV_OBJ_FLAG_FLOATING);
+    // lv_obj_clear_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
+
+    // lv_obj_clear_flag(lv_obj_get_parent(util_Arbit), LV_OBJ_FLAG_SCROLLABLE);
+    // lv_obj_add_flag(lv_obj_get_parent(util_Arbit), LV_OBJ_FLAG_FLOATING);
+
+    // lv_obj_clear_flag(lv_obj_get_parent(lv_obj_get_parent(util_Arbit)), LV_OBJ_FLAG_SCROLLABLE);
+    // lv_obj_clear_flag(lv_obj_get_parent(lv_obj_get_parent(lv_obj_get_parent(util_Arbit))), LV_OBJ_FLAG_SCROLLABLE);
+
     // Utility page Tab 4 ****************************************************************************************************************************
-    lv_obj_clear_flag(lv_tabview_get_content(tabview), LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(lv_tabview_get_content(tabview_utility), LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(tab4, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_pad_ver(tab4, 0, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(tab4, 0, LV_PART_MAIN);

@@ -196,6 +196,8 @@ void setupPowerSupply()
     PowerSupply.setupPages("Stats", "Graph", "Main", "Utility", "Setting");
     PowerSupply.setPagesCallback(updateObjectPos_cb);
 
+
+
     // Setup on/off touch switch on page 3
     PowerSupply.setupSwitch(PowerSupply.page[2], 0, 240, 160, btn_event_cb);
 
