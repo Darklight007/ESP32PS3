@@ -101,7 +101,7 @@ void loop()
   
   //   KeyCheckInterval(400);
   // DACInterval(100);
-  VCCCInterval(100);
+  VCCCInterval(33);
   // KeyCheckInterval(45);
   // Serial.printf("\nVoltage.encoder.getCount %l",PowerSupply.Voltage.encoder.getCount());
   // KeyCheckInterval(0); // moved to adc taskse

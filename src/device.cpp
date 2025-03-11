@@ -493,8 +493,9 @@ void Device::writeDAC_Current(uint16_t value)
 
 void Device::VCCCStatusUpdate(void)
 {
+
     static int last_status = false;
-    if (last_status == digitalRead(CCCVPin))
+    if (last_status == digitalRead(CCCVPin) || getStatus() == DEVICE::FUN)
         return;
 
     if (digitalRead(CCCVPin) == false)
@@ -673,7 +674,7 @@ DEVICE Device::getStatus(void)
 void Device::setStatus(DEVICE status_)
 
 {
-
+   static DEVICE oldStatus = status_;
     blockAll = true;
 
     // lv_obj_invalidate(lv_scr_act()); // Force a full redraw before pausing
@@ -681,8 +682,9 @@ void Device::setStatus(DEVICE status_)
     // lv_disp_enable_invalidation(NULL, false); // Disable invalidation (pause updates)
     TaskHandle_t idleTask1 = xTaskGetIdleTaskHandleForCPU(1);
     esp_task_wdt_delete(idleTask1);
-    vTaskDelay(75);
-    // delay(20);
+
+    if (status_ == DEVICE::OFF || oldStatus == DEVICE::OFF)
+     vTaskDelay(75);
 
     // Set Colors
     Voltage.setMeasureColor(stateColor[status_].measured);
@@ -754,12 +756,8 @@ void Device::setStatus(DEVICE status_)
         lv_label_set_text(controlMode, "OFF");
         lv_label_set_text(lv_obj_get_child(powerSwitch.btn, 0), "OFF");
 
-
-
-
-
         settingParameters.isPowerSupplyOn = false;
-        Serial.printf("\nThe switch and status set to %s", "Off.");
+        // Serial.printf("\nThe switch and status set to %s", "Off.");
     }
     else
     {
@@ -775,12 +773,14 @@ void Device::setStatus(DEVICE status_)
         settingParameters.isPowerSupplyOn = true;
         lv_label_set_text(lv_obj_get_child(powerSwitch.btn, 0), "ON");
 
-        Serial.printf("\nThe switch and status set to %s", "On.");
+        // Serial.printf("\nThe switch and status set to %s", "On.");
     }
 
     status = status_;
     lv_disp_enable_invalidation(NULL, true); // Re-enable invalidation (resume updates)
                                              // lv_refr_now(NULL); // Force an immediate screen refresh
+    
+    oldStatus = status_;
     blockAll = false;
     esp_task_wdt_add(idleTask1);
 };

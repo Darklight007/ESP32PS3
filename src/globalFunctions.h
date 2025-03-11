@@ -1203,76 +1203,159 @@ struct TouchAttr_
 
 } TouchAttr;
 
-// Draw only if X changes, storing last coordinates internally
-void drawOneYPerX(TFT_eSPI &tft, uint16_t x, uint16_t y, uint32_t color = TFT_CYAN)
+#define SCREEN_WIDTH 320
+#define SCREEN_HEIGHT 180
+#define BUCKET_COUNT 100                         // Reduce X buckets from 320 to 100
+#define DOT_SIZE 3              
+#define CHART_Y_MAX 100  // Adjust this to match your lv_chart_set_range()
+
+// Set dot size to 3x3
+static uint16_t dataBuckets[BUCKET_COUNT] = {0}; // Stores one Y per X bucket
+
+lv_obj_t *util_Arbit;
+lv_chart_series_t *util_Arbit_series;
+
+
+// Initialize display with all zeros
+void initBuckets(TFT_eSPI &tft)
 {
-    static uint16_t lastX = 0, lastY = 0;
-    if (Tabs::getCurrentPage() == 3 && lv_tabview_get_tab_act(tabview_utility)==2 && y > 50)
+    for (uint16_t x = 0; x < BUCKET_COUNT; x++)
+    {
+        dataBuckets[x] = 180;
+        SCREEN_HEIGHT - 1;                                                                              // Default Y to bottom
+        tft.fillRect(x * (SCREEN_WIDTH / BUCKET_COUNT), dataBuckets[x], DOT_SIZE, DOT_SIZE, TFT_WHITE); // Draw initial dots
+    }
+}
+
+// Update a single X with a new Y
+void plotToBucket2(uint16_t x, uint16_t y, TFT_eSPI &tft)
+{
+    if (x >= SCREEN_WIDTH)
+        return; // Out of bounds check
+
+    uint16_t bucketX = x * BUCKET_COUNT / SCREEN_WIDTH; // Map x to 100 buckets
+
+    if (Tabs::getCurrentPage() == 3 && lv_tabview_get_tab_act(tabview_utility) == 2)
     {
         lv_obj_clear_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
 
-        // Draw only if x differs
-        if (x != lastX)
+        if (y > 54 && y < 170 && x > 5)
         {
-            tft.drawLine(lastX, lastY, x, y, color);
-            lastX = x;
-            lastY = y;
+            // Erase old point by drawing background color
+            tft.fillRect(bucketX * (SCREEN_WIDTH / BUCKET_COUNT), dataBuckets[bucketX], DOT_SIZE, DOT_SIZE, TFT_BLACK);
+
+            // Store new value
+            dataBuckets[bucketX] = y;
+
+            // Draw new 3x3 dot
+            tft.fillRect(bucketX * (SCREEN_WIDTH / BUCKET_COUNT), y, DOT_SIZE, DOT_SIZE, TFT_CYAN);
         }
     }
 }
 
-void plotToBucket(uint16_t x, uint16_t y, TFT_eSPI &tft, uint32_t color = TFT_CYAN)
+void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *series)
 {
-    // Static array to store one y-value per x-bucket (x in [0..319])
-    static uint16_t data[320] = {0};
-    static bool initialized = false;
+    if (!chart || !series) return;
 
-    if (x >= 320)
-        return; // Out of range, do nothing
+    // Swap X and Y values
+    uint16_t temp = x;
+    x = y; 
+    y = CHART_Y_MAX - temp;  // Invert Y so 0 is at the bottom
 
-    // Update the y-value for this x bucket
-    data[x] = y;
+    // Prevent scrolling during update
+    lv_obj_clear_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Connect line from (x-1, data[x-1]) to (x, data[x]) if valid
-    if (initialized && x > 0)
-    {
-        tft.drawLine(x - 1, data[x - 1], x, data[x], color);
-    }
+    // Set value
+    lv_chart_set_value_by_id(chart, series, x, y);
 
-    // Mark as initialized after the first data point
-    if (!initialized)
-    {
-        initialized = true;
-    }
+    // Refresh the chart
+    lv_chart_refresh(chart);
+
+    // Re-enable scrolling after update
+    lv_obj_add_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
 }
+ 
 
-/*Read the touchpad*/
-void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
-{
+
+
+
+
+/* Read the touchpad */
+// void my_touchpad_read2(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
+// {
+//     uint16_t x, y;
+//     bool touched = tft.getTouch(&x, &y);
+
+//     // Retrieve and store LVGL data
+//     if (TouchAttr.getTouched(tft))
+//     {
+//         data->state = LV_INDEV_STATE_PR;
+//         data->point.x = TouchAttr.x;
+//         data->point.y = TouchAttr.y;
+
+//         if (touched)
+//         {
+//             plotToBucket(x, y, tft); // Update display with new dot
+//         }
+//     }
+//     else
+//     {
+//         data->state = LV_INDEV_STATE_REL;
+//         lv_obj_add_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
+//     }
+// }
+
+
+void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data) {
     uint16_t x, y;
     bool touched = tft.getTouch(&x, &y);
 
-    // Retrieve and store LVGL data
-    if (TouchAttr.getTouched(tft))
-    {
+    if (TouchAttr.getTouched(tft)) {
         data->state = LV_INDEV_STATE_PR;
         data->point.x = TouchAttr.x;
         data->point.y = TouchAttr.y;
 
-        if (touched)
-        {
-
-            // Now do "one Y per X"
-            drawOneYPerX(tft, x, y, TFT_CYAN);
-            // plotToBucket(x, y, tft);
+        if (touched) {
+            lv_obj_add_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
+            plotToBucket(y, x, util_Arbit, util_Arbit_series); // Reverse X and Y
         }
-    }
-    else
-    {
+    } else {
         data->state = LV_INDEV_STATE_REL;
-        lv_obj_add_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(lv_obj_get_parent(util_Arbit), LV_OBJ_FLAG_SCROLLABLE); // Re-enable scrolling
     }
 }
+
+
+
+
+// /*Read the touchpad*/
+// void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
+// {
+//     uint16_t x, y;
+//     bool touched = tft.getTouch(&x, &y);
+
+//     // Retrieve and store LVGL data
+//     if (TouchAttr.getTouched(tft))
+//     {
+//         data->state = LV_INDEV_STATE_PR;
+//         data->point.x = TouchAttr.x;
+//         data->point.y = TouchAttr.y;
+
+//         if (touched)
+//         {
+
+//             // Now do "one Y per X"
+//             // drawOneYPerX(tft, x, y, TFT_CYAN);
+//             plotToBucket(x, y, tft);
+//             // plotToBucket(x, y, tft);
+//         }
+//     }
+//     else
+//     {
+//         data->state = LV_INDEV_STATE_REL;
+//         lv_obj_add_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
+//     }
+// }
 
 /// @brief
 void init_touch()
@@ -1948,9 +2031,10 @@ static void spinbox_change_event_cb(lv_event_t *e)
         int row = (int)Utility_objs.table_point_list->user_data;
         lv_table_set_cell_value_fmt(Utility_objs.table_point_list, row, 1, "%06.4f", value);
         // Utility_objs.table_points[row] = value;
-        funGenMem.table_points[row] = value;
+        funGenMem.table_points[row][0] = value;
     }
 }
+
 void Utility_tabview(lv_obj_t *parent)
 {
     lv_obj_set_size(parent, 320, 216);
@@ -2151,9 +2235,32 @@ void Utility_tabview(lv_obj_t *parent)
 
     // Utility page Tab 3 ****************************************************************************************************************************
 
-    // lv_obj_t *util_Arbit = lv_obj_create(tab3);
-    // lv_obj_set_size(util_Arbit, 290, 160);
-    // lv_obj_align(util_Arbit, LV_ALIGN_DEFAULT, 0, 0);
+// Create the chart
+util_Arbit = lv_chart_create(tab3);
+lv_obj_set_size(util_Arbit, 300, 140);
+lv_obj_align(util_Arbit, LV_ALIGN_DEFAULT, -10, -20);
+lv_obj_set_style_bg_color(util_Arbit, lv_color_hex(0x000000), LV_PART_MAIN);
+
+// Set chart range
+lv_chart_set_range(util_Arbit, LV_CHART_AXIS_PRIMARY_X, 0, 300);
+lv_chart_set_range(util_Arbit, LV_CHART_AXIS_PRIMARY_Y, 0, 100);
+
+// Enable line chart mode
+lv_chart_set_type(util_Arbit, LV_CHART_TYPE_LINE);
+lv_chart_set_point_count(util_Arbit, 100); // 100 x-buckets
+
+// Create series
+util_Arbit_series = lv_chart_add_series(util_Arbit, lv_color_hex(0x00FFFF), LV_CHART_AXIS_PRIMARY_Y);
+
+// Fill with zero data initially
+for (int i = 0; i < 100; i++) {
+    lv_chart_set_next_value(util_Arbit, util_Arbit_series, 0);
+}
+
+// Refresh to apply
+lv_chart_refresh(util_Arbit);
+
+    
 
     // lv_obj_clear_flag(util_Arbit, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -2165,6 +2272,94 @@ void Utility_tabview(lv_obj_t *parent)
 
     // lv_obj_clear_flag(lv_obj_get_parent(lv_obj_get_parent(util_Arbit)), LV_OBJ_FLAG_SCROLLABLE);
     // lv_obj_clear_flag(lv_obj_get_parent(lv_obj_get_parent(lv_obj_get_parent(util_Arbit))), LV_OBJ_FLAG_SCROLLABLE);
+
+    static const char *opts = "Linear\n"
+                              "Smooth\n"
+                              "Stair";
+
+    lv_obj_t *dd;
+    // dd = lv_dropdown_create(tab3);
+    // lv_dropdown_set_options_static(dd, opts);
+    // lv_obj_align(dd, LV_ALIGN_TOP_MID, 0, 10);
+
+    // dd = lv_dropdown_create(lv_scr_act());
+    dd = lv_dropdown_create(tab3);
+    lv_dropdown_set_options_static(dd, opts);
+    // lv_dropdown_set_dir(dd, LV_DIR_BOTTOM);
+    lv_dropdown_set_symbol(dd, NULL);
+    lv_obj_align(dd, LV_ALIGN_BOTTOM_LEFT, -10, 0);
+    lv_obj_set_style_text_font(dd, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT); // Set smaller font
+    lv_obj_set_size(dd, 72, 25);                                                             // Reduce width
+    lv_obj_set_style_pad_all(dd, 4, LV_PART_MAIN);
+    // lv_obj_set_style_pad_all(dd, 4, LV_PART_ITEMS);
+
+    // Lambda function for dropdown event callback
+auto dropdownEventCb = [](lv_event_t *e) {
+    lv_obj_t *dropdown = lv_event_get_target(e);
+    char buf[64];
+    lv_dropdown_get_selected_str(dropdown, buf, sizeof(buf));
+    LV_LOG_USER("'%s' is selected", buf);
+};
+
+// Lambda function to create and configure a dropdown
+auto createDropdown = [&](lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
+                          const char *options, const char *name) {
+    lv_obj_t *dropdown = lv_dropdown_create(parent);
+    lv_dropdown_set_options(dropdown, options);
+    lv_dropdown_set_text(dropdown, name);
+    lv_obj_align(dropdown, LV_ALIGN_BOTTOM_LEFT, x, y);
+
+    // Remove symbol and apply transformation
+    lv_dropdown_set_symbol(dropdown, NULL);
+    lv_obj_set_style_transform_angle(dropdown, 1800, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    
+    // Disable highlight for selected item
+    lv_dropdown_set_selected_highlight(dropdown, false);
+    
+    // Attach event callback
+    lv_obj_add_event_cb(dropdown, dropdownEventCb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    // Apply styles
+    lv_obj_set_style_text_font(dropdown, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_all(dropdown, 4, LV_PART_MAIN);
+    lv_obj_set_size(dropdown, 72, 25); // Reduce width
+};
+
+// Dropdown options
+const char *saveOptions = 
+    "Save to Bank 0\n"
+    "Save to Bank 1\n"
+    "Exit";
+
+const char *loadOptions = 
+    "Load to Bank 0\n"
+    "Load to Bank 1\n"
+    "Exit";
+
+// Create save and load dropdowns
+createDropdown(tab3, 65, 0, saveOptions, "Save");
+createDropdown(tab3, 140, 0, loadOptions, "Load");
+
+// Buffer to hold waveform dropdown options
+constexpr size_t numWaveforms = 15; // Ensure it matches actual count
+static char waveformOptions[512];   // Ensure enough space
+
+// Lambda function to generate waveform options
+auto generateWaveformOptions = []() {
+    waveformOptions[0] = '\0'; // Clear buffer
+
+    strcat(waveformOptions, "Clear\n"); // Default option
+    for (size_t i = 0; i < numWaveforms; i++) {
+        strcat(waveformOptions, waveforms[i].name);
+        strcat(waveformOptions, "\n"); // Separate entries
+    }
+    strcat(waveformOptions, "Exit"); // Final option
+};
+
+// Generate waveform options and create the dropdown
+generateWaveformOptions();
+createDropdown(tab3, 215, 0, waveformOptions, "Fun");
+
 
     // Utility page Tab 4 ****************************************************************************************************************************
     lv_obj_clear_flag(lv_tabview_get_content(tabview_utility), LV_OBJ_FLAG_SCROLLABLE);
@@ -2182,7 +2377,7 @@ void Utility_tabview(lv_obj_t *parent)
     {
         // Utility_objs.table_points[i] = funGenMem.table_points[i];
         lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 0, "%0i", i);
-        lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%1.4f", funGenMem.table_points[i]);
+        lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%1.4f", funGenMem.table_points[i][0]);
     }
 
     lv_table_set_col_width(Utility_objs.table_point_list, 0, 40);
@@ -2226,7 +2421,7 @@ void Utility_tabview(lv_obj_t *parent)
             funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
             for (int i = 0; i < 100; i++)
             {
-                lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%06.4f", funGenMem.table_points[i]);
+                lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%06.4f", funGenMem.table_points[i][0]);
             }
             lv_obj_invalidate(Utility_objs.table_point_list);
         }
@@ -4077,7 +4272,7 @@ double linearChirp(double t)
 double tablePoint(double t)
 {
     // static uint64_t i;
-    return funGenMem.table_points[int(t * 100) % 100];
+    return funGenMem.table_points[int(t * 100) % 100][0];
 }
 
 // // Function pointer type
