@@ -48,6 +48,7 @@ struct FunGen
     double offset;
     double dutyCycle;
     double table_points[100][2];
+    double arbitrary_points[20][2];
 };
 struct DAC_codes
 {

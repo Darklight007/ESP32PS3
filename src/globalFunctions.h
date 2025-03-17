@@ -81,7 +81,7 @@ void functionGenerator_demo(void);
 /**********************
  *   GLOBAL VARIABLES
  **********************/
-FunGen funGenMem;
+FunGen funGenMem, funGenMem2;
 DAC_codes dac_data_g;
 
 // lv_obj_t *table_signals;
@@ -104,6 +104,7 @@ struct objs_list
     // double table_points[100];
     lv_obj_t *switch_keys_scan;
     lv_obj_t *switch_keys_label;
+    lv_coord_t arbitrary_points[20][2];
 } Utility_objs;
 
 // volatile long chartInterruptCounter;
@@ -1205,16 +1206,17 @@ struct TouchAttr_
 
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 180
-#define BUCKET_COUNT 100                         // Reduce X buckets from 320 to 100
-#define DOT_SIZE 3              
-#define CHART_Y_MAX 100  // Adjust this to match your lv_chart_set_range()
+#define BUCKET_COUNT 100 // Reduce X buckets from 320 to 100
+#define DOT_SIZE 3
+#define CHART_Y_MAX 100 // Adjust this to match your lv_chart_set_range()
+#define CHART_POINTS 20 // Adjust this to match your lv_chart_set_range()
+static bool dropdown_active = false;
 
 // Set dot size to 3x3
 static uint16_t dataBuckets[BUCKET_COUNT] = {0}; // Stores one Y per X bucket
 
-lv_obj_t *util_Arbit;
-lv_chart_series_t *util_Arbit_series;
-
+lv_obj_t *util_Arbit_chart;
+lv_chart_series_t *util_Arbit_chart_series;
 
 // Initialize display with all zeros
 void initBuckets(TFT_eSPI &tft)
@@ -1228,57 +1230,79 @@ void initBuckets(TFT_eSPI &tft)
 }
 
 // Update a single X with a new Y
-void plotToBucket2(uint16_t x, uint16_t y, TFT_eSPI &tft)
-{
-    if (x >= SCREEN_WIDTH)
-        return; // Out of bounds check
+// void plotToBucket2(uint16_t x, uint16_t y, TFT_eSPI &tft)
+// {
+//     if (x >= SCREEN_WIDTH)
+//         return; // Out of bounds check
 
-    uint16_t bucketX = x * BUCKET_COUNT / SCREEN_WIDTH; // Map x to 100 buckets
+//     uint16_t bucketX = x * BUCKET_COUNT / SCREEN_WIDTH; // Map x to 100 buckets
 
-    if (Tabs::getCurrentPage() == 3 && lv_tabview_get_tab_act(tabview_utility) == 2)
-    {
-        lv_obj_clear_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
+//     if (Tabs::getCurrentPage() == 3 && lv_tabview_get_tab_act(tabview_utility) == 2)
+//     {
+//         lv_obj_clear_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
 
-        if (y > 54 && y < 170 && x > 5)
-        {
-            // Erase old point by drawing background color
-            tft.fillRect(bucketX * (SCREEN_WIDTH / BUCKET_COUNT), dataBuckets[bucketX], DOT_SIZE, DOT_SIZE, TFT_BLACK);
+//         if (y > 44 && y < 170 && x > 5)
+//         {
+//             // Erase old point by drawing background color
+//             tft.fillRect(bucketX * (SCREEN_WIDTH / BUCKET_COUNT), dataBuckets[bucketX], DOT_SIZE, DOT_SIZE, TFT_BLACK);
 
-            // Store new value
-            dataBuckets[bucketX] = y;
+//             // Store new value
+//             dataBuckets[bucketX] = y;
 
-            // Draw new 3x3 dot
-            tft.fillRect(bucketX * (SCREEN_WIDTH / BUCKET_COUNT), y, DOT_SIZE, DOT_SIZE, TFT_CYAN);
-        }
-    }
-}
+//             // Draw new 3x3 dot
+//             tft.fillRect(bucketX * (SCREEN_WIDTH / BUCKET_COUNT), y, DOT_SIZE, DOT_SIZE, TFT_CYAN);
+//         }
+//     }
+// }
+
+// void plotToBucket3(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *series)
+// {
+//     if (!chart || !series) return;
+
+//     // Swap X and Y values
+//     uint16_t temp = x;
+//     x = y;
+//     y = CHART_Y_MAX - temp;  // Invert Y so 0 is at the bottom
+
+//     // Prevent scrolling during update
+//     // lv_obj_clear_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
+//     lv_obj_add_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
+
+//     // Set value
+//     lv_chart_set_value_by_id(chart, series, x/(CHART_POINTS*3.0), y/1.4+10);
+
+//     // Refresh the chart
+//     lv_chart_refresh(chart);
+
+//     // Re-enable scrolling after update
+//     // lv_obj_add_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
+// }
 
 void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *series)
 {
-    if (!chart || !series) return;
+    if (!chart || !series)
+        return;
 
-    // Swap X and Y values
-    uint16_t temp = x;
-    x = y; 
-    y = CHART_Y_MAX - temp;  // Invert Y so 0 is at the bottom
+    if (y > 30 && y < 190 && x > 5)
+    {
+        // Disable scrolling before plotting
+        // lv_obj_clear_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Prevent scrolling during update
-    lv_obj_clear_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
+        // Swap X and Y to match LVGL's coordinate system
+        // uint16_t temp = x;
+        // x = y;
+        y = CHART_Y_MAX - y; // Flip Y-axis so 0 is at the bottom
 
-    // Set value
-    lv_chart_set_value_by_id(chart, series, x, y);
+        // Plot the point at the correct position
+        lv_chart_set_value_by_id(chart, series, (x - 20) / (100 / CHART_POINTS * 2.9), y + 80);
 
-    // Refresh the chart
-    lv_chart_refresh(chart);
+        // Refresh the chart
+        lv_chart_refresh(chart);
 
-    // Re-enable scrolling after update
-    lv_obj_add_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
+        // Re-enable scrolling after updating the chart
+        // lv_obj_add_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
+    }
 }
- 
-
-
-
-
 
 /* Read the touchpad */
 // void my_touchpad_read2(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
@@ -1305,28 +1329,33 @@ void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *se
 //     }
 // }
 
+void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
+{
 
-void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data) {
     uint16_t x, y;
     bool touched = tft.getTouch(&x, &y);
 
-    if (TouchAttr.getTouched(tft)) {
+    if (TouchAttr.getTouched(tft))
+    {
         data->state = LV_INDEV_STATE_PR;
         data->point.x = TouchAttr.x;
         data->point.y = TouchAttr.y;
 
-        if (touched) {
-            lv_obj_add_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
-            plotToBucket(y, x, util_Arbit, util_Arbit_series); // Reverse X and Y
+        if (touched)
+        {
+            if (dropdown_active)
+                return; // Ignore touch when dropdown is open
+            lv_obj_clear_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
+            plotToBucket(x, y, util_Arbit_chart, util_Arbit_chart_series); // Reverse X and Y
+            // plotSmoothCurve(x, y, util_Arbit_chart, util_Arbit_chart_series); // Reverse X and Y
         }
-    } else {
+    }
+    else
+    {
         data->state = LV_INDEV_STATE_REL;
-        lv_obj_add_flag(lv_obj_get_parent(util_Arbit), LV_OBJ_FLAG_SCROLLABLE); // Re-enable scrolling
+        lv_obj_add_flag(lv_obj_get_parent(util_Arbit_chart), LV_OBJ_FLAG_SCROLLABLE); // Re-enable scrolling
     }
 }
-
-
-
 
 // /*Read the touchpad*/
 // void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
@@ -2035,6 +2064,175 @@ static void spinbox_change_event_cb(lv_event_t *e)
     }
 }
 
+#define NUM_LABELS 7
+
+char tickLabels_x_II[NUM_LABELS][10]; // 7 labels, max 9 characters each
+
+static void draw_event_util_Arbit_chart_cb(lv_event_t *e)
+{
+    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
+
+    if (!dsc)
+        return;
+
+    /* Customize division lines */
+    if (dsc->part == LV_PART_MAIN)
+    {
+        if (!dsc->line_dsc || !dsc->p1 || !dsc->p2)
+            return;
+
+        dsc->line_dsc->color = lv_palette_main(LV_PALETTE_GREY);
+    }
+
+    /* Customize tick labels */
+    if (dsc->part == LV_PART_TICKS && dsc->text)
+    {
+        /* Handle LV_CHART_AXIS_PRIMARY_X */
+        if (dsc->id == LV_CHART_AXIS_PRIMARY_X)
+        {
+            // for (int i = 0; i < NUM_LABELS; i++)
+            // {
+            //     if (i == NUM_LABELS - 1)
+            //     {
+            //         strcpy(tickLabels_x_II[i], "0 pts");
+            //     }
+            //     else
+            //     {
+            //         int value = CHART_SIZE * (NUM_LABELS - 1 - i) / (NUM_LABELS - 1);
+            //         sprintf(tickLabels_x_II[i], "%d", value);
+            //     }
+            // }
+
+            static int index_x = 0;
+            static char *tickLabels_x_II[] = {"40", "30", "20", "10", "0 pts"};
+            // Initialize tick labels based on CHART_SIZE and fractions
+
+            if (index_x == 5)
+                index_x = 0;
+
+            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabels_x_II[index_x++]);
+
+            if (dsc->label_dsc)
+                dsc->label_dsc->font = &lv_font_montserrat_10;
+        }
+        /* Handle LV_CHART_AXIS_PRIMARY_Y */
+        else if (dsc->id == LV_CHART_AXIS_PRIMARY_Y)
+        {
+            static int index_y = 0;
+            static char *tickLabels_y[] = {"1.0", "0.5", "0.0"};
+
+            // if (strcmp(dsc->text, "32000") == 0)
+            //     index_y = 0;
+            if (index_y == 3)
+                index_y = 0;
+
+            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabels_y[index_y++]);
+
+            if (dsc->label_dsc)
+                dsc->label_dsc->font = &lv_font_montserrat_8;
+        }
+        /* Handle LV_CHART_AXIS_SECONDARY_Y */
+    }
+}
+void saveToBank(int bank)
+{
+    LV_LOG_USER("Saved settings to Bank %d", bank);
+
+    // Construct memory bank name dynamically
+    char bankName[32];
+    snprintf(bankName, sizeof(bankName), "Arbitrary_Bank_%d", bank);
+
+    // Get the y-array from the chart
+    lv_coord_t *y_array = lv_chart_get_y_array(util_Arbit_chart, util_Arbit_chart_series);
+    if (!y_array)
+    {
+        LV_LOG_USER("Error: y_array is NULL.");
+        return;
+    }
+
+    // Save data points from chart to memory
+    for (int i = 0; i < CHART_POINTS; i++)
+    {
+        funGenMem2.arbitrary_points[i][bank] = y_array[i]; // Store y-values in funGenMem
+    }
+
+    // Save function generator memory
+    PowerSupply.SaveMemoryFgen("Arbit", funGenMem2);
+}
+
+void loadFromBank(int bank)
+{
+    LV_LOG_USER("Loaded settings from Bank %d", bank);
+    // Implement loading logic here
+    funGenMem2 = PowerSupply.LoadMemoryFgen("Arbit");
+    // Fill with zero data initially
+    for (int i = 0; i < CHART_POINTS; i++)
+    {
+        lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, funGenMem2.arbitrary_points[i][bank]);
+
+        // lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, 0);
+    }
+};
+
+static void dropdownEventCb(lv_event_t *e)
+{
+
+    // Lambda functions for handling save/load operations
+
+    lv_obj_t *dropdown = lv_event_get_target(e);
+    char buf[64];
+    lv_dropdown_get_selected_str(dropdown, buf, sizeof(buf));
+    LV_LOG_USER("'%s' is selected", buf);
+
+    dropdown_active = false;
+
+    std::string selection(buf);
+    if (selection == "Save to Bank 0")
+    {
+        // LV_LOG_USER("Saving to Bank 0");
+        saveToBank(0);
+    }
+    else if (selection == "Save to Bank 1")
+    {
+        // LV_LOG_USER("Saving to Bank 1");
+        saveToBank(1);
+    }
+    else if (selection == "Load to Bank 0")
+    {
+        // LV_LOG_USER("Loading from Bank 0");
+        loadFromBank(0);
+    }
+    else if (selection == "Load to Bank 1")
+    {
+        // LV_LOG_USER("Loading from Bank 1");
+        loadFromBank(1);
+    }
+    else
+    {
+        LV_LOG_USER("Unknown selection: %s", buf);
+        // int selected_row = (int)Utility_objs.table_fun_gen_list->user_data+1;
+        int selected_row = lv_dropdown_get_selected(dropdown) - 1; // Get selected index
+        if (selected_row == -1)
+        {
+            // Clear the chart (optional)
+            lv_chart_set_all_value(util_Arbit_chart, util_Arbit_chart_series, 0);
+            lv_chart_refresh(util_Arbit_chart); // Refresh chart
+            return;
+        }
+        Waveform currentWaveform = waveforms[selected_row];
+
+        for (int i = 0; i < CHART_POINTS; i++)
+        {
+            double value = currentWaveform.function((double)i / CHART_POINTS); // Map i to function
+            double outputValue = value * 1.0 ;
+            // funGenMem2.arbitrary_points[i][0] = outputValue; // Store in memory
+            lv_chart_set_value_by_id(util_Arbit_chart, util_Arbit_chart_series, i, outputValue * 140);
+        }
+
+        lv_chart_refresh(util_Arbit_chart); // Refresh chart
+    }
+}
+
 void Utility_tabview(lv_obj_t *parent)
 {
     lv_obj_set_size(parent, 320, 216);
@@ -2235,131 +2433,150 @@ void Utility_tabview(lv_obj_t *parent)
 
     // Utility page Tab 3 ****************************************************************************************************************************
 
-// Create the chart
-util_Arbit = lv_chart_create(tab3);
-lv_obj_set_size(util_Arbit, 300, 140);
-lv_obj_align(util_Arbit, LV_ALIGN_DEFAULT, -10, -20);
-lv_obj_set_style_bg_color(util_Arbit, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_clear_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
+    // Create the chart
+    util_Arbit_chart = lv_chart_create(tab3);
+    lv_obj_set_size(util_Arbit_chart, 280, 130);
+    lv_obj_align(util_Arbit_chart, LV_ALIGN_DEFAULT, 10, -10);
+    lv_obj_set_style_bg_color(util_Arbit_chart, lv_color_hex(0x000000), LV_PART_MAIN);
 
-// Set chart range
-lv_chart_set_range(util_Arbit, LV_CHART_AXIS_PRIMARY_X, 0, 300);
-lv_chart_set_range(util_Arbit, LV_CHART_AXIS_PRIMARY_Y, 0, 100);
+    // Set chart range
+    lv_chart_set_range(util_Arbit_chart, LV_CHART_AXIS_PRIMARY_X, 0, CHART_POINTS);
+    lv_chart_set_range(util_Arbit_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 140);
 
-// Enable line chart mode
-lv_chart_set_type(util_Arbit, LV_CHART_TYPE_LINE);
-lv_chart_set_point_count(util_Arbit, 100); // 100 x-buckets
+    // Enable line chart mode
+    lv_chart_set_type(util_Arbit_chart, LV_CHART_TYPE_LINE);
+    lv_chart_set_point_count(util_Arbit_chart, CHART_POINTS); // 100 x-buckets
 
-// Create series
-util_Arbit_series = lv_chart_add_series(util_Arbit, lv_color_hex(0x00FFFF), LV_CHART_AXIS_PRIMARY_Y);
+    // Create series
+    util_Arbit_chart_series = lv_chart_add_series(util_Arbit_chart, lv_color_hex(0x00FFFF), LV_CHART_AXIS_PRIMARY_Y);
 
-// Fill with zero data initially
-for (int i = 0; i < 100; i++) {
-    lv_chart_set_next_value(util_Arbit, util_Arbit_series, 0);
-}
+    // Fill with zero data initially
+    for (int i = 0; i < CHART_POINTS; i++)
+    {
+        lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, funGenMem.arbitrary_points[i][0]);
+        // lv_chart_get_y_array
+        // lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, 0);
+    }
 
-// Refresh to apply
-lv_chart_refresh(util_Arbit);
+    // lv_chart_set_range(util_Arbit_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 140);
+    // Refresh to apply
+    lv_obj_add_event_cb(util_Arbit_chart, draw_event_util_Arbit_chart_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
-    
+    /*Add ticks and label to every axis*/
+    lv_chart_set_axis_tick(util_Arbit_chart, LV_CHART_AXIS_PRIMARY_X, 2, 1, 5, 1, true, 50);
+    lv_chart_set_axis_tick(util_Arbit_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 1, 3, 1, true, 50);
 
-    // lv_obj_clear_flag(util_Arbit, LV_OBJ_FLAG_SCROLLABLE);
+    lv_chart_refresh(util_Arbit_chart);
 
-    // lv_obj_clear_flag(util_Arbit, LV_OBJ_FLAG_FLOATING);
+    // lv_obj_clear_flag(util_Arbit_chart, LV_OBJ_FLAG_SCROLLABLE);
+    // lv_obj_clear_flag(util_Arbit_chart, LV_OBJ_FLAG_FLOATING);
     // lv_obj_clear_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
+    // lv_obj_clear_flag(lv_obj_get_parent(util_Arbit_chart), LV_OBJ_FLAG_SCROLLABLE);
+    // lv_obj_add_flag(lv_obj_get_parent(util_Arbit_chart), LV_OBJ_FLAG_FLOATING);
+    // lv_obj_clear_flag(lv_obj_get_parent(lv_obj_get_parent(util_Arbit_chart)), LV_OBJ_FLAG_SCROLLABLE);
+    // lv_obj_clear_flag(lv_obj_get_parent(lv_obj_get_parent(lv_obj_get_parent(util_Arbit_chart))), LV_OBJ_FLAG_SCROLLABLE);
+    // static const char *opts = "Linear\n"
+    //                           "Smooth\n"
+    //                           "Stair";
 
-    // lv_obj_clear_flag(lv_obj_get_parent(util_Arbit), LV_OBJ_FLAG_SCROLLABLE);
-    // lv_obj_add_flag(lv_obj_get_parent(util_Arbit), LV_OBJ_FLAG_FLOATING);
-
-    // lv_obj_clear_flag(lv_obj_get_parent(lv_obj_get_parent(util_Arbit)), LV_OBJ_FLAG_SCROLLABLE);
-    // lv_obj_clear_flag(lv_obj_get_parent(lv_obj_get_parent(lv_obj_get_parent(util_Arbit))), LV_OBJ_FLAG_SCROLLABLE);
-
-    static const char *opts = "Linear\n"
-                              "Smooth\n"
-                              "Stair";
-
-    lv_obj_t *dd;
+    // lv_obj_t *dd;
     // dd = lv_dropdown_create(tab3);
     // lv_dropdown_set_options_static(dd, opts);
-    // lv_obj_align(dd, LV_ALIGN_TOP_MID, 0, 10);
-
-    // dd = lv_dropdown_create(lv_scr_act());
-    dd = lv_dropdown_create(tab3);
-    lv_dropdown_set_options_static(dd, opts);
-    // lv_dropdown_set_dir(dd, LV_DIR_BOTTOM);
-    lv_dropdown_set_symbol(dd, NULL);
-    lv_obj_align(dd, LV_ALIGN_BOTTOM_LEFT, -10, 0);
-    lv_obj_set_style_text_font(dd, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT); // Set smaller font
-    lv_obj_set_size(dd, 72, 25);                                                             // Reduce width
-    lv_obj_set_style_pad_all(dd, 4, LV_PART_MAIN);
-    // lv_obj_set_style_pad_all(dd, 4, LV_PART_ITEMS);
+    // lv_dropdown_set_symbol(dd, NULL);
+    // lv_obj_align(dd, LV_ALIGN_BOTTOM_LEFT, -10, 0);
+    // lv_obj_set_style_text_font(dd, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT); // Set smaller font
+    // lv_obj_set_size(dd, 72, 25);                                                             // Reduce width
+    // lv_obj_set_style_pad_all(dd, 4, LV_PART_MAIN);
 
     // Lambda function for dropdown event callback
-auto dropdownEventCb = [](lv_event_t *e) {
-    lv_obj_t *dropdown = lv_event_get_target(e);
-    char buf[64];
-    lv_dropdown_get_selected_str(dropdown, buf, sizeof(buf));
-    LV_LOG_USER("'%s' is selected", buf);
-};
+    // auto dropdownEventCb = [](lv_event_t *e)
+    // {
+    //     lv_obj_t *dropdown = lv_event_get_target(e);
+    //     char buf[64];
+    //     lv_dropdown_get_selected_str(dropdown, buf, sizeof(buf));
+    //     LV_LOG_USER("'%s' is selected", buf);
 
-// Lambda function to create and configure a dropdown
-auto createDropdown = [&](lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
-                          const char *options, const char *name) {
-    lv_obj_t *dropdown = lv_dropdown_create(parent);
-    lv_dropdown_set_options(dropdown, options);
-    lv_dropdown_set_text(dropdown, name);
-    lv_obj_align(dropdown, LV_ALIGN_BOTTOM_LEFT, x, y);
+    //     dropdown_active = false;  // Reset flag when selection is made
 
-    // Remove symbol and apply transformation
-    lv_dropdown_set_symbol(dropdown, NULL);
-    lv_obj_set_style_transform_angle(dropdown, 1800, LV_PART_INDICATOR | LV_STATE_CHECKED);
-    
-    // Disable highlight for selected item
-    lv_dropdown_set_selected_highlight(dropdown, false);
-    
-    // Attach event callback
-    lv_obj_add_event_cb(dropdown, dropdownEventCb, LV_EVENT_VALUE_CHANGED, NULL);
+    // };
 
-    // Apply styles
-    lv_obj_set_style_text_font(dropdown, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_pad_all(dropdown, 4, LV_PART_MAIN);
-    lv_obj_set_size(dropdown, 72, 25); // Reduce width
-};
+    auto dropdownOpenCb = [](lv_event_t *e)
+    {
+        dropdown_active = true; // Set flag when dropdown is opened
+    };
 
-// Dropdown options
-const char *saveOptions = 
-    "Save to Bank 0\n"
-    "Save to Bank 1\n"
-    "Exit";
+    // Lambda function to create and configure a dropdown
+    auto createDropdown = [&](lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
+                              const char *options, const char *name)
+    {
+        lv_obj_t *dropdown = lv_dropdown_create(parent);
+        lv_dropdown_set_options(dropdown, options);
+        lv_dropdown_set_text(dropdown, name);
+        lv_obj_align(dropdown, LV_ALIGN_BOTTOM_LEFT, x, y);
 
-const char *loadOptions = 
-    "Load to Bank 0\n"
-    "Load to Bank 1\n"
-    "Exit";
+        // Remove symbol and apply transformation
+        lv_dropdown_set_symbol(dropdown, NULL);
+        lv_obj_set_style_transform_angle(dropdown, 1800, LV_PART_INDICATOR | LV_STATE_CHECKED);
 
-// Create save and load dropdowns
-createDropdown(tab3, 65, 0, saveOptions, "Save");
-createDropdown(tab3, 140, 0, loadOptions, "Load");
+        // Disable highlight for selected item
+        lv_dropdown_set_selected_highlight(dropdown, false);
 
-// Buffer to hold waveform dropdown options
-constexpr size_t numWaveforms = 15; // Ensure it matches actual count
-static char waveformOptions[512];   // Ensure enough space
+        // Attach event callback
+        lv_obj_add_event_cb(dropdown, dropdownEventCb, LV_EVENT_VALUE_CHANGED, NULL);
+        lv_obj_add_event_cb(dropdown, dropdownOpenCb, LV_EVENT_PRESSED, NULL);
 
-// Lambda function to generate waveform options
-auto generateWaveformOptions = []() {
-    waveformOptions[0] = '\0'; // Clear buffer
+        // Apply styles
+        lv_obj_set_style_text_font(dropdown, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_all(dropdown, 4, LV_PART_MAIN);
+        lv_obj_set_size(dropdown, 72, 25); // Reduce width
+    };
 
-    strcat(waveformOptions, "Clear\n"); // Default option
-    for (size_t i = 0; i < numWaveforms; i++) {
-        strcat(waveformOptions, waveforms[i].name);
-        strcat(waveformOptions, "\n"); // Separate entries
-    }
-    strcat(waveformOptions, "Exit"); // Final option
-};
+    // Dropdown options
+    const char *saveOptions =
+        "Save to Bank 0\n"
+        "Save to Bank 1\n"
+        "Exit";
 
-// Generate waveform options and create the dropdown
-generateWaveformOptions();
-createDropdown(tab3, 215, 0, waveformOptions, "Fun");
+    const char *loadOptions =
+        "Load to Bank 0\n"
+        "Load to Bank 1\n"
+        "Exit";
 
+    // Create save and load dropdowns
+    createDropdown(tab3, -10, 0, saveOptions, "Save");
+    createDropdown(tab3, 65, 0, loadOptions, "Load");
+
+    // Buffer to hold waveform dropdown options
+    constexpr size_t numWaveforms = 17; // Ensure it matches actual count
+    static char waveformOptions[512];   // Ensure enough space
+
+    // Lambda function to generate waveform options
+    auto generateWaveformOptions = []()
+    {
+        waveformOptions[0] = '\0'; // Clear buffer
+
+        strcat(waveformOptions, "Clear\n"); // Default option
+        for (size_t i = 0; i < numWaveforms; i++)
+        {
+            strcat(waveformOptions, waveforms[i].name);
+            strcat(waveformOptions, "\n"); // Separate entries
+        }
+        strcat(waveformOptions, "Exit"); // Final option
+    };
+
+    // Generate waveform options and create the dropdown
+    generateWaveformOptions();
+    createDropdown(tab3, 140, 0, waveformOptions, "Fun");
+
+    // Saving  ************************************************************
+    // lv_obj_t *saveButton = lv_btn_create(tab4);
+    // label = lv_label_create(saveButton);
+    // lv_label_set_text(label, "Save");
+    // lv_obj_align(saveButton, LV_ALIGN_CENTER, 0, 0);
+    // lv_obj_align_to(saveButton, Utility_objs.table_spinbox_value, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+
+    // lv_obj_add_event_cb(saveButton, save_table_data_cb, LV_EVENT_CLICKED, NULL);
 
     // Utility page Tab 4 ****************************************************************************************************************************
     lv_obj_clear_flag(lv_tabview_get_content(tabview_utility), LV_OBJ_FLAG_SCROLLABLE);
@@ -4274,6 +4491,16 @@ double tablePoint(double t)
     // static uint64_t i;
     return funGenMem.table_points[int(t * 100) % 100][0];
 }
+double arbitraryBank0(double t)
+{
+    // static uint64_t i;
+    return funGenMem2.arbitrary_points[int(t * CHART_POINTS) % CHART_POINTS][0]/140.0;
+}
+double arbitraryBank1(double t)
+{
+    // static uint64_t i;
+    return funGenMem2.arbitrary_points[int(t * CHART_POINTS) % CHART_POINTS][1]/140.0;
+}
 
 // // Function pointer type
 // typedef double (*WaveformFunction)(double);
@@ -4307,6 +4534,8 @@ Waveform waveforms[] = {
     {"Sinc Function", sincFunction},
     // {"Step Function", stepFunction},
     {"Table Points", tablePoint},
+    {"Arbitrary Bank 0", arbitraryBank0},
+    {"Arbitrary Bank 1", arbitraryBank1},
 
     // Add more waveform structs here
 };
