@@ -19,6 +19,7 @@ DispObjects::~DispObjects() {};
 void DispObjects::measureUpdate(double value)
 {
     measured(value);
+    StatisticsUpdate(value);
 
     // ignore the rest for Power measurement
     if (!strcmp(lv_label_get_text(label_unit), "W"))

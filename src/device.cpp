@@ -368,11 +368,13 @@ DAC_codes Device::LoadDACdata(const String &key)
 void Device::readVoltage()
 {
 
-    if ((adcDataReady || false) && (adc.busyChannel == VOLTAGE) /*&& ads.checkDataReady()*/) // ||  adc.checkDataReady()
+    if ((adcDataReady || false) && (adc.busyChannel == VOLTAGE  && 
+        (!lvglIsBusy  || settingParameters.adcRate!=0 )) /*  && !lvglIsBusy && ads.checkDataReady()*/) // ||  adc.checkDataReady()
     {
         static double v;
         Voltage.rawValue = adc.readConversion();
         adcDataReady = false;
+
         adc.startConversion(CURRENT, REF_EXTERNAL); // REF_EXTERNAL
 
         v = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
@@ -384,10 +386,13 @@ void Device::readVoltage()
         // Serial.print("Measured Raw Voltage:");
         // Serial.println(v);
         // Serial.print("Voltage:");
-        // Serial.printf("%9.5f", Voltage.measured.Mean());
 
-        *Voltage.Bar.curValuePtr = v * Voltage.Bar.scaleFactor;
+        // *Voltage.Bar.curValuePtr = uint16_t(v * 8);
         // lv_obj_invalidate(Voltage.Bar.bar);
+        Serial.printf("\n%9.4f %5.2f %i", v, Voltage.effectiveResolution.Mean(),
+                      Voltage.Statistics.windowSizeIndex_ % Voltage.Statistics.NofAvgs);
+
+        // Serial.printf(" %3i",    *Voltage.Bar.curValuePtr );
     }
 }
 double internalCurrentConsumption;
@@ -674,7 +679,7 @@ DEVICE Device::getStatus(void)
 void Device::setStatus(DEVICE status_)
 
 {
-   static DEVICE oldStatus = status_;
+    static DEVICE oldStatus = status_;
     blockAll = true;
 
     // lv_obj_invalidate(lv_scr_act()); // Force a full redraw before pausing
@@ -684,7 +689,7 @@ void Device::setStatus(DEVICE status_)
     esp_task_wdt_delete(idleTask1);
 
     if (status_ == DEVICE::OFF || oldStatus == DEVICE::OFF)
-     vTaskDelay(75);
+        vTaskDelay(75);
 
     // Set Colors
     Voltage.setMeasureColor(stateColor[status_].measured);
@@ -779,7 +784,7 @@ void Device::setStatus(DEVICE status_)
     status = status_;
     lv_disp_enable_invalidation(NULL, true); // Re-enable invalidation (resume updates)
                                              // lv_refr_now(NULL); // Force an immediate screen refresh
-    
+
     oldStatus = status_;
     blockAll = false;
     esp_task_wdt_add(idleTask1);

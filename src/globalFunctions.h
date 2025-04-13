@@ -1507,11 +1507,12 @@ void Task_ADC(void *pvParameters)
         PowerSupply.readVoltage();
         PowerSupply.readCurrent();
         PowerSupply.Power.measureUpdate(PowerSupply.Current.measured.Mean() * PowerSupply.Voltage.measured.Mean());
-        if (Tabs::getCurrentPage() != 2)
-        {
-            PowerSupply.Voltage.StatisticsUpdate(PowerSupply.Voltage.measured.value);
-            PowerSupply.Current.StatisticsUpdate(PowerSupply.Current.measured.value);
-        }
+        // if (Tabs::getCurrentPage() != 2)
+        // moved to measured of Display object
+        // {
+            // PowerSupply.Voltage.StatisticsUpdate(PowerSupply.Voltage.measured.value);
+            // PowerSupply.Current.StatisticsUpdate(PowerSupply.Current.measured.value);
+        // }
 
         static bool lastCCCVStatus = false;
         if (lastCCCVStatus != digitalRead(PowerSupply.CCCVPin))
@@ -3614,11 +3615,15 @@ void LvglUpdatesInterval(unsigned long interval)
     }
     schedule([]
              {
-                 if (!lvglChartIsBusy && !blockAll)
+                 if (!lvglChartIsBusy && !blockAll ) //&& adcDataReady
+                //  when adcDataReady is set, it means the data is ready and conversion has stoped.
+                /// Best time to run SPI to not generate noise on ADC
                  {
+                    // PowerSupply.adc.ads1219->pause();
                      lvglIsBusy = 1;
                      lv_timer_handler();
                      lvglIsBusy = 0;
+                    //  PowerSupply.adc.ads1219->begin();
                  }
                  //  else
                  //  delay(10);
@@ -4601,7 +4606,7 @@ bool functionGenerator()
 
     static unsigned long startTime = micros();
     unsigned long currentTime = micros();
-    double elapsedTime = (currentTime - startTime) / 1000000.0;
+    double elapsedTime = (currentTime - startTime) / 1'000'000.0;
     double t = fmod(elapsedTime * funGenMem.frequency, 1.0);
     int selected_row = (int)Utility_objs.table_fun_gen_list->user_data;
     Waveform currentWaveform = waveforms[selected_row];
@@ -4631,7 +4636,7 @@ bool functionGenerator()
 int numWaveforms = sizeof(waveforms) / sizeof(waveforms[0]);
 void functionGenerator_demo()
 {
-    static const unsigned long periodTotal = 10000000UL;     // 10 seconds in microseconds
+    static const unsigned long periodTotal = 100000000UL;     // 10 seconds in microseconds
     static const unsigned long periodWave = periodTotal / 3; // ~3.333 seconds per period
     static unsigned long startTime = micros();
 

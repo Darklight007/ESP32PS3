@@ -84,8 +84,8 @@ public:
 
     void operator[](const double &value)
     {
-        int Length_=328;
-        const int index = 10+static_cast<int>(std::round((value - histWinMin) / (histWinMax - histWinMin) * Length_));
+        int Length_ = 328;
+        const int index = 10 + static_cast<int>(std::round((value - histWinMin) / (histWinMax - histWinMin) * Length_));
 
         if (index < 0 || index >= length_)
             return;
@@ -324,7 +324,7 @@ public:
             size_t index = windowSizeIndex_ % NofAvgs;
             double oldest = samples_[index];
             samples_[index] = sample;
-            sum_ += - oldest;
+            sum_ += -oldest;
             sum_sq_ += sample * sample - oldest * oldest;
             windowSizeIndex_++;
         }
@@ -349,11 +349,7 @@ public:
     double Mean() const
     {
         // size_t currentSize = std::min(windowSizeIndex_, static_cast<uint64_t>(NofAvgs));
-        // if (currentSize == 0)
-        //     return 0.0;
-        // return sum_ / static_cast<double>(currentSize);
-
-        return sum_ / std::max(uint64_t(1), std::min(windowSizeIndex_, uint64_t(NofAvgs)));
+            return sum_ / std::max(uint64_t(1), std::min(windowSizeIndex_, uint64_t(NofAvgs)));
     }
 
     // Get the sum of the samples

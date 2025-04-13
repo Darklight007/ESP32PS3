@@ -83,7 +83,7 @@ void setup()
 void loop()
 {
 
-  LvglUpdatesInterval(33);
+  LvglUpdatesInterval(0);
   // trackLoopExecution(__func__);
   StatusBarUpdateInterval(333);
 
@@ -110,3 +110,23 @@ void loop()
   //  Serial.printf("\nADC_loopCounter %l",PowerSupply.adc.ADC_loopCounter);
 //  Serial.printf("\n Current utiltap%i", lv_tabview_get_tab_act(tabview_utility));
 }
+
+
+
+/*
+Noise analysis
+80Mhz page 2: ER:18.09
+80Mhz page 4: ER:19.64
+
+80Mhz page 2: ER:19.09 add 3x10uf capacitors 
+80Mhz page 4: ER:19.78
+
+80Mhz page 2: No LCD ER:18.29
+80Mhz page 4: No LCD ER:19.30
+
+80Mhz page 2: No LCD ER:17.58 if spi work during ADC conversion
+80Mhz page 2: No LCD ER:18.29 if limit spi work during ADC conversion
+ 
+10Mhz page 2: ER:18.60
+ 1Mhz page 2: ER:19.62
+*/
