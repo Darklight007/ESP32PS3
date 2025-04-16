@@ -368,8 +368,15 @@ DAC_codes Device::LoadDACdata(const String &key)
 void Device::readVoltage()
 {
 
-    if ((adcDataReady || false) && (adc.busyChannel == VOLTAGE  && 
-        (!lvglIsBusy  || settingParameters.adcRate!=0 )) /*  && !lvglIsBusy && ads.checkDataReady()*/) // ||  adc.checkDataReady()
+    if ((adcDataReady || false) && (adc.busyChannel == VOLTAGE
+
+                                    /*
+                                    to avoid spi during conversion but after
+                                    adding 10uf cap to ref SPI noise gone
+                                    && (!lvglIsBusy  || settingParameters.adcRate!=0 )
+                                    */
+                                                                        ))
+
     {
         static double v;
         Voltage.rawValue = adc.readConversion();

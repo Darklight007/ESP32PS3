@@ -1503,15 +1503,18 @@ void Task_ADC(void *pvParameters)
         //     if (adcDataReady && PowerSupply.adc.busyChannel == CURRENT)
         //         I.shift(); // Shift for new sample
         // }
-
-        PowerSupply.readVoltage();
+        if (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0) //avid conversion when spi is working!
+        {
+            PowerSupply.readVoltage();
+        }
         PowerSupply.readCurrent();
+        
         PowerSupply.Power.measureUpdate(PowerSupply.Current.measured.Mean() * PowerSupply.Voltage.measured.Mean());
         // if (Tabs::getCurrentPage() != 2)
         // moved to measured of Display object
         // {
-            // PowerSupply.Voltage.StatisticsUpdate(PowerSupply.Voltage.measured.value);
-            // PowerSupply.Current.StatisticsUpdate(PowerSupply.Current.measured.value);
+        // PowerSupply.Voltage.StatisticsUpdate(PowerSupply.Voltage.measured.value);
+        // PowerSupply.Current.StatisticsUpdate(PowerSupply.Current.measured.value);
         // }
 
         static bool lastCCCVStatus = false;
@@ -2225,7 +2228,7 @@ static void dropdownEventCb(lv_event_t *e)
         for (int i = 0; i < CHART_POINTS; i++)
         {
             double value = currentWaveform.function((double)i / CHART_POINTS); // Map i to function
-            double outputValue = value * 1.0 ;
+            double outputValue = value * 1.0;
             // funGenMem2.arbitrary_points[i][0] = outputValue; // Store in memory
             lv_chart_set_value_by_id(util_Arbit_chart, util_Arbit_chart_series, i, outputValue * 140);
         }
@@ -3615,15 +3618,15 @@ void LvglUpdatesInterval(unsigned long interval)
     }
     schedule([]
              {
-                 if (!lvglChartIsBusy && !blockAll ) //&& adcDataReady
-                //  when adcDataReady is set, it means the data is ready and conversion has stoped.
-                /// Best time to run SPI to not generate noise on ADC
+                 if (!lvglChartIsBusy && !blockAll && adcDataReady) //&& adcDataReady
+                                                                    //  when adcDataReady is set, it means the data is ready and conversion has stoped.
+                                                                    /// Best time to run SPI to not generate noise on ADC
                  {
-                    // PowerSupply.adc.ads1219->pause();
+                     // PowerSupply.adc.ads1219->pause();
                      lvglIsBusy = 1;
                      lv_timer_handler();
                      lvglIsBusy = 0;
-                    //  PowerSupply.adc.ads1219->begin();
+                     //  PowerSupply.adc.ads1219->begin();
                  }
                  //  else
                  //  delay(10);
@@ -4499,12 +4502,12 @@ double tablePoint(double t)
 double arbitraryBank0(double t)
 {
     // static uint64_t i;
-    return funGenMem2.arbitrary_points[int(t * CHART_POINTS) % CHART_POINTS][0]/140.0;
+    return funGenMem2.arbitrary_points[int(t * CHART_POINTS) % CHART_POINTS][0] / 140.0;
 }
 double arbitraryBank1(double t)
 {
     // static uint64_t i;
-    return funGenMem2.arbitrary_points[int(t * CHART_POINTS) % CHART_POINTS][1]/140.0;
+    return funGenMem2.arbitrary_points[int(t * CHART_POINTS) % CHART_POINTS][1] / 140.0;
 }
 
 // // Function pointer type
@@ -4636,7 +4639,7 @@ bool functionGenerator()
 int numWaveforms = sizeof(waveforms) / sizeof(waveforms[0]);
 void functionGenerator_demo()
 {
-    static const unsigned long periodTotal = 100000000UL;     // 10 seconds in microseconds
+    static const unsigned long periodTotal = 100000000UL;    // 10 seconds in microseconds
     static const unsigned long periodWave = periodTotal / 3; // ~3.333 seconds per period
     static unsigned long startTime = micros();
 

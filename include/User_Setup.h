@@ -363,14 +363,14 @@
 // #define SPI_FREQUENCY  27000000
 // #define SPI_FREQUENCY  40000000
 // #define SPI_FREQUENCY  55000000 // STM32 SPI1 only (SPI2 maximum is 27MHz)
-#define SPI_FREQUENCY  80000000
+#define SPI_FREQUENCY  80'000'000
 
 // Optional reduced SPI frequency for reading TFT
-#define SPI_READ_FREQUENCY  20000000
+#define SPI_READ_FREQUENCY  20'000'000
 
 // The XPT2046 requires a lower SPI clock rate of 2.5MHz so we define that here:
 //2.5MHZ doesn't work correctly on pin 0
-#define SPI_TOUCH_FREQUENCY  25000000
+#define SPI_TOUCH_FREQUENCY  25'000'000
 
 // The ESP32 has 2 free SPI ports i.e. VSPI and HSPI, the VSPI is the default.
 // If the VSPI port is in use and pins are not accessible (e.g. TTGO T-Beam)
