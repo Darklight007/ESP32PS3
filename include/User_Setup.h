@@ -43,7 +43,7 @@
 
 // Only define one driver, the other ones must be commented out
 // #define ILI9341_DRIVER       // Generic driver for common displays
-#define ILI9341_2_DRIVER     // Alternative ILI9341 driver, see https://github.com/Bodmer/TFT_eSPI/issues/1172
+// #define ILI9341_2_DRIVER     // Alternative ILI9341 driver, see https://github.com/Bodmer/TFT_eSPI/issues/1172
 //#define ST7735_DRIVER      // Define additional parameters below for this display
 //#define ILI9163_DRIVER     // Define additional parameters below for this display
 //#define S6D02A1_DRIVER
@@ -85,11 +85,11 @@
 // #define TFT_WIDTH  128
 // #define TFT_WIDTH  172 // ST7789 172 x 320
 // #define TFT_WIDTH  170 // ST7789 170 x 320
-// #define TFT_WIDTH  240 // ST7789 240 x 240 and 240 x 320
+#define TFT_WIDTH  240 // ST7789 240 x 240 and 240 x 320
 // #define TFT_HEIGHT 160
 // #define TFT_HEIGHT 128
 // #define TFT_HEIGHT 240 // ST7789 240 x 240
-// #define TFT_HEIGHT 320 // ST7789 240 x 320
+#define TFT_HEIGHT 320 // ST7789 240 x 320
 // #define TFT_HEIGHT 240 // GC9A01 240 x 240
 
 // For ST7735 ONLY, define the type of display, originally this was based on the
@@ -366,11 +366,11 @@
 #define SPI_FREQUENCY  80'000'000
 
 // Optional reduced SPI frequency for reading TFT
-#define SPI_READ_FREQUENCY  20'000'000
+#define SPI_READ_FREQUENCY  6'000'000
 
 // The XPT2046 requires a lower SPI clock rate of 2.5MHz so we define that here:
 //2.5MHZ doesn't work correctly on pin 0
-#define SPI_TOUCH_FREQUENCY  25'000'000
+#define SPI_TOUCH_FREQUENCY  2'500'000
 
 // The ESP32 has 2 free SPI ports i.e. VSPI and HSPI, the VSPI is the default.
 // If the VSPI port is in use and pins are not accessible (e.g. TTGO T-Beam)
