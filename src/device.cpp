@@ -232,6 +232,14 @@ void Device::LoadSetting(void)
         memory.putUShort("pi", 314);
 
         Device::SaveSettingData("setting_param", settingParameters);
+
+        dac_data_g.zero_voltage = 11;
+        dac_data_g.max_voltage = 65535;
+        dac_data_g.zero_current = 10;
+        dac_data_g.max_current = 65535;
+
+        SaveDACdata("dac_data_", dac_data_g);
+
     }
     // memory.putUShort("pi", 0);
     memory.end();

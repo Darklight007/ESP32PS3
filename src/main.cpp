@@ -44,8 +44,9 @@
 
 #include "esp_int_wdt.h"
 #include "esp_system.h"
-
-
+// #include <Adafruit_NeoPixel.h>
+// #define LED_PIN 48
+// Adafruit_NeoPixel pixels(1, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 void setup()
 {
@@ -78,10 +79,17 @@ void setup()
   Serial.printf("\nSetup() run on core: #%i \n\n", xPortGetCoreID());
                  myTone(NOTE_A5, 200, true);
                  myTone(NOTE_A3, 200, true);
+
+  // pixels.begin();           
+  // pixels.setPixelColor(0, pixels.Color(0, 0, 0));
+  // pixels.show();              
+
 }
 
 void loop()
 {
+  // pixels.setPixelColor(0, pixels.Color(0, 0, 0)); // Red
+  // neopixelWrite(RGB_BUILTIN,0,0,0); // Green
 
   LvglUpdatesInterval(0);
   // trackLoopExecution(__func__);

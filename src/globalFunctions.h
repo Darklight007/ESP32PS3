@@ -3618,7 +3618,7 @@ void LvglUpdatesInterval(unsigned long interval)
     }
     schedule([]
              {
-                 if (!lvglChartIsBusy && !blockAll && adcDataReady) //&& adcDataReady
+                 if (!lvglChartIsBusy && !blockAll ) //&& adcDataReady
                                                                     //  when adcDataReady is set, it means the data is ready and conversion has stoped.
                                                                     /// Best time to run SPI to not generate noise on ADC
                  {
