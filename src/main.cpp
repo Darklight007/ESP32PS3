@@ -20,6 +20,7 @@
 
 // TFT & LVGL includes
 #include <lvgl.h>
+#include "lv_gui_helper.h"
 #include "demos/lv_demos.h"
 // #include <../lib/TFT_eSPI/Processors/TFT_eSPI_ESP32_S3.h>
 #include <TFT_eSPI.h>

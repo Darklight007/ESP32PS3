@@ -1503,12 +1503,12 @@ void Task_ADC(void *pvParameters)
         //     if (adcDataReady && PowerSupply.adc.busyChannel == CURRENT)
         //         I.shift(); // Shift for new sample
         // }
-        if (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0) //avid conversion when spi is working!
+        if (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0) // avid conversion when spi is working!
         {
             PowerSupply.readVoltage();
         }
         PowerSupply.readCurrent();
-        
+
         PowerSupply.Power.measureUpdate(PowerSupply.Current.measured.Mean() * PowerSupply.Voltage.measured.Mean());
         // if (Tabs::getCurrentPage() != 2)
         // moved to measured of Display object
@@ -2609,7 +2609,7 @@ void Utility_tabview(lv_obj_t *parent)
 
     // lv_obj_add_event_cb(Utility_objs.table_point_list, table_get_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    Utility_objs.table_spinbox_value = spinbox_pro(tab4, "#FFFFF7 Value:#", 0, 10000, 5, 1, LV_ALIGN_RIGHT_MID, -35, -50, 98, 0);
+    Utility_objs.table_spinbox_value = spinbox_pro(tab4, "#FFFFF7 Value:#", 0, 10000, 5, 1, LV_ALIGN_RIGHT_MID, -35, -50, 98, 4);
     lv_obj_add_event_cb(Utility_objs.table_spinbox_value, spinbox_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     // Saving  ************************************************************
@@ -2913,6 +2913,9 @@ void keyCheckLoop()
                  });
 
     keyMenusPage('j', " RELEASED.", 2, []
+                 { PowerSupply.ResetStats(); });
+
+    keyMenusPage('j', " RELEASED.", 4, []
                  { PowerSupply.ResetStats(); });
 
     keyMenus('Z', " RELEASED.", []
@@ -3367,8 +3370,13 @@ void StatusBar()
 
     lv_label_set_text(lbl_voltageCalib_m, std::to_string(m).c_str());
     lv_label_set_text(lbl_voltageCalib_b, std::to_string(get_b(code1, m, vin1)).c_str());
-    if (lv_obj_is_visible(voltageCurrentCalibration))
+
+    if (lv_obj_is_visible(voltageCurrentCalibration) ||  win_adc_already_created && lv_obj_is_visible(win_ADC_calibration))
     {
+        // load_cb(NULL);
+        // Calibration outputData = PowerSupply.LoadCalibData("cal");
+        // PowerSupply.CalBank[0] = {outputData};
+        // Serial.printf("\ndd_calibration:%i",lv_dropdown_get_selected(dd_calibration));
         if (lv_dropdown_get_selected(dd_calibration) == 0)
         {
             lv_label_set_text_fmt(lbl_rawCode, "%+08i", PowerSupply.Voltage.rawValue);
@@ -3377,6 +3385,9 @@ void StatusBar()
             lv_label_set_text_fmt(lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
             lv_label_set_text_fmt(lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
             lv_label_set_text_fmt(lbl_ER_, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
+            lv_label_set_text_fmt(Calib_GUI.lbl_ER, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
+            
+            
 
             PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
             PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2 = code2;
@@ -3392,6 +3403,8 @@ void StatusBar()
             lv_label_set_text_fmt(lbl_calibratedValue, "%+09.4f", PowerSupply.Current.measured.value);
             lv_label_set_text_fmt(lbl_calibValueAVG_, "%+09.4f", PowerSupply.Current.measured.Mean());
             lv_label_set_text_fmt(lbl_ER_, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
+            lv_label_set_text_fmt(Calib_GUI.lbl_ER, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
+
 
             PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_1 = code1;
             PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_2 = code2;
@@ -3399,8 +3412,8 @@ void StatusBar()
             PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.value_2 = vin2;
         }
 
-        // lv_event_send(btn_load, LV_EVENT_CLICKED, NULL);
         PowerSupply.calibrationUpdate();
+        // lv_event_send(btn_load, LV_EVENT_CLICKED, NULL);
     }
 
     // if (PowerSupply.eepromWriteFlag)
@@ -3618,7 +3631,7 @@ void LvglUpdatesInterval(unsigned long interval)
     }
     schedule([]
              {
-                 if (!lvglChartIsBusy && !blockAll ) //&& adcDataReady
+                 if (!lvglChartIsBusy && !blockAll && adcDataReady) //&& adcDataReady
                                                                     //  when adcDataReady is set, it means the data is ready and conversion has stoped.
                                                                     /// Best time to run SPI to not generate noise on ADC
                  {
@@ -3777,7 +3790,7 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
         // Update calibration label (if needed)
         // lv_label_set_text(lbl_voltageCalib_m, std::to_string(get_voltageCalib_m()).c_str());
     }
-    else if (win_dac_already_created && !lv_obj_is_visible(win_DAC_calibration))
+    else if (win_dac_already_created && !lv_obj_is_visible(win_DAC_calibration) && win_adc_already_created && !lv_obj_is_visible(win_ADC_calibration))
     {
         // Handle menu navigation when calibration page is not visible
         // static int32_t lastValue = 0;
@@ -3803,8 +3816,39 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
         if (temp == lastButton)
             myTone(NOTE_A4, 3); // Play a tone if selection didn't change
     }
+
     else if (win_dac_already_created && lv_obj_is_visible(win_DAC_calibration))
     {
+        if (encoder1_last_value < encoder1_value)
+            lv_spinbox_increment(obj_selected_spinbox);
+
+        else if (encoder1_last_value > encoder1_value)
+            lv_spinbox_decrement(obj_selected_spinbox);
+
+        encoder1_last_value = encoder1_value;
+    }
+
+    else if (win_adc_already_created && lv_obj_is_visible(win_ADC_calibration))
+    {
+        static int32_t cursor_pos = 0;
+
+        if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
+            return;
+
+        // Update cursor position based on encoder 2
+        if (encoder2_last_value < encoder2_value)
+        {
+            move_spinbox_cursor_left(obj_selected_spinbox);
+            encoder2_last_value = encoder2_value;
+            return;
+        }
+        else if (encoder2_last_value > encoder2_value)
+        {
+            move_spinbox_cursor_right(obj_selected_spinbox);
+            encoder2_last_value = encoder2_value;
+            return;
+        }
+
 
         if (encoder1_last_value < encoder1_value)
             lv_spinbox_increment(obj_selected_spinbox);
@@ -3815,6 +3859,8 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
         encoder1_last_value = encoder1_value;
     }
 }
+
+
 
 void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 {

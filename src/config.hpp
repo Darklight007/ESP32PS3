@@ -128,4 +128,8 @@ void my_print(const char *buf)
   Serial.flush();
 }
 
+struct Size_2d {
+  lv_coord_t w;
+  lv_coord_t h;
+};
 #endif
