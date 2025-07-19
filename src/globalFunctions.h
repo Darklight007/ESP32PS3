@@ -2659,20 +2659,21 @@ void autoScrollY()
     if (PowerSupply.graph.serV->hidden == PowerSupply.graph.serI->hidden &&
         PowerSupply.graph.serV->hidden == false)
 
-        ratio = .5 * ((PowerSupply.Current.measured.Mean() / PowerSupply.Current.maxValue) +
-                      PowerSupply.Voltage.measured.Mean() / PowerSupply.Voltage.maxValue);
+        ratio = .5 * ((PowerSupply.Current.measured.Mean() / (PowerSupply.Current.maxValue/PowerSupply.Current.adjFactor) +
+                      PowerSupply.Voltage.measured.Mean() / (PowerSupply.Voltage.maxValue/PowerSupply.Voltage.adjFactor)));
 
-    else if (PowerSupply.graph.serV->hidden == false)
-        ratio = (PowerSupply.Voltage.measured.Mean() / PowerSupply.Voltage.maxValue);
+    else if (!PowerSupply.graph.serV->hidden)
+        ratio = (PowerSupply.Voltage.measured.Mean() / (PowerSupply.Voltage.maxValue/PowerSupply.Voltage.adjFactor));
 
-    else if (PowerSupply.graph.serI->hidden == false)
-        ratio = (PowerSupply.Current.measured.Mean() / PowerSupply.Current.maxValue);
+    else if (!PowerSupply.graph.serI->hidden)
+        ratio = (PowerSupply.Current.measured.Mean() / (PowerSupply.Current.maxValue/PowerSupply.Current.adjFactor));
 
     double calc = (lv_chart_get_zoom_y(PowerSupply.graph.chart) -
                    (ratio) * (lv_chart_get_zoom_y(PowerSupply.graph.chart) + 256)) /
                   2;
 
-    //  Serial.printf(" Calc Y:%5.3f \n",lv_coord_t(calc));
+     Serial.printf("\nhidden%i ratio:%5.3f  Calc Y:%5.3f",PowerSupply.graph.serV->hidden , 
+        ratio, lv_coord_t(calc));
 
     lv_obj_scroll_to_y(PowerSupply.graph.chart, lv_coord_t(calc), LV_ANIM_OFF);
 }
@@ -3371,7 +3372,9 @@ void StatusBar()
     lv_label_set_text(lbl_voltageCalib_m, std::to_string(m).c_str());
     lv_label_set_text(lbl_voltageCalib_b, std::to_string(get_b(code1, m, vin1)).c_str());
 
-    if (lv_obj_is_visible(voltageCurrentCalibration) ||  win_adc_already_created && lv_obj_is_visible(win_ADC_calibration))
+    
+
+    if (lv_obj_is_visible(voltageCurrentCalibration))
     {
         // load_cb(NULL);
         // Calibration outputData = PowerSupply.LoadCalibData("cal");
@@ -3381,13 +3384,9 @@ void StatusBar()
         {
             lv_label_set_text_fmt(lbl_rawCode, "%+08i", PowerSupply.Voltage.rawValue);
             lv_label_set_text_fmt(lbl_rawAVG_, "%+08.0f", PowerSupply.Voltage.measured.Mean() * m + get_b(code1, m, vin1));
-
             lv_label_set_text_fmt(lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
             lv_label_set_text_fmt(lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
             lv_label_set_text_fmt(lbl_ER_, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
-            lv_label_set_text_fmt(Calib_GUI.lbl_ER, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
-            
-            
 
             PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
             PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2 = code2;
@@ -3403,8 +3402,8 @@ void StatusBar()
             lv_label_set_text_fmt(lbl_calibratedValue, "%+09.4f", PowerSupply.Current.measured.value);
             lv_label_set_text_fmt(lbl_calibValueAVG_, "%+09.4f", PowerSupply.Current.measured.Mean());
             lv_label_set_text_fmt(lbl_ER_, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
-            lv_label_set_text_fmt(Calib_GUI.lbl_ER, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
 
+            // lv_label_set_text_fmt(Calib_GUI.lbl_ER, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
 
             PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_1 = code1;
             PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_2 = code2;
@@ -3416,6 +3415,33 @@ void StatusBar()
         // lv_event_send(btn_load, LV_EVENT_CLICKED, NULL);
     }
 
+    if (win_adc_already_created && lv_obj_is_visible(win_ADC_calibration))
+    {
+
+            int code1 = lv_spinbox_get_value(Calib_GUI.code_1);
+            int code2 = lv_spinbox_get_value(Calib_GUI.code_2);
+            double vin1 = double(lv_spinbox_get_value(Calib_GUI.vin_1)) / 10000.0;
+            double vin2 = double(lv_spinbox_get_value(Calib_GUI.vin_2)) / 10000.0;
+
+            double m = get_m(code1, code2, vin1, vin2);
+
+            lv_label_set_text_fmt(Calib_GUI.lbl_voltageCalib_m, "%f", m);
+            lv_label_set_text_fmt(Calib_GUI.lbl_voltageCalib_b, "%f", get_b(code1, m, vin1));
+
+            lv_label_set_text_fmt(Calib_GUI.lbl_rawCode, "%+08i", PowerSupply.Voltage.rawValue);
+            lv_label_set_text_fmt(Calib_GUI.lbl_rawAVG_, "%+08.0f", PowerSupply.Voltage.measured.Mean() * m + get_b(code1, m, vin1));
+            lv_label_set_text_fmt(Calib_GUI.lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
+            lv_label_set_text_fmt(Calib_GUI.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
+            lv_label_set_text_fmt(Calib_GUI.lbl_ER, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
+            
+            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2 = code2;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_1 = vin1;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_2 = vin2;
+
+            PowerSupply.calibrationUpdate();
+        
+    }
     // if (PowerSupply.eepromWriteFlag)
     // {
     //     EEPROM.commit();
@@ -3849,7 +3875,6 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
             return;
         }
 
-
         if (encoder1_last_value < encoder1_value)
             lv_spinbox_increment(obj_selected_spinbox);
 
@@ -3859,8 +3884,6 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
         encoder1_last_value = encoder1_value;
     }
 }
-
-
 
 void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 {

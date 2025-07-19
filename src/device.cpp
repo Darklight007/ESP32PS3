@@ -386,6 +386,14 @@ void Device::readVoltage()
                                                                         ))
 
     {
+        constexpr float adcRateCompensation[4] = {
+            1.00000f,               // 20 SPS
+            32.0000f/31.99946f ,    // 90 SPS
+            32.0000f/31.99709f ,    // 330 SPS
+            32.0000f/31.99205f      // 1000 SPS
+        };
+
+        
         static double v;
         Voltage.rawValue = adc.readConversion();
         adcDataReady = false;
@@ -394,18 +402,19 @@ void Device::readVoltage()
 
         v = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
 
+        v*=adcRateCompensation[settingParameters.adcRate];
+
         // Voltage.hist[v];
         Voltage.measureUpdate(v); //  enob(rs[0].StandardDeviation())
         adc.ADC_loopCounter++;
         // myTone(NOTE_A3, 1);
-        // Serial.print("Measured Raw Voltage:");
-        // Serial.println(v);
-        // Serial.print("Voltage:");
+ 
 
         // *Voltage.Bar.curValuePtr = uint16_t(v * 8);
         // lv_obj_invalidate(Voltage.Bar.bar);
-        Serial.printf("\n%9.4f %5.2f %i", v, Voltage.effectiveResolution.Mean(),
-                      Voltage.Statistics.windowSizeIndex_ % Voltage.Statistics.NofAvgs);
+        
+        // Serial.printf("\n%9.4f %10.5f %5.2f %i", v, Voltage.Statistics.Mean(),Voltage.effectiveResolution.Mean(),
+        //               Voltage.Statistics.windowSizeIndex_ % Voltage.Statistics.NofAvgs);
 
         // Serial.printf(" %3i",    *Voltage.Bar.curValuePtr );
     }

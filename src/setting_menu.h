@@ -111,6 +111,11 @@ lv_obj_t *lbl_ER_;
 
 struct setting_GUI
 {
+    lv_obj_t *vin_1;
+    lv_obj_t *vin_2;
+    lv_obj_t *code_1;
+    lv_obj_t *code_2;
+    
     lv_obj_t *lbl_voltageCalib_m;
     lv_obj_t *lbl_voltageCalib_b;
     lv_obj_t *lbl_rawCode;
@@ -118,10 +123,7 @@ struct setting_GUI
     lv_obj_t *lbl_rawAVG_;
     lv_obj_t *lbl_calibValueAVG_;
     lv_obj_t *lbl_ER;
-    lv_obj_t *vin_1;
-    lv_obj_t *vin_2;
-    lv_obj_t *code_1;
-    lv_obj_t *code_2;
+    
 
 } Calib_GUI;
 
@@ -1187,107 +1189,62 @@ static void btn_calibration_ADC_Voltage_event_cb(lv_event_t *e)
     lv_style_set_text_color(&style_, lv_color_hex(0xFFFFFF));
     lv_style_set_bg_color(&style_, lv_color_hex(0xFFAAAA));
 
+    lv_obj_t *lbl_raw = LVLabel::create(cont, "Raw Code:", Calib_GUI.code_1, 0, pad.y, &style_spinboxLbl);
+    Calib_GUI.lbl_rawCode = LVLabel::create(cont, "#FFFFF7 838860080#", lbl_raw, 0, pad.y - 2, &style_);
+    lv_obj_t *lbl_rawAVG = LVLabel::create(cont, "Avg Raw:", Calib_GUI.lbl_rawCode, 0, pad.y, &style_spinboxLbl);
+    Calib_GUI.lbl_rawAVG_ = LVLabel::create(cont, "+21657651", lbl_rawAVG, 0, pad.y - 2, &style_);
 
+    lv_obj_t *lbl_calibValue = LVLabel::create(cont, "Calibrated Value:", Calib_GUI.code_2, 0, pad.y, &style_spinboxLbl);
+    Calib_GUI.lbl_calibratedValue = LVLabel::create(cont, "15.01256V", lbl_calibValue, 0, pad.y - 2, &style_);
+    lv_obj_t *lbl_calibValueAVG = LVLabel::create(cont, "Avg Calibrated Value:", Calib_GUI.lbl_calibratedValue, 0, pad.y, &style_spinboxLbl);
+    Calib_GUI.lbl_calibValueAVG_ = LVLabel::create(cont, "+019.0154", lbl_calibValueAVG, 0, pad.y - 2, &style_);
 
-    lv_obj_t* lbl_raw = LVLabelHelper::create(cont, "Raw Code:", Calib_GUI.code_1,0, pad.y, &style_spinboxLbl);
-    Calib_GUI.lbl_rawCode =  LVLabelHelper::create(cont, "#FFFFF7 838860080#", lbl_raw, 0, pad.y - 2, &style_);
-    lv_obj_t *lbl_rawAVG =  LVLabelHelper::create(cont, "Avg Raw:", Calib_GUI.lbl_rawCode, 0, pad.y, &style_spinboxLbl);
-    Calib_GUI.lbl_rawAVG_ =  LVLabelHelper::create(cont, "+21657651", lbl_rawAVG, 0, pad.y - 2, &style_);
-
-    lv_obj_t *lbl_calibValue =  LVLabelHelper::create(cont, "Calibrated Value:", Calib_GUI.code_2, 0, pad.y, &style_spinboxLbl);
-    Calib_GUI.lbl_calibratedValue =  LVLabelHelper::create(cont, "15.01256V", lbl_calibValue, 0, pad.y - 2, &style_);
-    lv_obj_t *lbl_calibValueAVG =  LVLabelHelper::create(cont, "Avg Calibrated Value:", Calib_GUI.lbl_calibratedValue, 0, pad.y, &style_spinboxLbl);
-    Calib_GUI.lbl_calibValueAVG_ =  LVLabelHelper::create(cont, "+019.0154", lbl_calibValueAVG, 0, pad.y - 2, &style_);
-
-    lv_obj_t *lbl_ER =  LVLabelHelper::create(cont, "Effective Resolution:", Calib_GUI.lbl_rawAVG_, 0, pad.y, &style_spinboxLbl);
-    Calib_GUI.lbl_ER =  LVLabelHelper::create(cont, "17.23", lbl_ER, 0, pad.y - 2, &style_);
+    lv_obj_t *lbl_ER = LVLabel::create(cont, "Effective Resolution:", Calib_GUI.lbl_rawAVG_, 0, pad.y, &style_spinboxLbl);
+    Calib_GUI.lbl_ER = LVLabel::create(cont, "17.23", lbl_ER, 0, pad.y - 2, &style_);
 
     lv_point_t btn_pos = {140 + offset.x, 160};
 
-    LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y,      54, 26, &style_btn_loadSave, load_cb);
+    LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 54, 26, &style_btn_loadSave, load_cb);
     LVButton btnSave(cont, "Save", btn_pos.x + 62, btn_pos.y, 54, 26, &style_btn_loadSave, save_cb);
-
-    // Create line
-    auto createLine3 = [&](lv_obj_t *parent, const lv_point_t points[], lv_coord_t width, lv_style_t *style_,
-                           int color, lv_coord_t dash_width, lv_coord_t dash_gap,
-                           lv_coord_t x_ofs, lv_coord_t y_ofs)
-    {
-        /*Create an array for the points of the line*/
-        /*Create style*/
-        lv_style_set_line_width(style_, width);
-        lv_style_set_line_color(style_, lv_color_hex(color));
-        lv_style_set_line_rounded(style_, true);
-
-        lv_style_set_line_dash_width(style_, dash_width);
-        lv_style_set_line_dash_gap(style_, dash_gap);
-
-        /*Create a line and apply the new style*/
-        lv_obj_t *line1;
-        line1 = lv_line_create(parent);
-        lv_line_set_points(line1, points, 2); /*Set the points*/
-        lv_obj_remove_style_all(line1);
-        lv_obj_add_style(line1, style_, 0);
-        lv_obj_align_to(line1, parent, LV_ALIGN_TOP_LEFT, x_ofs, y_ofs);
-    };
 
     int yOffset = 160;
     int xoff = 60;
     static lv_style_t line_style;
     lv_style_init(&line_style);
-    static lv_point_t line_points[] = {{0, 80}, {70, 50}};
-    createLine3(cont, line_points, 1, &line_style, 0xffc107, 5, 0, xoff, yOffset - 5);
 
     static lv_style_t dash_style;
     lv_style_init(&dash_style);
-    static lv_point_t line2_points[] = {{0, 0}, {70, 0}};
-    createLine3(cont, line2_points, 1, &dash_style, 0xffffff, 5, 6, xoff, yOffset - 30 + 80);
 
-    static lv_point_t line3_points[] = {{62, 0}, {62, 40}};
-    createLine3(cont, line3_points, 1, &dash_style, 0xffffff, 5, 3, xoff, yOffset + 40);
+    // static lv_point_t points[] =  {{0, 80}, {70, 50}};
+    LVLine::create(cont, {{0, 80}, {70, 50}}, 3, &line_style, 0xffc107, 5, 0, xoff, yOffset - 5);
 
-    static lv_point_t line4_points[] = {{0, 0}, {20, 0}};
-    createLine3(cont, line4_points, 1, &dash_style, 0xffffff, 2, 6, xoff, yOffset - 12 + 80);
+    // static lv_point_t line_points[] = {{0, 80}, {70, 50}};
 
-    static lv_point_t line5_points[] = {{13, 0}, {13, 15}};
-    createLine3(cont, line5_points, 1, &dash_style, 0xffffff, 2, 3, xoff, yOffset + 64);
+    LVLine::create(cont, {{0, 0}, {70, 0}}, 1, &dash_style, 0xffffff, 5, 6, xoff, yOffset - 30 + 80);
+    LVLine::create(cont, {{62, 0}, {62, 40}}, 1, &dash_style, 0xffffff, 5, 3, xoff, yOffset + 40);
+    LVLine::create(cont, {{0, 0}, {20, 0}}, 1, &dash_style, 0xffffff, 2, 6, xoff, yOffset - 12 + 80);
+    LVLine::create(cont, {{13, 0}, {13, 15}}, 1, &dash_style, 0xffffff, 2, 3, xoff, yOffset + 64);
     // return;
 
     // Rectangular frame
     static lv_style_t line_style2;
     lv_style_init(&line_style2);
     int yshift = 40;
-    static lv_point_t line6_points[] = {{0, yshift}, {70, yshift}};
-    createLine3(cont, line6_points, 1, &line_style2, 0x080808, 5, 0, xoff, yOffset + yshift);
-    createLine3(cont, line6_points, 1, &line_style2, 0x080808, 5, 0, xoff, yOffset - 40 + yshift);
 
-    static lv_point_t line7_points[] = {{0, 0}, {0, 40}};
-    createLine3(cont, line7_points, 1, &line_style2, 0x0a0a0a, 5, 0, xoff, yOffset + yshift);
-    createLine3(cont, line7_points, 1, &line_style2, 0x6a6a6a, 5, 0, 70 + xoff, yOffset + yshift);
+    LVLine::create(cont, {{0, 40}, {70, 40}}, 1, &line_style2, 0x080808, 5, 0, xoff, yOffset + yshift);
+    LVLine::create(cont, {{0, 40}, {70, 40}}, 1, &line_style2, 0x080808, 5, 0, xoff, yOffset - 40 + yshift);
+
+    LVLine::create(cont, {{0, 0}, {0, 40}}, 1, &line_style2, 0x0a0a0a, 5, 0, xoff, yOffset + yshift);
+    lv_obj_t* bl = LVLine::create(cont, {{0, 0}, {0, 40}}, 1, &line_style2, 0x6a6a6a, 5, 0, 70 + xoff, yOffset + yshift);
 
     win_adc_already_created = true;
 
-    // static lv_style_t style_lbl;
-    // lv_style_init(&style_lbl);
-    // lv_style_set_text_font(&style_lbl, &graph_R_8); //
-    // lv_style_set_bg_color(&style_lbl, lv_color_hex(0xFF0000));
-
-    auto createLabel = [&](lv_obj_t *parent, const char *labelText, lv_align_t align, lv_coord_t x_ofs, lv_coord_t y_ofs)
-    {
-        lv_obj_t *_label = lv_label_create(parent);
-        lv_obj_remove_style_all(_label);
-        lv_label_set_recolor(_label, true); /*Enable re-coloring by commands in the text*/
-        lv_label_set_text(_label, labelText);
-        lv_obj_align_to(_label, parent, align, x_ofs, y_ofs);
-        // lv_obj_add_style(_label, &style_lbl, LV_STATE_DEFAULT);
-        // return _label;
-    };
-
     yOffset -= +10 - 65;
 
-    createLabel(cont, "#FFFFF7 Code1#", LV_ALIGN_TOP_LEFT, 2, yOffset + -15);
-    createLabel(cont, "#FFFFF7 Code2#", LV_ALIGN_TOP_LEFT, 2, yOffset + 5);
-    createLabel(cont, "#FFFFF7 Vin1#", LV_ALIGN_TOP_LEFT, 60, yOffset + 30);
-    createLabel(cont, "#FFFFF7 Vin2#", LV_ALIGN_TOP_LEFT, 60 + 49, yOffset + 30);
+    LVLabel::create(cont, "#FFFFF7 Code2#", bl , -105, -20, &style_spinboxLbl);
+    LVLabel::create(cont, "#FFFFF7 Code1#", bl , -105, -37, &style_spinboxLbl);
+    LVLabel::create(cont, "#FFFFF7 Vin1#", bl , -105+38, -20+25, &style_spinboxLbl);
+    LVLabel::create(cont, "#FFFFF7 Vin2#", bl , -105+38+49, -20+25, &style_spinboxLbl);
 
     // return;
     // lv_obj_t *label_title = lv_label_create(cont);
@@ -1311,14 +1268,14 @@ static void btn_calibration_ADC_Voltage_event_cb(lv_event_t *e)
     lv_obj_align(label_m, LV_ALIGN_TOP_LEFT, 0, verPad + 20);
     lv_obj_align(label_m_den, LV_ALIGN_TOP_LEFT, 50, verPad + 30);
 
-    lbl_voltageCalib_m = lv_label_create(cont);
-    lbl_voltageCalib_b = lv_label_create(cont);
+    Calib_GUI.lbl_voltageCalib_m = lv_label_create(cont);
+    Calib_GUI.lbl_voltageCalib_b = lv_label_create(cont);
 
-    lv_obj_align(lbl_voltageCalib_m, LV_ALIGN_TOP_LEFT, 160, verPad + 20);
+    lv_obj_align(Calib_GUI.lbl_voltageCalib_m, LV_ALIGN_TOP_LEFT, 160, verPad + 20);
 
     lv_label_set_text(label_b, "b = Code1 - m * Vin1 =");
     lv_obj_align(label_b, LV_ALIGN_TOP_LEFT, 0, verPad + 30 + 30 * 1);
-    lv_obj_align(lbl_voltageCalib_b, LV_ALIGN_TOP_LEFT, 160, verPad + 30 + 30 * 1);
+    lv_obj_align(Calib_GUI.lbl_voltageCalib_b, LV_ALIGN_TOP_LEFT, 160, verPad + 30 + 30 * 1);
 
     lv_label_set_text(label_Vin_calib, "Vin_cal = (Code-b)/m");
     lv_obj_align(label_Vin_calib, LV_ALIGN_TOP_LEFT, 0, verPad + 30 + 30 * 2);

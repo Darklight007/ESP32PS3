@@ -89,21 +89,22 @@ void DispObjects::barUpdate(void)
 
     if (Bar.changed)
     {
-        // lv_bar_set_value(Bar.bar, measured.value / maxValue * lv_bar_get_max_value(Bar.bar), LV_ANIM_OFF);
+        lv_bar_set_value(Bar.bar, measured.value / (maxValue/adjFactor) * lv_bar_get_max_value(Bar.bar), LV_ANIM_OFF);
         lv_obj_invalidate(Bar.bar);
         static double oldMaxValue{0};
         if (measured.absMax != oldMaxValue)
         {
-            lv_obj_set_x(Bar.bar_maxMarker, lv_obj_get_x(Bar.bar) + int(measured.absMax * lv_obj_get_width(Bar.bar) / maxValue) - 3);
+            lv_obj_set_x(Bar.bar_maxMarker, lv_obj_get_x(Bar.bar) + int(measured.absMax * lv_obj_get_width(Bar.bar) / (maxValue/adjFactor)) - 3);
             oldMaxValue = measured.absMax;
         }
 
         static double oldMinValue{0};
         if (measured.absMin != oldMinValue)
         {
-            lv_obj_set_x(Bar.bar_minMarker, lv_obj_get_x(Bar.bar) + int(measured.absMin * lv_obj_get_width(Bar.bar) / maxValue) - 3);
+            lv_obj_set_x(Bar.bar_minMarker, lv_obj_get_x(Bar.bar) + int(measured.absMin * lv_obj_get_width(Bar.bar) / (maxValue/adjFactor)) - 3);
             oldMinValue = measured.absMin;
         }
+        // lv_obj_set_width(Bar.bar_adjValue, ((adjValue-adjOffset) ) / maxValue * lv_bar_get_max_value(Bar.bar));
         // LV_LOG_USER("Voltage max bar:%f",Statistics.value);
         Bar.changed = false;
         // oldMaxValue=-INFINITY;
@@ -153,9 +154,10 @@ void DispObjects::SetUpdate(int value)
     // lv_disp_enable_invalidation( lv_disp_get_default(), false);
     // if (!lvglIsBusy)
     lv_label_set_text_fmt(label_setValue, "%+08.4f%s", (adjValue-adjOffset) / adjFactor, lv_label_get_text(label_unit));
-
-    lv_obj_set_width(Bar.bar_adjValue, ((adjValue-adjOffset) / adjFactor) / maxValue * lv_bar_get_max_value(Bar.bar));
+    lv_obj_set_width(Bar.bar_adjValue, ((adjValue-adjOffset) ) / maxValue * lv_bar_get_max_value(Bar.bar));
     // lv_obj_invalidate(label_setValue);
+
+    Serial.printf("\nmaxValue %15.5f  ",maxValue);
 }
 
 void DispObjects::Flush(void)
