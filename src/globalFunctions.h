@@ -1506,8 +1506,8 @@ void Task_ADC(void *pvParameters)
         if (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0) // avid conversion when spi is working!
         {
             PowerSupply.readVoltage();
+            PowerSupply.readCurrent();
         }
-        PowerSupply.readCurrent();
 
         PowerSupply.Power.measureUpdate(PowerSupply.Current.measured.Mean() * PowerSupply.Voltage.measured.Mean());
         // if (Tabs::getCurrentPage() != 2)
@@ -2659,21 +2659,21 @@ void autoScrollY()
     if (PowerSupply.graph.serV->hidden == PowerSupply.graph.serI->hidden &&
         PowerSupply.graph.serV->hidden == false)
 
-        ratio = .5 * ((PowerSupply.Current.measured.Mean() / (PowerSupply.Current.maxValue/PowerSupply.Current.adjFactor) +
-                      PowerSupply.Voltage.measured.Mean() / (PowerSupply.Voltage.maxValue/PowerSupply.Voltage.adjFactor)));
+        ratio = .5 * ((PowerSupply.Current.measured.Mean() / (PowerSupply.Current.maxValue / PowerSupply.Current.adjFactor) +
+                       PowerSupply.Voltage.measured.Mean() / (PowerSupply.Voltage.maxValue / PowerSupply.Voltage.adjFactor)));
 
     else if (!PowerSupply.graph.serV->hidden)
-        ratio = (PowerSupply.Voltage.measured.Mean() / (PowerSupply.Voltage.maxValue/PowerSupply.Voltage.adjFactor));
+        ratio = (PowerSupply.Voltage.measured.Mean() / (PowerSupply.Voltage.maxValue / PowerSupply.Voltage.adjFactor));
 
     else if (!PowerSupply.graph.serI->hidden)
-        ratio = (PowerSupply.Current.measured.Mean() / (PowerSupply.Current.maxValue/PowerSupply.Current.adjFactor));
+        ratio = (PowerSupply.Current.measured.Mean() / (PowerSupply.Current.maxValue / PowerSupply.Current.adjFactor));
 
     double calc = (lv_chart_get_zoom_y(PowerSupply.graph.chart) -
                    (ratio) * (lv_chart_get_zoom_y(PowerSupply.graph.chart) + 256)) /
                   2;
 
-     Serial.printf("\nhidden%i ratio:%5.3f  Calc Y:%5.3f",PowerSupply.graph.serV->hidden , 
-        ratio, lv_coord_t(calc));
+    Serial.printf("\nhidden%i ratio:%5.3f  Calc Y:%5.3f", PowerSupply.graph.serV->hidden,
+                  ratio, lv_coord_t(calc));
 
     lv_obj_scroll_to_y(PowerSupply.graph.chart, lv_coord_t(calc), LV_ANIM_OFF);
 }
@@ -3372,8 +3372,6 @@ void StatusBar()
     lv_label_set_text(lbl_voltageCalib_m, std::to_string(m).c_str());
     lv_label_set_text(lbl_voltageCalib_b, std::to_string(get_b(code1, m, vin1)).c_str());
 
-    
-
     if (lv_obj_is_visible(voltageCurrentCalibration))
     {
         // load_cb(NULL);
@@ -3415,33 +3413,60 @@ void StatusBar()
         // lv_event_send(btn_load, LV_EVENT_CLICKED, NULL);
     }
 
-    if (win_adc_already_created && lv_obj_is_visible(win_ADC_calibration))
+    // if (win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(win_ADC_voltage_calibration))
+    if (win_ADC_voltage_calibration != nullptr && (win_ADC_voltage_calibration))
     {
 
-            int code1 = lv_spinbox_get_value(Calib_GUI.code_1);
-            int code2 = lv_spinbox_get_value(Calib_GUI.code_2);
-            double vin1 = double(lv_spinbox_get_value(Calib_GUI.vin_1)) / 10000.0;
-            double vin2 = double(lv_spinbox_get_value(Calib_GUI.vin_2)) / 10000.0;
+        int code1 = lv_spinbox_get_value(Calib_GUI.code_1);
+        int code2 = lv_spinbox_get_value(Calib_GUI.code_2);
+        double vin1 = double(lv_spinbox_get_value(Calib_GUI.vin_1)) / 10000.0;
+        double vin2 = double(lv_spinbox_get_value(Calib_GUI.vin_2)) / 10000.0;
 
-            double m = get_m(code1, code2, vin1, vin2);
+        double m = get_m(code1, code2, vin1, vin2);
 
-            lv_label_set_text_fmt(Calib_GUI.lbl_voltageCalib_m, "%f", m);
-            lv_label_set_text_fmt(Calib_GUI.lbl_voltageCalib_b, "%f", get_b(code1, m, vin1));
+        lv_label_set_text_fmt(Calib_GUI.lbl_voltageCalib_m, "%f", m);
+        lv_label_set_text_fmt(Calib_GUI.lbl_voltageCalib_b, "%f", get_b(code1, m, vin1));
 
-            lv_label_set_text_fmt(Calib_GUI.lbl_rawCode, "%+08i", PowerSupply.Voltage.rawValue);
-            lv_label_set_text_fmt(Calib_GUI.lbl_rawAVG_, "%+08.0f", PowerSupply.Voltage.measured.Mean() * m + get_b(code1, m, vin1));
-            lv_label_set_text_fmt(Calib_GUI.lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
-            lv_label_set_text_fmt(Calib_GUI.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
-            lv_label_set_text_fmt(Calib_GUI.lbl_ER, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
-            
-            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
-            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2 = code2;
-            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_1 = vin1;
-            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_2 = vin2;
+        lv_label_set_text_fmt(Calib_GUI.lbl_rawCode, "%+08i", PowerSupply.Voltage.rawValue);
+        lv_label_set_text_fmt(Calib_GUI.lbl_rawAVG_, "%+08.0f", PowerSupply.Voltage.measured.Mean() * m + get_b(code1, m, vin1));
+        lv_label_set_text_fmt(Calib_GUI.lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
+        lv_label_set_text_fmt(Calib_GUI.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
+        lv_label_set_text_fmt(Calib_GUI.lbl_ER, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
 
-            PowerSupply.calibrationUpdate();
-        
+        PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
+        PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2 = code2;
+        PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_1 = vin1;
+        PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_2 = vin2;
+
+        PowerSupply.calibrationUpdate();
     }
+    if (win_ADC_current_calibration != nullptr && (win_ADC_current_calibration))
+    {
+
+        int code1 = lv_spinbox_get_value(Calib_GUI_current.code_1);
+        int code2 = lv_spinbox_get_value(Calib_GUI_current.code_2);
+        double vin1 = double(lv_spinbox_get_value(Calib_GUI_current.vin_1)) / 10000.0;
+        double vin2 = double(lv_spinbox_get_value(Calib_GUI_current.vin_2)) / 10000.0;
+
+        double m = get_m(code1, code2, vin1, vin2);
+
+        lv_label_set_text_fmt(Calib_GUI_current.lbl_voltageCalib_m, "%f", m);
+        lv_label_set_text_fmt(Calib_GUI_current.lbl_voltageCalib_b, "%f", get_b(code1, m, vin1));
+
+        lv_label_set_text_fmt(Calib_GUI_current.lbl_rawCode, "%+08i", PowerSupply.Current.rawValue);
+        lv_label_set_text_fmt(Calib_GUI_current.lbl_rawAVG_, "%+08.0f", PowerSupply.Current.measured.Mean() * m + get_b(code1, m, vin1));
+        lv_label_set_text_fmt(Calib_GUI_current.lbl_calibratedValue, "%+09.4f", PowerSupply.Current.measured.value);
+        lv_label_set_text_fmt(Calib_GUI_current.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Current.measured.Mean());
+        lv_label_set_text_fmt(Calib_GUI_current.lbl_ER, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
+
+        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_1 = code1;
+        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_2 = code2;
+        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.value_1 = vin1;
+        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.value_2 = vin2;
+
+        PowerSupply.calibrationUpdate();
+    }
+
     // if (PowerSupply.eepromWriteFlag)
     // {
     //     EEPROM.commit();
@@ -3775,6 +3800,15 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
     // static int32_t encoder1_last_value = 0;
     // static int32_t encoder2_last_value = 0;
 
+    // Serial.printf("\n Debbg point: win_adc_already_created %i", win_adc_already_created);
+    // Serial.printf("\n Debbg point: win_ADC_voltage_calibration %i", win_ADC_voltage_calibration);
+
+    // Serial.printf("\n Debug func: %s", __func__);
+    // Serial.printf("\n Debug line %i", __LINE__);
+
+    if (!obj_selected_spinbox)
+        return;
+
     if (lv_obj_is_visible(voltageCurrentCalibration))
     {
         static int32_t cursor_pos = 0;
@@ -3816,7 +3850,8 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
         // Update calibration label (if needed)
         // lv_label_set_text(lbl_voltageCalib_m, std::to_string(get_voltageCalib_m()).c_str());
     }
-    else if (win_dac_already_created && !lv_obj_is_visible(win_DAC_calibration) && win_adc_already_created && !lv_obj_is_visible(win_ADC_calibration))
+    else if (win_DAC_calibration != NULL && !lv_obj_is_visible(win_DAC_calibration) &&
+             win_ADC_voltage_calibration != nullptr && !lv_obj_is_visible(win_ADC_voltage_calibration))
     {
         // Handle menu navigation when calibration page is not visible
         // static int32_t lastValue = 0;
@@ -3843,7 +3878,7 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
             myTone(NOTE_A4, 3); // Play a tone if selection didn't change
     }
 
-    else if (win_dac_already_created && lv_obj_is_visible(win_DAC_calibration))
+    else if (win_DAC_calibration != nullptr && lv_obj_is_visible(win_DAC_calibration))
     {
         if (encoder1_last_value < encoder1_value)
             lv_spinbox_increment(obj_selected_spinbox);
@@ -3854,8 +3889,9 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
         encoder1_last_value = encoder1_value;
     }
 
-    else if (win_adc_already_created && lv_obj_is_visible(win_ADC_calibration))
+    else if (win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(win_ADC_voltage_calibration))
     {
+
         static int32_t cursor_pos = 0;
 
         if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
@@ -4279,7 +4315,10 @@ void print_obj_type(lv_obj_t *obj)
 void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_last_value)
 {
     if (!obj_selected_spinbox)
+    {
+
         handleUtilityPage(encoder1_last_value, encoder2_last_value);
+    }
     else
     {
         static int32_t cursor_pos = 0;
@@ -4364,6 +4403,7 @@ void managePageEncoderInteraction()
         break;
 
     case 4: // Calibration Page
+
         handleCalibrationPage(encoder1_last_value, encoder2_last_value);
         break;
 

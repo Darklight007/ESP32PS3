@@ -388,17 +388,20 @@ void Device::readVoltage()
     {
         constexpr float adcRateCompensation[4] = {
             1.00000f,               // 20 SPS
-            32.0000f/31.99946f ,    // 90 SPS
-            32.0000f/31.99709f ,    // 330 SPS
-            32.0000f/31.99205f      // 1000 SPS
+            32.0000f/31.9985f ,    // 90 SPS
+            32.0000f/31.9945f ,    // 330 SPS
+            32.0000f/31.9882f      // 1000 SPS
         };
 
         
         static double v;
         Voltage.rawValue = adc.readConversion();
         adcDataReady = false;
-
+        adc.ads1219->setGain(ONE); // Gain 4 for Current
+        
         adc.startConversion(CURRENT, REF_EXTERNAL); // REF_EXTERNAL
+        
+        
 
         v = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
 
@@ -409,8 +412,12 @@ void Device::readVoltage()
         adc.ADC_loopCounter++;
         // myTone(NOTE_A3, 1);
  
+        static  double factor = lv_bar_get_max_value(Voltage.Bar.bar)/( Voltage.maxValue/Voltage.adjFactor );
 
-        // *Voltage.Bar.curValuePtr = uint16_t(v * 8);
+
+        *Voltage.Bar.curValuePtr = v *factor; //uint16_t(v * 8);
+
+
         // lv_obj_invalidate(Voltage.Bar.bar);
         
         // Serial.printf("\n%9.4f %10.5f %5.2f %i", v, Voltage.Statistics.Mean(),Voltage.effectiveResolution.Mean(),
@@ -428,6 +435,7 @@ void Device::readCurrent()
         static double c;
         Current.rawValue = adc.readConversion();
         adcDataReady = false;
+        adc.ads1219->setGain(ONE); // Gain 1 for voltage
         adc.startConversion(VOLTAGE, REF_EXTERNAL); // REF_EXTERNAL
 
         double currentOfR11R12_arrR2 = 1.0 * Voltage.measured.Mean() / 45.714e3; // Current consuming by R11, R12 and ARR_R2
@@ -445,6 +453,8 @@ void Device::readCurrent()
         // Current.hist[c];
 
         Current.measureUpdate(c);
+        *Current.Bar.curValuePtr = c / (Current.maxValue/Current.adjFactor) * lv_bar_get_max_value(Current.Bar.bar); //uint16_t(v * 8);
+
 
         // Serial.print (c);
         // Serial.print(",  Current:");
@@ -454,19 +464,20 @@ void Device::readCurrent()
         // Serial.print(":");
         // Serial.print(Current.measured.sum_);
         // Serial.print("\n");
-        *Current.Bar.curValuePtr = c * Current.Bar.scaleFactor;
+        // *Current.Bar.curValuePtr = c * Current.Bar.scaleFactor;
         // lv_obj_invalidate(Current.Bar.bar);
         static unsigned long loopCount = 0;
         static unsigned long startTime = millis();
 
-        adc.ADC_loopCounter++;
-        if ((startTime + 1000) <= millis())
-        {
-            adc.realADCSpeed = adc.ADC_loopCounter;
-            // Serial.printf("\nDC real SPS for 1 ch:%4i ",  adc.ADC_loopCounter);
-            adc.ADC_loopCounter = 0;
-            startTime = millis();
-        }
+        // adc.ADC_loopCounter++;
+        // if ((startTime + 1000) <= millis())
+        // {
+        //     adc.realADCSpeed = adc.ADC_loopCounter;
+        //     Serial.printf("\nADC real SPS for 1 ch:%4i ",  adc.ADC_loopCounter);
+        //     adc.ADC_loopCounter = 0;
+        //     startTime = millis();
+        // }
+
     }
     static unsigned long loopCount = 0;
     static unsigned long startTime = millis();
@@ -480,6 +491,8 @@ void Device::readCurrent()
         ADC_loopCheckCounter = 0;
         startTime = millis();
     }
+    
+
 }
 void Device::getPower()
 {

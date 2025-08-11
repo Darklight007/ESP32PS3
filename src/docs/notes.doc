@@ -1,3 +1,48 @@
+
+Temp/Time drifts
+
+With Fuck R arrau
+Time(s)|temp|Real Output|  ADC  |
+0      |24.5| 32.7480   |32.7460|               
+1      |24.6| 32.7496   |32.7460|               
+60     |----| 32.7497   |32.7468|             
+180    |27.5| 32.7501   |32.7471|        
+600    |35.3| 32.7503   |32.7482|     
+
+With Good R array
+Time(s)|temp|Real Output|  ADC  |
+0      |24.5| 32.7493   |32.7475|
+1      |24.6| 32.7496   |32.7482|
+60     |25.0| 32.7497   |32.7485|
+180    |27.5| 32.7501   |32.7490|
+600    |35.3| 32.7503   |32.7494|
+5h30m  |46.9| 32.7497   |32.7491|
+
+0v-->32.75
+5h30m  |46.9| 32.7497   |32.7485|     
+
+
+
+With Good R array
+Time(s)|temp|Real Output|  ADC  |
+0      |24.5| 32.7496   |32.7459|               
+1      |24.6| 32.7496   |32.7460|
+60     |25.0| 32.7497   |32.7465|     
+180    |27.5| 32.7501   |32.7470| 
+600    |33.8| 32.7503   |32.7475|
+
+
+With new R11/R12
+
+Time(s)|temp|Real Output|  ADC  |
+0      |24.3| 32.7513   |32.7496|               
+1      |24.3| 32.7513   |32.7500|               
+xx     |27.6| 32.7503   |32.7500|
+37m    |31.7| 32.7513   |32.7502|     
+180    |27.5| 32.7501   |32.7470| 
+600    |33.8| 32.7503   |32.7475|
+
+
 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
 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
 

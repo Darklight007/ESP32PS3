@@ -157,7 +157,7 @@ void DispObjects::SetUpdate(int value)
     lv_obj_set_width(Bar.bar_adjValue, ((adjValue-adjOffset) ) / maxValue * lv_bar_get_max_value(Bar.bar));
     // lv_obj_invalidate(label_setValue);
 
-    Serial.printf("\nmaxValue %15.5f  ",maxValue);
+    // Serial.printf("\nmaxValue %15.5f  ",maxValue);
 }
 
 void DispObjects::Flush(void)
@@ -508,7 +508,7 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     lv_obj_t *lineMj[7];
     lv_obj_t *lineMn[32];
 
-    double tickDist = barLength / floor(maxValue * 5.0 / mTick);
+    double tickDist = barLength / floor(maxValue/adjFactor * 5.0 / mTick);
 
     for (auto i = 0; i < 7; i++)
     {
@@ -516,6 +516,7 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
         lv_line_set_points(lineMj[i], majorTick, 2); /*Set the points*/
         lv_obj_align(lineMj[i], 0, 2 + i * tickDist * 5, 70 + 1);
     }
+
     for (auto i = 0; i < 32; i++)
     {
         lineMn[i] = lv_line_create(label_set);
@@ -539,7 +540,7 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     lv_obj_add_style(Bar.bar_maxValue, &style_barMaxValue, LV_STATE_DEFAULT);
     lv_obj_align(Bar.bar_maxValue, LV_ALIGN_DEFAULT, x + barLength + 26, 70 - 2);
     // voltageScaleFactor
-    Bar.scaleFactor = lv_bar_get_max_value(Bar.bar) / maxValue;
+    Bar.scaleFactor = lv_bar_get_max_value(Bar.bar) / (maxValue/adjFactor)*.5;
     Bar.curValuePtr = &((lv_bar_t *)Bar.bar)->cur_value;
 
     //  int32_t *curValuePtr = &((lv_bar_t *)PowerSupply.Voltage.Bar.bar)->cur_value;

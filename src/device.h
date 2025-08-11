@@ -275,8 +275,9 @@ public:
     {
 
         // ads1219->setVoltageReference(REF_INTERNAL);
-        ads1219->setVoltageReference(vref);
-        ads1219->setGain(gain);
+
+        // ads1219->setVoltageReference(vref);
+        // ads1219->setGain(gain);
 
         // if (channel == VOLTAGE)
         //     // ads1219->readDifferential_0_1();

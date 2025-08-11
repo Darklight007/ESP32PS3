@@ -112,7 +112,7 @@ void initializeDisplay()
 void initializeTouch()
 {
     // Touchscreen calibration data (rotation 3)
-    uint16_t calData[5] = {366, 3445, 310, 3406, 1};
+    uint16_t calData[5] = {366, 3445, 310, 3406, 1}; //475, 3300, 212, 3360, 1
     tft.setTouch(calData);
     Serial.println("Touch Screen Calibrated.");
 }

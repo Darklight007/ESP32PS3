@@ -17,11 +17,14 @@ lv_obj_t *menu;
 lv_obj_t *voltageCurrentCalibration;
 lv_obj_t *myTextBox;
 
-lv_obj_t *win_DAC_calibration;
-lv_obj_t *win_ADC_calibration;
+lv_obj_t *win_DAC_calibration = nullptr;
+;
+lv_obj_t *win_ADC_voltage_calibration = nullptr;
+lv_obj_t *win_ADC_current_calibration = nullptr;
 
-static bool win_dac_already_created = false;
-static bool win_adc_already_created = false;
+
+// static bool win_adc_already_created = false;
+// static bool win_dac_already_created = false;
 
 bool isMyTextBoxHidden;
 enum
@@ -115,7 +118,7 @@ struct setting_GUI
     lv_obj_t *vin_2;
     lv_obj_t *code_1;
     lv_obj_t *code_2;
-    
+
     lv_obj_t *lbl_voltageCalib_m;
     lv_obj_t *lbl_voltageCalib_b;
     lv_obj_t *lbl_rawCode;
@@ -123,9 +126,25 @@ struct setting_GUI
     lv_obj_t *lbl_rawAVG_;
     lv_obj_t *lbl_calibValueAVG_;
     lv_obj_t *lbl_ER;
-    
 
-} Calib_GUI;
+} Calib_GUI,Calib_GUI_current;
+
+
+// struct setting_GUI
+// {
+//     lv_obj_t *vin_1;
+//     lv_obj_t *vin_2;
+//     lv_obj_t *code_1;
+//     lv_obj_t *code_2;
+
+//     lv_obj_t *lbl_voltageCalib_m;
+//     lv_obj_t *lbl_voltageCalib_b;
+//     lv_obj_t *lbl_rawCode;
+//     lv_obj_t *lbl_calibratedValue;
+//     lv_obj_t *lbl_rawAVG_;
+//     lv_obj_t *lbl_calibValueAVG_;
+//     lv_obj_t *lbl_ER;
+// } Calib_GUI_current;
 
 // lv_obj_t *lbl_currentCalib_m;
 // lv_obj_t *lbl_currentCalib_b;
@@ -274,6 +293,24 @@ static void load_cb(lv_event_t *e)
         lv_spinbox_set_value(code2_, 1.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_2);
         lv_spinbox_set_value(vin1_, 10000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.value_1);
         lv_spinbox_set_value(vin2_, 10000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.value_2);
+    }
+
+    if (win_ADC_voltage_calibration != nullptr && !lv_obj_has_flag(win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN))
+    {
+        lv_spinbox_set_value(Calib_GUI.code_1, 1.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1);
+        lv_spinbox_set_value(Calib_GUI.code_2, 1.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2);
+        lv_spinbox_set_value(Calib_GUI.vin_1, 10'000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_1);
+        lv_spinbox_set_value(Calib_GUI.vin_2, 10'000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_2);
+
+        // lv_label_set_text_fmt(Calib_GUI.lbl_voltageCalib_m, "%.6f", get_voltageCalib_m());
+        
+    }
+    if (win_ADC_current_calibration != nullptr && !lv_obj_has_flag(win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN))
+    {
+        lv_spinbox_set_value(Calib_GUI_current.code_1, 1.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_1);
+        lv_spinbox_set_value(Calib_GUI_current.code_2, 1.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_2);
+        lv_spinbox_set_value(Calib_GUI_current.vin_1, 10'000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.value_1);
+        lv_spinbox_set_value(Calib_GUI_current.vin_2, 10'000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.value_2);
     }
 }
 
@@ -727,7 +764,7 @@ void SettingMenu(lv_obj_t *parent)
     section = lv_menu_section_create(sub_calibration_page);
     create_pushbutton(section, NULL, btn_calibration_ADC_event_cb, LV_SYMBOL_CHARGE, "V/I ADC");
     create_pushbutton(section, NULL, btn_calibration_ADC_Voltage_event_cb, LV_SYMBOL_CHARGE, "ADC Voltage");
-    create_pushbutton(section, NULL, btn_calibration_ADC_Voltage_event_cb, LV_SYMBOL_CHARGE, "ADC Current");
+    create_pushbutton(section, NULL, btn_calibration_ADC_Current_event_cb, LV_SYMBOL_CHARGE, "ADC Current");
     create_pushbutton(section, NULL, btn_calibration_DAC_event_cb, LV_SYMBOL_CHARGE, "V/I DAC");
     create_pushbutton(section, NULL, LCD_Calibration_cb, "", "LCD Touch");
     create_pushbutton(section, NULL, NULL, "Statistics", "Reset Stats");
@@ -1127,15 +1164,15 @@ void createLine2(lv_obj_t *parent, const lv_point_t points[], lv_coord_t width, 
 static void btn_calibration_ADC_Voltage_event_cb(lv_event_t *e)
 {
 
-    if (win_adc_already_created)
+    if (win_ADC_voltage_calibration != nullptr)
     {
-        lv_obj_clear_flag(win_ADC_calibration, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN);
         return;
     }
 
-    win_ADC_calibration = lv_win_create(lv_scr_act(), 32);
-    lv_obj_set_size(win_ADC_calibration, 320, 226);
-    lv_win_add_title(win_ADC_calibration, "ADC Voltage Calibration");
+    win_ADC_voltage_calibration = lv_win_create(lv_scr_act(), 32);
+    lv_obj_set_size(win_ADC_voltage_calibration, 320, 226);
+    lv_win_add_title(win_ADC_voltage_calibration, "ADC Voltage Calibration");
 
     lv_obj_t *btn;
     // btn = lv_win_add_btn(win_DAC_calibration, LV_SYMBOL_LEFT, 40);
@@ -1144,11 +1181,11 @@ static void btn_calibration_ADC_Voltage_event_cb(lv_event_t *e)
     // btn = lv_win_add_btn(win_DAC_calibration, LV_SYMBOL_RIGHT, 40);
     // lv_obj_add_event_cb(btn, event_handler, LV_EVENT_CLICKED, NULL);
 
-    btn = lv_win_add_btn(win_ADC_calibration, LV_SYMBOL_CLOSE, 60);
+    btn = lv_win_add_btn(win_ADC_voltage_calibration, LV_SYMBOL_CLOSE, 60);
     // lv_obj_add_event_cb(btn, event_handler, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(btn, btn_close_hide_obj_cb, LV_EVENT_CLICKED, NULL);
 
-    static lv_obj_t *cont = lv_win_get_content(win_ADC_calibration); /*Content can be added here*/
+    static lv_obj_t *cont = lv_win_get_content(win_ADC_voltage_calibration); /*Content can be added here*/
     lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
     // lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
@@ -1204,8 +1241,10 @@ static void btn_calibration_ADC_Voltage_event_cb(lv_event_t *e)
 
     lv_point_t btn_pos = {140 + offset.x, 160};
 
-    LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 54, 26, &style_btn_loadSave, load_cb);
     LVButton btnSave(cont, "Save", btn_pos.x + 62, btn_pos.y, 54, 26, &style_btn_loadSave, save_cb);
+    LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 54, 26, &style_btn_loadSave, load_cb);
+
+    // lv_obj_add_event_cb(setBtnLoad, &SPINBOXuPDATE, LV_EVENT_RELEASED, nullptr);
 
     int yOffset = 160;
     int xoff = 60;
@@ -1235,16 +1274,14 @@ static void btn_calibration_ADC_Voltage_event_cb(lv_event_t *e)
     LVLine::create(cont, {{0, 40}, {70, 40}}, 1, &line_style2, 0x080808, 5, 0, xoff, yOffset - 40 + yshift);
 
     LVLine::create(cont, {{0, 0}, {0, 40}}, 1, &line_style2, 0x0a0a0a, 5, 0, xoff, yOffset + yshift);
-    lv_obj_t* bl = LVLine::create(cont, {{0, 0}, {0, 40}}, 1, &line_style2, 0x6a6a6a, 5, 0, 70 + xoff, yOffset + yshift);
-
-    win_adc_already_created = true;
+    lv_obj_t *bl = LVLine::create(cont, {{0, 0}, {0, 40}}, 1, &line_style2, 0x6a6a6a, 5, 0, 70 + xoff, yOffset + yshift);
 
     yOffset -= +10 - 65;
 
-    LVLabel::create(cont, "#FFFFF7 Code2#", bl , -105, -20, &style_spinboxLbl);
-    LVLabel::create(cont, "#FFFFF7 Code1#", bl , -105, -37, &style_spinboxLbl);
-    LVLabel::create(cont, "#FFFFF7 Vin1#", bl , -105+38, -20+25, &style_spinboxLbl);
-    LVLabel::create(cont, "#FFFFF7 Vin2#", bl , -105+38+49, -20+25, &style_spinboxLbl);
+    LVLabel::create(cont, "#FFFFF7 Code2#", bl, -105, -20, &style_spinboxLbl);
+    LVLabel::create(cont, "#FFFFF7 Code1#", bl, -105, -37, &style_spinboxLbl);
+    LVLabel::create(cont, "#FFFFF7 Vin1#", bl, -105 + 38, -20 + 25, &style_spinboxLbl);
+    LVLabel::create(cont, "#FFFFF7 Vin2#", bl, -105 + 38 + 49, -20 + 25, &style_spinboxLbl);
 
     // return;
     // lv_obj_t *label_title = lv_label_create(cont);
@@ -1285,10 +1322,172 @@ static void btn_calibration_ADC_Voltage_event_cb(lv_event_t *e)
     // lv_obj_align(dummy, LV_ALIGN_TOP_LEFT, 65, verPad + 60 + 30 * 3);
 }
 
+//
+static void btn_calibration_ADC_Current_event_cb(lv_event_t *e)
+{
+
+    if (win_ADC_current_calibration != nullptr)
+    {
+        lv_obj_clear_flag(win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+
+    win_ADC_current_calibration = lv_win_create(lv_scr_act(), 32);
+    lv_obj_set_size(win_ADC_current_calibration, 320, 226);
+    lv_win_add_title(win_ADC_current_calibration, "ADC Current Calibration");
+
+    lv_obj_t *btn;
+    // btn = lv_win_add_btn(win_DAC_calibration, LV_SYMBOL_LEFT, 40);
+    // lv_obj_add_event_cb(btn, event_handler, LV_EVENT_CLICKED, NULL);
+
+    // btn = lv_win_add_btn(win_DAC_calibration, LV_SYMBOL_RIGHT, 40);
+    // lv_obj_add_event_cb(btn, event_handler, LV_EVENT_CLICKED, NULL);
+
+    btn = lv_win_add_btn(win_ADC_current_calibration, LV_SYMBOL_CLOSE, 60);
+    // lv_obj_add_event_cb(btn, event_handler, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(btn, btn_close_hide_obj_cb, LV_EVENT_CLICKED, NULL);
+
+    static lv_obj_t *cont = lv_win_get_content(win_ADC_current_calibration); /*Content can be added here*/
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
+    // lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
+    // lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+
+    static lv_style_t style_btn_loadSave;
+    lv_style_init(&style_btn_loadSave);
+    lv_style_set_bg_color(&style_btn_loadSave, lv_palette_main(LV_PALETTE_BLUE));
+    // lv_obj_add_style(dd_calibration_, &style_btn_loadSave, LV_STATE_DEFAULT);
+
+    /********************
+     * Spinbox
+     ********************/
+    int verPad = 0;
+    lv_point_t offset = {10, 20};
+    lv_coord_t spinbox_width = 110;
+    lv_coord_t column_next = spinbox_width + 30;
+    lv_coord_t row_next = 38;
+    lv_point_t pad = {5, 5};
+    Calib_GUI_current.vin_1 = spinbox_pro(cont, "#FFFFF7 Vin1:#", -10'000, 400'000, 6, 2, LV_ALIGN_TOP_LEFT, offset.x, offset.y, spinbox_width, 10);
+    Calib_GUI_current.code_1 = spinbox_pro(cont, "#FFFFF7 Code1:#", -10'000, 8'388'608, 7, 0, LV_ALIGN_TOP_LEFT, offset.x, offset.y + row_next, spinbox_width, 11);
+    Calib_GUI_current.vin_2 = spinbox_pro(cont, "#FFFFF7 Vin2:#", -10'000, 400'000, 6, 2, LV_ALIGN_TOP_LEFT, offset.x + column_next, offset.y, spinbox_width, 12);
+    Calib_GUI_current.code_2 = spinbox_pro(cont, "#FFFFF7 Code2:#", -10'000, 8'388'608, 7, 0, LV_ALIGN_TOP_LEFT, offset.x + column_next, offset.y + row_next, spinbox_width, 13);
+
+    lv_spinbox_set_value(Calib_GUI_current.code_1, 1.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_1);
+    lv_spinbox_set_value(Calib_GUI_current.code_2, 1.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_2);
+    lv_spinbox_set_value(Calib_GUI_current.vin_1, 10'000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.value_1);
+    lv_spinbox_set_value(Calib_GUI_current.vin_2, 10'000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.value_2);
+
+    static lv_style_t style_spinboxLbl;
+    lv_style_init(&style_spinboxLbl);
+    lv_style_set_text_font(&style_spinboxLbl, &lv_font_montserrat_10); //    &Undertale_16b1); //
+    lv_style_set_bg_color(&style_spinboxLbl, lv_color_hex(0xFF0000));
+
+    static lv_style_t style_;
+    lv_style_init(&style_);
+    lv_style_set_text_font(&style_, &graph_R_16); //&Undertale_16b1); //
+    lv_style_set_text_color(&style_, lv_color_hex(0xFFFFFF));
+    lv_style_set_bg_color(&style_, lv_color_hex(0xFFAAAA));
+
+    lv_obj_t *lbl_raw = LVLabel::create(cont, "Raw Code:", Calib_GUI_current.code_1, 0, pad.y, &style_spinboxLbl);
+    Calib_GUI_current.lbl_rawCode = LVLabel::create(cont, "#FFFFF7 838860080#", lbl_raw, 0, pad.y - 2, &style_);
+    lv_obj_t *lbl_rawAVG = LVLabel::create(cont, "Avg Raw:", Calib_GUI_current.lbl_rawCode, 0, pad.y, &style_spinboxLbl);
+    Calib_GUI_current.lbl_rawAVG_ = LVLabel::create(cont, "+21657651", lbl_rawAVG, 0, pad.y - 2, &style_);
+
+    lv_obj_t *lbl_calibValue = LVLabel::create(cont, "Calibrated Value:", Calib_GUI_current.code_2, 0, pad.y, &style_spinboxLbl);
+    Calib_GUI_current.lbl_calibratedValue = LVLabel::create(cont, "15.01256V", lbl_calibValue, 0, pad.y - 2, &style_);
+    lv_obj_t *lbl_calibValueAVG = LVLabel::create(cont, "Avg Calibrated Value:", Calib_GUI_current.lbl_calibratedValue, 0, pad.y, &style_spinboxLbl);
+    Calib_GUI_current.lbl_calibValueAVG_ = LVLabel::create(cont, "+019.0154", lbl_calibValueAVG, 0, pad.y - 2, &style_);
+
+    lv_obj_t *lbl_ER = LVLabel::create(cont, "Effective Resolution:", Calib_GUI_current.lbl_rawAVG_, 0, pad.y, &style_spinboxLbl);
+    Calib_GUI_current.lbl_ER = LVLabel::create(cont, "17.23", lbl_ER, 0, pad.y - 2, &style_);
+
+    lv_point_t btn_pos = {140 + offset.x, 160};
+
+    LVButton btnSave(cont, "Save", btn_pos.x + 62, btn_pos.y, 54, 26, &style_btn_loadSave, save_cb);
+    LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 54, 26, &style_btn_loadSave, load_cb);
+
+    // lv_obj_add_event_cb(setBtnLoad, &SPINBOXuPDATE, LV_EVENT_RELEASED, nullptr);
+
+    int yOffset = 160;
+    int xoff = 60;
+    static lv_style_t line_style;
+    lv_style_init(&line_style);
+
+    static lv_style_t dash_style;
+    lv_style_init(&dash_style);
+
+    // static lv_point_t points[] =  {{0, 80}, {70, 50}};
+    LVLine::create(cont, {{0, 80}, {70, 50}}, 3, &line_style, 0xffc107, 5, 0, xoff, yOffset - 5);
+
+    // static lv_point_t line_points[] = {{0, 80}, {70, 50}};
+
+    LVLine::create(cont, {{0, 0}, {70, 0}}, 1, &dash_style, 0xffffff, 5, 6, xoff, yOffset - 30 + 80);
+    LVLine::create(cont, {{62, 0}, {62, 40}}, 1, &dash_style, 0xffffff, 5, 3, xoff, yOffset + 40);
+    LVLine::create(cont, {{0, 0}, {20, 0}}, 1, &dash_style, 0xffffff, 2, 6, xoff, yOffset - 12 + 80);
+    LVLine::create(cont, {{13, 0}, {13, 15}}, 1, &dash_style, 0xffffff, 2, 3, xoff, yOffset + 64);
+    // return;
+
+    // Rectangular frame
+    static lv_style_t line_style2;
+    lv_style_init(&line_style2);
+    int yshift = 40;
+
+    LVLine::create(cont, {{0, 40}, {70, 40}}, 1, &line_style2, 0x080808, 5, 0, xoff, yOffset + yshift);
+    LVLine::create(cont, {{0, 40}, {70, 40}}, 1, &line_style2, 0x080808, 5, 0, xoff, yOffset - 40 + yshift);
+
+    LVLine::create(cont, {{0, 0}, {0, 40}}, 1, &line_style2, 0x0a0a0a, 5, 0, xoff, yOffset + yshift);
+    lv_obj_t *bl = LVLine::create(cont, {{0, 0}, {0, 40}}, 1, &line_style2, 0x6a6a6a, 5, 0, 70 + xoff, yOffset + yshift);
+
+    yOffset -= +10 - 65;
+
+    LVLabel::create(cont, "#FFFFF7 Code2#", bl, -105, -20, &style_spinboxLbl);
+    LVLabel::create(cont, "#FFFFF7 Code1#", bl, -105, -37, &style_spinboxLbl);
+    LVLabel::create(cont, "#FFFFF7 Vin1#", bl, -105 + 38, -20 + 25, &style_spinboxLbl);
+    LVLabel::create(cont, "#FFFFF7 Vin2#", bl, -105 + 38 + 49, -20 + 25, &style_spinboxLbl);
+
+    // return;
+    // lv_obj_t *label_title = lv_label_create(cont);
+    lv_obj_t *label_m = lv_label_create(cont);
+    lv_obj_t *label_m_num = lv_label_create(cont);
+    lv_obj_t *label_m_den = lv_label_create(cont);
+    lv_obj_t *label_b = lv_label_create(cont);
+    lv_obj_t *label_Vin_calib = lv_label_create(cont);
+
+    // lv_label_set_text(label_title, "Voltage Calibration");
+    // lv_obj_align(label_title, LV_ALIGN_TOP_LEFT, 127, 0);
+
+    // memory = ESP.getFreeHeap();
+    lv_label_set_text(label_m_num, "Code2 - Code1");
+    lv_label_set_text(label_m, "m = --------------------- =");
+    lv_label_set_text(label_m_den, "Vin2 - Vin1");
+
+    // LV_LOG_USER("Used memory:%i", memory - ESP.getFreeHeap());
+    verPad += yOffset + 50;
+    lv_obj_align(label_m_num, LV_ALIGN_TOP_LEFT, 35, verPad + 10);
+    lv_obj_align(label_m, LV_ALIGN_TOP_LEFT, 0, verPad + 20);
+    lv_obj_align(label_m_den, LV_ALIGN_TOP_LEFT, 50, verPad + 30);
+
+    Calib_GUI_current.lbl_voltageCalib_m = lv_label_create(cont);
+    Calib_GUI_current.lbl_voltageCalib_b = lv_label_create(cont);
+
+    lv_obj_align(Calib_GUI_current.lbl_voltageCalib_m, LV_ALIGN_TOP_LEFT, 160, verPad + 20);
+
+    lv_label_set_text(label_b, "b = Code1 - m * Vin1 =");
+    lv_obj_align(label_b, LV_ALIGN_TOP_LEFT, 0, verPad + 30 + 30 * 1);
+    lv_obj_align(Calib_GUI_current.lbl_voltageCalib_b, LV_ALIGN_TOP_LEFT, 160, verPad + 30 + 30 * 1);
+
+    lv_label_set_text(label_Vin_calib, "Vin_cal = (Code-b)/m");
+    lv_obj_align(label_Vin_calib, LV_ALIGN_TOP_LEFT, 0, verPad + 30 + 30 * 2);
+
+    // lv_obj_t *dummy = lv_label_create(cont);
+    // lv_label_set_text(dummy, "");
+    // lv_obj_align(dummy, LV_ALIGN_TOP_LEFT, 65, verPad + 60 + 30 * 3);
+}
+
 static void btn_calibration_DAC_event_cb(lv_event_t *e)
 {
 
-    if (win_dac_already_created)
+    if (win_DAC_calibration != nullptr)
     {
         lv_obj_clear_flag(win_DAC_calibration, LV_OBJ_FLAG_HIDDEN);
         return;
@@ -1430,7 +1629,7 @@ static void btn_calibration_DAC_event_cb(lv_event_t *e)
 
     lv_obj_add_event_cb(zc, DAC_current_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(mc, DAC_current_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    win_dac_already_created = true;
+    // win_dac_already_created = true;
 
     return;
     lv_obj_t *DAC_Calibration = lv_obj_create(lv_scr_act());

@@ -101,7 +101,7 @@ void loop()
 
   statisticUpdateInterval(333);
   // FFTUpdateInterval(1000);
-  EncoderRestartInterval(1000); //--> some bugs?
+  EncoderRestartInterval(2000); //--> some bugs?
   managePageEncoderInteraction();
 
   // if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
