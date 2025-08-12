@@ -143,6 +143,13 @@ static void draw_event_cb2(lv_event_t *e);
  * @brief Construct a new ESP32Encoder object
  * @param ...
  */
+void hide(lv_obj_t *obj)
+{
+    if (obj)
+    {
+        lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    }
+}
 
 /********************************************************/
 void btn_event_cb(lv_event_t *e)
@@ -2758,7 +2765,12 @@ void keyCheckLoop()
     keyMenus('H', " RELEASED.", []
              {
                  Tabs::goToHomeTab();
-                 lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN); });
+                 lv_obj_add_flag(voltageCurrentCalibration,LV_OBJ_FLAG_HIDDEN);
+                 hide(win_ADC_voltage_calibration);
+                 hide(win_ADC_current_calibration);
+                 hide(win_DAC_calibration); }
+
+    );
 
     keyMenus('H', " HOLD.", [] // Home button
              {
@@ -3414,7 +3426,7 @@ void StatusBar()
     }
 
     // if (win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(win_ADC_voltage_calibration))
-    if (win_ADC_voltage_calibration != nullptr && (win_ADC_voltage_calibration))
+    if (win_ADC_voltage_calibration != nullptr && !lv_obj_has_flag(win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN))
     {
 
         int code1 = lv_spinbox_get_value(Calib_GUI.code_1);
@@ -3440,7 +3452,7 @@ void StatusBar()
 
         PowerSupply.calibrationUpdate();
     }
-    if (win_ADC_current_calibration != nullptr && (win_ADC_current_calibration))
+    if (win_ADC_current_calibration != nullptr && !lv_obj_has_flag(win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN))
     {
 
         int code1 = lv_spinbox_get_value(Calib_GUI_current.code_1);
@@ -3450,8 +3462,8 @@ void StatusBar()
 
         double m = get_m(code1, code2, vin1, vin2);
 
-        lv_label_set_text_fmt(Calib_GUI_current.lbl_voltageCalib_m, "%f", m);
-        lv_label_set_text_fmt(Calib_GUI_current.lbl_voltageCalib_b, "%f", get_b(code1, m, vin1));
+        lv_label_set_text_fmt(Calib_GUI_current.lbl_currentCalib_m, "%f", m);
+        lv_label_set_text_fmt(Calib_GUI_current.lbl_currentCalib_b, "%f", get_b(code1, m, vin1));
 
         lv_label_set_text_fmt(Calib_GUI_current.lbl_rawCode, "%+08i", PowerSupply.Current.rawValue);
         lv_label_set_text_fmt(Calib_GUI_current.lbl_rawAVG_, "%+08.0f", PowerSupply.Current.measured.Mean() * m + get_b(code1, m, vin1));
@@ -3889,7 +3901,8 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
         encoder1_last_value = encoder1_value;
     }
 
-    else if (win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(win_ADC_voltage_calibration))
+    else if (win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(win_ADC_voltage_calibration) ||
+             win_ADC_current_calibration != nullptr && lv_obj_is_visible(win_ADC_current_calibration))
     {
 
         static int32_t cursor_pos = 0;

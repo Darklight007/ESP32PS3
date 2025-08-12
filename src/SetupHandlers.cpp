@@ -222,10 +222,10 @@ void setupPowerSupply()
 
     // Set window sizes for measurements and statistics
     PowerSupply.Voltage.measured.SetWindowSize(MAX_NO_OF_AVG);
-    PowerSupply.Voltage.Statistics.SetWindowSize(4096);
+    PowerSupply.Voltage.Statistics.SetWindowSize(512);
 
     PowerSupply.Current.measured.SetWindowSize(MAX_NO_OF_AVG);
-    PowerSupply.Current.Statistics.SetWindowSize(4096);
+    PowerSupply.Current.Statistics.SetWindowSize(512);
 
     PowerSupply.Power.measured.SetWindowSize(MAX_NO_OF_AVG);
     PowerSupply.Power.Statistics.SetWindowSize(1);

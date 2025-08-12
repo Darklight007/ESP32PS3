@@ -239,7 +239,6 @@ void Device::LoadSetting(void)
         dac_data_g.max_current = 65535;
 
         SaveDACdata("dac_data_", dac_data_g);
-
     }
     // memory.putUShort("pi", 0);
     memory.end();
@@ -383,43 +382,38 @@ void Device::readVoltage()
                                     adding 10uf cap to ref SPI noise gone
                                     && (!lvglIsBusy  || settingParameters.adcRate!=0 )
                                     */
-                                                                        ))
+                                    ))
 
     {
         constexpr float adcRateCompensation[4] = {
-            1.00000f,               // 20 SPS
-            32.0000f/31.9985f ,    // 90 SPS
-            32.0000f/31.9945f ,    // 330 SPS
-            32.0000f/31.9882f      // 1000 SPS
+            1.00000f,            // 20 SPS
+            32.0000f / 31.9985f, // 90 SPS
+            32.0000f / 31.9945f, // 330 SPS
+            32.0000f / 31.9882f  // 1000 SPS
         };
 
-        
         static double v;
         Voltage.rawValue = adc.readConversion();
         adcDataReady = false;
         adc.ads1219->setGain(ONE); // Gain 4 for Current
-        
+
         adc.startConversion(CURRENT, REF_EXTERNAL); // REF_EXTERNAL
-        
-        
 
         v = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
 
-        v*=adcRateCompensation[settingParameters.adcRate];
+        v *= adcRateCompensation[settingParameters.adcRate];
 
         // Voltage.hist[v];
         Voltage.measureUpdate(v); //  enob(rs[0].StandardDeviation())
         adc.ADC_loopCounter++;
         // myTone(NOTE_A3, 1);
- 
-        static  double factor = lv_bar_get_max_value(Voltage.Bar.bar)/( Voltage.maxValue/Voltage.adjFactor );
 
+        static double factor = lv_bar_get_max_value(Voltage.Bar.bar) / (Voltage.maxValue / Voltage.adjFactor);
 
-        *Voltage.Bar.curValuePtr = v *factor; //uint16_t(v * 8);
-
+        *Voltage.Bar.curValuePtr = v * factor; // uint16_t(v * 8);
 
         // lv_obj_invalidate(Voltage.Bar.bar);
-        
+
         // Serial.printf("\n%9.4f %10.5f %5.2f %i", v, Voltage.Statistics.Mean(),Voltage.effectiveResolution.Mean(),
         //               Voltage.Statistics.windowSizeIndex_ % Voltage.Statistics.NofAvgs);
 
@@ -435,17 +429,13 @@ void Device::readCurrent()
         static double c;
         Current.rawValue = adc.readConversion();
         adcDataReady = false;
-        adc.ads1219->setGain(ONE); // Gain 1 for voltage
+        adc.ads1219->setGain(ONE);                  // Gain 1 for voltage
         adc.startConversion(VOLTAGE, REF_EXTERNAL); // REF_EXTERNAL
 
-        double currentOfR11R12_arrR2 = 1.0 * Voltage.measured.Mean() / 45.714e3; // Current consuming by R11, R12 and ARR_R2
-        // double currentOfADCRate = 1.0 * Voltage.measured.Mean() / (32.0 / (0.0019 - 0.0012));-> Based on ADC rate
-
-        // Current used by R11&R12 and maybe others?
-        static double diff_A = .00055 / (32.0 - 0.0);
-        double currentOfUnknowSource = 1.0 * Voltage.measured.Mean() * diff_A;
-        internalCurrentConsumption = currentOfUnknowSource +
-                                     0.0 * 0.000180 * !digitalRead(CCCVPin); // Why?
+        // Current used by R11&R12 and arrR2
+        static double diff_A = (0.000594 - 0.000143) / (32.0 - 0.0);
+        double currentOfR11R12_arrR2 = 1.0 * Voltage.measured.Mean() * diff_A +
+                                       0.0 * 0.000180 * !digitalRead(CCCVPin); // Why?;
 
         c = (((Current.rawValue - Current.calib_b) * Current.calib_1m) - currentOfR11R12_arrR2); // old value: .0009
         // c=c+c*0.00009901;
@@ -453,8 +443,7 @@ void Device::readCurrent()
         // Current.hist[c];
 
         Current.measureUpdate(c);
-        *Current.Bar.curValuePtr = c / (Current.maxValue/Current.adjFactor) * lv_bar_get_max_value(Current.Bar.bar); //uint16_t(v * 8);
-
+        *Current.Bar.curValuePtr = c / (Current.maxValue / Current.adjFactor) * lv_bar_get_max_value(Current.Bar.bar); // uint16_t(v * 8);
 
         // Serial.print (c);
         // Serial.print(",  Current:");
@@ -466,18 +455,21 @@ void Device::readCurrent()
         // Serial.print("\n");
         // *Current.Bar.curValuePtr = c * Current.Bar.scaleFactor;
         // lv_obj_invalidate(Current.Bar.bar);
+
+        Serial.printf("\n%9.4f %10.6f %5.2f %i", c, Current.Statistics.Mean(), Current.effectiveResolution.Mean(),
+                      Current.Statistics.windowSizeIndex_ % Current.Statistics.NofAvgs);
+
         static unsigned long loopCount = 0;
         static unsigned long startTime = millis();
 
-        // adc.ADC_loopCounter++;
-        // if ((startTime + 1000) <= millis())
-        // {
-        //     adc.realADCSpeed = adc.ADC_loopCounter;
-        //     Serial.printf("\nADC real SPS for 1 ch:%4i ",  adc.ADC_loopCounter);
-        //     adc.ADC_loopCounter = 0;
-        //     startTime = millis();
-        // }
-
+        adc.ADC_loopCounter++;
+        if ((startTime + 1000) <= millis())
+        {
+            adc.realADCSpeed = adc.ADC_loopCounter;
+            // Serial.printf("\nADC real SPS for 1 ch:%4i ",  adc.ADC_loopCounter);
+            adc.ADC_loopCounter = 0;
+            startTime = millis();
+        }
     }
     static unsigned long loopCount = 0;
     static unsigned long startTime = millis();
@@ -491,8 +483,6 @@ void Device::readCurrent()
         ADC_loopCheckCounter = 0;
         startTime = millis();
     }
-    
-
 }
 void Device::getPower()
 {
@@ -553,8 +543,8 @@ void Device::DACUpdate(void)
     {
         DAC.writeAndPowerAll(DAC_VOLTAGE, Voltage.adjOffset);
 
-        // DAC.writeAndPowerAll(DAC_CURRENT, Current.adjOffset+ 1*10000);
-        DAC.writeAndPowerAll(DAC_CURRENT, (-Current.adjOffset - 0.001) * 10000);
+        //  DAC.writeAndPowerAll(DAC_CURRENT, (-Current.adjOffset - 0.001) * 10000);
+        DAC.writeAndPowerAll(DAC_CURRENT, Current.adjOffset);
 
         return;
     }

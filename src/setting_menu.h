@@ -127,24 +127,24 @@ struct setting_GUI
     lv_obj_t *lbl_calibValueAVG_;
     lv_obj_t *lbl_ER;
 
-} Calib_GUI,Calib_GUI_current;
+} Calib_GUI;
 
 
-// struct setting_GUI
-// {
-//     lv_obj_t *vin_1;
-//     lv_obj_t *vin_2;
-//     lv_obj_t *code_1;
-//     lv_obj_t *code_2;
+struct setting_GUI_current
+{
+    lv_obj_t *vin_1;
+    lv_obj_t *vin_2;
+    lv_obj_t *code_1;
+    lv_obj_t *code_2;
 
-//     lv_obj_t *lbl_voltageCalib_m;
-//     lv_obj_t *lbl_voltageCalib_b;
-//     lv_obj_t *lbl_rawCode;
-//     lv_obj_t *lbl_calibratedValue;
-//     lv_obj_t *lbl_rawAVG_;
-//     lv_obj_t *lbl_calibValueAVG_;
-//     lv_obj_t *lbl_ER;
-// } Calib_GUI_current;
+    lv_obj_t *lbl_currentCalib_m;
+    lv_obj_t *lbl_currentCalib_b;
+    lv_obj_t *lbl_rawCode;
+    lv_obj_t *lbl_calibratedValue;
+    lv_obj_t *lbl_rawAVG_;
+    lv_obj_t *lbl_calibValueAVG_;
+    lv_obj_t *lbl_ER;
+} Calib_GUI_current;
 
 // lv_obj_t *lbl_currentCalib_m;
 // lv_obj_t *lbl_currentCalib_b;
@@ -762,7 +762,7 @@ void SettingMenu(lv_obj_t *parent)
      ******************************/
     lv_obj_t *sub_calibration_page = lv_menu_page_create(menu, NULL);
     section = lv_menu_section_create(sub_calibration_page);
-    create_pushbutton(section, NULL, btn_calibration_ADC_event_cb, LV_SYMBOL_CHARGE, "V/I ADC");
+    // create_pushbutton(section, NULL, btn_calibration_ADC_event_cb, LV_SYMBOL_CHARGE, "V/I ADC");
     create_pushbutton(section, NULL, btn_calibration_ADC_Voltage_event_cb, LV_SYMBOL_CHARGE, "ADC Voltage");
     create_pushbutton(section, NULL, btn_calibration_ADC_Current_event_cb, LV_SYMBOL_CHARGE, "ADC Current");
     create_pushbutton(section, NULL, btn_calibration_DAC_event_cb, LV_SYMBOL_CHARGE, "V/I DAC");
@@ -1467,14 +1467,14 @@ static void btn_calibration_ADC_Current_event_cb(lv_event_t *e)
     lv_obj_align(label_m, LV_ALIGN_TOP_LEFT, 0, verPad + 20);
     lv_obj_align(label_m_den, LV_ALIGN_TOP_LEFT, 50, verPad + 30);
 
-    Calib_GUI_current.lbl_voltageCalib_m = lv_label_create(cont);
-    Calib_GUI_current.lbl_voltageCalib_b = lv_label_create(cont);
+    Calib_GUI_current.lbl_currentCalib_m = lv_label_create(cont);
+    Calib_GUI_current.lbl_currentCalib_b = lv_label_create(cont);
 
-    lv_obj_align(Calib_GUI_current.lbl_voltageCalib_m, LV_ALIGN_TOP_LEFT, 160, verPad + 20);
+    lv_obj_align(Calib_GUI_current.lbl_currentCalib_m, LV_ALIGN_TOP_LEFT, 160, verPad + 20);
 
     lv_label_set_text(label_b, "b = Code1 - m * Vin1 =");
     lv_obj_align(label_b, LV_ALIGN_TOP_LEFT, 0, verPad + 30 + 30 * 1);
-    lv_obj_align(Calib_GUI_current.lbl_voltageCalib_b, LV_ALIGN_TOP_LEFT, 160, verPad + 30 + 30 * 1);
+    lv_obj_align(Calib_GUI_current.lbl_currentCalib_b, LV_ALIGN_TOP_LEFT, 160, verPad + 30 + 30 * 1);
 
     lv_label_set_text(label_Vin_calib, "Vin_cal = (Code-b)/m");
     lv_obj_align(label_Vin_calib, LV_ALIGN_TOP_LEFT, 0, verPad + 30 + 30 * 2);
