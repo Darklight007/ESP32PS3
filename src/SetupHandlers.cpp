@@ -313,6 +313,7 @@ void setupCalibPage()
 {
     // Create Calibration page
     voltage_current_calibration();
+    // voltageCurrentCalibration = lv_obj_create(lv_scr_act());
     
 
     // Hide the calibration objects initially

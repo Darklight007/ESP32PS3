@@ -85,6 +85,9 @@ void setup()
   // pixels.setPixelColor(0, pixels.Color(0, 0, 0));
   // pixels.show();              
 
+btn_calibration_ADC_voltage_event_cb(NULL);
+btn_calibration_ADC_current_event_cb(NULL);
+
 }
 
 void loop()

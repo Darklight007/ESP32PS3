@@ -2757,15 +2757,18 @@ void keyCheckLoop()
 
     keyMenus('k', " RELEASED.", []
              {
-                 if (lv_obj_is_visible(voltageCurrentCalibration))
-                 {
-                     lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
-                 } });
+                 //  if (lv_obj_is_visible(voltageCurrentCalibration))
+                 //  {
+                 //      lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
+                 //  }
+             }
+
+    );
 
     keyMenus('H', " RELEASED.", []
              {
                  Tabs::goToHomeTab();
-                 lv_obj_add_flag(voltageCurrentCalibration,LV_OBJ_FLAG_HIDDEN);
+                //  lv_obj_add_flag(voltageCurrentCalibration,LV_OBJ_FLAG_HIDDEN);
                  hide(win_ADC_voltage_calibration);
                  hide(win_ADC_current_calibration);
                  hide(win_DAC_calibration); }
@@ -2943,12 +2946,18 @@ void keyCheckLoop()
                 lv_event_send(lv_obj_get_child(slider_Avgs, -1), LV_EVENT_VALUE_CHANGED, NULL); });
 
     keyMenusPage('+', " RELEASED.", 4, []
-                 {  if (lv_obj_is_visible(voltageCurrentCalibration)) {
-                     lv_event_send(spinboxes.btn_plus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);} });
+                 {
+                     //  if (lv_obj_is_visible(voltageCurrentCalibration)) {
+                     //  lv_event_send(spinboxes.btn_plus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);}
+                 });
 
     keyMenusPage('-', " RELEASED.", 4, []
-                 {  if (lv_obj_is_visible(voltageCurrentCalibration)) {
-                    lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);} });
+                 {
+                    //  if (lv_obj_is_visible(voltageCurrentCalibration))
+                    //  {
+                    //      lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
+                    //  }
+                 });
     if ((Tabs::getCurrentPage() == 3))
     {
         int a = -1;
@@ -3013,7 +3022,7 @@ void keyCheckLoop()
         }
     }
 
-    if ((Tabs::getCurrentPage() == 2) || (Tabs::getCurrentPage() == 4 && lv_obj_is_visible(voltageCurrentCalibration)))
+    if ((Tabs::getCurrentPage() == 2) || (Tabs::getCurrentPage() == 4 /*&& lv_obj_is_visible(voltageCurrentCalibration)*/))
     {
         keyMenus('7', " RELEASED.", []
                  { key_event_handler(0); });
@@ -3051,45 +3060,48 @@ void keyCheckLoop()
                         ismyTextHiddenChange = true; });
 
         keyMenusPage('E', " RELEASED.", 4, []
-                     {if (!lv_obj_is_visible(myTextBox))
-                        {
-                            lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                     {
+                        
+                        // if (!lv_obj_is_visible(myTextBox))
+                        // {
+                        //     // lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
 
-                            lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
-                            int32_t v = lv_spinbox_get_value(spinBox);
+                        //     // lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
+                        //     // int32_t v = lv_spinbox_get_value(spinBox);
 
-// Serial.printf("\nspinboxes.current_index:%i",spinboxes.current_index);
 
-                            char str[12];
 
-                            if (spinboxes.current_index % 2 != 0)
-                            {
-                                sprintf(str, "%+08.0f",double( v ));
-                                key_event_handler_readBack_clb(str);
-                            }
+                        //     // char str[12];
 
-                            else
-                            {
-                                sprintf(str, "%+08.4f", double (v/10000.0));
-                                key_event_handler_readBack_clb(str);
-                                // key_event_handler_readBack_clb(std::to_string(v).c_str());
-                            }
-                            ismyTextHiddenChange = true;
-                        }
-                        else
-                        {
-                            lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
-                            myTone(NOTE_A5, 100);
-                            const char *txt = lv_textarea_get_text(ta);
-                            lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
-                            if (spinboxes.current_index % 2 != 0)
-                                lv_spinbox_set_value(spinBox, strtod(txt, NULL));
-                            else
-                                lv_spinbox_set_value(spinBox, 10000.0 * strtod(txt, NULL));
-                            lv_textarea_set_text(ta,"");
-                            ismyTextHiddenChange = true;
+                        //     // if (spinboxes.current_index % 2 != 0)
+                        //     // {
+                        //     //     sprintf(str, "%+08.0f",double( v ));
+                        //     //     key_event_handler_readBack_clb(str);
+                        //     // }
 
-                        } });
+                        //     // else
+                        //     // {
+                        //     //     sprintf(str, "%+08.4f", double (v/10000.0));
+                        //     //     key_event_handler_readBack_clb(str);
+                        //     //     // key_event_handler_readBack_clb(std::to_string(v).c_str());
+                        //     // }
+                        //     // ismyTextHiddenChange = true;
+                        // }
+                        // else
+                        // {
+                        //     // lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                        //     // myTone(NOTE_A5, 100);
+                        //     // const char *txt = lv_textarea_get_text(ta);
+                        //     // lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
+                        //     // if (spinboxes.current_index % 2 != 0)
+                        //     //     lv_spinbox_set_value(spinBox, strtod(txt, NULL));
+                        //     // else
+                        //     //     lv_spinbox_set_value(spinBox, 10000.0 * strtod(txt, NULL));
+                        //     // lv_textarea_set_text(ta,"");
+                        //     // ismyTextHiddenChange = true;
+
+                        // }
+                     });
     }
 
     keyMenusPage('^', " RELEASED.", 2, []
@@ -3097,7 +3109,9 @@ void keyCheckLoop()
     keyMenusPage('>', " RELEASED.", 2, []
                  { PowerSupply.Current.setLock(!PowerSupply.Current.getLock()); });
     keyMenusPage('M', " RELEASED.", 4, []
-                 { lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN); });
+                 {
+                     // lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
+                 });
 
     keyMenusPage('V', " RELEASED.", 2, []
                  {
@@ -3369,81 +3383,29 @@ void StatusBar()
         lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, x + space * 4, y);
     };
 
-    lv_obj_t *vin1_ = lv_obj_get_child(voltageCurrentCalibration, spinboxes.ids[0]);
-    lv_obj_t *code1_ = lv_obj_get_child(voltageCurrentCalibration, spinboxes.ids[1]);
-    lv_obj_t *vin2_ = lv_obj_get_child(voltageCurrentCalibration, spinboxes.ids[2]);
-    lv_obj_t *code2_ = lv_obj_get_child(voltageCurrentCalibration, spinboxes.ids[3]);
+    // if (win_ADC_voltage_calibration != nullptr)
+    //     Serial.printf("\nwin_ADC_voltage_calibration:%i is vis:%i", win_ADC_voltage_calibration, lv_obj_is_visible(win_ADC_voltage_calibration));
+    // if (win_ADC_current_calibration != nullptr)
+    //     Serial.printf("\nwin_ADC_current_calibration:%i is vis:%i", win_ADC_current_calibration, lv_obj_is_visible(win_ADC_current_calibration));
 
-    int code1 = (lv_spinbox_get_value(code1_));
-    int code2 = (lv_spinbox_get_value(code2_));
-    double vin1 = double(lv_spinbox_get_value(vin1_)) / 10000.0;
-    double vin2 = double(lv_spinbox_get_value(vin2_)) / 10000.0;
-
-    double m = get_m(code1, code2, vin1, vin2);
-
-    lv_label_set_text(lbl_voltageCalib_m, std::to_string(m).c_str());
-    lv_label_set_text(lbl_voltageCalib_b, std::to_string(get_b(code1, m, vin1)).c_str());
-
-    if (lv_obj_is_visible(voltageCurrentCalibration))
-    {
-        // load_cb(NULL);
-        // Calibration outputData = PowerSupply.LoadCalibData("cal");
-        // PowerSupply.CalBank[0] = {outputData};
-        // Serial.printf("\ndd_calibration:%i",lv_dropdown_get_selected(dd_calibration));
-        if (lv_dropdown_get_selected(dd_calibration) == 0)
-        {
-            lv_label_set_text_fmt(lbl_rawCode, "%+08i", PowerSupply.Voltage.rawValue);
-            lv_label_set_text_fmt(lbl_rawAVG_, "%+08.0f", PowerSupply.Voltage.measured.Mean() * m + get_b(code1, m, vin1));
-            lv_label_set_text_fmt(lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
-            lv_label_set_text_fmt(lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
-            lv_label_set_text_fmt(lbl_ER_, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
-
-            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
-            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2 = code2;
-            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_1 = vin1;
-            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_2 = vin2;
-        }
-
-        else
-        {
-            lv_label_set_text_fmt(lbl_rawCode, "%+08i", PowerSupply.Current.rawValue);
-            lv_label_set_text_fmt(lbl_rawAVG_, "%+08.0f", PowerSupply.Current.measured.Mean() * m + get_b(code1, m, vin1));
-
-            lv_label_set_text_fmt(lbl_calibratedValue, "%+09.4f", PowerSupply.Current.measured.value);
-            lv_label_set_text_fmt(lbl_calibValueAVG_, "%+09.4f", PowerSupply.Current.measured.Mean());
-            lv_label_set_text_fmt(lbl_ER_, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
-
-            // lv_label_set_text_fmt(Calib_GUI.lbl_ER, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
-
-            PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_1 = code1;
-            PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_2 = code2;
-            PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.value_1 = vin1;
-            PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.value_2 = vin2;
-        }
-
-        PowerSupply.calibrationUpdate();
-        // lv_event_send(btn_load, LV_EVENT_CLICKED, NULL);
-    }
-
-    // if (win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(win_ADC_voltage_calibration))
-    if (win_ADC_voltage_calibration != nullptr && !lv_obj_has_flag(win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN))
+    if (win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(win_ADC_voltage_calibration))
     {
 
-        int code1 = lv_spinbox_get_value(Calib_GUI.code_1);
-        int code2 = lv_spinbox_get_value(Calib_GUI.code_2);
-        double vin1 = double(lv_spinbox_get_value(Calib_GUI.vin_1)) / 10000.0;
-        double vin2 = double(lv_spinbox_get_value(Calib_GUI.vin_2)) / 10000.0;
+        int code1 = lv_spinbox_get_value(Calib_GUI_voltage.code_1);
+        int code2 = lv_spinbox_get_value(Calib_GUI_voltage.code_2);
+        double vin1 = double(lv_spinbox_get_value(Calib_GUI_voltage.vin_1)) / 10000.0;
+        double vin2 = double(lv_spinbox_get_value(Calib_GUI_voltage.vin_2)) / 10000.0;
 
         double m = get_m(code1, code2, vin1, vin2);
 
-        lv_label_set_text_fmt(Calib_GUI.lbl_voltageCalib_m, "%f", m);
-        lv_label_set_text_fmt(Calib_GUI.lbl_voltageCalib_b, "%f", get_b(code1, m, vin1));
+        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_calib_m, "%f", m);
+        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_calib_b, "%f", get_b(code1, m, vin1));
 
-        lv_label_set_text_fmt(Calib_GUI.lbl_rawCode, "%+08i", PowerSupply.Voltage.rawValue);
-        lv_label_set_text_fmt(Calib_GUI.lbl_rawAVG_, "%+08.0f", PowerSupply.Voltage.measured.Mean() * m + get_b(code1, m, vin1));
-        lv_label_set_text_fmt(Calib_GUI.lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
-        lv_label_set_text_fmt(Calib_GUI.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
-        lv_label_set_text_fmt(Calib_GUI.lbl_ER, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
+        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_rawCode, "%+08i", PowerSupply.Voltage.rawValue);
+        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_rawAVG_, "%+08.0f", PowerSupply.Voltage.measured.Mean() * m + get_b(code1, m, vin1));
+        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
+        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
+        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_ER, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
 
         PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
         PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2 = code2;
@@ -3452,7 +3414,7 @@ void StatusBar()
 
         PowerSupply.calibrationUpdate();
     }
-    if (win_ADC_current_calibration != nullptr && !lv_obj_has_flag(win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN))
+    if (win_ADC_current_calibration != nullptr && lv_obj_is_visible(win_ADC_current_calibration))
     {
 
         int code1 = lv_spinbox_get_value(Calib_GUI_current.code_1);
@@ -3462,8 +3424,8 @@ void StatusBar()
 
         double m = get_m(code1, code2, vin1, vin2);
 
-        lv_label_set_text_fmt(Calib_GUI_current.lbl_currentCalib_m, "%f", m);
-        lv_label_set_text_fmt(Calib_GUI_current.lbl_currentCalib_b, "%f", get_b(code1, m, vin1));
+        lv_label_set_text_fmt(Calib_GUI_current.lbl_calib_m, "%f", m);
+        lv_label_set_text_fmt(Calib_GUI_current.lbl_calib_b, "%f", get_b(code1, m, vin1));
 
         lv_label_set_text_fmt(Calib_GUI_current.lbl_rawCode, "%+08i", PowerSupply.Current.rawValue);
         lv_label_set_text_fmt(Calib_GUI_current.lbl_rawAVG_, "%+08.0f", PowerSupply.Current.measured.Mean() * m + get_b(code1, m, vin1));
@@ -3821,47 +3783,47 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
     if (!obj_selected_spinbox)
         return;
 
-    if (lv_obj_is_visible(voltageCurrentCalibration))
-    {
-        static int32_t cursor_pos = 0;
+    // if (lv_obj_is_visible(voltageCurrentCalibration))
+    // {
+    //     static int32_t cursor_pos = 0;
 
-        // Check if encoder values have changed
-        if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
-            return;
+    //     // Check if encoder values have changed
+    //     if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
+    //         return;
 
-        // Update cursor position based on encoder 2
-        if (encoder2_last_value < encoder2_value)
-            cursor_pos++;
-        else if (encoder2_last_value > encoder2_value)
-            cursor_pos--;
+    //     // Update cursor position based on encoder 2
+    //     if (encoder2_last_value < encoder2_value)
+    //         cursor_pos++;
+    //     else if (encoder2_last_value > encoder2_value)
+    //         cursor_pos--;
 
-        int width = spinboxes.digit_count[spinboxes.id_index] - 1;
-        cursor_pos = std::clamp(cursor_pos, 0, width);
+    //     int width = spinboxes.digit_count[spinboxes.id_index] - 1;
+    //     cursor_pos = std::clamp(cursor_pos, 0, width);
 
-        lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
+    //     lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
 
-        // Set cursor position in the spinbox
-        lv_spinbox_set_cursor_pos(spinBox, 0);
-        lv_spinbox_set_cursor_pos(spinBox, width - cursor_pos);
+    //     // Set cursor position in the spinbox
+    //     lv_spinbox_set_cursor_pos(spinBox, 0);
+    //     lv_spinbox_set_cursor_pos(spinBox, width - cursor_pos);
 
-        // Serial.printf("\ndata->cursor_pos: %i", width - cursor_pos);
+    //     // Serial.printf("\ndata->cursor_pos: %i", width - cursor_pos);
 
-        encoder2_last_value = encoder2_value;
+    //     encoder2_last_value = encoder2_value;
 
-        // Adjust spinbox value based on encoder 1
-        if (encoder1_last_value < encoder1_value)
-            lv_event_send(spinboxes.btn_plus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
-        else if (encoder1_last_value > encoder1_value)
-            lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
+    //     // Adjust spinbox value based on encoder 1
+    //     if (encoder1_last_value < encoder1_value)
+    //         lv_event_send(spinboxes.btn_plus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
+    //     else if (encoder1_last_value > encoder1_value)
+    //         lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
 
-        // Perform calibration
-        PowerSupply.calibrate();
-        // encoder1_last_value = encoder1_value;
-        // SaveCalibrationData(); // Uncomment if needed
+    //     // Perform calibration
+    //     PowerSupply.calibrate();
+    //     // encoder1_last_value = encoder1_value;
+    //     // SaveCalibrationData(); // Uncomment if needed
 
-        // Update calibration label (if needed)
-        // lv_label_set_text(lbl_voltageCalib_m, std::to_string(get_voltageCalib_m()).c_str());
-    }
+    //     // Update calibration label (if needed)
+    
+    // }
     else if (win_DAC_calibration != NULL && !lv_obj_is_visible(win_DAC_calibration) &&
              win_ADC_voltage_calibration != nullptr && !lv_obj_is_visible(win_ADC_voltage_calibration))
     {
