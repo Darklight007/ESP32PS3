@@ -1752,13 +1752,12 @@ static void key_event_handler_readBack_k(DispObjects dp)
 }
 
 static lv_style_t style_font_unit;
+static lv_style_t style_font;
+static lv_style_t style_font_btnm;
+static lv_style_t style_backgound;
 
 void textarea(lv_obj_t *parent)
 {
-    static lv_style_t style_font;
-
-    static lv_style_t style_font_btnm;
-    static lv_style_t style_backgound;
 
     lv_style_init(&style_font);
     // lv_style_set_bg_opa(&style_font, LV_OPA_50);
@@ -1817,7 +1816,7 @@ void textarea(lv_obj_t *parent)
     static const char *btnm_map[] = {"7", "8", "9", LV_SYMBOL_BACKSPACE, "-", "\n",
                                      "4", "5", "6", "V", "mV", "\n",
                                      "1", "2", "3", "A", "mA", "\n",
-                                     "0", ".", "E", LV_SYMBOL_NEW_LINE, "+"};
+                                     "0", ".", "E", LV_SYMBOL_NEW_LINE, "+", NULL};
 
     lv_style_init(&style_font_btnm);
     // lv_style_set_bg_opa(&style_font, LV_OPA_50);
@@ -1827,7 +1826,7 @@ void textarea(lv_obj_t *parent)
 
     btnm = lv_btnmatrix_create(myTextBox);
     lv_obj_remove_style_all(btnm);
-
+    // return;
     lv_obj_set_size(btnm, 290, 100);
     lv_obj_add_flag(btnm, LV_OBJ_FLAG_HIDDEN);
     lv_style_set_bg_color(&style_font_btnm, lv_palette_lighten(LV_PALETTE_GREY, 1));
@@ -2953,10 +2952,10 @@ void keyCheckLoop()
 
     keyMenusPage('-', " RELEASED.", 4, []
                  {
-                    //  if (lv_obj_is_visible(voltageCurrentCalibration))
-                    //  {
-                    //      lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
-                    //  }
+                     //  if (lv_obj_is_visible(voltageCurrentCalibration))
+                     //  {
+                     //      lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
+                     //  }
                  });
     if ((Tabs::getCurrentPage() == 3))
     {
@@ -3061,46 +3060,43 @@ void keyCheckLoop()
 
         keyMenusPage('E', " RELEASED.", 4, []
                      {
-                        
-                        // if (!lv_obj_is_visible(myTextBox))
-                        // {
-                        //     // lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                         // if (!lv_obj_is_visible(myTextBox))
+                         // {
+                         //     // lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
 
-                        //     // lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
-                        //     // int32_t v = lv_spinbox_get_value(spinBox);
+                         //     // lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
+                         //     // int32_t v = lv_spinbox_get_value(spinBox);
 
+                         //     // char str[12];
 
+                         //     // if (spinboxes.current_index % 2 != 0)
+                         //     // {
+                         //     //     sprintf(str, "%+08.0f",double( v ));
+                         //     //     key_event_handler_readBack_clb(str);
+                         //     // }
 
-                        //     // char str[12];
+                         //     // else
+                         //     // {
+                         //     //     sprintf(str, "%+08.4f", double (v/10000.0));
+                         //     //     key_event_handler_readBack_clb(str);
+                         //     //     // key_event_handler_readBack_clb(std::to_string(v).c_str());
+                         //     // }
+                         //     // ismyTextHiddenChange = true;
+                         // }
+                         // else
+                         // {
+                         //     // lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                         //     // myTone(NOTE_A5, 100);
+                         //     // const char *txt = lv_textarea_get_text(ta);
+                         //     // lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
+                         //     // if (spinboxes.current_index % 2 != 0)
+                         //     //     lv_spinbox_set_value(spinBox, strtod(txt, NULL));
+                         //     // else
+                         //     //     lv_spinbox_set_value(spinBox, 10000.0 * strtod(txt, NULL));
+                         //     // lv_textarea_set_text(ta,"");
+                         //     // ismyTextHiddenChange = true;
 
-                        //     // if (spinboxes.current_index % 2 != 0)
-                        //     // {
-                        //     //     sprintf(str, "%+08.0f",double( v ));
-                        //     //     key_event_handler_readBack_clb(str);
-                        //     // }
-
-                        //     // else
-                        //     // {
-                        //     //     sprintf(str, "%+08.4f", double (v/10000.0));
-                        //     //     key_event_handler_readBack_clb(str);
-                        //     //     // key_event_handler_readBack_clb(std::to_string(v).c_str());
-                        //     // }
-                        //     // ismyTextHiddenChange = true;
-                        // }
-                        // else
-                        // {
-                        //     // lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
-                        //     // myTone(NOTE_A5, 100);
-                        //     // const char *txt = lv_textarea_get_text(ta);
-                        //     // lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
-                        //     // if (spinboxes.current_index % 2 != 0)
-                        //     //     lv_spinbox_set_value(spinBox, strtod(txt, NULL));
-                        //     // else
-                        //     //     lv_spinbox_set_value(spinBox, 10000.0 * strtod(txt, NULL));
-                        //     // lv_textarea_set_text(ta,"");
-                        //     // ismyTextHiddenChange = true;
-
-                        // }
+                         // }
                      });
     }
 
@@ -3822,7 +3818,7 @@ void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_va
     //     // SaveCalibrationData(); // Uncomment if needed
 
     //     // Update calibration label (if needed)
-    
+
     // }
     else if (win_DAC_calibration != NULL && !lv_obj_is_visible(win_DAC_calibration) &&
              win_ADC_voltage_calibration != nullptr && !lv_obj_is_visible(win_ADC_voltage_calibration))

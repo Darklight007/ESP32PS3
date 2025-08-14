@@ -31,6 +31,9 @@ extern bool wire1Connected; // Flag indicating if device is connected on Wire1
 // size_t memory;               // Global variable to hold free heap memory size
 extern int32_t *barGraph_V;
 extern DAC_codes dac_data_g;
+
+
+
 // **Initialization Functions**
 
 // Initialize serial communication
@@ -73,7 +76,7 @@ void initializeI2C()
     // Initialize I2C buses with appropriate clock rates
     Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_1_7M); // For ADS1219 (supports up to 1 Mbps)
     Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_1_7M);  // For other devices (supports up to 1.7 Mbps)
-
+    delay(100);                                          // Wait for I2C buses to stabilize
     // Scan the default I2C bus (Wire)
     wireConnected = scanI2CBus(Wire, 0x20);
 
@@ -112,7 +115,7 @@ void initializeDisplay()
 void initializeTouch()
 {
     // Touchscreen calibration data (rotation 3)
-    uint16_t calData[5] = {366, 3445, 310, 3406, 1}; //475, 3300, 212, 3360, 1
+    uint16_t calData[5] = {366, 3445, 310, 3406, 1}; // 475, 3300, 212, 3360, 1
     tft.setTouch(calData);
     Serial.println("Touch Screen Calibrated.");
 }
@@ -196,15 +199,12 @@ void setupPowerSupply()
     PowerSupply.setupPages("Stats", "Graph", "Main", "Utility", "Setting");
     PowerSupply.setPagesCallback(updateObjectPos_cb);
 
-
-
     // Setup on/off touch switch on page 3
     PowerSupply.setupSwitch(PowerSupply.page[2], 0, 240, 160, btn_event_cb);
 
     delay(500);
     dac_data_g = PowerSupply.LoadDACdata("dac_data_");
     delay(500);
-
     PowerSupply.Voltage.adjOffset = dac_data_g.zero_voltage;
     PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage);                         // 2000.0;
     PowerSupply.Voltage.maxValue = (dac_data_g.max_voltage - dac_data_g.zero_voltage); // 2000.0;
@@ -274,6 +274,7 @@ void setupPowerSupply()
     Tabs::setDefaultPage(2);
     textarea(PowerSupply.page[2]);
     Tabs::setCurrentPage(2);
+    // return;
 
     // Load settings parameters for page 4
     PowerSupply.LoadSetting();
@@ -306,18 +307,27 @@ void setupPowerSupply()
     curValuePtr = barGraph_V;
     // }
     // PowerSupply.SaveMemory("myDataKey", mem);
+
+    // btn_calibration_ADC_voltage_event_cb(NULL);
+    // btn_calibration_ADC_current_event_cb(NULL);
 }
 
 // Setup the calibration page
 void setupCalibPage()
 {
     // Create Calibration page
-    voltage_current_calibration();
+    // voltage_current_calibration();
     // voltageCurrentCalibration = lv_obj_create(lv_scr_act());
-    
 
-    // Hide the calibration objects initially
-    lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
+    // lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
+    // hide(win_ADC_voltage_calibration);
+    // hide(win_ADC_current_calibration);
+    // hide(win_DAC_calibration);
+
+    lv_obj_add_flag(win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
+    // lv_obj_add_flag(win_DAC_calibration, LV_OBJ_FLAG_HIDDEN);
+
     lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -362,7 +372,7 @@ void createTasks()
         "Voltage & Current ADC", /* Name of task */
         14000,                   /* Stack size of task */
         NULL,                    /* Parameter of the task */
-        1,                      /* Priority of the task */
+        1,                       /* Priority of the task */
         &Task_adc,               /* Task handle */
         0                        /* Pin task to core 0 */
     );

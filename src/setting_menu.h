@@ -14,8 +14,8 @@ extern FunGen funGenMem;
 extern DAC_codes dac_data_g;
 
 lv_obj_t *menu;
-lv_obj_t *voltageCurrentCalibration;
-lv_obj_t *myTextBox;
+lv_obj_t *voltageCurrentCalibration=nullptr;
+lv_obj_t *myTextBox=nullptr;;
 
 lv_obj_t *win_DAC_calibration = nullptr;
 ;
