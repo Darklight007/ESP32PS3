@@ -33,7 +33,7 @@ enum
 };
 typedef uint8_t lv_menu_builder_variant_t;
 
-static void switch_handler(lv_event_t *e);
+void switch_handler(lv_event_t *e);
 lv_obj_t *root_page;
 
 // static lv_obj_t *slider_label; unused variable
@@ -250,19 +250,7 @@ static void load_cb(lv_event_t *e)
     }
 }
 
-void voltage_current_calibration(void)
-{
 
-    voltageCurrentCalibration = lv_obj_create(lv_scr_act());
-
-    static lv_point_t line6_points[] = {{0, 0}, {70, 0}};
-
-    lv_obj_t *line1;
-    line1 = lv_obj_create(voltageCurrentCalibration);
-    lv_line_set_points(line1, line6_points, 2); /*Set the points*/
-
-    // createLine(voltageCurrentCalibration, line6_points);
-}
 
 static lv_obj_t *create_switch_(lv_obj_t *parent, const char *icon, const char *txt, bool chk,
                                 lv_event_cb_t event_cb, lv_event_code_t filter, void *user_data)
@@ -358,9 +346,10 @@ void SettingMenu(lv_obj_t *parent)
     // create_pushbutton(section, NULL, btn_calibration_ADC_event_cb, LV_SYMBOL_CHARGE, "V/I ADC");
     create_pushbutton(section, NULL, btn_calibration_ADC_voltage_event_cb, LV_SYMBOL_CHARGE, "ADC Voltage");
     create_pushbutton(section, NULL, btn_calibration_ADC_current_event_cb, LV_SYMBOL_CHARGE, "ADC Current");
+    // create_pushbutton(section, NULL, btn_calibration_ADC_current_event_cb, LV_SYMBOL_CHARGE, "Internal Current Cal");
     create_pushbutton(section, NULL, btn_calibration_DAC_event_cb, LV_SYMBOL_CHARGE, "V/I DAC");
-    create_pushbutton(section, NULL, LCD_Calibration_cb, "", "LCD Touch");
     create_pushbutton(section, NULL, NULL, "Statistics", "Reset Stats");
+    create_pushbutton(section, NULL, LCD_Calibration_cb, "", "LCD Touch");
 
     /******************************
      ** Save/Load
@@ -421,7 +410,7 @@ void SettingMenu(lv_obj_t *parent)
     lv_event_send(lv_obj_get_child(lv_obj_get_child(lv_menu_get_cur_sidebar_page(menu), 0), 0), LV_EVENT_CLICKED, NULL);
 }
 
-static void switch_handler(lv_event_t *e)
+void switch_handler(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     // lv_obj_t * menu = lv_event_get_user_data(e);
@@ -1040,35 +1029,6 @@ static void btn_calibration_DAC_event_cb(lv_event_t *e)
     lv_obj_add_event_cb(mc, DAC_current_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
     // win_dac_already_created = true;
 
-    return;
-    lv_obj_t *DAC_Calibration = lv_obj_create(lv_scr_act());
-
-    lv_obj_set_size(DAC_Calibration, 320, 240);
-    lv_obj_align(DAC_Calibration, LV_ALIGN_CENTER, 0, 0);
-    // static lv_style_t style_panel;
-    // lv_style_init(&style_panel);
-    // remove all padding
-    // lv_style_set_pad_ver(&style_panel, 0);
-    // lv_style_set_pad_hor(&style_panel, 0);
-    // lv_obj_add_style(DAC_Calibration, &style_panel, LV_STATE_DEFAULT);
-
-    /********************
-     * close button
-     ********************/
-    lv_obj_t *close_btn = lv_btn_create(DAC_Calibration);
-    lv_obj_t *close_btn_label = lv_label_create(close_btn);
-    lv_obj_remove_style_all(close_btn_label);
-    // lv_obj_remove_style_all(close_btn);
-
-    lv_label_set_text(close_btn_label, " X ");
-    lv_obj_center(close_btn_label);
-
-    lv_obj_set_pos(close_btn, 0, 0);
-    lv_obj_add_event_cb(close_btn, btn_close_hide_obj_cb, LV_EVENT_RELEASED, NULL);
-    lv_obj_set_align(close_btn, LV_ALIGN_TOP_RIGHT);
-
-    lv_obj_set_content_width(close_btn_label, 20);  // The actual width: padding left + 50 + padding right
-    lv_obj_set_content_height(close_btn_label, 20); // The actual width: padding top + 30 + padding bottom
 }
 
 static void LCD_Calibration_cb(lv_event_t *e)
@@ -1212,7 +1172,7 @@ static lv_obj_t *create_switch(lv_obj_t *parent, const char *icon, const char *t
 // struct _lv_event_dsc_t *lv_obj_add_event_cb(lv_obj_t *obj, lv_event_cb_t event_cb, lv_event_code_t filter,
 //                                             void *user_data);
 
-static lv_obj_t *create_pushbutton(lv_obj_t *parent, const char *icon, lv_event_cb_t event_cb, const char *txt, const char *buttonTxt)
+lv_obj_t *create_pushbutton(lv_obj_t *parent, const char *icon, lv_event_cb_t event_cb, const char *txt, const char *buttonTxt)
 {
     // lv_obj_t *obj = create_text(parent, icon, txt, LV_MENU_ITEM_BUILDER_VARIANT_1);
 
