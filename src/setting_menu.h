@@ -33,7 +33,7 @@ enum
 };
 typedef uint8_t lv_menu_builder_variant_t;
 
-void switch_handler(lv_event_t *e);
+static void switch_handler(lv_event_t *e);
 lv_obj_t *root_page;
 
 // static lv_obj_t *slider_label; unused variable
@@ -410,7 +410,7 @@ void SettingMenu(lv_obj_t *parent)
     lv_event_send(lv_obj_get_child(lv_obj_get_child(lv_menu_get_cur_sidebar_page(menu), 0), 0), LV_EVENT_CLICKED, NULL);
 }
 
-void switch_handler(lv_event_t *e)
+static void switch_handler(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     // lv_obj_t * menu = lv_event_get_user_data(e);

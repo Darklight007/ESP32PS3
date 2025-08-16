@@ -8,6 +8,8 @@
 #include <ADS1219.h>
 #include "device.h"
 #include "FFTHandler.h"
+// #include <lvgl.h>
+#include <TFT_eSPI.h>
 
 void IRAM_ATTR VoltageEnc(void *arg);
 void IRAM_ATTR CurrentEnc(void *arg);

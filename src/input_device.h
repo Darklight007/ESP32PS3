@@ -14,6 +14,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "tabs.h"
+#include "Wire.h"
+#include "Key.h"
+#include "config.hpp"
 
 // IRAM_ATTR void VoltageEnc(void *arg);
 // IRAM_ATTR void CurrentEnc(void *arg);
