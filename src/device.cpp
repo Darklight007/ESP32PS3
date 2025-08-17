@@ -532,7 +532,7 @@ void Device::VCCCStatusUpdate(void)
 
     if (digitalRead(CCCVPin) == false)
         setStatus(DEVICE::CC);
-    else
+    else if (getStatus() != DEVICE::OFF  && digitalRead(CCCVPin) == true )
         setStatus(DEVICE::VC);
     last_status = digitalRead(CCCVPin);
 }
