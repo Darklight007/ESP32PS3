@@ -2368,7 +2368,7 @@ void Utility_tabview(lv_obj_t *parent)
     static lv_style_t style_func;
     lv_style_init(&style_func);
 
-    Utility_objs.table_fun_gen_list = table_pro(tab2, &style_func, &lv_font_montserrat_12, LV_ALIGN_DEFAULT, 3, 3, 20, 130, 5, 5);
+    Utility_objs.table_fun_gen_list = table_pro(tab2, &style_func, &lv_font_montserrat_12, LV_ALIGN_DEFAULT, 3, 3, 160, 130, 5, 5);
 
     for (int i = 0; i < numWaveforms; i++)
     {
@@ -2598,7 +2598,7 @@ void Utility_tabview(lv_obj_t *parent)
     static lv_style_t style_stats;
     lv_style_init(&style_stats);
 
-    Utility_objs.table_point_list = table_pro(tab4, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 3, 20, 180, 0, 5);
+    Utility_objs.table_point_list = table_pro(tab4, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 3, 160, 180, 0, 5);
 
     for (int i = 0; i < 100; i++)
     {
