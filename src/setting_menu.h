@@ -1,5 +1,14 @@
 #pragma once
 #include <lvgl.h>
+#include <stdint.h>
+
+
+// public "builder variant" enum used by create_text(...)
+using lv_menu_builder_variant_t = uint8_t;
+enum : lv_menu_builder_variant_t {
+    LV_MENU_ITEM_BUILDER_VARIANT_1 = 0,
+    LV_MENU_ITEM_BUILDER_VARIANT_2 = 1
+};
 
 // ---- forward declarations (avoid heavy headers here) ----
 struct Device;

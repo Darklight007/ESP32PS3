@@ -75,8 +75,6 @@ void setup()
   setupDAC();
   // SetupOVP();  // Create OVP/OCP protection
 
-  btn_calibration_ADC_voltage_event_cb(NULL);
-  btn_calibration_ADC_current_event_cb(NULL);
   
   setupCalibPage();
   createTasks();

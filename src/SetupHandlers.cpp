@@ -321,8 +321,8 @@ void setupCalibPage()
     // hide(win_ADC_voltage_calibration);
     // hide(win_ADC_current_calibration);
     // hide(win_DAC_calibration);
-    // btn_calibration_ADC_voltage_event_cb(NULL);
-    // btn_calibration_ADC_current_event_cb(NULL);
+    btn_calibration_ADC_voltage_event_cb(NULL);
+    btn_calibration_ADC_current_event_cb(NULL);
 
     lv_obj_add_flag(win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
