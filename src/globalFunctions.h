@@ -6,12 +6,14 @@
 // #include "config.hpp"
 #include "input_device.h"
 #include "setting_menu.h"
+// #include "setting_menu2.h"
 #include <string>
 #include <math.h>
 #include "spinbox_pro.h"
 #include "table_pro.h"
 
 #define PI 3.14159265358979323846
+
 
 /**********************
  *   PROTOTYPES
@@ -81,8 +83,8 @@ void functionGenerator_demo(void);
 /**********************
  *   GLOBAL VARIABLES
  **********************/
-FunGen funGenMem, funGenMem2;
-DAC_codes dac_data_g;
+
+// DAC_codes dac_data_g;
 
 // lv_obj_t *table_signals;
 
@@ -1465,8 +1467,8 @@ void Task_ADC(void *pvParameters)
         {
             if (wireConnected)
             {
-                isMyTextBoxHidden = lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
-                if (!isMyTextBoxHidden)
+                // isMyTextBoxHidden = lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                if (!lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN))
                     KeyCheckInterval(10);
 
                 else if (!lv_obj_has_state(Utility_objs.switch_keys_scan, LV_STATE_CHECKED))
@@ -2070,7 +2072,7 @@ static void spinbox_change_event_cb(lv_event_t *e)
         int row = (int)Utility_objs.table_point_list->user_data;
         lv_table_set_cell_value_fmt(Utility_objs.table_point_list, row, 1, "%06.4f", value);
         // Utility_objs.table_points[row] = value;
-        funGenMem.table_points[row][0] = value;
+      PowerSupply.funGenMem.table_points[row][0] = value;
     }
 }
 
@@ -2163,22 +2165,22 @@ void saveToBank(int bank)
     // Save data points from chart to memory
     for (int i = 0; i < CHART_POINTS; i++)
     {
-        funGenMem2.arbitrary_points[i][bank] = y_array[i]; // Store y-values in funGenMem
+        PowerSupply.funGenArbitraryMem.arbitrary_points[i][bank] = y_array[i]; // Store y-values in PowerSupply.funGenMem
     }
 
     // Save function generator memory
-    PowerSupply.SaveMemoryFgen("Arbit", funGenMem2);
+    PowerSupply.SaveMemoryFgen("Arbit", PowerSupply.funGenArbitraryMem);
 }
 
 void loadFromBank(int bank)
 {
     LV_LOG_USER("Loaded settings from Bank %d", bank);
     // Implement loading logic here
-    funGenMem2 = PowerSupply.LoadMemoryFgen("Arbit");
+    PowerSupply.funGenArbitraryMem = PowerSupply.LoadMemoryFgen("Arbit");
     // Fill with zero data initially
     for (int i = 0; i < CHART_POINTS; i++)
     {
-        lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, funGenMem2.arbitrary_points[i][bank]);
+        lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, PowerSupply.funGenArbitraryMem.arbitrary_points[i][bank]);
 
         // lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, 0);
     }
@@ -2235,7 +2237,7 @@ static void dropdownEventCb(lv_event_t *e)
         {
             double value = currentWaveform.function((double)i / CHART_POINTS); // Map i to function
             double outputValue = value * 1.0;
-            // funGenMem2.arbitrary_points[i][0] = outputValue; // Store in memory
+            // PowerSupply.funGenArbitraryMem.arbitrary_points[i][0] = outputValue; // Store in memory
             lv_chart_set_value_by_id(util_Arbit_chart, util_Arbit_chart_series, i, outputValue * 140);
         }
 
@@ -2401,12 +2403,12 @@ void Utility_tabview(lv_obj_t *parent)
     Utility_objs.fun.Offset = spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -32000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2);
     Utility_objs.fun.Duty = spinbox_pro(tab2, "#FFFFF7 Duty [%]:#", 0, 10000, 5, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 3, 98, 3);
 
-    funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
+    PowerSupply.funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
 
-    set_spinbox_data_by_id(tab2, 0, funGenMem.amplitude * 1000);
-    set_spinbox_data_by_id(tab2, 1, funGenMem.frequency * 1000);
-    set_spinbox_data_by_id(tab2, 2, funGenMem.offset * 1000);
-    set_spinbox_data_by_id(tab2, 3, funGenMem.dutyCycle * 10000);
+    set_spinbox_data_by_id(tab2, 0, PowerSupply.funGenMem.amplitude * 1000);
+    set_spinbox_data_by_id(tab2, 1, PowerSupply.funGenMem.frequency * 1000);
+    set_spinbox_data_by_id(tab2, 2, PowerSupply.funGenMem.offset * 1000);
+    set_spinbox_data_by_id(tab2, 3, PowerSupply.funGenMem.dutyCycle * 10000);
 
     // PowerSupply.setupSwitch(tab2, 0, 0, 20, nullptr);
 
@@ -2464,7 +2466,7 @@ void Utility_tabview(lv_obj_t *parent)
     // Fill with zero data initially
     for (int i = 0; i < CHART_POINTS; i++)
     {
-        lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, funGenMem.arbitrary_points[i][0]);
+        lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, PowerSupply.funGenMem.arbitrary_points[i][0]);
         // lv_chart_get_y_array
         // lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, 0);
     }
@@ -2602,9 +2604,9 @@ void Utility_tabview(lv_obj_t *parent)
 
     for (int i = 0; i < 100; i++)
     {
-        // Utility_objs.table_points[i] = funGenMem.table_points[i];
+        // Utility_objs.table_points[i] = PowerSupply.funGenMem.table_points[i];
         lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 0, "%0i", i);
-        lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%1.4f", funGenMem.table_points[i][0]);
+        lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%1.4f", PowerSupply.funGenMem.table_points[i][0]);
     }
 
     lv_table_set_col_width(Utility_objs.table_point_list, 0, 40);
@@ -2629,7 +2631,7 @@ void Utility_tabview(lv_obj_t *parent)
     {
         lv_event_code_t code = lv_event_get_code(e);
         if (code == LV_EVENT_CLICKED)
-            PowerSupply.SaveMemoryFgen("FunGen", funGenMem);
+            PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
     };
     lv_obj_add_event_cb(saveButton, save_table_data_cb, LV_EVENT_CLICKED, NULL);
 
@@ -2645,10 +2647,10 @@ void Utility_tabview(lv_obj_t *parent)
         lv_event_code_t code = lv_event_get_code(e);
         if (code == LV_EVENT_CLICKED)
         {
-            funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
+            PowerSupply.funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
             for (int i = 0; i < 100; i++)
             {
-                lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%06.4f", funGenMem.table_points[i][0]);
+                lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%06.4f", PowerSupply.funGenMem.table_points[i][0]);
             }
             lv_obj_invalidate(Utility_objs.table_point_list);
         }
@@ -2768,9 +2770,9 @@ void keyCheckLoop()
              {
                  Tabs::goToHomeTab();
                 //  lv_obj_add_flag(voltageCurrentCalibration,LV_OBJ_FLAG_HIDDEN);
-                 hide(win_ADC_voltage_calibration);
-                 hide(win_ADC_current_calibration);
-                 hide(win_DAC_calibration); }
+                 hide( PowerSupply.gui.win_ADC_voltage_calibration);
+                 hide( PowerSupply.gui.win_ADC_current_calibration);
+                 hide( PowerSupply.gui.win_DAC_calibration); }
 
     );
 
@@ -2941,8 +2943,8 @@ void keyCheckLoop()
                 // PowerSupply.Voltage.effectiveResolution(64);
                 PowerSupply.ResetStats();
 
-                lv_slider_set_value(lv_obj_get_child(slider_Avgs, -1), log2(w), LV_ANIM_OFF);
-                lv_event_send(lv_obj_get_child(slider_Avgs, -1), LV_EVENT_VALUE_CHANGED, NULL); });
+                lv_slider_set_value(lv_obj_get_child(PowerSupply.gui.slider_Avgs, -1), log2(w), LV_ANIM_OFF);
+                lv_event_send(lv_obj_get_child(PowerSupply.gui.slider_Avgs, -1), LV_EVENT_VALUE_CHANGED, NULL); });
 
     keyMenusPage('+', " RELEASED.", 4, []
                  {
@@ -3384,7 +3386,7 @@ void StatusBar()
     // if (win_ADC_current_calibration != nullptr)
     //     Serial.printf("\nwin_ADC_current_calibration:%i is vis:%i", win_ADC_current_calibration, lv_obj_is_visible(win_ADC_current_calibration));
 
-    if (win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(win_ADC_voltage_calibration))
+    if ( PowerSupply.gui.win_ADC_voltage_calibration != nullptr && lv_obj_is_visible( PowerSupply.gui.win_ADC_voltage_calibration))
     {
 
         int code1 = lv_spinbox_get_value(Calib_GUI_voltage.code_1);
@@ -3410,7 +3412,7 @@ void StatusBar()
 
         PowerSupply.calibrationUpdate();
     }
-    if (win_ADC_current_calibration != nullptr && lv_obj_is_visible(win_ADC_current_calibration))
+    if ( PowerSupply.gui.win_ADC_current_calibration != nullptr && lv_obj_is_visible( PowerSupply.gui.win_ADC_current_calibration))
     {
 
         int code1 = lv_spinbox_get_value(Calib_GUI_current.code_1);
@@ -3765,132 +3767,225 @@ void VCCCInterval(unsigned long interval)
 
 // **Helper Functions**
 
-void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
+// void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
+// {
+//     // static int32_t encoder1_last_value = 0;
+//     // static int32_t encoder2_last_value = 0;
+    
+//     // Serial.printf("\n Debbg point: win_adc_already_created %i", win_adc_already_created);
+//     // Serial.printf("\n Debbg point: win_ADC_voltage_calibration %i", win_ADC_voltage_calibration);
+    
+//     // Serial.printf("\n Debug func: %s", __func__);
+//     // Serial.printf("\n Debug line %i", __LINE__);
+    
+//     // Serial.printf("\nDebug: lastButton:%i", lastButton);
+//     if (!obj_selected_spinbox)
+//         return;
+
+//     // if (lv_obj_is_visible(voltageCurrentCalibration))
+//     // {
+//     //     static int32_t cursor_pos = 0;
+
+//     //     // Check if encoder values have changed
+//     //     if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
+//     //         return;
+
+//     //     // Update cursor position based on encoder 2
+//     //     if (encoder2_last_value < encoder2_value)
+//     //         cursor_pos++;
+//     //     else if (encoder2_last_value > encoder2_value)
+//     //         cursor_pos--;
+
+//     //     int width = spinboxes.digit_count[spinboxes.id_index] - 1;
+//     //     cursor_pos = std::clamp(cursor_pos, 0, width);
+
+//     //     lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
+
+//     //     // Set cursor position in the spinbox
+//     //     lv_spinbox_set_cursor_pos(spinBox, 0);
+//     //     lv_spinbox_set_cursor_pos(spinBox, width - cursor_pos);
+
+//     //     // Serial.printf("\ndata->cursor_pos: %i", width - cursor_pos);
+
+//     //     encoder2_last_value = encoder2_value;
+
+//     //     // Adjust spinbox value based on encoder 1
+//     //     if (encoder1_last_value < encoder1_value)
+//     //         lv_event_send(spinboxes.btn_plus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
+//     //     else if (encoder1_last_value > encoder1_value)
+//     //         lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
+
+//     //     // Perform calibration
+//     //     PowerSupply.calibrate();
+//     //     // encoder1_last_value = encoder1_value;
+//     //     // SaveCalibrationData(); // Uncomment if needed
+
+//     //     // Update calibration label (if needed)
+
+//     // }
+//     else if ( !lv_obj_is_visible( PowerSupply.gui.win_DAC_calibration) &&
+//                !lv_obj_is_visible( PowerSupply.gui.win_ADC_voltage_calibration))
+//     {
+//         // Handle menu navigation when calibration page is not visible
+//         // static int32_t lastValue = 0;
+
+//         if (encoder2_last_value == encoder2_value)
+//             return;
+
+//         if (encoder2_last_value < encoder2_value)
+//             lastButton++;
+//         else if (encoder2_last_value > encoder2_value)
+//             lastButton--;
+
+//         // encoder2_last_value = encoder2_value;
+//         int8_t temp = lastButton;
+//         lastButton = std::clamp(int(lastButton), 0, 6);
+
+//         lv_obj_t *theMenu = lv_obj_get_child(lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu), 0);
+
+//         // Navigate the menu
+//         lv_event_send(lv_obj_get_child(theMenu, lastButton), LV_EVENT_CLICKED, NULL);
+
+//         if (temp == lastButton)
+//             myTone(NOTE_A4, 3); // Play a tone if selection didn't change
+        
+//     }
+
+//     else if (lv_obj_is_visible( PowerSupply.gui.win_DAC_calibration))
+//     {
+//         if (encoder1_last_value < encoder1_value)
+//             lv_spinbox_increment(obj_selected_spinbox);
+
+//         else if (encoder1_last_value > encoder1_value)
+//             lv_spinbox_decrement(obj_selected_spinbox);
+
+//         encoder1_last_value = encoder1_value;
+//     }
+
+//     else if (lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration) ||
+//              lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration))
+//     {
+
+//         static int32_t cursor_pos = 0;
+
+//         if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
+//             return;
+
+//         // Update cursor position based on encoder 2
+//         if (encoder2_last_value < encoder2_value)
+//         {
+//             move_spinbox_cursor_left(obj_selected_spinbox);
+//             encoder2_last_value = encoder2_value;
+//             return;
+//         }
+//         else if (encoder2_last_value > encoder2_value)
+//         {
+//             move_spinbox_cursor_right(obj_selected_spinbox);
+//             encoder2_last_value = encoder2_value;
+//             return;
+//         }
+
+//         if (encoder1_last_value < encoder1_value)
+//             lv_spinbox_increment(obj_selected_spinbox);
+
+//         else if (encoder1_last_value > encoder1_value)
+//             lv_spinbox_decrement(obj_selected_spinbox);
+
+//         encoder1_last_value = encoder1_value;
+//     }
+
+// }
+
+
+// Overload 1: preferred — state passed by reference and persisted by caller
+void handleCalibrationPage(int32_t enc1_value, int32_t enc2_value,
+                           int32_t& enc1_last, int32_t& enc2_last)
 {
-    // static int32_t encoder1_last_value = 0;
-    // static int32_t encoder2_last_value = 0;
+    // Snapshot what’s visible right now
+    const bool dacVisible = lv_obj_is_visible(PowerSupply.gui.win_DAC_calibration);
+    const bool adcVVisible = lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration);
+    const bool adcIVisible = lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration);
+    const bool anyADC = adcVVisible || adcIVisible;
+    const bool anyCalib = dacVisible || anyADC;
 
-    // Serial.printf("\n Debbg point: win_adc_already_created %i", win_adc_already_created);
-    // Serial.printf("\n Debbg point: win_ADC_voltage_calibration %i", win_ADC_voltage_calibration);
+    // ---- 1) Menu navigation (no calibration windows visible) ----
+    if (!anyCalib)
+    {
+        if (enc2_value != enc2_last)
+        {
+            if (enc2_value > enc2_last)      ++lastButton;
+            else if (enc2_value < enc2_last) --lastButton;
 
-    // Serial.printf("\n Debug func: %s", __func__);
-    // Serial.printf("\n Debug line %i", __LINE__);
+            // Clamp to your known menu size (0..6 as in your original code)
+            const int menuMin = 0, menuMax = 6;
+            int8_t prev = lastButton;
+            lastButton = std::clamp<int>(lastButton, menuMin, menuMax);
 
-    if (!obj_selected_spinbox)
+            lv_obj_t* sidebar = lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu);
+            if (sidebar) {
+                lv_obj_t* list = lv_obj_get_child(sidebar, 0);
+                if (list) {
+                    lv_obj_t* item = lv_obj_get_child(list, lastButton);
+                    if (item) lv_event_send(item, LV_EVENT_CLICKED, nullptr);
+                }
+            }
+            if (prev == lastButton) myTone(NOTE_A4, 3);
+
+            enc2_last = enc2_value; // persist
+        }
+        // nothing to do with enc1 here; still persist for completeness
+        enc1_last = enc1_value;
         return;
-
-    // if (lv_obj_is_visible(voltageCurrentCalibration))
-    // {
-    //     static int32_t cursor_pos = 0;
-
-    //     // Check if encoder values have changed
-    //     if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
-    //         return;
-
-    //     // Update cursor position based on encoder 2
-    //     if (encoder2_last_value < encoder2_value)
-    //         cursor_pos++;
-    //     else if (encoder2_last_value > encoder2_value)
-    //         cursor_pos--;
-
-    //     int width = spinboxes.digit_count[spinboxes.id_index] - 1;
-    //     cursor_pos = std::clamp(cursor_pos, 0, width);
-
-    //     lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
-
-    //     // Set cursor position in the spinbox
-    //     lv_spinbox_set_cursor_pos(spinBox, 0);
-    //     lv_spinbox_set_cursor_pos(spinBox, width - cursor_pos);
-
-    //     // Serial.printf("\ndata->cursor_pos: %i", width - cursor_pos);
-
-    //     encoder2_last_value = encoder2_value;
-
-    //     // Adjust spinbox value based on encoder 1
-    //     if (encoder1_last_value < encoder1_value)
-    //         lv_event_send(spinboxes.btn_plus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
-    //     else if (encoder1_last_value > encoder1_value)
-    //         lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
-
-    //     // Perform calibration
-    //     PowerSupply.calibrate();
-    //     // encoder1_last_value = encoder1_value;
-    //     // SaveCalibrationData(); // Uncomment if needed
-
-    //     // Update calibration label (if needed)
-
-    // }
-    else if (win_DAC_calibration != NULL && !lv_obj_is_visible(win_DAC_calibration) &&
-             win_ADC_voltage_calibration != nullptr && !lv_obj_is_visible(win_ADC_voltage_calibration))
-    {
-        // Handle menu navigation when calibration page is not visible
-        // static int32_t lastValue = 0;
-
-        if (encoder2_last_value == encoder2_value)
-            return;
-
-        if (encoder2_last_value < encoder2_value)
-            lastButton++;
-        else if (encoder2_last_value > encoder2_value)
-            lastButton--;
-
-        // encoder2_last_value = encoder2_value;
-
-        int8_t temp = lastButton;
-        lastButton = std::clamp(int(lastButton), 0, 6);
-
-        lv_obj_t *theMenu = lv_obj_get_child(lv_menu_get_cur_sidebar_page(menu), 0);
-
-        // Navigate the menu
-        lv_event_send(lv_obj_get_child(theMenu, lastButton), LV_EVENT_CLICKED, NULL);
-
-        if (temp == lastButton)
-            myTone(NOTE_A4, 3); // Play a tone if selection didn't change
     }
 
-    else if (win_DAC_calibration != nullptr && lv_obj_is_visible(win_DAC_calibration))
-    {
-        if (encoder1_last_value < encoder1_value)
-            lv_spinbox_increment(obj_selected_spinbox);
-
-        else if (encoder1_last_value > encoder1_value)
-            lv_spinbox_decrement(obj_selected_spinbox);
-
-        encoder1_last_value = encoder1_value;
+    // From here on, we’re in some calibration UI.
+    // If we need a spinbox but there isn’t one yet, just persist encoder state and stop.
+    if (!obj_selected_spinbox) {
+        enc1_last = enc1_value;
+        enc2_last = enc2_value;
+        return;
     }
 
-    else if (win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(win_ADC_voltage_calibration) ||
-             win_ADC_current_calibration != nullptr && lv_obj_is_visible(win_ADC_current_calibration))
+    // ---- 2) DAC calibration window: adjust value via encoder1 only ----
+    if (dacVisible)
     {
-
-        static int32_t cursor_pos = 0;
-
-        if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
-            return;
-
-        // Update cursor position based on encoder 2
-        if (encoder2_last_value < encoder2_value)
-        {
-            move_spinbox_cursor_left(obj_selected_spinbox);
-            encoder2_last_value = encoder2_value;
-            return;
+        if (enc1_value != enc1_last) {
+            if (enc1_value > enc1_last) lv_spinbox_increment(obj_selected_spinbox);
+            else                        lv_spinbox_decrement(obj_selected_spinbox);
+            enc1_last = enc1_value;
         }
-        else if (encoder2_last_value > encoder2_value)
-        {
-            move_spinbox_cursor_right(obj_selected_spinbox);
-            encoder2_last_value = encoder2_value;
-            return;
+        enc2_last = enc2_value; // not used here, but keep up-to-date
+        return;
+    }
+
+    // ---- 3) ADC calibration windows: encoder2 moves cursor, encoder1 changes value ----
+    if (anyADC)
+    {
+        // Cursor move (encoder2): left on increment, right on decrement
+        if (enc2_value != enc2_last) {
+            if (enc2_value > enc2_last) move_spinbox_cursor_left(obj_selected_spinbox);
+            else                        move_spinbox_cursor_right(obj_selected_spinbox);
+            enc2_last = enc2_value;
         }
 
-        if (encoder1_last_value < encoder1_value)
-            lv_spinbox_increment(obj_selected_spinbox);
-
-        else if (encoder1_last_value > encoder1_value)
-            lv_spinbox_decrement(obj_selected_spinbox);
-
-        encoder1_last_value = encoder1_value;
+        // Value change (encoder1)
+        if (enc1_value != enc1_last) {
+            if (enc1_value > enc1_last) lv_spinbox_increment(obj_selected_spinbox);
+            else                        lv_spinbox_decrement(obj_selected_spinbox);
+            enc1_last = enc1_value;
+        }
+        return;
     }
 }
+
+// Overload 2: convenience — keeps its own “last” values internally
+void handleCalibrationPage(int32_t enc1_value, int32_t enc2_value)
+{
+    static int32_t enc1_last = enc1_value;
+    static int32_t enc2_last = enc2_value;
+    handleCalibrationPage(enc1_value, enc2_value, enc1_last, enc2_last);
+}
+
 
 void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 {
@@ -4325,24 +4420,24 @@ void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_l
         // print_obj_type(fgen_tabview); // Output: Object is************ a button
         // Serial.printf("\nSpinbox_pro%i", get_spinbox_data_by_id(fgen_tabview, 2));
 
-        funGenMem.amplitude = lv_spinbox_get_value(Utility_objs.fun.Amplitude) / 1000.0;
-        funGenMem.frequency = lv_spinbox_get_value(Utility_objs.fun.Frequency) / 1000.0;
-        funGenMem.offset = lv_spinbox_get_value(Utility_objs.fun.Offset) / 1000.0;
-        funGenMem.dutyCycle = lv_spinbox_get_value(Utility_objs.fun.Duty) / 10000.0;
+        PowerSupply.funGenMem.amplitude = lv_spinbox_get_value(Utility_objs.fun.Amplitude) / 1000.0;
+        PowerSupply.funGenMem.frequency = lv_spinbox_get_value(Utility_objs.fun.Frequency) / 1000.0;
+        PowerSupply.funGenMem.offset = lv_spinbox_get_value(Utility_objs.fun.Offset) / 1000.0;
+        PowerSupply.funGenMem.dutyCycle = lv_spinbox_get_value(Utility_objs.fun.Duty) / 10000.0;
 
-        // funGenMem.amplitude = double(get_spinbox_data_by_id(fgen_tabview, 0) / 1000.0);
-        // funGenMem.frequency = double(get_spinbox_data_by_id(fgen_tabview, 1) / 1000.0);
-        // funGenMem.offset = double(get_spinbox_data_by_id(fgen_tabview, 2) / 1000.0);
-        // funGenMem.dutyCycle = double(get_spinbox_data_by_id(fgen_tabview, 3) / 10000.0);
+        // PowerSupply.funGenMem.amplitude = double(get_spinbox_data_by_id(fgen_tabview, 0) / 1000.0);
+        // PowerSupply.funGenMem.frequency = double(get_spinbox_data_by_id(fgen_tabview, 1) / 1000.0);
+        // PowerSupply.funGenMem.offset = double(get_spinbox_data_by_id(fgen_tabview, 2) / 1000.0);
+        // PowerSupply.funGenMem.dutyCycle = double(get_spinbox_data_by_id(fgen_tabview, 3) / 10000.0);
 
         if (lv_tabview_get_tab_act(lv_obj_get_child(PowerSupply.page[3], 0)) == 1)
-            PowerSupply.SaveMemoryFgen("FunGen", funGenMem);
+            PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
 
         // Serial.printf("\n********************");
-        // Serial.printf("\namplitude %f", funGenMem.amplitude);
-        // Serial.printf("\nfrequency %f", funGenMem.frequency);
-        // Serial.printf("\noffset %f", funGenMem.offset);
-        // Serial.printf("\ndutyCycle %f", funGenMem.dutyCycle);
+        // Serial.printf("\namplitude %f", PowerSupply.funGenMem.amplitude);
+        // Serial.printf("\nfrequency %f", PowerSupply.funGenMem.frequency);
+        // Serial.printf("\noffset %f", PowerSupply.funGenMem.offset);
+        // Serial.printf("\ndutyCycle %f", PowerSupply.funGenMem.dutyCycle);
         // Serial.printf("\n********************");
         // print_obj_type(parent); // Output: Object is a button
         // Serial.printf("\nSpinbox_pro%i", get_spinbox_data_by_id(parent, 2));
@@ -4560,7 +4655,7 @@ double logarithmicCurve(double t)
 double pwmWave(double t)
 {
 
-    return (t < funGenMem.dutyCycle) ? 1.0 : 0;
+    return (t < PowerSupply.funGenMem.dutyCycle) ? 1.0 : 0;
 }
 
 double f0 = 0.0;  // Start frequency
@@ -4577,17 +4672,17 @@ double linearChirp(double t)
 double tablePoint(double t)
 {
     // static uint64_t i;
-    return funGenMem.table_points[int(t * 100) % 100][0];
+    return PowerSupply.funGenMem.table_points[int(t * 100) % 100][0];
 }
 double arbitraryBank0(double t)
 {
     // static uint64_t i;
-    return funGenMem2.arbitrary_points[int(t * CHART_POINTS) % CHART_POINTS][0] / 140.0;
+    return PowerSupply.funGenArbitraryMem.arbitrary_points[int(t * CHART_POINTS) % CHART_POINTS][0] / 140.0;
 }
 double arbitraryBank1(double t)
 {
     // static uint64_t i;
-    return funGenMem2.arbitrary_points[int(t * CHART_POINTS) % CHART_POINTS][1] / 140.0;
+    return PowerSupply.funGenArbitraryMem.arbitrary_points[int(t * CHART_POINTS) % CHART_POINTS][1] / 140.0;
 }
 
 // // Function pointer type
@@ -4690,12 +4785,12 @@ bool functionGenerator()
     static unsigned long startTime = micros();
     unsigned long currentTime = micros();
     double elapsedTime = (currentTime - startTime) / 1'000'000.0;
-    double t = fmod(elapsedTime * funGenMem.frequency, 1.0);
+    double t = fmod(elapsedTime * PowerSupply.funGenMem.frequency, 1.0);
     int selected_row = (int)Utility_objs.table_fun_gen_list->user_data;
     Waveform currentWaveform = waveforms[selected_row];
     double value = currentWaveform.function(t);
     // Serial.println(t);
-    double outputValue = value * funGenMem.amplitude + funGenMem.offset;
+    double outputValue = value * PowerSupply.funGenMem.amplitude + PowerSupply.funGenMem.offset;
 
     static double lastOutputValue = 0.0;
     if (outputValue != lastOutputValue)
