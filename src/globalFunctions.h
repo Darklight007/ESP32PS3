@@ -14,7 +14,6 @@
 
 #define PI 3.14159265358979323846
 
-
 /**********************
  *   PROTOTYPES
  **********************/
@@ -2072,7 +2071,7 @@ static void spinbox_change_event_cb(lv_event_t *e)
         int row = (int)Utility_objs.table_point_list->user_data;
         lv_table_set_cell_value_fmt(Utility_objs.table_point_list, row, 1, "%06.4f", value);
         // Utility_objs.table_points[row] = value;
-      PowerSupply.funGenMem.table_points[row][0] = value;
+        PowerSupply.funGenMem.table_points[row][0] = value;
     }
 }
 
@@ -3386,7 +3385,7 @@ void StatusBar()
     // if (win_ADC_current_calibration != nullptr)
     //     Serial.printf("\nwin_ADC_current_calibration:%i is vis:%i", win_ADC_current_calibration, lv_obj_is_visible(win_ADC_current_calibration));
 
-    if ( PowerSupply.gui.win_ADC_voltage_calibration != nullptr && lv_obj_is_visible( PowerSupply.gui.win_ADC_voltage_calibration))
+    if (PowerSupply.gui.win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration))
     {
 
         int code1 = lv_spinbox_get_value(Calib_GUI_voltage.code_1);
@@ -3412,7 +3411,7 @@ void StatusBar()
 
         PowerSupply.calibrationUpdate();
     }
-    if ( PowerSupply.gui.win_ADC_current_calibration != nullptr && lv_obj_is_visible( PowerSupply.gui.win_ADC_current_calibration))
+    if (PowerSupply.gui.win_ADC_current_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration))
     {
 
         int code1 = lv_spinbox_get_value(Calib_GUI_current.code_1);
@@ -3767,225 +3766,198 @@ void VCCCInterval(unsigned long interval)
 
 // **Helper Functions**
 
-// void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
-// {
-//     // static int32_t encoder1_last_value = 0;
-//     // static int32_t encoder2_last_value = 0;
-    
-//     // Serial.printf("\n Debbg point: win_adc_already_created %i", win_adc_already_created);
-//     // Serial.printf("\n Debbg point: win_ADC_voltage_calibration %i", win_ADC_voltage_calibration);
-    
-//     // Serial.printf("\n Debug func: %s", __func__);
-//     // Serial.printf("\n Debug line %i", __LINE__);
-    
-//     // Serial.printf("\nDebug: lastButton:%i", lastButton);
-//     if (!obj_selected_spinbox)
-//         return;
+// Put these small helpers above handleCalibrationPage()
+// enum class UIMode { Menu, DAC, ADC };
 
-//     // if (lv_obj_is_visible(voltageCurrentCalibration))
-//     // {
-//     //     static int32_t cursor_pos = 0;
-
-//     //     // Check if encoder values have changed
-//     //     if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
-//     //         return;
-
-//     //     // Update cursor position based on encoder 2
-//     //     if (encoder2_last_value < encoder2_value)
-//     //         cursor_pos++;
-//     //     else if (encoder2_last_value > encoder2_value)
-//     //         cursor_pos--;
-
-//     //     int width = spinboxes.digit_count[spinboxes.id_index] - 1;
-//     //     cursor_pos = std::clamp(cursor_pos, 0, width);
-
-//     //     lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
-
-//     //     // Set cursor position in the spinbox
-//     //     lv_spinbox_set_cursor_pos(spinBox, 0);
-//     //     lv_spinbox_set_cursor_pos(spinBox, width - cursor_pos);
-
-//     //     // Serial.printf("\ndata->cursor_pos: %i", width - cursor_pos);
-
-//     //     encoder2_last_value = encoder2_value;
-
-//     //     // Adjust spinbox value based on encoder 1
-//     //     if (encoder1_last_value < encoder1_value)
-//     //         lv_event_send(spinboxes.btn_plus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
-//     //     else if (encoder1_last_value > encoder1_value)
-//     //         lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
-
-//     //     // Perform calibration
-//     //     PowerSupply.calibrate();
-//     //     // encoder1_last_value = encoder1_value;
-//     //     // SaveCalibrationData(); // Uncomment if needed
-
-//     //     // Update calibration label (if needed)
-
-//     // }
-//     else if ( !lv_obj_is_visible( PowerSupply.gui.win_DAC_calibration) &&
-//                !lv_obj_is_visible( PowerSupply.gui.win_ADC_voltage_calibration))
-//     {
-//         // Handle menu navigation when calibration page is not visible
-//         // static int32_t lastValue = 0;
-
-//         if (encoder2_last_value == encoder2_value)
-//             return;
-
-//         if (encoder2_last_value < encoder2_value)
-//             lastButton++;
-//         else if (encoder2_last_value > encoder2_value)
-//             lastButton--;
-
-//         // encoder2_last_value = encoder2_value;
-//         int8_t temp = lastButton;
-//         lastButton = std::clamp(int(lastButton), 0, 6);
-
-//         lv_obj_t *theMenu = lv_obj_get_child(lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu), 0);
-
-//         // Navigate the menu
-//         lv_event_send(lv_obj_get_child(theMenu, lastButton), LV_EVENT_CLICKED, NULL);
-
-//         if (temp == lastButton)
-//             myTone(NOTE_A4, 3); // Play a tone if selection didn't change
-        
-//     }
-
-//     else if (lv_obj_is_visible( PowerSupply.gui.win_DAC_calibration))
-//     {
-//         if (encoder1_last_value < encoder1_value)
-//             lv_spinbox_increment(obj_selected_spinbox);
-
-//         else if (encoder1_last_value > encoder1_value)
-//             lv_spinbox_decrement(obj_selected_spinbox);
-
-//         encoder1_last_value = encoder1_value;
-//     }
-
-//     else if (lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration) ||
-//              lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration))
-//     {
-
-//         static int32_t cursor_pos = 0;
-
-//         if (encoder2_last_value == encoder2_value && encoder1_last_value == encoder1_value)
-//             return;
-
-//         // Update cursor position based on encoder 2
-//         if (encoder2_last_value < encoder2_value)
-//         {
-//             move_spinbox_cursor_left(obj_selected_spinbox);
-//             encoder2_last_value = encoder2_value;
-//             return;
-//         }
-//         else if (encoder2_last_value > encoder2_value)
-//         {
-//             move_spinbox_cursor_right(obj_selected_spinbox);
-//             encoder2_last_value = encoder2_value;
-//             return;
-//         }
-
-//         if (encoder1_last_value < encoder1_value)
-//             lv_spinbox_increment(obj_selected_spinbox);
-
-//         else if (encoder1_last_value > encoder1_value)
-//             lv_spinbox_decrement(obj_selected_spinbox);
-
-//         encoder1_last_value = encoder1_value;
-//     }
-
+// // Decide which UI we are in (reads your existing windows).
+// static inline UIMode detect_mode() {
+//     if (lv_obj_is_visible(PowerSupply.gui.win_DAC_calibration))           return UIMode::DAC;
+//     if (lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration) ||
+//         lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration))   return UIMode::ADC;
+//     return UIMode::Menu;
 // }
 
+// // --- Handlers --------------------------------------------------------------
 
-// Overload 1: preferred — state passed by reference and persisted by caller
-void handleCalibrationPage(int32_t enc1_value, int32_t enc2_value,
-                           int32_t& enc1_last, int32_t& enc2_last)
+// static inline void handle_menu_mode(int32_t& enc2_last_value) {
+//     if (enc2_last_value == encoder2_value) return;
+
+//     // Move selection in sidebar by encoder2
+//     int8_t prev = lastButton;
+//     lastButton += (encoder2_value > enc2_last_value) ? +1 : -1;
+//     lastButton = std::clamp<int>(lastButton, 0, 6);
+
+//     lv_obj_t* sidebar_list = lv_obj_get_child(lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu), 0);
+//     lv_event_send(lv_obj_get_child(sidebar_list, lastButton), LV_EVENT_CLICKED, nullptr);
+
+//     if (prev == lastButton) myTone(NOTE_A4, 3);      // feedback if unchanged
+//     enc2_last_value = encoder2_value;                // single, consistent update
+// }
+
+// static inline void handle_dac_mode(int32_t& enc1_last_value) {
+//     if (!obj_selected_spinbox) return;
+//     if (enc1_last_value == encoder1_value) return;
+
+//     // Change the value with encoder1
+//     (encoder1_value > enc1_last_value) ? lv_spinbox_increment(obj_selected_spinbox)
+//                                        : lv_spinbox_decrement(obj_selected_spinbox);
+//     enc1_last_value = encoder1_value;
+// }
+
+// static inline void handle_adc_mode(int32_t& enc1_last_value, int32_t& enc2_last_value) {
+//     if (!obj_selected_spinbox) return;
+
+//     // First: horizontal cursor with encoder2 (one action per tick)
+//     if (enc2_last_value != encoder2_value) {
+//         if (encoder2_value > enc2_last_value) move_spinbox_cursor_left(obj_selected_spinbox);
+//         else                                  move_spinbox_cursor_right(obj_selected_spinbox);
+//         enc2_last_value = encoder2_value;
+//         return; // do not also change value in the same tick
+//     }
+
+//     // Second: value change with encoder1
+//     if (enc1_last_value == encoder1_value) return;
+//     (encoder1_value > enc1_last_value) ? lv_spinbox_increment(obj_selected_spinbox)
+//                                        : lv_spinbox_decrement(obj_selected_spinbox);
+//     enc1_last_value = encoder1_value;
+// }
+
+// // --- Public entry ----------------------------------------------------------
+
+// void handleCalibrationPage(int32_t& encoder1_last_value, int32_t& encoder2_last_value)
+// {
+//     // If none of the calibration windows are open, we’re in menu mode, regardless of spinbox focus.
+//     const UIMode mode = detect_mode();
+//     switch (mode) {
+//         case UIMode::Menu: handle_menu_mode(encoder2_last_value); break;
+//         case UIMode::DAC:  handle_dac_mode(encoder1_last_value);  break;
+//         case UIMode::ADC:  handle_adc_mode(encoder1_last_value, encoder2_last_value); break;
+//     }
+// }
+// --- helpers (put near the top of the file) ---
+static inline void spinbox_move_left(lv_obj_t *sb) { lv_spinbox_step_next(sb); }  // select higher digit
+static inline void spinbox_move_right(lv_obj_t *sb) { lv_spinbox_step_prev(sb); } // select lower digit
+
+// If you wire this to each spinbox's LV_EVENT_PRESSED, we also clear the "jump back" after touch.
+static void on_spinbox_pressed(lv_event_t *e)
 {
-    // Snapshot what’s visible right now
-    const bool dacVisible = lv_obj_is_visible(PowerSupply.gui.win_DAC_calibration);
-    const bool adcVVisible = lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration);
-    const bool adcIVisible = lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration);
-    const bool anyADC = adcVVisible || adcIVisible;
-    const bool anyCalib = dacVisible || anyADC;
+    LV_UNUSED(e);
+    extern int32_t encoder2_value; // your live encoder 2 count
+    static lv_obj_t *last = nullptr;
+    lv_obj_t *sb = lv_event_get_target(e);
+    last = sb; // mark focus
+    // Resync baselines so the next tick doesn't apply a stale delta:
+    // (we keep these statics below; declare here as extern to reuse)
+    extern int32_t g_last_enc2_dac;
+    extern int32_t g_last_enc2_adc;
+    g_last_enc2_dac = encoder2_value;
+    g_last_enc2_adc = encoder2_value;
+}
 
-    // ---- 1) Menu navigation (no calibration windows visible) ----
-    if (!anyCalib)
+// --- stateful baselines for deltas (file-static) ---
+static int32_t g_last_enc1_dac = 0, g_last_enc2_dac = 0;
+static int32_t g_last_enc1_adc = 0, g_last_enc2_adc = 0;
+static int32_t g_last_enc2_menu = 0;
+static lv_obj_t *g_last_focus = nullptr;
+
+// --- replace your handleCalibrationPage with this ---
+void handleCalibrationPage(int32_t /*encoder1_last_value*/, int32_t /*encoder2_last_value*/)
+{
+    if (!obj_selected_spinbox)
+        return;
+
+    // live encoder counters you already maintain elsewhere
+    extern int32_t encoder1_value;
+    extern int32_t encoder2_value;
+
+    const bool dac_visible =
+        PowerSupply.gui.win_DAC_calibration &&
+        lv_obj_is_visible(PowerSupply.gui.win_DAC_calibration);
+
+    const bool adc_visible =
+        (PowerSupply.gui.win_ADC_voltage_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration)) ||
+        (PowerSupply.gui.win_ADC_current_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration));
+
+    const bool menu_visible = !dac_visible && !adc_visible;
+
+    // If focus moved to a different spinbox (e.g. touch), resync encoder2 baseline to avoid “jump back”
+    if (g_last_focus != obj_selected_spinbox)
     {
-        if (enc2_value != enc2_last)
+        g_last_focus = obj_selected_spinbox;
+        if (dac_visible)
+            g_last_enc2_dac = encoder2_value;
+        if (adc_visible)
+            g_last_enc2_adc = encoder2_value;
+    }
+
+    if (menu_visible)
+    {
+        if (encoder2_value != g_last_enc2_menu)
         {
-            if (enc2_value > enc2_last)      ++lastButton;
-            else if (enc2_value < enc2_last) --lastButton;
+            if (encoder2_value > g_last_enc2_menu)
+                lastButton--;
+            else
+                lastButton++;
+            lastButton = std::clamp<int>(lastButton, 0, 6);
 
-            // Clamp to your known menu size (0..6 as in your original code)
-            const int menuMin = 0, menuMax = 6;
-            int8_t prev = lastButton;
-            lastButton = std::clamp<int>(lastButton, menuMin, menuMax);
+            lv_obj_t *theMenu = lv_obj_get_child(lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu), 0);
+            lv_event_send(lv_obj_get_child(theMenu, lastButton), LV_EVENT_CLICKED, nullptr);
 
-            lv_obj_t* sidebar = lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu);
-            if (sidebar) {
-                lv_obj_t* list = lv_obj_get_child(sidebar, 0);
-                if (list) {
-                    lv_obj_t* item = lv_obj_get_child(list, lastButton);
-                    if (item) lv_event_send(item, LV_EVENT_CLICKED, nullptr);
-                }
-            }
-            if (prev == lastButton) myTone(NOTE_A4, 3);
-
-            enc2_last = enc2_value; // persist
+            g_last_enc2_menu = encoder2_value;
         }
-        // nothing to do with enc1 here; still persist for completeness
-        enc1_last = enc1_value;
         return;
     }
 
-    // From here on, we’re in some calibration UI.
-    // If we need a spinbox but there isn’t one yet, just persist encoder state and stop.
-    if (!obj_selected_spinbox) {
-        enc1_last = enc1_value;
-        enc2_last = enc2_value;
-        return;
-    }
-
-    // ---- 2) DAC calibration window: adjust value via encoder1 only ----
-    if (dacVisible)
+    // ---- DAC window: add encoder 2 to move the digit/cursor ----
+    if (dac_visible)
     {
-        if (enc1_value != enc1_last) {
-            if (enc1_value > enc1_last) lv_spinbox_increment(obj_selected_spinbox);
-            else                        lv_spinbox_decrement(obj_selected_spinbox);
-            enc1_last = enc1_value;
+        // cursor/digit selection via encoder 2
+        if (encoder2_value != g_last_enc2_dac)
+        {
+            if (encoder2_value > g_last_enc2_dac)
+                spinbox_move_left(obj_selected_spinbox);
+            else
+                spinbox_move_right(obj_selected_spinbox);
+            g_last_enc2_dac = encoder2_value;
         }
-        enc2_last = enc2_value; // not used here, but keep up-to-date
+        // value change via encoder 1
+        if (encoder1_value != g_last_enc1_dac)
+        {
+            if (encoder1_value > g_last_enc1_dac)
+                lv_spinbox_increment(obj_selected_spinbox);
+            else
+                lv_spinbox_decrement(obj_selected_spinbox);
+            g_last_enc1_dac = encoder1_value;
+        }
         return;
     }
 
-    // ---- 3) ADC calibration windows: encoder2 moves cursor, encoder1 changes value ----
-    if (anyADC)
+    // ---- ADC windows (voltage/current) ----
+    if (adc_visible)
     {
-        // Cursor move (encoder2): left on increment, right on decrement
-        if (enc2_value != enc2_last) {
-            if (enc2_value > enc2_last) move_spinbox_cursor_left(obj_selected_spinbox);
-            else                        move_spinbox_cursor_right(obj_selected_spinbox);
-            enc2_last = enc2_value;
+        // cursor/digit selection via encoder 2
+        if (encoder2_value != g_last_enc2_adc)
+        {
+            if (encoder2_value > g_last_enc2_adc)
+                spinbox_move_left(obj_selected_spinbox);
+            else
+                spinbox_move_right(obj_selected_spinbox);
+            g_last_enc2_adc = encoder2_value;
+            // After only moving the cursor, stop here; next tick handles value if needed.
+            return;
         }
-
-        // Value change (encoder1)
-        if (enc1_value != enc1_last) {
-            if (enc1_value > enc1_last) lv_spinbox_increment(obj_selected_spinbox);
-            else                        lv_spinbox_decrement(obj_selected_spinbox);
-            enc1_last = enc1_value;
+        // value change via encoder 1
+        if (encoder1_value != g_last_enc1_adc)
+        {
+            if (encoder1_value > g_last_enc1_adc)
+                lv_spinbox_increment(obj_selected_spinbox);
+            else
+                lv_spinbox_decrement(obj_selected_spinbox);
+            g_last_enc1_adc = encoder1_value;
+            // optional: PowerSupply.calibrate();
         }
-        return;
     }
 }
-
-// Overload 2: convenience — keeps its own “last” values internally
-void handleCalibrationPage(int32_t enc1_value, int32_t enc2_value)
-{
-    static int32_t enc1_last = enc1_value;
-    static int32_t enc2_last = enc2_value;
-    handleCalibrationPage(enc1_value, enc2_value, enc1_last, enc2_last);
-}
-
 
 void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 {
