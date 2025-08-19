@@ -59,17 +59,18 @@ extern void SettingMenu(lv_obj_t *parent);
 extern void voltage_current_calibration(void);
 extern void btn_calibration_ADC_voltage_event_cb(lv_event_t *e);
 extern void btn_calibration_ADC_current_event_cb(lv_event_t *e); 
+extern void open_dac_calibration_cb(lv_event_t *e);
 
 // extern void btn_calibration_ADC_voltage_event_cb(lv_event_t *e);
 // extern void btn_calibration_ADC_current_event_cb(lv_event_t *e);
 extern void updateObjectPos_cb(lv_event_t *e);
 
-extern lv_obj_t *menu;
+// extern lv_obj_t *menu;
 // extern lv_obj_t *voltageCurrentCalibration;
 
-extern lv_obj_t *win_ADC_voltage_calibration;
-extern lv_obj_t *win_ADC_current_calibration;
-extern lv_obj_t *win_DAC_calibration;
+// extern lv_obj_t *win_ADC_voltage_calibration;
+// extern lv_obj_t *win_ADC_current_calibration;
+// extern lv_obj_t *win_DAC_calibration;
 extern lv_obj_t *myTextBox;
 
 extern TaskHandle_t Task_adc; 

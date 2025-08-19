@@ -30,7 +30,7 @@ extern bool wireConnected;  // Flag indicating if device is connected on Wire
 extern bool wire1Connected; // Flag indicating if device is connected on Wire1
 // size_t memory;               // Global variable to hold free heap memory size
 extern int32_t *barGraph_V;
-extern DAC_codes dac_data_g;
+// extern DAC_codes dac_data_g;
 
 // **Initialization Functions**
 
@@ -201,22 +201,22 @@ void setupPowerSupply()
     PowerSupply.setupSwitch(PowerSupply.page[2], 0, 240, 160, btn_event_cb);
 
     delay(500);
-    dac_data_g = PowerSupply.LoadDACdata("dac_data_");
+    PowerSupply.dac_data = PowerSupply.LoadDACdata("dac_data_");
     delay(500);
-    PowerSupply.Voltage.adjOffset = dac_data_g.zero_voltage;
-    PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage);                         // 2000.0;
-    PowerSupply.Voltage.maxValue = (dac_data_g.max_voltage - dac_data_g.zero_voltage); // 2000.0;
+    PowerSupply.Voltage.adjOffset = PowerSupply.dac_data.zero_voltage;
+    PowerSupply.Voltage.minValue = (-PowerSupply.dac_data.zero_voltage);                         // 2000.0;
+    PowerSupply.Voltage.maxValue = (PowerSupply.dac_data.max_voltage - PowerSupply.dac_data.zero_voltage); // 2000.0;
     PowerSupply.Voltage.adc_maxValue = 32.768;
 
-    PowerSupply.Current.adjOffset = dac_data_g.zero_current;
-    PowerSupply.Current.minValue = (-dac_data_g.zero_current);                         // 10000.0;
-    PowerSupply.Current.maxValue = (dac_data_g.max_current - dac_data_g.zero_current); // 10000.0;
+    PowerSupply.Current.adjOffset = PowerSupply.dac_data.zero_current;
+    PowerSupply.Current.minValue = (-PowerSupply.dac_data.zero_current);                         // 10000.0;
+    PowerSupply.Current.maxValue = (PowerSupply.dac_data.max_current - PowerSupply.dac_data.zero_current); // 10000.0;
     PowerSupply.Current.adc_maxValue = 6.5536;
 
     // Setup voltage, current, and power parameters for page 3
     PowerSupply.Voltage.setup(PowerSupply.page[2], "V-Set:", -14, -8, "V",
                               PowerSupply.Voltage.maxValue, PowerSupply.Voltage.minValue,
-                              5.0, dac_data_g.zero_voltage, 2000);
+                              5.0, PowerSupply.dac_data.zero_voltage, 2000);
 
     // Set window sizes for measurements and statistics
     PowerSupply.Voltage.measured.SetWindowSize(MAX_NO_OF_AVG);
@@ -235,7 +235,7 @@ void setupPowerSupply()
     // Setup current parameters
 
     PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", PowerSupply.Current.maxValue, PowerSupply.Current.minValue,
-                              1.0, dac_data_g.zero_current, 10000);
+                              1.0, PowerSupply.dac_data.zero_current, 10000);
 
     // Setup power display parameters
     PowerSupply.Power.setup(PowerSupply.page[2], "", -14, 144, "W", 0, 0, 0, 0, 0, &dseg_b_24, &Tauri_R_28);
@@ -323,10 +323,11 @@ void setupCalibPage()
     // hide(win_DAC_calibration);
     btn_calibration_ADC_voltage_event_cb(NULL);
     btn_calibration_ADC_current_event_cb(NULL);
+    open_dac_calibration_cb(NULL);
 
-    lv_obj_add_flag(win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
-    // lv_obj_add_flag(win_DAC_calibration, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(PowerSupply.gui.win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(PowerSupply.gui.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(PowerSupply.gui.win_DAC_calibration, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
 }

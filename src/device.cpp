@@ -3,9 +3,9 @@
 
 extern Calibration StoreData;
 extern bool lvglIsBusy, lvglChartIsBusy, blockAll;
-FunGen funGen; // Definition
+// FunGen funGen; // Definition
 
-extern DAC_codes dac_data_g;
+// extern DAC_codes dac_data_g;
 extern lv_obj_t *btn_function_gen;
 
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
@@ -233,12 +233,17 @@ void Device::LoadSetting(void)
 
         Device::SaveSettingData("setting_param", settingParameters);
 
-        dac_data_g.zero_voltage = 11;
-        dac_data_g.max_voltage = 65535;
-        dac_data_g.zero_current = 10;
-        dac_data_g.max_current = 65535;
+        // dac_data_g.zero_voltage = 11;
+        // dac_data_g.max_voltage = 65535;
+        // dac_data_g.zero_current = 10;
+        // dac_data_g.max_current = 65535;
 
-        SaveDACdata("dac_data_", dac_data_g);
+        dac_data.zero_voltage = 11;
+        dac_data.max_voltage = 65535;
+        dac_data.zero_current = 10;
+        dac_data.max_current = 65535;
+
+        SaveDACdata("dac_data_", dac_data);
     }
     // memory.putUShort("pi", 0);
     memory.end();
@@ -532,7 +537,7 @@ void Device::VCCCStatusUpdate(void)
 
     if (digitalRead(CCCVPin) == false)
         setStatus(DEVICE::CC);
-    else if (getStatus() != DEVICE::OFF  && digitalRead(CCCVPin) == true )
+    else if (getStatus() != DEVICE::OFF && digitalRead(CCCVPin) == true)
         setStatus(DEVICE::VC);
     last_status = digitalRead(CCCVPin);
 }

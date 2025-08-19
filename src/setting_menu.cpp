@@ -3,29 +3,20 @@
 // heavy/private includes live ONLY in the .cpp
 #include "spinbox_pro.h"
 #include "version.h"
-#include "buzzer.h"
-#include "TFT_eSPI.h"
+#include "buzzer.h"   // provides buzzerSound and myTone()
+#include "TFT_eSPI.h" // tft instance
 #include "tabs.h"
-#include "device.h"
-#include "lv_gui_helper.h"
+#include "device.h"        // provides PowerSupply and dac_data_g
+#include "lv_gui_helper.h" // LVLabel, LVButton helpers
 
 #include <cmath>
 #include <map>
+#include <cstdio>
 
 // ---------- public objects (one definition) ----------
-lv_obj_t *menu = nullptr;
-lv_obj_t *root_page = nullptr;
 
 lv_obj_t *myTextBox = nullptr;
-bool isMyTextBoxHidden = false;
 int8_t lastButton = 0;
-
-lv_obj_t *win_DAC_calibration = nullptr;
-lv_obj_t *win_ADC_voltage_calibration = nullptr;
-lv_obj_t *win_ADC_current_calibration = nullptr;
-
-lv_obj_t *slider_Avgs = nullptr;
-lv_obj_t *btn_load = nullptr;
 
 setting_GUI Calib_GUI_voltage{};
 setting_GUI Calib_GUI_current{};
@@ -122,44 +113,36 @@ namespace
         }
     }
 
-    // Switch handler for root/sidebar toggle
-    static void switch_handler(lv_event_t *e)
-    {
-        auto code = lv_event_get_code(e);
-        auto *m = static_cast<lv_obj_t *>(lv_event_get_user_data(e));
-        auto *obj = lv_event_get_target(e);
-        if (code != LV_EVENT_VALUE_CHANGED)
-            return;
+    // // Switch handler for root/sidebar toggle (kept for reference)
+    // static void switch_handler(lv_event_t* e)
+    // {
+    //     if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    //     auto* m   = static_cast<lv_obj_t*>(lv_event_get_user_data(e));
+    //     auto* obj = lv_event_get_target(e);
 
-        if (lv_obj_has_state(obj, LV_STATE_CHECKED))
-        {
-            lv_menu_set_page(m, nullptr);
-            lv_menu_set_sidebar_page(m, root_page);
-            lv_event_send(lv_obj_get_child(lv_obj_get_child(lv_menu_get_cur_sidebar_page(m), 0), 0),
-                          LV_EVENT_CLICKED, nullptr);
-        }
-        else
-        {
-            lv_menu_set_sidebar_page(m, nullptr);
-            lv_menu_clear_history(m);
-            lv_menu_set_page(m, root_page);
-        }
-    }
+    //     if (lv_obj_has_state(obj, LV_STATE_CHECKED))
+    //     {
+    //         lv_menu_set_page(m, nullptr);
+    //         lv_menu_set_sidebar_page(m, root_page);
+    //         lv_event_send(lv_obj_get_child(lv_obj_get_child(lv_menu_get_cur_sidebar_page(m), 0), 0),
+    //                       LV_EVENT_CLICKED, nullptr);
+    //     }
+    //     else
+    //     {
+    //         lv_menu_set_sidebar_page(m, nullptr);
+    //         lv_menu_clear_history(m);
+    //         lv_menu_set_page(m, root_page);
+    //     }
+    // }
 
     // ------ UI builders ------
     static lv_obj_t *create_text(lv_obj_t *parent, const char *icon, const char *txt,
                                  uint8_t builder_variant, lv_obj_t *obj)
     {
+        (void)icon;
         obj = lv_menu_cont_create(parent);
 
-        lv_obj_t *img = nullptr;
         lv_obj_t *label = nullptr;
-
-        if (icon)
-        {
-            img = lv_img_create(obj);
-            lv_img_set_src(img, icon);
-        }
         if (txt)
         {
             label = lv_label_create(obj);
@@ -167,15 +150,13 @@ namespace
             lv_obj_set_flex_grow(label, 0);
             lv_obj_set_height(label, 11);
         }
-        if (builder_variant == 2 && icon && txt)
-        {
-            lv_obj_add_flag(img, LV_OBJ_FLAG_FLEX_IN_NEW_TRACK);
-            lv_obj_swap(img, label);
-        }
+
+        // builder_variant 1 or 2 (see LVGL menu docs). Using raw ints avoids macro deps.
+        (void)builder_variant;
         return obj;
     }
 
-    static lv_obj_t *create_switch_(lv_obj_t *parent, const char *icon, const char *txt, bool chk,
+    static lv_obj_t *create_switch_(lv_obj_t *parent, const char * /*icon*/, const char *txt, bool chk,
                                     lv_event_cb_t event_cb, lv_event_code_t filter, void *user_data)
     {
         lv_obj_t *obj = lv_menu_cont_create(parent);
@@ -294,12 +275,13 @@ namespace
         PowerSupply.SaveCalibrationData();
         PRESSED_event_cb(nullptr);
     }
+
     static void load_cb(lv_event_t *)
     {
         PowerSupply.LoadCalibrationData();
         PRESSED_event_cb(nullptr);
 
-        if (win_ADC_voltage_calibration && !lv_obj_has_flag(win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN))
+        if (PowerSupply.gui.win_ADC_voltage_calibration && !lv_obj_has_flag(PowerSupply.gui.win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN))
         {
             auto &v = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
             lv_spinbox_set_value(Calib_GUI_voltage.code_1, v.code_1);
@@ -307,7 +289,7 @@ namespace
             lv_spinbox_set_value(Calib_GUI_voltage.vin_1, (int32_t)llround(10000.0 * v.value_1));
             lv_spinbox_set_value(Calib_GUI_voltage.vin_2, (int32_t)llround(10000.0 * v.value_2));
         }
-        if (win_ADC_current_calibration && !lv_obj_has_flag(win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN))
+        if (PowerSupply.gui.win_ADC_current_calibration && !lv_obj_has_flag(PowerSupply.gui.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN))
         {
             auto &i = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
             lv_spinbox_set_value(Calib_GUI_current.code_1, i.code_1);
@@ -318,11 +300,10 @@ namespace
     }
 
     // slider factory
-    static lv_obj_t *create_slider(lv_obj_t *parent, const char *icon, const char *txt,
+    static lv_obj_t *create_slider(lv_obj_t *parent, const char * /*icon*/, const char *txt,
                                    int32_t min, int32_t max, int32_t val,
                                    lv_event_cb_t event_cb, lv_event_code_t filter)
     {
-        (void)icon;
         lv_obj_t *obj = lv_menu_cont_create(parent);
         lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(obj, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_END);
@@ -369,7 +350,7 @@ namespace
         lv_obj_t *win = lv_win_create(lv_scr_act(), 32);
         *win_holder = win;
         lv_obj_set_size(win, 320, 226);
-        lv_win_add_title(win, title);
+        lv_win_add_title(win, title); // LVGL 8 win API.
 
         lv_obj_t *btn = lv_win_add_btn(win, LV_SYMBOL_CLOSE, 60);
         lv_obj_add_event_cb(btn, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
@@ -378,28 +359,16 @@ namespace
         lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
         lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
 
-        static lv_style_t style_btn_loadSave;
-        static bool sbtn{};
-        if (!sbtn)
-        {
-            lv_style_init(&style_btn_loadSave);
-            lv_style_set_bg_color(&style_btn_loadSave, lv_palette_main(LV_PALETTE_BLUE));
-            sbtn = true;
-        }
-
         static lv_style_t style_lbl, style_val;
-        static bool sstyles{};
-        if (!sstyles)
+        static bool styles_inited{};
+        if (!styles_inited)
         {
             lv_style_init(&style_lbl);
             lv_style_set_text_font(&style_lbl, &lv_font_montserrat_10);
-            lv_style_set_bg_color(&style_lbl, lv_color_hex(0xFF0000));
-
             lv_style_init(&style_val);
             lv_style_set_text_font(&style_val, &graph_R_16);
             lv_style_set_text_color(&style_val, lv_color_hex(0xFFFFFF));
-            lv_style_set_bg_color(&style_val, lv_color_hex(0xFFAAAA));
-            sstyles = true;
+            styles_inited = true;
         }
 
         lv_point_t offset{10, 20};
@@ -433,10 +402,10 @@ namespace
         gui.lbl_ER = LVLabel::create(cont, "00.00", lbl_er, 0, pad.y - 2, &style_val);
 
         lv_point_t btn_pos{140 + offset.x, 160};
-        LVButton btnSave(cont, "Save", btn_pos.x + 62, btn_pos.y, 54, 26, &style_btn_loadSave, save_cb);
-        LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 54, 26, &style_btn_loadSave, load_cb);
+        LVButton btnSave(cont, "Save", btn_pos.x + 62, btn_pos.y, 54, 26, nullptr, save_cb);
+        LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 54, 26, nullptr, load_cb);
 
-        // formula labels
+        // m, b, and Vin_cal notes (simple labels)
         auto *label_m = lv_label_create(cont);
         auto *label_m_num = lv_label_create(cont);
         auto *label_m_den = lv_label_create(cont);
@@ -464,7 +433,7 @@ namespace
         lv_obj_align(label_vin, LV_ALIGN_TOP_LEFT, 0, verPad + 90);
     }
 
-    // DAC handlers as proper function pointers (no lambdas)
+    // DAC handlers
     static void DAC_voltage_calib_change_event_cb(lv_event_t *e)
     {
         if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED)
@@ -473,15 +442,15 @@ namespace
         double mv = lv_spinbox_get_value(s_mv);
         lv_label_set_text_fmt(s_label_maxV, "%+6.4fV", (mv - zv) / 2000.0);
 
-        dac_data_g.zero_voltage = lv_spinbox_get_value(s_zv);
-        dac_data_g.max_voltage = lv_spinbox_get_value(s_mv);
-        dac_data_g.zero_current = lv_spinbox_get_value(s_zc);
-        dac_data_g.max_current = lv_spinbox_get_value(s_mc);
+        PowerSupply.dac_data.zero_voltage = lv_spinbox_get_value(s_zv);
+        PowerSupply.dac_data.max_voltage = lv_spinbox_get_value(s_mv);
+        PowerSupply.dac_data.zero_current = lv_spinbox_get_value(s_zc);
+        PowerSupply.dac_data.max_current = lv_spinbox_get_value(s_mc);
 
-        PowerSupply.Voltage.adjOffset = dac_data_g.zero_voltage;
-        PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage);
+        PowerSupply.Voltage.adjOffset = PowerSupply.dac_data.zero_voltage;
+        PowerSupply.Voltage.minValue = (-PowerSupply.dac_data.zero_voltage);
         PowerSupply.Voltage.maxValue = (mv - zv);
-        PowerSupply.SaveDACdata("dac_data_", dac_data_g);
+        PowerSupply.SaveDACdata("dac_data_", PowerSupply.dac_data);
     }
 
     static void DAC_current_calib_change_event_cb(lv_event_t *e)
@@ -492,19 +461,19 @@ namespace
         double mc = lv_spinbox_get_value(s_mc);
         lv_label_set_text_fmt(s_label_maxC, "%+6.4fA", (mc - zc) / 10000.0);
 
-        dac_data_g.zero_voltage = lv_spinbox_get_value(s_zv);
-        dac_data_g.max_voltage = lv_spinbox_get_value(s_mv);
-        dac_data_g.zero_current = lv_spinbox_get_value(s_zc);
-        dac_data_g.max_current = lv_spinbox_get_value(s_mc);
+        PowerSupply.dac_data.zero_voltage = lv_spinbox_get_value(s_zv);
+        PowerSupply.dac_data.max_voltage = lv_spinbox_get_value(s_mv);
+        PowerSupply.dac_data.zero_current = lv_spinbox_get_value(s_zc);
+        PowerSupply.dac_data.max_current = lv_spinbox_get_value(s_mc);
 
-        PowerSupply.Current.adjOffset = dac_data_g.zero_current;
-        PowerSupply.Current.minValue = (-dac_data_g.zero_current) / 10000.0;
+        PowerSupply.Current.adjOffset = PowerSupply.dac_data.zero_current;
+        PowerSupply.Current.minValue = (-PowerSupply.dac_data.zero_current) / 10000.0;
         PowerSupply.Current.maxValue = (mc - zc) / 10000.0;
-        PowerSupply.SaveDACdata("dac_data_", dac_data_g);
+        PowerSupply.SaveDACdata("dac_data_", PowerSupply.dac_data);
     }
 
     // LCD touch calibration kept private
-    static void LCD_Calibration_cb(lv_event_t *e)
+    static void LCD_Calibration_cb(lv_event_t *)
     {
         uint16_t calData[5];
         tft.fillScreen(TFT_BLACK);
@@ -521,13 +490,10 @@ namespace
         lv_obj_invalidate(Tabs::tabview);
     }
 
-    static lv_obj_t *create_pushbutton(lv_obj_t *parent, const char * icon,
-                                       lv_event_cb_t event_cb, const char * /*txt*/,
-                                       const char *buttonTxt)
+    static lv_obj_t *create_button_item(lv_obj_t *parent, lv_event_cb_t cb, const char *buttonTxt)
     {
         lv_obj_t *obj = lv_menu_cont_create(parent);
         lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_COLUMN);
-
         lv_obj_set_style_pad_all(obj, 3, LV_PART_ITEMS);
         lv_obj_set_style_pad_all(obj, 3, LV_PART_MAIN);
 
@@ -535,14 +501,15 @@ namespace
         lv_obj_set_size(btn, 120, 30);
         auto *label = lv_label_create(btn);
         lv_label_set_text(label, buttonTxt);
-        lv_obj_center(label); 
+        lv_obj_center(label);
 
         lv_obj_add_event_cb(btn, PRESSED_event_cb, LV_EVENT_PRESSED, nullptr);
         lv_obj_add_event_cb(btn, RELEASED_event_cb, LV_EVENT_RELEASED, nullptr);
-        if (event_cb)
-            lv_obj_add_event_cb(btn, event_cb, LV_EVENT_RELEASED, nullptr);
+        if (cb)
+            lv_obj_add_event_cb(btn, cb, LV_EVENT_RELEASED, nullptr);
         return obj;
     }
+
 } // namespace
 
 // ---------- small helpers exported ----------
@@ -552,176 +519,181 @@ double get_b(double code, double m, double vin) { return code - m * vin; }
 // ---------- public: build menus ----------
 void SettingMenu(lv_obj_t *parent)
 {
-    menu = lv_menu_create(parent);
+    PowerSupply.gui.setting_menu = lv_menu_create(parent); // lv_menu API.
 
-    lv_color_t bg = lv_obj_get_style_bg_color(menu, 0);
-    lv_obj_set_style_bg_color(menu, lv_color_darken(bg, lv_color_brightness(bg) > 127 ? 10 : 50), 0);
-    lv_menu_set_mode_root_back_btn(menu, LV_MENU_ROOT_BACK_BTN_DISABLED);
-    lv_obj_set_size(menu, 294, 200);
-    lv_obj_center(menu);
+    lv_color_t bg = lv_obj_get_style_bg_color(PowerSupply.gui.setting_menu, 0);
+    lv_obj_set_style_bg_color(PowerSupply.gui.setting_menu, lv_color_darken(bg, lv_color_brightness(bg) > 127 ? 10 : 50), 0);
+    lv_menu_set_mode_root_back_btn(PowerSupply.gui.setting_menu, LV_MENU_ROOT_BACK_BTN_DISABLED);
+    lv_obj_set_size(PowerSupply.gui.setting_menu, 294, 200);
+    lv_obj_center(PowerSupply.gui.setting_menu);
 
     // Display page
-    lv_obj_t *sub_display = lv_menu_page_create(menu, nullptr);
-    lv_obj_set_style_pad_hor(sub_display, lv_obj_get_style_pad_left(lv_menu_get_main_header(menu), 0), 0);
+    lv_obj_t *sub_display = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
+    lv_obj_set_style_pad_hor(sub_display, lv_obj_get_style_pad_left(lv_menu_get_main_header(PowerSupply.gui.setting_menu), 0), 0);
     auto *section = lv_menu_section_create(sub_display);
-    create_slider(section, LV_SYMBOL_SETTINGS, "Backlight", 0, 255, 255, slider_backlight_event_cb, LV_EVENT_VALUE_CHANGED);
+    create_slider(section, nullptr, "Backlight", 0, 255, 255, slider_backlight_event_cb, LV_EVENT_VALUE_CHANGED);
 
     // Sound
-    lv_obj_t *sub_sound = lv_menu_page_create(menu, nullptr);
+    lv_obj_t *sub_sound = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_sound);
-    create_switch_(section, LV_SYMBOL_AUDIO, "Buzzer", buzzerSound, switch_buzzer_event_cb, LV_EVENT_SHORT_CLICKED, nullptr);
+    create_switch_(section, nullptr, "Buzzer", buzzerSound, switch_buzzer_event_cb, LV_EVENT_SHORT_CLICKED, nullptr);
 
     // Measure
-    lv_obj_t *sub_measure = lv_menu_page_create(menu, nullptr);
+    lv_obj_t *sub_measure = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_measure);
     create_slider(section, nullptr, "ADC SPS", 0, 3, PowerSupply.settingParameters.adcRate, slider_adcRate_event_cb, LV_EVENT_VALUE_CHANGED);
-    slider_Avgs = create_slider(section, nullptr, "ADC # of Avgs", 0, (int)std::log2(MAX_NO_OF_AVG), PowerSupply.settingParameters.adcNumberOfAvgs, slider_adcAVG_event_cb, LV_EVENT_VALUE_CHANGED);
+    PowerSupply.gui.slider_Avgs = create_slider(section, nullptr, "ADC # of Avgs", 0, (int)std::log2(MAX_NO_OF_AVG), PowerSupply.settingParameters.adcNumberOfAvgs, slider_adcAVG_event_cb, LV_EVENT_VALUE_CHANGED);
     create_slider(section, nullptr, "Number of Digits", 1, 4, PowerSupply.settingParameters.adcNumberOfDigits, slider_decimalPoints_event_cb, LV_EVENT_VALUE_CHANGED);
-    create_switch_(section, nullptr, "Auto Bar-Graph", false, switch_buzzer_event_cb, LV_EVENT_VALUE_CHANGED, menu);
+    create_switch_(section, nullptr, "Auto Bar-Graph", false, switch_buzzer_event_cb, LV_EVENT_VALUE_CHANGED, PowerSupply.gui.setting_menu);
 
     // Calibration
-    lv_obj_t *sub_cal = lv_menu_page_create(menu, nullptr);
+    lv_obj_t *sub_cal = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_cal);
-    create_pushbutton(section, nullptr, btn_calibration_ADC_voltage_event_cb, LV_SYMBOL_CHARGE, "ADC Voltage");
-    create_pushbutton(section, nullptr, btn_calibration_ADC_current_event_cb, LV_SYMBOL_CHARGE, "ADC Current");
-    create_pushbutton(section, nullptr, [](lv_event_t *e) { // DAC window open (private)
-        if (win_DAC_calibration)
-        {
-            lv_obj_clear_flag(win_DAC_calibration, LV_OBJ_FLAG_HIDDEN);
-            return;
-        }
-        win_DAC_calibration = lv_win_create(lv_scr_act(), 36);
-        lv_obj_set_size(win_DAC_calibration, 320, 226);
-        lv_win_add_title(win_DAC_calibration, "DAC Calibration");
-        auto *close = lv_win_add_btn(win_DAC_calibration, LV_SYMBOL_CLOSE, 60);
-        lv_obj_add_event_cb(close, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
-        auto *cont = lv_win_get_content(win_DAC_calibration);
-        lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
-        lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
-        lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
-
-        auto *title = lv_label_create(cont);
-        lv_label_set_text(title, "DAC Code      Output V/C");
-        lv_obj_align(title, LV_ALIGN_OUT_LEFT_TOP, 95, 10);
-        lv_obj_set_style_text_font(title, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_text_color(title, lv_color_hex(0x00FFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-
-        int xPos = 94, yPos = 40, yOffset = 25, xOffset = 10;
-
-        s_zv = spinbox_pro(cont, "#FFFFF7 Zero Voltage:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 86, 15);
-        s_mv = spinbox_pro(cont, "#FFFFF7 Max  Voltage:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 1, 86, 16);
-        s_zc = spinbox_pro(cont, "#FFFFF7 Zero Current:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 2.3, 86, 17);
-        s_mc = spinbox_pro(cont, "#FFFFF7 Max  Current:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 3.3, 86, 18);
-
-        auto addLabel = [&](lv_obj_t *parent, const char *fmt, double value) -> lv_obj_t *
-        {
-            lv_obj_t *parent_child = lv_obj_get_child(parent, 1);
-            lv_obj_align(parent_child, LV_ALIGN_OUT_RIGHT_MID, -90, 0);
-            auto *lbl = lv_label_create(parent);
-            lv_obj_add_flag(parent, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
-            lv_obj_align_to(lbl, parent, LV_ALIGN_OUT_RIGHT_MID, xOffset, 0);
-            lv_label_set_text_fmt(lbl, fmt, value);
-            lv_obj_set_style_text_font(lbl, &graph_R_16, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-            return lbl;
-        };
-
-        addLabel(s_zv, "+%07.4fV", 0.0);
-        s_label_maxV = addLabel(s_mv, "+%07.4fV", 32.750);
-
-        addLabel(s_zc, "%+06.4fA", 0.0);
-        s_label_maxC = addLabel(s_mc, "%+06.4fA", 6.5535);
-
-        dac_data_g = PowerSupply.LoadDACdata("dac_data_");
-        lv_spinbox_set_value(s_zv, dac_data_g.zero_voltage);
-        lv_spinbox_set_value(s_mv, dac_data_g.max_voltage);
-        lv_spinbox_set_value(s_zc, dac_data_g.zero_current);
-        lv_spinbox_set_value(s_mc, dac_data_g.max_current);
-
-        PowerSupply.Voltage.adjOffset = dac_data_g.zero_voltage;
-        PowerSupply.Voltage.minValue = (-dac_data_g.zero_voltage);
-        PowerSupply.Voltage.maxValue = (dac_data_g.max_voltage - dac_data_g.zero_voltage);
-
-        PowerSupply.Current.adjOffset = dac_data_g.zero_current;
-        PowerSupply.Current.minValue = (-dac_data_g.zero_current);
-        PowerSupply.Current.maxValue = (dac_data_g.max_current - dac_data_g.zero_current);
-
-        lv_obj_add_event_cb(s_zv, DAC_voltage_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, s_label_maxV);
-        lv_obj_add_event_cb(s_mv, DAC_voltage_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, s_label_maxV);
-        lv_obj_add_event_cb(s_zc, DAC_current_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
-        lv_obj_add_event_cb(s_mc, DAC_current_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
-    },
-                      LV_SYMBOL_CHARGE, "V/I DAC");
-    create_pushbutton(section, nullptr, nullptr, "Statistics", "Reset Stats");
-
-    create_pushbutton(section, nullptr, LCD_Calibration_cb, "", "LCD Touch");
+    create_button_item(section, btn_calibration_ADC_voltage_event_cb, "ADC Voltage");
+    create_button_item(section, btn_calibration_ADC_current_event_cb, "ADC Current");
+    create_button_item(section, open_dac_calibration_cb, "V/I DAC");
+    create_button_item(section, nullptr /* Stats reset wiring */, "Reset Stats");
+    create_button_item(section, LCD_Calibration_cb, "LCD Touch");
 
     // Save/Load
-    lv_obj_t *sub_save_load = lv_menu_page_create(menu, NULL);
+    lv_obj_t *sub_save_load = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_save_load);
-    create_pushbutton(section, nullptr, nullptr, nullptr, "Load");
-    create_pushbutton(section, nullptr, nullptr, nullptr, "Save");
+    create_button_item(section, load_cb, "Load");
+    create_button_item(section, save_cb, "Save");
 
-    
     // Version/About/Sidebar
-    lv_obj_t *sub_software_info_page = lv_menu_page_create(menu, nullptr);
+    lv_obj_t *sub_software_info_page = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_software_info_page);
 
     char version_text[48];
     snprintf(version_text, sizeof(version_text), "Version %s", SOFTWARE_VERSION);
     create_text(section, nullptr, version_text, 1, nullptr);
 
-    lv_obj_t *sub_about_page = lv_menu_page_create(menu, nullptr);
+    lv_obj_t *sub_about_page = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_about_page);
-    auto *obj0 = create_text(section, nullptr, "Software information", 1, nullptr);
-    lv_menu_set_load_page_event(menu, obj0, sub_software_info_page);
+    auto *itm = create_text(section, nullptr, "Software information", 1, nullptr);
+    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_software_info_page);
 
-    root_page = lv_menu_page_create(menu, nullptr);
-    lv_obj_set_style_pad_hor(root_page, lv_obj_get_style_pad_left(lv_menu_get_main_header(menu), 0), 0);
+    // Root page + items
+    lv_obj_t *root_page = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
+    lv_obj_set_style_pad_hor(root_page, lv_obj_get_style_pad_left(lv_menu_get_main_header(PowerSupply.gui.setting_menu), 0), 0);
     section = lv_menu_section_create(root_page);
 
-    obj0 = create_text(section, nullptr, "Display", 1, nullptr);
-    lv_menu_set_load_page_event(menu, obj0, sub_display);
-    lv_obj_add_event_cb(obj0, trackPress, LV_EVENT_RELEASED, nullptr);
+    itm = create_text(section, nullptr, "Display", 1, nullptr);
+    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_display);
+    lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
 
-    obj0 = create_text(section, nullptr, "Sound", 1, nullptr);
-    lv_menu_set_load_page_event(menu, obj0, sub_sound);
-    lv_obj_add_event_cb(obj0, trackPress, LV_EVENT_RELEASED, nullptr);
+    itm = create_text(section, nullptr, "Sound", 1, nullptr);
+    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_sound);
+    lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
 
-    obj0 = create_text(section, nullptr, "Measure", 1, nullptr);
-    lv_menu_set_load_page_event(menu, obj0, sub_measure);
-    lv_obj_add_event_cb(obj0, trackPress, LV_EVENT_RELEASED, nullptr);
+    itm = create_text(section, nullptr, "Measure", 1, nullptr);
+    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_measure);
+    lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
 
-    obj0 = create_text(section, nullptr, "Calibration", 1, nullptr);
-    lv_menu_set_load_page_event(menu, obj0, sub_cal);
-    lv_obj_add_event_cb(obj0, trackPress, LV_EVENT_RELEASED, nullptr);
+    itm = create_text(section, nullptr, "Calibration", 1, nullptr);
+    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_cal);
+    lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
 
-    obj0 = create_text(section, nullptr, "Load/Save", 1, nullptr);
-    lv_menu_set_load_page_event(menu, obj0, sub_save_load);
-    lv_obj_add_event_cb(obj0, trackPress, LV_EVENT_RELEASED, nullptr);
+    itm = create_text(section, nullptr, "Save/Load", 1, nullptr);
+    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_save_load);
+    lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
 
-    obj0 = create_text(section, nullptr, "About", 1, nullptr);
-    lv_menu_set_load_page_event(menu, obj0, sub_about_page);
-    lv_obj_add_event_cb(obj0, trackPress, LV_EVENT_RELEASED, nullptr);
+    itm = create_text(section, nullptr, "About", 1, nullptr);
+    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_about_page);
+    lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
 
-    lv_menu_set_sidebar_page(menu, root_page);
-    auto *m = (lv_menu_t *)menu;
+    lv_menu_set_sidebar_page(PowerSupply.gui.setting_menu, root_page);
+    auto *m = (lv_menu_t *)PowerSupply.gui.setting_menu;
     lv_obj_set_size(m->sidebar, LV_PCT(38), LV_PCT(100));
-    lv_event_send(lv_obj_get_child(lv_obj_get_child(lv_menu_get_cur_sidebar_page(menu), 0), 0),
+    // Simulate click on first item
+    lv_event_send(lv_obj_get_child(lv_obj_get_child(lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu), 0), 0),
                   LV_EVENT_CLICKED, nullptr);
 }
 
 // ---------- exported callbacks used by other files ----------
-void btn_calibration_ADC_voltage_event_cb(lv_event_t * /*e*/)
+void btn_calibration_ADC_voltage_event_cb(lv_event_t *)
 {
     auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
     CalPrefill pf{cal.code_1, cal.code_2, cal.value_1, cal.value_2, "V"};
-    build_adc_calibration_window(&win_ADC_voltage_calibration, "ADC Voltage Calibration", Calib_GUI_voltage, pf);
+    build_adc_calibration_window(&PowerSupply.gui.win_ADC_voltage_calibration, "ADC Voltage Calibration", Calib_GUI_voltage, pf);
 }
 
-void btn_calibration_ADC_current_event_cb(lv_event_t * /*e*/)
+void btn_calibration_ADC_current_event_cb(lv_event_t *)
 {
     auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
     CalPrefill pf{cal.code_1, cal.code_2, cal.value_1, cal.value_2, "A"};
-    build_adc_calibration_window(&win_ADC_current_calibration, "ADC Current Calibration", Calib_GUI_current, pf);
+    build_adc_calibration_window(&PowerSupply.gui.win_ADC_current_calibration, "ADC Current Calibration", Calib_GUI_current, pf);
+}
+
+// Open/create the DAC calibration window
+void open_dac_calibration_cb(lv_event_t *)
+{
+    if (PowerSupply.gui.win_DAC_calibration)
+    {
+        lv_obj_clear_flag(PowerSupply.gui.win_DAC_calibration, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+
+    PowerSupply.gui.win_DAC_calibration = lv_win_create(lv_scr_act(), 36);
+    lv_obj_set_size(PowerSupply.gui.win_DAC_calibration, 320, 226);
+    lv_win_add_title(PowerSupply.gui.win_DAC_calibration, "DAC Calibration");
+    auto *close = lv_win_add_btn(PowerSupply.gui.win_DAC_calibration, LV_SYMBOL_CLOSE, 60);
+    lv_obj_add_event_cb(close, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
+    auto *cont = lv_win_get_content(PowerSupply.gui.win_DAC_calibration);
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+
+    auto *title = lv_label_create(cont);
+    lv_label_set_text(title, "DAC Code      Output V/C");
+    lv_obj_align(title, LV_ALIGN_OUT_LEFT_TOP, 95, 10);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(title, lv_color_hex(0x00FFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    int xPos = 94, yPos = 40, yOffset = 25, xOffset = 10;
+
+    s_zv = spinbox_pro(cont, "#FFFFF7 Zero Voltage:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 86, 15);
+    s_mv = spinbox_pro(cont, "#FFFFF7 Max  Voltage:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 1, 86, 16);
+    s_zc = spinbox_pro(cont, "#FFFFF7 Zero Current:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 2.3, 86, 17);
+    s_mc = spinbox_pro(cont, "#FFFFF7 Max  Current:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 3.3, 86, 18);
+
+    auto addLabel = [&](lv_obj_t *parent, const char *fmt, double value) -> lv_obj_t *
+    {
+        lv_obj_t *parent_child = lv_obj_get_child(parent, 1);
+        lv_obj_align(parent_child, LV_ALIGN_OUT_RIGHT_MID, -90, 0);
+        auto *lbl = lv_label_create(parent);
+        lv_obj_add_flag(parent, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+        lv_obj_align_to(lbl, parent, LV_ALIGN_OUT_RIGHT_MID, xOffset, 0);
+        lv_label_set_text_fmt(lbl, fmt, value);
+        lv_obj_set_style_text_font(lbl, &graph_R_16, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+        return lbl;
+    };
+
+    addLabel(s_zv, "+%07.4fV", 0.0);
+    s_label_maxV = addLabel(s_mv, "+%07.4fV", 32.750);
+
+    addLabel(s_zc, "%+06.4fA", 0.0);
+    s_label_maxC = addLabel(s_mc, "%+06.4fA", 6.5535);
+
+    // Load persisted DAC data and update limits
+    PowerSupply.dac_data = PowerSupply.LoadDACdata("dac_data_");
+    lv_spinbox_set_value(s_zv, PowerSupply.dac_data.zero_voltage);
+    lv_spinbox_set_value(s_mv, PowerSupply.dac_data.max_voltage);
+    lv_spinbox_set_value(s_zc, PowerSupply.dac_data.zero_current);
+    lv_spinbox_set_value(s_mc, PowerSupply.dac_data.max_current);
+
+    PowerSupply.Voltage.adjOffset = PowerSupply.dac_data.zero_voltage;
+    PowerSupply.Voltage.minValue = (-PowerSupply.dac_data.zero_voltage);
+    PowerSupply.Voltage.maxValue = (PowerSupply.dac_data.max_voltage - PowerSupply.dac_data.zero_voltage);
+
+    PowerSupply.Current.adjOffset = PowerSupply.dac_data.zero_current;
+    PowerSupply.Current.minValue = (-PowerSupply.dac_data.zero_current);
+    PowerSupply.Current.maxValue = (PowerSupply.dac_data.max_current - PowerSupply.dac_data.zero_current);
+
+    lv_obj_add_event_cb(s_zv, DAC_voltage_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, s_label_maxV);
+    lv_obj_add_event_cb(s_mv, DAC_voltage_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, s_label_maxV);
+    lv_obj_add_event_cb(s_zc, DAC_current_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+    lv_obj_add_event_cb(s_mc, DAC_current_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 }

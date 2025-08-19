@@ -52,10 +52,10 @@ struct FunGen
 };
 struct DAC_codes
 {
-    int32_t  zero_voltage;
-    int32_t  max_voltage;
-    int32_t  zero_current;
-    int32_t  max_current;
+    int32_t zero_voltage;
+    int32_t max_voltage;
+    int32_t zero_current;
+    int32_t max_current;
 };
 
 // extern FunGen funGen; // Declaration
@@ -65,7 +65,7 @@ struct DAC_codes
 extern lv_disp_t *lv_disp;
 extern volatile bool adcDataReady;
 
-extern bool blockAll ;
+extern bool blockAll;
 // extern volatile bool dataReady;
 
 static void IRAM_ATTR ADCPinISR()
@@ -85,6 +85,15 @@ struct SettingParameters
     uint16_t SetCurrent;
     bool buzzer = false;
     bool isPowerSupplyOn = true;
+};
+
+struct GUI
+{
+    lv_obj_t *slider_Avgs = nullptr;
+    lv_obj_t *setting_menu = nullptr;
+    lv_obj_t *win_ADC_voltage_calibration= nullptr;
+    lv_obj_t *win_ADC_current_calibration= nullptr;
+    lv_obj_t *win_DAC_calibration= nullptr;
 };
 
 struct Graph_
@@ -285,7 +294,7 @@ public:
         // else if (channel == CURRENT)
         //     ads1219->readDifferential_2_3();
         //     // ads1219->readSingleEnded(3);
-            
+
         ads1219->readSingleEnded(channel);
         busyChannel = channel;
     }
@@ -346,6 +355,7 @@ public:
     Tabs utility_tab;
     lv_obj_t *page[5];
     std::map<DEVICE, deviceColors> stateColor;
+
     ADC adc;
     LTC2655 DAC;
 
@@ -356,8 +366,13 @@ public:
     const byte CCCVPin = 12;
 
     SettingParameters settingParameters;
-
+    GUI gui;
     mem memory[10];
+
+    DAC_codes dac_data;
+
+    FunGen funGenMem;
+    FunGen funGenArbitraryMem;
 
     /***************
      * @param pin MCU interrupt pin for ADC drdy
