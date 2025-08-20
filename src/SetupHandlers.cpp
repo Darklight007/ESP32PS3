@@ -329,7 +329,7 @@ void setupCalibPage()
     lv_obj_add_flag(PowerSupply.gui.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(PowerSupply.gui.win_DAC_calibration, LV_OBJ_FLAG_HIDDEN);
 
-    lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
 }
 
 // Setup the ADC (Analog-to-Digital Converter)

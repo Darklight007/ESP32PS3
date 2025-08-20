@@ -15,9 +15,6 @@
 
 // ---------- public objects (one definition) ----------
 
-lv_obj_t *myTextBox = nullptr;
-int8_t lastButton = 0;
-
 setting_GUI Calib_GUI_voltage{};
 setting_GUI Calib_GUI_current{};
 
@@ -61,11 +58,11 @@ namespace
         lv_obj_add_flag(lv_obj_get_parent(lv_obj_get_parent(btn)), LV_OBJ_FLAG_HIDDEN);
     }
 
-    static void trackPress(lv_event_t *e)
-    {
-        auto *obj = lv_event_get_target(e);
-        lastButton = lv_obj_get_index(obj);
-    }
+    // static void trackPress(lv_event_t *e)
+    // {
+    //     auto *obj = lv_event_get_target(e);
+    //     lastButton = lv_obj_get_index(obj);
+    // }
 
     static void trackChild(lv_event_t *e)
     {
@@ -375,10 +372,10 @@ namespace
         lv_coord_t w = 110, col = w + 30, row = 38;
         lv_point_t pad{5, 5};
 
-        gui.vin_1 = spinbox_pro(cont, "#FFFFF7 Vin1:#", -10000, 400000, 6, 2, LV_ALIGN_TOP_LEFT, offset.x, offset.y, w, 10);
-        gui.code_1 = spinbox_pro(cont, "#FFFFF7 Code1:#", -10000, 8388608, 7, 0, LV_ALIGN_TOP_LEFT, offset.x, offset.y + row, w, 11);
-        gui.vin_2 = spinbox_pro(cont, "#FFFFF7 Vin2:#", -10000, 400000, 6, 2, LV_ALIGN_TOP_LEFT, offset.x + col, offset.y, w, 12);
-        gui.code_2 = spinbox_pro(cont, "#FFFFF7 Code2:#", -10000, 8388608, 7, 0, LV_ALIGN_TOP_LEFT, offset.x + col, offset.y + row, w, 13);
+        gui.vin_1 = spinbox_pro(cont, "#FFFFF7 Vin1:#", -10000, 400000, 6, 2, LV_ALIGN_TOP_LEFT, offset.x, offset.y, w, 10, &graph_R_16);
+        gui.code_1 = spinbox_pro(cont, "#FFFFF7 Code1:#", -10000, 8388608, 7, 0, LV_ALIGN_TOP_LEFT, offset.x, offset.y + row, w, 11, &graph_R_16);
+        gui.vin_2 = spinbox_pro(cont, "#FFFFF7 Vin2:#", -10000, 400000, 6, 2, LV_ALIGN_TOP_LEFT, offset.x + col, offset.y, w, 12, &graph_R_16);
+        gui.code_2 = spinbox_pro(cont, "#FFFFF7 Code2:#", -10000, 8388608, 7, 0, LV_ALIGN_TOP_LEFT, offset.x + col, offset.y + row, w, 13, &graph_R_16);
 
         lv_spinbox_set_value(gui.code_1, pf.code1);
         lv_spinbox_set_value(gui.code_2, pf.code2);
@@ -451,6 +448,8 @@ namespace
         PowerSupply.Voltage.minValue = (-PowerSupply.dac_data.zero_voltage);
         PowerSupply.Voltage.maxValue = (mv - zv);
         PowerSupply.SaveDACdata("dac_data_", PowerSupply.dac_data);
+        PowerSupply.LoadDACdata("dac_data_");
+        PowerSupply.Voltage.adjValueChanged = true;
     }
 
     static void DAC_current_calib_change_event_cb(lv_event_t *e)
@@ -470,6 +469,8 @@ namespace
         PowerSupply.Current.minValue = (-PowerSupply.dac_data.zero_current) / 10000.0;
         PowerSupply.Current.maxValue = (mc - zc) / 10000.0;
         PowerSupply.SaveDACdata("dac_data_", PowerSupply.dac_data);
+        PowerSupply.LoadDACdata("dac_data_");
+        
     }
 
     // LCD touch calibration kept private
@@ -581,27 +582,22 @@ void SettingMenu(lv_obj_t *parent)
 
     itm = create_text(section, nullptr, "Display", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_display);
-    lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
+    // lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
 
     itm = create_text(section, nullptr, "Sound", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_sound);
-    lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
 
     itm = create_text(section, nullptr, "Measure", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_measure);
-    lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
 
     itm = create_text(section, nullptr, "Calibration", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_cal);
-    lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
 
     itm = create_text(section, nullptr, "Save/Load", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_save_load);
-    lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
 
     itm = create_text(section, nullptr, "About", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_about_page);
-    lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
 
     lv_menu_set_sidebar_page(PowerSupply.gui.setting_menu, root_page);
     auto *m = (lv_menu_t *)PowerSupply.gui.setting_menu;
@@ -653,10 +649,10 @@ void open_dac_calibration_cb(lv_event_t *)
 
     int xPos = 94, yPos = 40, yOffset = 25, xOffset = 10;
 
-    s_zv = spinbox_pro(cont, "#FFFFF7 Zero Voltage:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 86, 15);
-    s_mv = spinbox_pro(cont, "#FFFFF7 Max  Voltage:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 1, 86, 16);
-    s_zc = spinbox_pro(cont, "#FFFFF7 Zero Current:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 2.3, 86, 17);
-    s_mc = spinbox_pro(cont, "#FFFFF7 Max  Current:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 3.3, 86, 18);
+    s_zv = spinbox_pro(cont, "#FFFFF7 Zero Voltage:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 86, 15, &graph_R_16);
+    s_mv = spinbox_pro(cont, "#FFFFF7 Max  Voltage:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 1, 86, 16, &graph_R_16);
+    s_zc = spinbox_pro(cont, "#FFFFF7 Zero Current:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 2.3, 86, 17, &graph_R_16);
+    s_mc = spinbox_pro(cont, "#FFFFF7 Max  Current:#", 0, 65535, 5, 0, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 3.3, 86, 18, &graph_R_16);
 
     auto addLabel = [&](lv_obj_t *parent, const char *fmt, double value) -> lv_obj_t *
     {

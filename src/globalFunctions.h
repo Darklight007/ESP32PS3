@@ -10,6 +10,7 @@
 #include <string>
 #include <math.h>
 #include "spinbox_pro.h"
+#include "SpinboxPro.hpp"
 #include "table_pro.h"
 
 #define PI 3.14159265358979323846
@@ -1466,8 +1467,8 @@ void Task_ADC(void *pvParameters)
         {
             if (wireConnected)
             {
-                // isMyTextBoxHidden = lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
-                if (!lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN))
+                // isPowerSupply.gui.textarea_set_valueHidden = lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
+                if (!lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN))
                     KeyCheckInterval(10);
 
                 else if (!lv_obj_has_state(Utility_objs.switch_keys_scan, LV_STATE_CHECKED))
@@ -1628,7 +1629,7 @@ static void btnm_event_handler(lv_event_t *e)
     {
         if (strlen(lv_textarea_get_text(ta)) == 0)
         {
-            lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
             ismyTextHiddenChange = true;
         }
         lv_textarea_del_char(ta);
@@ -1637,7 +1638,7 @@ static void btnm_event_handler(lv_event_t *e)
         lv_event_send(ta, LV_EVENT_READY, NULL);
     else if (strcmp(txt, "E") == 0)
     {
-        lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
         ismyTextHiddenChange = true;
     }
     else if (strcmp(txt, "Clr") == 0)
@@ -1659,7 +1660,7 @@ static void btnm_event_handler(lv_event_t *e)
 
     else if (strcmp(txt, "V") == 0)
     {
-        lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
         // PowerSupply.Voltage.SetUpdate(round(strtod(txt, NULL) * 2000.0)  - 0 * PowerSupply.Voltage.adjOffset);
@@ -1670,7 +1671,7 @@ static void btnm_event_handler(lv_event_t *e)
 
     else if (strcmp(txt, "mV") == 0)
     {
-        lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
         PowerSupply.Voltage.SetUpdate((strtod(txt, NULL) * 2.0) + PowerSupply.Voltage.adjOffset);
@@ -1680,7 +1681,7 @@ static void btnm_event_handler(lv_event_t *e)
 
     else if (strcmp(txt, "A") == 0)
     {
-        lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
         PowerSupply.Current.SetUpdate(strtod(txt, NULL) * PowerSupply.Current.adjFactor + PowerSupply.Current.adjOffset);
@@ -1690,7 +1691,7 @@ static void btnm_event_handler(lv_event_t *e)
 
     else if (strcmp(txt, "mA") == 0)
     {
-        lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
         PowerSupply.Current.SetUpdate(strtod(txt, NULL) * 10.0 + PowerSupply.Current.adjOffset);
@@ -1702,7 +1703,7 @@ static void btnm_event_handler(lv_event_t *e)
 }
 static void key_event_handler(uint16_t btn_id)
 {
-    lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
     lv_btnmatrix_set_selected_btn(btnm, btn_id);
     lv_event_send(btnm, LV_EVENT_VALUE_CHANGED, NULL);
     lv_label_set_text(unit_label, "mV/V/mA/A");
@@ -1773,15 +1774,15 @@ void textarea(lv_obj_t *parent)
     // ta = lv.textarea(scr);
     // ta.add_style(style, lv.PART.CURSOR | lv.STATE.FOCUSED);
     // lv.scr_load(scr);
-    myTextBox = lv_obj_create(lv_scr_act());
-    lv_obj_set_size(myTextBox, 320, 240);
+    PowerSupply.gui.textarea_set_value = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(PowerSupply.gui.textarea_set_value, 320, 240);
     lv_style_init(&style_backgound);
 
     lv_style_set_bg_opa(&style_backgound, LV_OPA_80);
-    lv_obj_remove_style(myTextBox, &style_backgound, LV_STATE_DEFAULT);
-    lv_obj_add_style(myTextBox, &style_backgound, LV_STATE_DEFAULT);
+    lv_obj_remove_style(PowerSupply.gui.textarea_set_value, &style_backgound, LV_STATE_DEFAULT);
+    lv_obj_add_style(PowerSupply.gui.textarea_set_value, &style_backgound, LV_STATE_DEFAULT);
 
-    ta = lv_textarea_create(myTextBox);
+    ta = lv_textarea_create(PowerSupply.gui.textarea_set_value);
     lv_textarea_set_one_line(ta, true);
     lv_obj_align(ta, LV_ALIGN_TOP_MID, 0, 50);
     lv_obj_add_event_cb(ta, textarea_event_handler, LV_EVENT_READY, ta);
@@ -1790,7 +1791,7 @@ void textarea(lv_obj_t *parent)
     lv_obj_add_style(ta, &style_font, LV_STATE_DEFAULT);
     lv_obj_add_state(ta, LV_STATE_FOCUSED); /*To be sure the cursor is visible*/
 
-    lv_obj_t *unit_box = lv_obj_create(myTextBox);
+    lv_obj_t *unit_box = lv_obj_create(PowerSupply.gui.textarea_set_value);
     lv_obj_align(unit_box, LV_ALIGN_TOP_RIGHT, -15, 24);
     // lv_obj_remove_style_all(unit_box);
 
@@ -1825,7 +1826,7 @@ void textarea(lv_obj_t *parent)
 
     lv_style_set_text_font(&style_font_btnm, &lv_font_montserrat_20); // graph_R_16
 
-    btnm = lv_btnmatrix_create(myTextBox);
+    btnm = lv_btnmatrix_create(PowerSupply.gui.textarea_set_value);
     lv_obj_remove_style_all(btnm);
     // return;
     lv_obj_set_size(btnm, 290, 100);
@@ -1933,12 +1934,7 @@ static void table_touch_event_cb(lv_event_t *e)
         Utility_objs.table_current_value = atof(cell_str);
         lv_spinbox_set_value(Utility_objs.table_spinbox_value, Utility_objs.table_current_value * 10000.0);
         lv_obj_invalidate(Utility_objs.table_spinbox_value);
-
-        if (obj_selected_spinbox)
-        {
-            remove_red_border(obj_selected_spinbox);
-            obj_selected_spinbox = nullptr;
-        }
+        remove_selected_spinbox();
     }
 }
 
@@ -2052,11 +2048,12 @@ void btn_function_gen_event_cb(lv_event_t *e)
         PowerSupply.setStatus(DEVICE::ON);
     }
 
-    if (obj_selected_spinbox)
-    {
-        remove_red_border(obj_selected_spinbox);
-        obj_selected_spinbox = nullptr;
-    }
+    // if (get_selected_spinbox())
+    // {
+    //     remove_red_border(get_selected_spinbox());
+    //     get_selected_spinbox() = nullptr;
+    // }
+    remove_selected_spinbox();
     // Serial.printf("\nDebug check points!");
     // trackLoopExecution(__func__);
 }
@@ -2397,10 +2394,10 @@ void Utility_tabview(lv_obj_t *parent)
     // createSpinbox(tab3, "#FFFFF7 Offset:#", -10000, 400000, 6, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2);
     // createSpinbox(tab3, "#FFFFF7 Code2:#", -10000, 8388608, 7, 0, LV_ALIGN_RIGHT_MID, XOffset , verOffset + verPad * 3);
 
-    Utility_objs.fun.Amplitude = spinbox_pro(tab2, "#FFFFF7 Amplitude:#", 0, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0, 98, 0);
-    Utility_objs.fun.Frequency = spinbox_pro(tab2, "#FFFFF7 Frequency [Hz]:#", 0, 10000, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1, 98, 1);
-    Utility_objs.fun.Offset = spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -32000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2);
-    Utility_objs.fun.Duty = spinbox_pro(tab2, "#FFFFF7 Duty [%]:#", 0, 10000, 5, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 3, 98, 3);
+    Utility_objs.fun.Amplitude = spinbox_pro(tab2, "#FFFFF7 Amplitude:#", 0, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0, 98, 0,&graph_R_16);
+    Utility_objs.fun.Frequency = spinbox_pro(tab2, "#FFFFF7 Frequency [Hz]:#", 0, 10000, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1, 98, 1, &graph_R_16);
+    Utility_objs.fun.Offset = spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -32000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2, &graph_R_16);
+    Utility_objs.fun.Duty = spinbox_pro(tab2, "#FFFFF7 Duty [%]:#", 0, 10000, 5, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 3, 98, 3, &graph_R_16);
 
     PowerSupply.funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
 
@@ -2616,8 +2613,32 @@ void Utility_tabview(lv_obj_t *parent)
 
     // lv_obj_add_event_cb(Utility_objs.table_point_list, table_get_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    Utility_objs.table_spinbox_value = spinbox_pro(tab4, "#FFFFF7 Value:#", 0, 10000, 5, 1, LV_ALIGN_RIGHT_MID, -35, -50, 98, 4);
+    Utility_objs.table_spinbox_value = spinbox_pro(tab4, "#FFFFF7 Value:#", 0, 10000, 5, 1, LV_ALIGN_RIGHT_MID, -35, -50, 98, 4, &graph_R_16);
     lv_obj_add_event_cb(Utility_objs.table_spinbox_value, spinbox_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+
+// // setup (same as before)
+// SpinboxPro::Config cfg;
+// cfg.spinboxFont = &graph_R_16;
+// cfg.labelFont   = &lv_font_montserrat_12;
+// cfg.clickBeep   = true;
+
+// SpinboxPro::BeepFn clickBeep = [](){ myTone(NOTE_A4, 5); };
+// SpinboxPro spx(cfg, clickBeep);
+// // one‑liner builder
+// auto spinOskol = SpinboxPro::Builder(spx)
+//     .parent(tab4)
+//     .label("#FFFFF7 Zero Voltage:#")
+//     .range(0, 65535)
+//     .digits(5, 0)
+//     .align(LV_ALIGN_DEFAULT, 165, 160 )
+//     .width(86)
+//     .id(15)
+//     .create();
+ 
+
+
+
 
     // Saving  ************************************************************
     lv_obj_t *saveButton = lv_btn_create(tab4);
@@ -2737,7 +2758,7 @@ void keyCheckLoop()
     keyMenus('l', " RELEASED.",
              [&]
              {
-                 if (!lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN))
+                 if (!lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN))
                      return;
                  Tabs::previousPage();
                  //  UpdateTabs();
@@ -2748,7 +2769,7 @@ void keyCheckLoop()
     keyMenus('k', " RELEASED.",
              [&]
              {
-                 if (!lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN))
+                 if (!lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN))
                      return;
                  Tabs::nextPage();
                  //  UpdateTabs();
@@ -2786,7 +2807,7 @@ void keyCheckLoop()
 
     keyMenus('m', " RELEASED.", []
              {
-                 if (!lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN))
+                 if (!lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN))
                      return;
                  Tabs::setCurrentPage(3); }
 
@@ -3053,17 +3074,17 @@ void keyCheckLoop()
                  { key_event_handler(16); });
 
         keyMenusPage('E', " RELEASED.", 2, []
-                     {  if (!lv_obj_is_visible(myTextBox))
-                        lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                     {  if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
+                        lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
                     else
-                        lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                        lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
                         ismyTextHiddenChange = true; });
 
         keyMenusPage('E', " RELEASED.", 4, []
                      {
-                         // if (!lv_obj_is_visible(myTextBox))
+                         // if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
                          // {
-                         //     // lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                         //     // lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
 
                          //     // lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
                          //     // int32_t v = lv_spinbox_get_value(spinBox);
@@ -3086,7 +3107,7 @@ void keyCheckLoop()
                          // }
                          // else
                          // {
-                         //     // lv_obj_add_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                         //     // lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
                          //     // myTone(NOTE_A5, 100);
                          //     // const char *txt = lv_textarea_get_text(ta);
                          //     // lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
@@ -3112,9 +3133,9 @@ void keyCheckLoop()
 
     keyMenusPage('V', " RELEASED.", 2, []
                  {
-                     if (!lv_obj_is_visible(myTextBox))
+                     if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
                      {
-                         lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                         lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
                          key_event_handler_readBack(PowerSupply.Voltage);
                          ismyTextHiddenChange = true;
                          delay(100);
@@ -3125,9 +3146,9 @@ void keyCheckLoop()
 
     keyMenusPage('v', " RELEASED.", 2, []
                  {
-                     if (!lv_obj_is_visible(myTextBox))
+                     if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
                      {
-                         lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                         lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
                          key_event_handler_readBack_k(PowerSupply.Voltage);
                          ismyTextHiddenChange = true;
                          delay(100);
@@ -3137,9 +3158,9 @@ void keyCheckLoop()
 
     keyMenusPage('A', " RELEASED.", 2, []
                  {
-                     if (!lv_obj_is_visible(myTextBox))
+                     if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
                      {
-                         lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                         lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
                          key_event_handler_readBack(PowerSupply.Current);
                          ismyTextHiddenChange = true;
                            delay(100);
@@ -3149,9 +3170,9 @@ void keyCheckLoop()
 
     keyMenusPage('a', " RELEASED.", 2, []
                  {
-            if (!lv_obj_is_visible(myTextBox))
+            if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
             {
-                lv_obj_clear_flag(myTextBox, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
                 key_event_handler_readBack_k(PowerSupply.Current);
                 ismyTextHiddenChange = true;
                   delay(100);
@@ -3781,111 +3802,137 @@ void VCCCInterval(unsigned long interval)
 // Private helpers (no globals exported)
 
 // Encoder baselines and private menu index
-static int32_t g_last_enc1_dac  = 0, g_last_enc2_dac  = 0;
-static int32_t g_last_enc1_adc  = 0, g_last_enc2_adc  = 0;
+static int32_t g_last_enc1_dac = 0, g_last_enc2_dac = 0;
+static int32_t g_last_enc1_adc = 0, g_last_enc2_adc = 0;
 static int32_t g_last_enc2_menu = 0;
-static int     g_menu_index      = 0;        // replaces old global lastButton
-static lv_obj_t* g_last_focus    = nullptr;  // to avoid “jump back” when focus changes
+static int g_menu_index = 0;             // replaces old global lastButton
+static lv_obj_t *g_last_focus = nullptr; // to avoid “jump back” when focus changes
 
 // Your app state (use whatever you already have)
-extern lv_obj_t* obj_selected_spinbox;
+// extern lv_obj_t *get_selected_spinbox();
 
 // ----- small helpers -----
-enum class UIMode { Menu, DAC, ADC };
+enum class UIMode
+{
+    Menu,
+    DAC,
+    ADC
+};
 
-static inline lv_obj_t* current_sidebar_list() {
-  lv_obj_t* page = lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu);
-  return page ? lv_obj_get_child(page, 0) : nullptr;  // first child is the list container in LVGL menu
+static inline lv_obj_t *current_sidebar_list()
+{
+    lv_obj_t *page = lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu);
+    return page ? lv_obj_get_child(page, 0) : nullptr; // first child is the list container in LVGL menu
 }
 
-static inline UIMode detect_mode() {
-  const bool dac =
-    PowerSupply.gui.win_DAC_calibration &&
-    lv_obj_is_visible(PowerSupply.gui.win_DAC_calibration);
+static inline UIMode detect_mode()
+{
+    const bool dac =
+        PowerSupply.gui.win_DAC_calibration &&
+        lv_obj_is_visible(PowerSupply.gui.win_DAC_calibration);
 
-  const bool adc =
-    (PowerSupply.gui.win_ADC_voltage_calibration   && lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration)) ||
-    (PowerSupply.gui.win_ADC_current_calibration   && lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration));
+    const bool adc =
+        (PowerSupply.gui.win_ADC_voltage_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration)) ||
+        (PowerSupply.gui.win_ADC_current_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration));
 
-  return (!dac && !adc) ? UIMode::Menu : (dac ? UIMode::DAC : UIMode::ADC);
+    return (!dac && !adc) ? UIMode::Menu : (dac ? UIMode::DAC : UIMode::ADC);
 }
 
 // ----- handlers (no binding, pure polling) -----
-static void handle_menu_mode() {
-  lv_obj_t* list = current_sidebar_list();
-  if (!list) return;
+static void handle_menu_mode()
+{
+    lv_obj_t *list = current_sidebar_list();
+    if (!list)
+        return;
 
-  if (encoder2_value != g_last_enc2_menu) {
-    // Map wheel direction to list movement (flip if your hardware feels backwards)
-    const int dir = (encoder2_value > g_last_enc2_menu) ? +1 : -1;
-    const int count = lv_obj_get_child_cnt(list);
-    g_menu_index = std::clamp(g_menu_index + dir, 0, std::max(0, count - 1));
+    if (encoder2_value != g_last_enc2_menu)
+    {
+        // Map wheel direction to list movement (flip if your hardware feels backwards)
+        const int dir = (encoder2_value > g_last_enc2_menu) ? +1 : -1;
+        const int count = lv_obj_get_child_cnt(list);
+        g_menu_index = std::clamp(g_menu_index + dir, 0, std::max(0, count - 1));
 
-    // "Activate" the target row
-    lv_event_send(lv_obj_get_child(list, g_menu_index), LV_EVENT_CLICKED, nullptr);
+        // "Activate" the target row
+        lv_event_send(lv_obj_get_child(list, g_menu_index), LV_EVENT_CLICKED, nullptr);
 
-    g_last_enc2_menu = encoder2_value;
-  }
+        g_last_enc2_menu = encoder2_value;
+    }
 }
 
-static void handle_dac_mode() {
-  if (!obj_selected_spinbox) return;
+static void handle_dac_mode()
+{
+    if (!get_selected_spinbox())
+        return;
 
-  // Resync baseline when focus changes (e.g., touch switched spinbox)
-  if (g_last_focus != obj_selected_spinbox) {
-    g_last_focus   = obj_selected_spinbox;
-    g_last_enc2_dac = encoder2_value;
-  }
+    // Resync baseline when focus changes (e.g., touch switched spinbox)
+    if (g_last_focus != get_selected_spinbox())
+    {
+        g_last_focus = get_selected_spinbox();
+        g_last_enc2_dac = encoder2_value;
+    }
 
-  // Encoder 2 selects digit
-  if (encoder2_value != g_last_enc2_dac) {
-    (encoder2_value > g_last_enc2_dac) ? move_left(obj_selected_spinbox)
-                                       : move_right(obj_selected_spinbox);
-    g_last_enc2_dac = encoder2_value;
-  }
+    // Encoder 2 selects digit
+    if (encoder2_value != g_last_enc2_dac)
+    {
+        (encoder2_value > g_last_enc2_dac) ? move_left(get_selected_spinbox())
+                                           : move_right(get_selected_spinbox());
+        g_last_enc2_dac = encoder2_value;
+    }
 
-  // Encoder 1 changes value
-  if (encoder1_value != g_last_enc1_dac) {
-    (encoder1_value > g_last_enc1_dac) ? lv_spinbox_increment(obj_selected_spinbox)
-                                       : lv_spinbox_decrement(obj_selected_spinbox);
-    g_last_enc1_dac = encoder1_value;
-  }
+    // Encoder 1 changes value
+    if (encoder1_value != g_last_enc1_dac)
+    {
+        (encoder1_value > g_last_enc1_dac) ? increment(get_selected_spinbox())
+                                           : decrement(get_selected_spinbox());
+        g_last_enc1_dac = encoder1_value;
+    }
 }
 
-static void handle_adc_mode() {
-  if (!obj_selected_spinbox) return;
+static void handle_adc_mode()
+{
+    if (!get_selected_spinbox())
+        return;
 
-  if (g_last_focus != obj_selected_spinbox) {
-    g_last_focus   = obj_selected_spinbox;
-    g_last_enc2_adc = encoder2_value;
-  }
+    if (g_last_focus != get_selected_spinbox())
+    {
+        g_last_focus = get_selected_spinbox();
+        g_last_enc2_adc = encoder2_value;
+    }
 
-  // Encoder 2 moves cursor/digit
-  if (encoder2_value != g_last_enc2_adc) {
-    (encoder2_value > g_last_enc2_adc) ? move_left(obj_selected_spinbox)
-                                       : move_right(obj_selected_spinbox);
-    g_last_enc2_adc = encoder2_value;
-    return; // only moved cursor this tick
-  }
+    // Encoder 2 moves cursor/digit
+    if (encoder2_value != g_last_enc2_adc)
+    {
+        (encoder2_value > g_last_enc2_adc) ? move_left(get_selected_spinbox())
+                                           : move_right(get_selected_spinbox());
+        g_last_enc2_adc = encoder2_value;
+        return; // only moved cursor this tick
+    }
 
-  // Encoder 1 changes value
-  if (encoder1_value != g_last_enc1_adc) {
-    (encoder1_value > g_last_enc1_adc) ? lv_spinbox_increment(obj_selected_spinbox)
-                                       : lv_spinbox_decrement(obj_selected_spinbox);
-    g_last_enc1_adc = encoder1_value;
-  }
+    // Encoder 1 changes value
+    if (encoder1_value != g_last_enc1_adc)
+    {
+        (encoder1_value > g_last_enc1_adc) ? increment(get_selected_spinbox())
+                                           : decrement(get_selected_spinbox());
+        g_last_enc1_adc = encoder1_value;
+    }
 }
 
 // ----- single public entry you call repeatedly -----
-void handleCalibrationPage(int32_t /*unused1*/, int32_t /*unused2*/) {
-  switch (detect_mode()) {
-    case UIMode::Menu: handle_menu_mode(); break;
-    case UIMode::DAC:  handle_dac_mode();  break;
-    case UIMode::ADC:  handle_adc_mode();  break;
-  }
+void handleCalibrationPage(int32_t /*unused1*/, int32_t /*unused2*/)
+{
+    switch (detect_mode())
+    {
+    case UIMode::Menu:
+        handle_menu_mode();
+        break;
+    case UIMode::DAC:
+        handle_dac_mode();
+        break;
+    case UIMode::ADC:
+        handle_adc_mode();
+        break;
+    }
 }
-
-
 
 void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 {
@@ -4280,7 +4327,7 @@ void print_obj_type(lv_obj_t *obj)
 
 void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_last_value)
 {
-    if (!obj_selected_spinbox)
+    if (!get_selected_spinbox())
     {
 
         handleUtilityPage(encoder1_last_value, encoder2_last_value);
@@ -4296,23 +4343,23 @@ void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_l
         // Update cursor position based on encoder 2
         if (encoder2_last_value < encoder2_value)
         {
-            move_left(obj_selected_spinbox);
+            move_left(get_selected_spinbox());
             encoder2_last_value = encoder2_value;
             return;
         }
 
         else if (encoder2_last_value > encoder2_value)
         {
-            move_right(obj_selected_spinbox);
+            move_right(get_selected_spinbox());
             encoder2_last_value = encoder2_value;
             return;
         }
 
         if (encoder1_last_value < encoder1_value)
-            lv_spinbox_increment(obj_selected_spinbox);
+            increment(get_selected_spinbox());
 
         else if (encoder1_last_value > encoder1_value)
-            lv_spinbox_decrement(obj_selected_spinbox);
+            decrement(get_selected_spinbox());
 
         encoder1_last_value = encoder1_value;
 
@@ -4390,13 +4437,13 @@ void MiscPriority()
     if (ismyTextHiddenChange && false)
     {
 
-        if (priorityFlag != 1 && lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN)) // lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN) || !
+        if (priorityFlag != 1 && lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN)) // lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN) || !
         {
             priorityFlag = 1;
             vTaskPrioritySet(Task_adc, priorityFlag);
         }
 
-        else if (priorityFlag != 0 && !lv_obj_has_flag(myTextBox, LV_OBJ_FLAG_HIDDEN))
+        else if (priorityFlag != 0 && !lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN))
         {
             priorityFlag = 0;
             vTaskPrioritySet(Task_adc, priorityFlag);

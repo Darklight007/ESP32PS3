@@ -4,20 +4,17 @@
 // If you use tones; otherwise, you can comment these out:
 #include "buzzer.h" // provides myTone + NOTE_A4 in your project
 
-// If you have a custom font (graph_R_16) defined elsewhere, keep this extern.
-// Otherwise, feel free to switch to lv_font_montserrat_16 below.
-extern const lv_font_t graph_R_16;
 
 // ---------------- Styles (must outlive users) ----------------
 static bool s_styles_inited = false;
 static lv_style_t s_style_red_border;
 static lv_style_t s_style_spinbox_lbl;
 static lv_style_t s_style_spinbox;
+static lv_obj_t *obj_selected_spinbox = nullptr;
 
 // Legacy global selected pointer (your other files read it)
-lv_obj_t *obj_selected_spinbox = nullptr;
 
-static void ensure_styles_once()
+static void ensure_styles_once(const lv_font_t *font=nullptr)
 {
     if (s_styles_inited)
         return;
@@ -31,7 +28,7 @@ static void ensure_styles_once()
 
     lv_style_init(&s_style_spinbox);
     // Use your custom font if available; else montserrat_16.
-    lv_style_set_text_font(&s_style_spinbox, &graph_R_16);
+    lv_style_set_text_font(&s_style_spinbox, font);
     lv_style_set_pad_ver(&s_style_spinbox, 2);
     lv_style_set_pad_left(&s_style_spinbox, 2);
     lv_style_set_pad_right(&s_style_spinbox, 0);
@@ -45,7 +42,7 @@ static void ensure_styles_once()
     lv_style_set_bg_color(&s_style_spinbox_lbl, lv_color_hex(0xFF0000));
 }
 
-void spinbox_pro_init_styles(void) { ensure_styles_once(); }
+// void spinbox_pro_init_styles(void) { ensure_styles_once(); }
 
 // ---------------- Small helpers used across files ----------------
 static void set_red_border(lv_obj_t *sb)
@@ -100,9 +97,9 @@ lv_obj_t *spinbox_pro(lv_obj_t *parent, const char *labelText,
                       int32_t range_min, int32_t range_max,
                       uint8_t digit_count, uint8_t separator_position,
                       lv_align_t align, lv_coord_t x_ofs, lv_coord_t y_ofs,
-                      lv_coord_t width, uint8_t id)
+                      lv_coord_t width, uint8_t id, const lv_font_t *font)
 {
-    ensure_styles_once();
+    ensure_styles_once(font);
 
     // Create spinbox
     lv_obj_t *sb = lv_spinbox_create(parent);
@@ -164,6 +161,19 @@ lv_obj_t *find_spinbox_with_id(lv_obj_t *parent, uint32_t id)
     return NULL;
 }
 
+lv_obj_t *get_selected_spinbox()
+{
+    return obj_selected_spinbox;
+}
+void remove_selected_spinbox()
+{
+    if (obj_selected_spinbox)
+    {
+        remove_red_border(obj_selected_spinbox);
+        obj_selected_spinbox = nullptr;
+    }
+}
+
 int32_t get_spinbox_data_by_id(lv_obj_t *parent, uint32_t id)
 {
     lv_obj_t *obj = find_spinbox_with_id(parent, id);
@@ -173,15 +183,27 @@ int32_t get_spinbox_data_by_id(lv_obj_t *parent, uint32_t id)
 void set_spinbox_data_by_id(lv_obj_t *parent, uint32_t id, int32_t value)
 {
     lv_obj_t *obj = find_spinbox_with_id(parent, id);
-    if (obj)
+    if (obj && lv_obj_is_visible(obj))
         lv_spinbox_set_value(obj, value);
 }
 
-void move_left(lv_obj_t *sb) { 
+void move_left(lv_obj_t *sb)
+{
     lv_spinbox_step_next(sb);
- } // select higher digit
+} // select higher digit
 
 void move_right(lv_obj_t *sb)
 {
     lv_spinbox_step_prev(sb);
 } // select lower digit
+
+void increment(lv_obj_t *sb)
+{
+    if (lv_obj_is_visible(sb))
+        lv_spinbox_increment(sb);
+}
+void decrement(lv_obj_t *sb)
+{
+    if (lv_obj_is_visible(sb))
+        lv_spinbox_decrement(sb);
+}

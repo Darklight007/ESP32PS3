@@ -20,11 +20,6 @@ extern Device    PowerSupply;
 extern bool      buzzerSound;
 extern TFT_eSPI  tft;
 
-// ---- public widgets / state used by other files ----
-extern lv_obj_t* myTextBox;
-extern int8_t    lastButton;
-
-
  
 // ---- GUI bundle shared with other files ----
 struct setting_GUI {

@@ -71,7 +71,7 @@ extern void updateObjectPos_cb(lv_event_t *e);
 // extern lv_obj_t *win_ADC_voltage_calibration;
 // extern lv_obj_t *win_ADC_current_calibration;
 // extern lv_obj_t *win_DAC_calibration;
-extern lv_obj_t *myTextBox;
+
 
 extern TaskHandle_t Task_adc; 
 extern TaskHandle_t Task1; 

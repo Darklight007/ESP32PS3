@@ -94,6 +94,7 @@ struct GUI
     lv_obj_t *win_ADC_voltage_calibration= nullptr;
     lv_obj_t *win_ADC_current_calibration= nullptr;
     lv_obj_t *win_DAC_calibration= nullptr;
+    lv_obj_t *textarea_set_value = nullptr;
 };
 
 struct Graph_
