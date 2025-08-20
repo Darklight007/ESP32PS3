@@ -2,7 +2,7 @@
 #include <cmath>
 
 // If you use tones; otherwise, you can comment these out:
-#include "buzzer.h"   // provides myTone + NOTE_A4 in your project
+#include "buzzer.h" // provides myTone + NOTE_A4 in your project
 
 // If you have a custom font (graph_R_16) defined elsewhere, keep this extern.
 // Otherwise, feel free to switch to lv_font_montserrat_16 below.
@@ -17,8 +17,10 @@ static lv_style_t s_style_spinbox;
 // Legacy global selected pointer (your other files read it)
 lv_obj_t *obj_selected_spinbox = nullptr;
 
-static void ensure_styles_once() {
-    if (s_styles_inited) return;
+static void ensure_styles_once()
+{
+    if (s_styles_inited)
+        return;
     s_styles_inited = true;
 
     lv_style_init(&s_style_red_border);
@@ -46,17 +48,21 @@ static void ensure_styles_once() {
 void spinbox_pro_init_styles(void) { ensure_styles_once(); }
 
 // ---------------- Small helpers used across files ----------------
-static void set_red_border(lv_obj_t *sb) {
+static void set_red_border(lv_obj_t *sb)
+{
     lv_obj_add_style(sb, &s_style_red_border, LV_PART_MAIN);
 }
 
-void remove_red_border(lv_obj_t *sb) {
-    if (!sb) return;
+void remove_red_border(lv_obj_t *sb)
+{
+    if (!sb)
+        return;
     lv_obj_remove_style(sb, &s_style_red_border, LV_PART_MAIN);
 }
 
 // Highlight/select the spinbox on press
-static void select_highlight(lv_event_t *e) {
+static void select_highlight(lv_event_t *e)
+{
     lv_obj_t *obj = lv_event_get_target(e);
     ensure_styles_once();
     if (obj_selected_spinbox && obj_selected_spinbox != obj)
@@ -66,20 +72,25 @@ static void select_highlight(lv_event_t *e) {
 }
 
 // Free user data when the spinbox is deleted
-static void spinbox_del_event_cb(lv_event_t *e) {
+static void spinbox_del_event_cb(lv_event_t *e)
+{
     lv_obj_t *sb = lv_event_get_target(e);
-    if (obj_selected_spinbox == sb) obj_selected_spinbox = nullptr;
+    if (obj_selected_spinbox == sb)
+        obj_selected_spinbox = nullptr;
 
     SpinboxData *data = static_cast<SpinboxData *>(lv_obj_get_user_data(sb));
-    if (data) {
+    if (data)
+    {
         lv_mem_free(data);
         lv_obj_set_user_data(sb, nullptr);
     }
 }
 
 // Optional click beep
-static void pressed_beep_cb(lv_event_t *e) {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+static void pressed_beep_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+    {
         myTone(NOTE_A4, 5);
     }
 }
@@ -121,10 +132,11 @@ lv_obj_t *spinbox_pro(lv_obj_t *parent, const char *labelText,
 
     // Allocate user data
     SpinboxData *data = (SpinboxData *)lv_mem_alloc(sizeof(SpinboxData));
-    if (data) {
-        data->cursor_pos  = 0;
+    if (data)
+    {
+        data->cursor_pos = 0;
         data->digit_count = (digit_count > 0) ? (digit_count - 1) : 0;
-        data->id          = id;
+        data->id = id;
         lv_obj_set_user_data(sb, data);
     }
 
@@ -139,42 +151,37 @@ lv_obj_t *spinbox_pro(lv_obj_t *parent, const char *labelText,
     return sb;
 }
 
-lv_obj_t *find_spinbox_with_id(lv_obj_t *parent, uint32_t id) {
+lv_obj_t *find_spinbox_with_id(lv_obj_t *parent, uint32_t id)
+{
     uint32_t child_cnt = lv_obj_get_child_cnt(parent);
-    for (uint32_t i = 0; i < child_cnt; ++i) {
+    for (uint32_t i = 0; i < child_cnt; ++i)
+    {
         lv_obj_t *child = lv_obj_get_child(parent, i);
         SpinboxData *data = static_cast<SpinboxData *>(lv_obj_get_user_data(child));
-        if (data && data->id == id) return child;
+        if (data && data->id == id)
+            return child;
     }
     return NULL;
 }
 
-int32_t get_spinbox_data_by_id(lv_obj_t *parent, uint32_t id) {
+int32_t get_spinbox_data_by_id(lv_obj_t *parent, uint32_t id)
+{
     lv_obj_t *obj = find_spinbox_with_id(parent, id);
     return obj ? lv_spinbox_get_value(obj) : 0;
 }
 
-void set_spinbox_data_by_id(lv_obj_t *parent, uint32_t id, int32_t value) {
+void set_spinbox_data_by_id(lv_obj_t *parent, uint32_t id, int32_t value)
+{
     lv_obj_t *obj = find_spinbox_with_id(parent, id);
-    if (obj) lv_spinbox_set_value(obj, value);
+    if (obj)
+        lv_spinbox_set_value(obj, value);
 }
 
-void move_spinbox_cursor_left(lv_obj_t *spinbox) {
-    SpinboxData *data = static_cast<SpinboxData *>(lv_obj_get_user_data(spinbox));
-    if (!data) return;
-    if (data->cursor_pos > 0) {
-        data->cursor_pos--;
-        lv_spinbox_set_cursor_pos(spinbox, 0);
-        lv_spinbox_set_cursor_pos(spinbox, data->cursor_pos);
-    }
-}
+void move_left(lv_obj_t *sb) { 
+    lv_spinbox_step_next(sb);
+ } // select higher digit
 
-void move_spinbox_cursor_right(lv_obj_t *spinbox) {
-    SpinboxData *data = static_cast<SpinboxData *>(lv_obj_get_user_data(spinbox));
-    if (!data) return;
-    if (data->cursor_pos < data->digit_count) {
-        data->cursor_pos++;
-        lv_spinbox_set_cursor_pos(spinbox, 0);
-        lv_spinbox_set_cursor_pos(spinbox, data->cursor_pos);
-    }
-}
+void move_right(lv_obj_t *sb)
+{
+    lv_spinbox_step_prev(sb);
+} // select lower digit

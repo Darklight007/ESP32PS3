@@ -27,11 +27,13 @@ lv_obj_t *find_spinbox_with_id(lv_obj_t *parent, uint32_t id);
 int32_t   get_spinbox_data_by_id(lv_obj_t *parent, uint32_t id);
 void      set_spinbox_data_by_id(lv_obj_t *parent, uint32_t id, int32_t value);
 
-void move_spinbox_cursor_left(lv_obj_t *spinbox);
-void move_spinbox_cursor_right(lv_obj_t *spinbox);
+
+void move_left(lv_obj_t *sb);
+void move_right(lv_obj_t *sb);   // select lower digit
 
 void remove_red_border(lv_obj_t *spinbox);   // your code calls this
 void spinbox_pro_init_styles(void);          // safe to call multiple times
+
 
 #ifdef __cplusplus
 }
