@@ -99,7 +99,7 @@ void loop()
   // neopixelWrite(RGB_BUILTIN,0,0,0); // Green
 
   LvglUpdatesInterval(0);
-  trackLoopExecution(__func__);
+  // trackLoopExecution(__func__);
   StatusBarUpdateInterval(333);
 
   if ((millis() - encoderTimeStamp) > 33)

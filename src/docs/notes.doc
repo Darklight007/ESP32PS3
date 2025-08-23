@@ -1,3 +1,19 @@
+Calibrate for internal current consumption
+1. Message to disconnect output
+2. Set the voltage to 0.0Volt
+3. Reset Current average calculation
+4. Measure Current after 512 values v0
+5. Set the voltage to 32.0Volt
+6. Reset Current average calculation
+7. Measure Current after 512 values v1
+8 Set the internalCurrentPerVoltage= (v1-v0)/32.0
+
+
+
+
+
+
+
 
 Temp/Time drifts
 

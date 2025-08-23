@@ -3409,21 +3409,21 @@ void StatusBar()
     if (PowerSupply.gui.win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration))
     {
 
-        int code1 = lv_spinbox_get_value(Calib_GUI_voltage.code_1);
-        int code2 = lv_spinbox_get_value(Calib_GUI_voltage.code_2);
-        double vin1 = double(lv_spinbox_get_value(Calib_GUI_voltage.vin_1)) / 10000.0;
-        double vin2 = double(lv_spinbox_get_value(Calib_GUI_voltage.vin_2)) / 10000.0;
+        int code1 = lv_spinbox_get_value(Calib_GUI.Voltage.code_1);
+        int code2 = lv_spinbox_get_value(Calib_GUI.Voltage.code_2);
+        double vin1 = double(lv_spinbox_get_value(Calib_GUI.Voltage.vin_1)) / 10000.0;
+        double vin2 = double(lv_spinbox_get_value(Calib_GUI.Voltage.vin_2)) / 10000.0;
 
         double m = get_m(code1, code2, vin1, vin2);
 
-        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_calib_m, "%f", m);
-        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_calib_b, "%f", get_b(code1, m, vin1));
+        lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_calib_m, "%f", m);
+        lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_calib_b, "%f", get_b(code1, m, vin1));
 
-        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_rawCode, "%+08i", PowerSupply.Voltage.rawValue);
-        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_rawAVG_, "%+08.0f", PowerSupply.Voltage.measured.Mean() * m + get_b(code1, m, vin1));
-        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
-        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
-        lv_label_set_text_fmt(Calib_GUI_voltage.lbl_ER, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
+        lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_rawCode, "%+08i", PowerSupply.Voltage.rawValue);
+        lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_rawAVG_, "%+08.0f", PowerSupply.Voltage.measured.Mean() * m + get_b(code1, m, vin1));
+        lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
+        lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
+        lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_ER, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
 
         PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
         PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2 = code2;
@@ -3435,21 +3435,21 @@ void StatusBar()
     if (PowerSupply.gui.win_ADC_current_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration))
     {
 
-        int code1 = lv_spinbox_get_value(Calib_GUI_current.code_1);
-        int code2 = lv_spinbox_get_value(Calib_GUI_current.code_2);
-        double vin1 = double(lv_spinbox_get_value(Calib_GUI_current.vin_1)) / 10000.0;
-        double vin2 = double(lv_spinbox_get_value(Calib_GUI_current.vin_2)) / 10000.0;
+        int code1 = lv_spinbox_get_value(Calib_GUI.Current.code_1);
+        int code2 = lv_spinbox_get_value(Calib_GUI.Current.code_2);
+        double vin1 = double(lv_spinbox_get_value(Calib_GUI.Current.vin_1)) / 10000.0;
+        double vin2 = double(lv_spinbox_get_value(Calib_GUI.Current.vin_2)) / 10000.0;
 
         double m = get_m(code1, code2, vin1, vin2);
 
-        lv_label_set_text_fmt(Calib_GUI_current.lbl_calib_m, "%f", m);
-        lv_label_set_text_fmt(Calib_GUI_current.lbl_calib_b, "%f", get_b(code1, m, vin1));
+        lv_label_set_text_fmt(Calib_GUI.Current.lbl_calib_m, "%f", m);
+        lv_label_set_text_fmt(Calib_GUI.Current.lbl_calib_b, "%f", get_b(code1, m, vin1));
 
-        lv_label_set_text_fmt(Calib_GUI_current.lbl_rawCode, "%+08i", PowerSupply.Current.rawValue);
-        lv_label_set_text_fmt(Calib_GUI_current.lbl_rawAVG_, "%+08.0f", PowerSupply.Current.measured.Mean() * m + get_b(code1, m, vin1));
-        lv_label_set_text_fmt(Calib_GUI_current.lbl_calibratedValue, "%+09.4f", PowerSupply.Current.measured.value);
-        lv_label_set_text_fmt(Calib_GUI_current.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Current.measured.Mean());
-        lv_label_set_text_fmt(Calib_GUI_current.lbl_ER, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
+        lv_label_set_text_fmt(Calib_GUI.Current.lbl_rawCode, "%+08i", PowerSupply.Current.rawValue);
+        lv_label_set_text_fmt(Calib_GUI.Current.lbl_rawAVG_, "%+08.0f", PowerSupply.Current.measured.Mean() * m + get_b(code1, m, vin1));
+        lv_label_set_text_fmt(Calib_GUI.Current.lbl_calibratedValue, "%+09.4f", PowerSupply.Current.measured.value);
+        lv_label_set_text_fmt(Calib_GUI.Current.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Current.measured.Mean());
+        lv_label_set_text_fmt(Calib_GUI.Current.lbl_ER, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
 
         PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_1 = code1;
         PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_2 = code2;
@@ -3832,11 +3832,26 @@ static inline UIMode detect_mode()
         lv_obj_is_visible(PowerSupply.gui.win_DAC_calibration);
 
     const bool adc =
-        (PowerSupply.gui.win_ADC_voltage_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration)) ||
-        (PowerSupply.gui.win_ADC_current_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration));
+        (PowerSupply.gui.win_ADC_voltage_calibration  && lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration))  ||
+        (PowerSupply.gui.win_ADC_current_calibration  && lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration))  ||
+        (PowerSupply.gui.win_int_current_calibration  && lv_obj_is_visible(PowerSupply.gui.win_int_current_calibration)); // NEW
 
     return (!dac && !adc) ? UIMode::Menu : (dac ? UIMode::DAC : UIMode::ADC);
 }
+
+
+// static inline UIMode detect_mode()
+// {
+//     const bool dac =
+//         PowerSupply.gui.win_DAC_calibration &&
+//         lv_obj_is_visible(PowerSupply.gui.win_DAC_calibration);
+
+//     const bool adc =
+//         (PowerSupply.gui.win_ADC_voltage_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration)) ||
+//         (PowerSupply.gui.win_ADC_current_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration));
+
+//     return (!dac && !adc) ? UIMode::Menu : (dac ? UIMode::DAC : UIMode::ADC);
+// }
 
 // ----- handlers (no binding, pure polling) -----
 static void handle_menu_mode()

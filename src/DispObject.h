@@ -600,6 +600,8 @@ public:
     double calib_m;
     double calib_1m;
     double calib_b;
+    double internalResistance = (80e3*80e3)/(80e3+80e3);  // 40kOhm
+    
 
     double maxValue;
     double dac_maxValue;

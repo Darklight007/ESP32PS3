@@ -8,6 +8,7 @@
 #include "tabs.h"
 #include "device.h"        // provides PowerSupply and dac_data_g
 #include "lv_gui_helper.h" // LVLabel, LVButton helpers
+#include <float.h>
 
 #include <cmath>
 #include <map>
@@ -15,8 +16,8 @@
 
 // ---------- public objects (one definition) ----------
 
-setting_GUI Calib_GUI_voltage{};
-setting_GUI Calib_GUI_current{};
+setting_GUI Calib_GUI{};
+// setting_GUI Calib_GUI.Current{};
 
 // ---------- internal state / helpers ----------
 namespace
@@ -47,6 +48,8 @@ namespace
 
     lv_obj_t *s_label_maxV = nullptr;
     lv_obj_t *s_label_maxC = nullptr;
+
+    lv_obj_t *int_total_res = nullptr; // max  current spin
 
     // pressed/released beeps
     static void PRESSED_event_cb(lv_event_t *) { myTone(NOTE_A4, 5); }
@@ -281,18 +284,23 @@ namespace
         if (PowerSupply.gui.win_ADC_voltage_calibration && !lv_obj_has_flag(PowerSupply.gui.win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN))
         {
             auto &v = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
-            lv_spinbox_set_value(Calib_GUI_voltage.code_1, v.code_1);
-            lv_spinbox_set_value(Calib_GUI_voltage.code_2, v.code_2);
-            lv_spinbox_set_value(Calib_GUI_voltage.vin_1, (int32_t)llround(10000.0 * v.value_1));
-            lv_spinbox_set_value(Calib_GUI_voltage.vin_2, (int32_t)llround(10000.0 * v.value_2));
+            lv_spinbox_set_value(Calib_GUI.Voltage.code_1, v.code_1);
+            lv_spinbox_set_value(Calib_GUI.Voltage.code_2, v.code_2);
+            lv_spinbox_set_value(Calib_GUI.Voltage.vin_1, (int32_t)llround(10000.0 * v.value_1));
+            lv_spinbox_set_value(Calib_GUI.Voltage.vin_2, (int32_t)llround(10000.0 * v.value_2));
         }
         if (PowerSupply.gui.win_ADC_current_calibration && !lv_obj_has_flag(PowerSupply.gui.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN))
         {
             auto &i = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
-            lv_spinbox_set_value(Calib_GUI_current.code_1, i.code_1);
-            lv_spinbox_set_value(Calib_GUI_current.code_2, i.code_2);
-            lv_spinbox_set_value(Calib_GUI_current.vin_1, (int32_t)llround(10000.0 * i.value_1));
-            lv_spinbox_set_value(Calib_GUI_current.vin_2, (int32_t)llround(10000.0 * i.value_2));
+            lv_spinbox_set_value(Calib_GUI.Current.code_1, i.code_1);
+            lv_spinbox_set_value(Calib_GUI.Current.code_2, i.code_2);
+            lv_spinbox_set_value(Calib_GUI.Current.vin_1, (int32_t)llround(10000.0 * i.value_1));
+            lv_spinbox_set_value(Calib_GUI.Current.vin_2, (int32_t)llround(10000.0 * i.value_2));
+        }
+        if (PowerSupply.gui.win_int_current_calibration && !lv_obj_has_flag(PowerSupply.gui.win_int_current_calibration, LV_OBJ_FLAG_HIDDEN))
+        {
+            // Update internal resistor value in the spinbox
+            lv_spinbox_set_value(Calib_GUI.internalResistor, PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor * 1000.0); // Convert to mOhms
         }
     }
 
@@ -335,7 +343,7 @@ namespace
 
     static void build_adc_calibration_window(lv_obj_t **win_holder,
                                              const char *title,
-                                             setting_GUI &gui,
+                                             setting_ &gui,
                                              const CalPrefill &pf)
     {
         if (*win_holder)
@@ -431,6 +439,15 @@ namespace
     }
 
     // DAC handlers
+    static void ADC_iinternalRes_calib_change_event_cb(lv_event_t *e)
+    {
+        if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED)
+            return;
+        double internalResistor = lv_spinbox_get_value(Calib_GUI.internalResistor) / 1000.0; // Convert from mOhms to Ohms
+        PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = internalResistor;
+    }
+
+    // DAC handlers
     static void DAC_voltage_calib_change_event_cb(lv_event_t *e)
     {
         if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED)
@@ -448,8 +465,7 @@ namespace
         PowerSupply.Voltage.minValue = (-PowerSupply.dac_data.zero_voltage);
         PowerSupply.Voltage.maxValue = (mv - zv);
         PowerSupply.SaveDACdata("dac_data_", PowerSupply.dac_data);
-        PowerSupply.LoadDACdata("dac_data_");
-        PowerSupply.Voltage.adjValueChanged = true;
+        PowerSupply.Voltage.SetEncoderUpdate();
     }
 
     static void DAC_current_calib_change_event_cb(lv_event_t *e)
@@ -469,8 +485,7 @@ namespace
         PowerSupply.Current.minValue = (-PowerSupply.dac_data.zero_current) / 10000.0;
         PowerSupply.Current.maxValue = (mc - zc) / 10000.0;
         PowerSupply.SaveDACdata("dac_data_", PowerSupply.dac_data);
-        PowerSupply.LoadDACdata("dac_data_");
-        
+        PowerSupply.Current.SetEncoderUpdate();
     }
 
     // LCD touch calibration kept private
@@ -552,6 +567,7 @@ void SettingMenu(lv_obj_t *parent)
     section = lv_menu_section_create(sub_cal);
     create_button_item(section, btn_calibration_ADC_voltage_event_cb, "ADC Voltage");
     create_button_item(section, btn_calibration_ADC_current_event_cb, "ADC Current");
+    create_button_item(section, internal_current_calibration_cb, "Inter. Current");
     create_button_item(section, open_dac_calibration_cb, "V/I DAC");
     create_button_item(section, nullptr /* Stats reset wiring */, "Reset Stats");
     create_button_item(section, LCD_Calibration_cb, "LCD Touch");
@@ -612,14 +628,214 @@ void btn_calibration_ADC_voltage_event_cb(lv_event_t *)
 {
     auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
     CalPrefill pf{cal.code_1, cal.code_2, cal.value_1, cal.value_2, "V"};
-    build_adc_calibration_window(&PowerSupply.gui.win_ADC_voltage_calibration, "ADC Voltage Calibration", Calib_GUI_voltage, pf);
+    build_adc_calibration_window(&PowerSupply.gui.win_ADC_voltage_calibration, "ADC Voltage Calibration", Calib_GUI.Voltage, pf);
 }
 
 void btn_calibration_ADC_current_event_cb(lv_event_t *)
 {
     auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
     CalPrefill pf{cal.code_1, cal.code_2, cal.value_1, cal.value_2, "A"};
-    build_adc_calibration_window(&PowerSupply.gui.win_ADC_current_calibration, "ADC Current Calibration", Calib_GUI_current, pf);
+    build_adc_calibration_window(&PowerSupply.gui.win_ADC_current_calibration, "ADC Current Calibration", Calib_GUI.Current, pf);
+}
+static lv_obj_t *log_win;
+static lv_obj_t *log_label;
+
+typedef struct {
+    int step;
+    double v0;
+    double v1;
+} measure_ctx_t;
+
+static void close_log_cb(lv_timer_t *t)
+{
+    if (log_win) {
+        lv_obj_del(log_win);
+        log_win = NULL;
+        log_label = NULL;
+    }
+    lv_timer_del(t);
+}
+
+static void log_step(const char *fmt, ...)
+{
+    char buf[256];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    const char *old = lv_label_get_text(log_label);
+    static char new_txt[1024];
+    snprintf(new_txt, sizeof(new_txt), "%s%s\n", old, buf);
+
+    lv_label_set_text(log_label, new_txt);
+    lv_obj_scroll_to_view(log_label, LV_ANIM_OFF);
+}
+
+static void auto_measure_cb(lv_timer_t *t)
+{
+    measure_ctx_t *ctx = (measure_ctx_t *)t->user_data;
+
+    switch (ctx->step) {
+    case 0: // Set 0V
+        PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+        myTone(NOTE_A5, 100, false);
+        Serial.printf("\nInit: set 0V");
+        log_step("Step 1: Set voltage 0V");
+        ctx->step = 1;
+        lv_timer_set_period(t, 1500);   // 0.5s delay before reset
+        break;
+
+    case 1: // Reset stats at 0V
+        PowerSupply.Current.Statistics.ResetStats();
+        Serial.printf("\nStats reset @0V");
+        log_step("Step 2: Reset stats at 0V");
+        ctx->step = 2;
+        lv_timer_set_period(t, 10000); // 10s wait
+        break;
+
+    case 2: // Measure at 0V
+        ctx->v0 = PowerSupply.Current.Statistics.Mean();
+        Serial.printf("\nStep 3: v0 = %f", ctx->v0);
+        log_step("Step 3: v0 = %f", ctx->v0);
+        myTone(NOTE_A5, 100, false);
+
+        PowerSupply.Voltage.SetUpdate(32.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+        Serial.printf("\nSet 32V");
+        log_step("Step 4: Set voltage 32V");
+        ctx->step = 3;
+        lv_timer_set_period(t, 500);   // 0.5s delay before reset
+        break;
+
+    case 3: // Reset stats at 32V
+        PowerSupply.Current.Statistics.ResetStats();
+        Serial.printf("\nStats reset @32V");
+        log_step("Step 5: Reset stats at 32V");
+        ctx->step = 4;
+        lv_timer_set_period(t, 10000); // 10s wait
+        break;
+
+    case 4: // Measure at 32V and finish
+        ctx->v1 = PowerSupply.Current.Statistics.Mean();
+        Serial.printf("\nStep 6: v1 = %f", ctx->v1);
+        log_step("Step 6: v1 = %f", ctx->v1);
+
+        float internalTotalRes = 32.0f / (ctx->v1 - ctx->v0) / 1000.0f;
+        Serial.printf("\nMeasured Res: %4.3fk", internalTotalRes);
+        log_step("Measured Res: %4.3fk", internalTotalRes);
+
+        lv_spinbox_set_value(Calib_GUI.internalResistor, 1000.0 * internalTotalRes);
+        myTone(NOTE_A4, 500, false);
+
+        PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+
+        log_step("Done. Closing in 3s...");
+        lv_timer_del(t);
+        lv_mem_free(ctx);
+
+        lv_timer_t *close_t = lv_timer_create(close_log_cb, 3000, NULL);
+        lv_timer_set_repeat_count(close_t, 1);
+        break;
+    }
+}
+
+static void start_auto_measure()
+{
+    PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = FLT_MAX;
+    myTone(NOTE_A5, 100, false);
+    Serial.printf("\n\n*************************************** Wait!\n");
+
+    measure_ctx_t *ctx = static_cast<measure_ctx_t *>(lv_mem_alloc(sizeof(measure_ctx_t)));
+    ctx->step = 0;
+
+    lv_timer_t *t = lv_timer_create(auto_measure_cb, 1, ctx);
+    lv_timer_set_repeat_count(t, -1);
+}
+
+static void create_log_window()
+{
+    log_win = lv_win_create(lv_scr_act(), 40);
+    lv_win_add_title(log_win, "Auto Measure Log");
+
+    lv_obj_t *cont = lv_win_get_content(log_win);
+    log_label = lv_label_create(cont);
+    lv_label_set_text(log_label, "");
+    lv_label_set_long_mode(log_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(log_label, lv_pct(100));
+}
+
+static void event_cb(lv_event_t *e)
+{
+    lv_obj_t *obj = lv_event_get_current_target(e);
+    if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED) {
+        const char *txt = lv_msgbox_get_active_btn_text(obj);
+        lv_msgbox_close(obj);
+        if (txt && strcmp(txt, "OK") == 0) {
+            create_log_window();
+            start_auto_measure();
+        }
+    }
+}
+
+void Warning_msgbox(void)
+{
+    static const char *btns[] = {"OK", "Cancel", ""};
+    lv_obj_t *mbox1 = lv_msgbox_create(NULL, "Auto Measure", "Disconnect any load!", btns, true);
+    lv_obj_add_event_cb(mbox1, event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_center(mbox1);
+}
+
+
+lv_obj_t *mbox;
+static void AutoMeasureTotalRes_cb(lv_event_t *)
+{
+    // static const char *btns[] = {"OK", "Cancel", ""};
+
+    // mbox = lv_msgbox_create(NULL, "Auto Measure", "Disconnect any load!", btns, true);
+    // lv_obj_add_event_cb(mbox, mbox_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    // lv_obj_center(mbox);
+    Warning_msgbox();
+}
+
+// Open/create the DAC calibration window
+void internal_current_calibration_cb(lv_event_t *)
+{
+    if (PowerSupply.gui.win_int_current_calibration)
+    {
+        lv_obj_clear_flag(PowerSupply.gui.win_int_current_calibration, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+
+    PowerSupply.gui.win_int_current_calibration = lv_win_create(lv_scr_act(), 36);
+    lv_obj_set_size(PowerSupply.gui.win_int_current_calibration, 320, 226);
+    lv_win_add_title(PowerSupply.gui.win_int_current_calibration, "Internal Current Calibration");
+    auto *close = lv_win_add_btn(PowerSupply.gui.win_int_current_calibration, LV_SYMBOL_CLOSE, 60);
+    lv_obj_add_event_cb(close, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
+    auto *cont = lv_win_get_content(PowerSupply.gui.win_int_current_calibration);
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+
+    int xPos = 10, xOffset = 10, yPos = 70, yOffset = 25;
+
+    lv_point_t btn_pos{160, 20};
+    LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 75, 35, nullptr, load_cb);
+    LVButton btnSave(cont, "Save", btn_pos.x + 75 + xOffset, btn_pos.y, 75, 35, nullptr, save_cb);
+
+    // int_total_res
+    Calib_GUI.internalResistor = spinbox_pro(cont, "#FFFFF7 Total Internal Resistor (kohm):#", 0, 999'999.9, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 150, 21, &graph_R_16);
+
+    PowerSupply.LoadCalibrationData();
+    // lv_spinbox_set_value(intRes, 40'000.123*1000.0);
+    lv_spinbox_set_value(Calib_GUI.internalResistor, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor);
+
+    Serial.printf("\nInternal Current Calibration: %f", PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor);
+
+    PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = lv_spinbox_get_value(Calib_GUI.internalResistor) / 1000.0;
+
+    lv_obj_add_event_cb(Calib_GUI.internalResistor, ADC_iinternalRes_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    LVButton btnAutoMeasureTotalRes(cont, "Auto Measure", 80, 120, 120, 35, nullptr, AutoMeasureTotalRes_cb);
 }
 
 // Open/create the DAC calibration window

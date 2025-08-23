@@ -127,6 +127,16 @@ void Device::SaveCalibrationData()
 {
     Device::SaveCalibData("cal", CalBank[bankCalibId]);
     Serial.print("\ndata saved.");
+
+    Calibration outputData = CalBank[bankCalibId] ;
+
+    calibrationUpdate();
+
+    Serial.printf("\nSaved calibration data:%s {%+08.4f %+08i %+08.4f %+08i}, {%+08.4f %+08i %+08.4f %+08i}, %4.4f",
+                  outputData.macAdd,
+                  outputData.vCal.value_1, outputData.vCal.code_1, outputData.vCal.value_2, outputData.vCal.code_2,
+                  outputData.iCal.value_1, outputData.iCal.code_1, outputData.iCal.value_2, outputData.iCal.code_2,
+                   outputData.internalResistor);
 }
 
 void Device::LoadCalibrationData()
@@ -136,10 +146,11 @@ void Device::LoadCalibrationData()
 
     calibrationUpdate();
 
-    Serial.printf("\nCalibration data loaded:%s {%+08.4f %+08i %+08.4f %+08i}, {%+08.4f %+08i %+08.4f %+08i}",
+    Serial.printf("\nCalibration data loaded:%s {%+08.4f %+08i %+08.4f %+08i}, {%+08.4f %+08i %+08.4f %+08i}, %4.4f",
                   outputData.macAdd,
                   outputData.vCal.value_1, outputData.vCal.code_1, outputData.vCal.value_2, outputData.vCal.code_2,
-                  outputData.iCal.value_1, outputData.iCal.code_1, outputData.iCal.value_2, outputData.iCal.code_2);
+                  outputData.iCal.value_1, outputData.iCal.code_1, outputData.iCal.value_2, outputData.iCal.code_2,
+                  outputData.internalResistor);
 
     // CalBank[bankCalibId].vCal.value_1 = outputData.vCal.value_1;
     // CalBank[bankCalibId].vCal.value_2 = outputData.vCal.value_2;
@@ -169,7 +180,8 @@ void Device::LoadCalibrationData()
         Serial.print("\n\n ** WRONG CALIBRATION DATA ** \n");
         Serial.print("\nLoading factory calibration data ...");
 
-        CalBank[bankCalibId] = Calibration(CalBank[bankCalibId].macAdd, {+00.0000, -259, +32.0000, +8164608}, {+00.0000, +104080, +3.0000, +2926000});
+        CalBank[bankCalibId] = Calibration(CalBank[bankCalibId].macAdd, {+00.0000, -259, +32.0000, +8164608}, {+00.0000, +104080, +3.0000, +2926000},  40'000.0); // 1/40kOhm /volt
+
         calibrate();
         calibrationUpdate();
         Serial.printf(" done.");
@@ -425,7 +437,6 @@ void Device::readVoltage()
         // Serial.printf(" %3i",    *Voltage.Bar.curValuePtr );
     }
 }
-double internalCurrentConsumption;
 
 void Device::readCurrent()
 {
@@ -438,11 +449,13 @@ void Device::readCurrent()
         adc.startConversion(VOLTAGE, REF_EXTERNAL); // REF_EXTERNAL
 
         // Current used by R11&R12 and arrR2
-        static double diff_A = (0.000594 - 0.000143) / (32.0 - 0.0);
-        double currentOfR11R12_arrR2 = 1.0 * Voltage.measured.Mean() * diff_A +
+        // static double diff_A = (0.000461 - 0.000021) / (32.0 - 0.0); // (0.000594 - 0.000143)
+        double internalResistor = CalBank[bankCalibId].internalResistor; // 1.0 / 40'000.0; // 1/40kOhm /volt
+
+        double currentOfInternalRes = 1.0 * Voltage.measured.Mean() / (internalResistor*1000.0) +
                                        0.0 * 0.000180 * !digitalRead(CCCVPin); // Why?;
 
-        c = (((Current.rawValue - Current.calib_b) * Current.calib_1m) - currentOfR11R12_arrR2); // old value: .0009
+        c = (((Current.rawValue - Current.calib_b) * Current.calib_1m) - currentOfInternalRes); // old value: .0009
         // c=c+c*0.00009901;
 
         // Current.hist[c];
@@ -461,7 +474,10 @@ void Device::readCurrent()
         // *Current.Bar.curValuePtr = c * Current.Bar.scaleFactor;
         // lv_obj_invalidate(Current.Bar.bar);
 
-        // Serial.printf("\n%9.4f %10.6f %5.2f %i", c, Current.Statistics.Mean(), Current.effectiveResolution.Mean(),
+        // Serial.printf("\n\r%9.6f %9.6f %5.2f %i",
+        //               c,
+        //               Current.Statistics.Mean(),
+        //               Current.effectiveResolution.Mean(),
         //               Current.Statistics.windowSizeIndex_ % Current.Statistics.NofAvgs);
 
         static unsigned long loopCount = 0;
@@ -564,37 +580,21 @@ void Device::DACUpdate(void)
     {
         static double dac_last_Voltage = -1, dac_last_Current = -1;
 
-        // Wire.setClock(400000UL);
-        /*  adjValued must be in the range of 0 to 65535
-            offset value should be only affect the display
-            the real offset must be set in hardware.
-            Bu the max value and min value should be check in software
-
-        */
         uint16_t v = Voltage.adjValue; //  +0* Voltage.adjOffset;
         // if (dac_last_Voltage != v)
         {
             DAC.writeAndPowerAll(DAC_VOLTAGE, v);
             dac_last_Voltage = v;
-        }
-
-        /*
-        This current obtain experimentally by measurement.
-        It is proportional  to voltage and it's measure at 32V
-        */
-
-        double otherInternalCurrentConsumer = 1.0 * Voltage.measured.Mean() / (32.0 / (0.00098 - 0.00025)); // -2.1 mm
-        uint16_t c = Current.adjValue;                                                                      // + Current.adjOffset;
-        ;                                                                                                   // 0 * internalCurrentConsumption + 0 * otherInternalCurrentConsumer) * 10000;
-
-        // Serial.printf("\n v_uint16_t: %i v:%f ", Voltage.adjValue, double((Voltage.adjValue - Voltage.adjOffset) / 2000.0));
-        // Serial.printf(" c_uint16_t: %i c:%f ", Current.adjValue, double((Current.adjValue - Current.adjOffset) / 10000.0));
-
+        }      
+        
+        uint16_t c = Current.adjValue;                                                                      
         // if (dac_last_Current != c)
         {
             DAC.writeAndPowerAll(DAC_CURRENT, uint16_t(c));
             dac_last_Current = c;
         }
+        // Serial.printf("\n v_uint16_t: %i v:%f ", Voltage.adjValue, double((Voltage.adjValue - Voltage.adjOffset) / 2000.0));
+        // Serial.printf(" c_uint16_t: %i c:%f ", Current.adjValue, double((Current.adjValue - Current.adjOffset) / 10000.0));
     }
     else // if (getStatus() == DEVICE::OFF)
     {

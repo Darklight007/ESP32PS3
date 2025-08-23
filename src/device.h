@@ -93,6 +93,7 @@ struct GUI
     lv_obj_t *setting_menu = nullptr;
     lv_obj_t *win_ADC_voltage_calibration= nullptr;
     lv_obj_t *win_ADC_current_calibration= nullptr;
+    lv_obj_t *win_int_current_calibration= nullptr;
     lv_obj_t *win_DAC_calibration= nullptr;
     lv_obj_t *textarea_set_value = nullptr;
 };
@@ -247,12 +248,14 @@ public:
     String macAdd;
     calibPoints vCal;
     calibPoints iCal;
+    double internalResistor; // 1/40kOhm /volt
     Calibration(
         String t_macAdd,
         calibPoints t_vcalib,
-        calibPoints t_icalib) : macAdd(t_macAdd),
+        calibPoints t_icalib,
+    double icpv) : macAdd(t_macAdd),
                                 vCal(t_vcalib),
-                                iCal(t_icalib)
+                                iCal(t_icalib),internalResistor(icpv)
     {
     }
 

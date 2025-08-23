@@ -337,7 +337,8 @@ void setupADC()
 {
     // Bank of calibration data for different devices based on MAC address
     PowerSupply.CalBank = {
-        {"7C:9E:BD:4D:C7:08", {0.005000, 121, 32.7503, 3353431}, {0.0000, 124955, 3.000, 1746856}} // v1.6
+        {"7C:9E:BD:4D:C7:08", {0.005000, 121, 32.7503, 3353431}, {0.0000, 124955, 3.000, 1746856} // v1.6
+    ,40'000.0} // Internal current consumption in Amperes;
     };
 
     // Setup ADC with READY pin number, ISR function, and I2C bus
