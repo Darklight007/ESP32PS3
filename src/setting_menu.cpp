@@ -13,6 +13,10 @@
 #include <cmath>
 #include <map>
 #include <cstdio>
+#include <cstring> // for memcmp, memcpy
+#include <cstdint>
+#include <cstddef>
+#include <functional>
 
 // ---------- public objects (one definition) ----------
 
@@ -637,18 +641,196 @@ void btn_calibration_ADC_current_event_cb(lv_event_t *)
     CalPrefill pf{cal.code_1, cal.code_2, cal.value_1, cal.value_2, "A"};
     build_adc_calibration_window(&PowerSupply.gui.win_ADC_current_calibration, "ADC Current Calibration", Calib_GUI.Current, pf);
 }
+
+///*****************************************************************************
+// ****************** Simple sequencer for auto-measure *************************
+// *****************************************************************************
+
+static char s_logbuf[2048];
+static size_t s_len = 0;
+static bool s_pending = false; // true after _begin(), cleared by _done()
+// ---------- Reuse your existing logger ----------
+void log_step_begin(const char *fmt, ...);
+void log_step_done();
+void log_step(const char *fmt, ...);
+static void close_log_cb(lv_timer_t *t);
+
+// ---------- Your measurement context ----------
+struct measure_ctx_t
+{
+    int step = 0; // unused by sequencer, keep if you want
+    double v0 = 0.0;
+    double v1 = 0.0;
+};
+
+// ---------- Sequencer types ----------
+struct SeqStep
+{
+    const char *label;             // e.g. "Setting voltage to 0V"
+    uint32_t wait_ms_begin_to_end; // delay before we call end()
+    uint32_t wait_ms_after_end;    // cooldown before next step
+    std::function<void()> begin;   // optional
+    std::function<void()> end;     // optional
+};
+
+struct SeqRunner
+{
+    lv_timer_t *timer = nullptr;
+    const SeqStep *steps = nullptr;
+    size_t count = 0;
+    size_t index = 0;     // current step
+    bool in_begin = true; // phase: begin or end
+    measure_ctx_t *mctx = nullptr;
+};
+
+// Forward
+static void seq_cb(lv_timer_t *t);
+
+// Create and start the runner
+static SeqRunner *seq_start(lv_timer_t *t, const SeqStep *steps, size_t count, measure_ctx_t *mctx)
+{
+    auto *r = static_cast<SeqRunner *>(lv_mem_alloc(sizeof(SeqRunner)));
+    r->timer = t;
+    r->steps = steps;
+    r->count = count;
+    r->index = 0;
+    r->in_begin = true;
+    r->mctx = mctx;
+    t->user_data = r; // bind runner to timer
+
+    // run first tick "now"
+    lv_timer_set_repeat_count(t, -1);
+    lv_timer_set_period(t, 1);
+    return r;
+}
+
+// The LVGL timer callback drives the sequence
+static void seq_cb(lv_timer_t *t)
+{
+    auto *r = static_cast<SeqRunner *>(t->user_data);
+    if (!r || r->index >= r->count)
+    {
+        // done
+        lv_timer_del(t);
+        if (r)
+            lv_mem_free(r);
+        return;
+    }
+
+    const SeqStep &s = r->steps[r->index];
+
+    if (r->in_begin)
+    {
+        // BEGIN PHASE
+        log_step_begin("%u.  %s", (unsigned)(r->index + 1), s.label);
+        if (s.begin)
+            s.begin(); // user begin action
+        lv_timer_set_period(t, s.wait_ms_begin_to_end);
+        r->in_begin = false; // next time: end phase
+        return;
+    }
+    else
+    {
+        // END PHASE
+        log_step_done();
+        if (s.end)
+            s.end(); // user end action
+        lv_timer_set_period(t, s.wait_ms_after_end);
+        r->in_begin = true; // next time: begin of next step
+        r->index += 1;
+
+        if (r->index >= r->count)
+        {
+            // finished whole table; stop timer
+            lv_timer_del(t);
+            lv_mem_free(r);
+        }
+        return;
+    }
+}
+
+static void start_auto_measure_with_sequencer()
+{
+    // Create ctx
+    auto *mctx = static_cast<measure_ctx_t *>(lv_mem_alloc(sizeof(measure_ctx_t)));
+    *mctx = measure_ctx_t{};
+
+    // Build steps
+    static const SeqStep kSteps[] = {
+        {"Setting voltage to 0V",
+         1000, 0,
+         []()
+         { PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); },
+         nullptr},
+        {"Reset statistics",
+         2000, 1500,
+         []()
+         { PowerSupply.Current.Statistics.ResetStats(); },
+         nullptr},
+        {"Measuring current at 0V",
+         10000, 1500,
+         nullptr,
+         [mctx]()
+         { mctx->v0 = PowerSupply.Current.Statistics.Mean(); }},
+        {"Setting voltage to 32V",
+         1500, 0,
+         []()
+         { PowerSupply.Voltage.SetUpdate(32.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); },
+         nullptr},
+        {"Reset statistics",
+         1500, 1500,
+         []()
+         { PowerSupply.Current.Statistics.ResetStats(); },
+         nullptr},
+        {"Measuring current at 32V",
+         10000, 1500,
+         nullptr,
+         [mctx]()
+         { mctx->v1 = PowerSupply.Current.Statistics.Mean(); }},
+        {"Finalize",
+         0, 0,
+         nullptr,
+         [mctx]()
+         {
+             log_step("           i0 = %+1.6f", mctx->v0);
+             log_step("           i1 = %+1.6f", mctx->v1);
+             const float internalTotalRes = 32.0f / (mctx->v1 - mctx->v0) / 1000.0f;
+             log_step("Measured Res: %4.3fk", internalTotalRes);
+
+             lv_spinbox_set_value(Calib_GUI.internalResistor, 1000.0f * internalTotalRes);
+             PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = internalTotalRes;
+
+             PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor +
+                                           PowerSupply.Voltage.adjOffset);
+
+             // close log later
+             lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
+             lv_timer_set_repeat_count(close_t, 1);
+         }},
+    };
+
+    // Create timer & start
+    lv_timer_t *t = lv_timer_create(seq_cb, 1, nullptr);
+    seq_start(t, kSteps, sizeof(kSteps) / sizeof(kSteps[0]), mctx);
+}
+
+// ****************************************************************************
+// ****************** Simple logging window for auto-measure *******************
+// ****************************************************************************
+
 static lv_obj_t *log_win;
 static lv_obj_t *log_label;
 
-typedef struct {
+typedef struct
+{
     int step;
     double v0;
     double v1;
-} measure_ctx_t;
-
+} measure_ctx2_t;
 static void close_log_cb(lv_timer_t *t)
 {
-    if (log_win) {
+    if (log_win)
+    {
         lv_obj_del(log_win);
         log_win = NULL;
         log_label = NULL;
@@ -656,96 +838,251 @@ static void close_log_cb(lv_timer_t *t)
     lv_timer_del(t);
 }
 
-static void log_step(const char *fmt, ...)
+// Replace your log_step() with this pair
+
+static inline void log_update_label()
+{
+    s_logbuf[s_len] = '\0';
+    lv_label_set_text(log_label, s_logbuf);
+    lv_obj_scroll_to_view(log_label, LV_ANIM_OFF);
+    myTone(NOTE_A5, 100, false);
+}
+
+// 1) Print: "1.  Setting volt to 0v ...\n"
+void log_step_begin(const char *fmt, ...)
+{
+    // auto-close any previous pending step
+    if (s_pending)
+    {
+        // replace the previous " ...\n" with " done!\n"
+        // (safe even if buffer tight; see _done code)
+        // You can call log_step_done(); but inline is faster.
+        const char tail[] = " ...\n";
+        const size_t tail_len = sizeof(tail) - 1;
+        if (s_len >= tail_len && std::memcmp(s_logbuf + s_len - tail_len, tail, tail_len) == 0)
+        {
+            s_len -= tail_len;
+            const char done[] = " done!\n";
+            size_t add = strlen(done);
+            if (s_len + add >= sizeof(s_logbuf))
+                add = sizeof(s_logbuf) - s_len - 1;
+            std::memcpy(s_logbuf + s_len, done, add);
+            s_len += add;
+        }
+        s_pending = false;
+    }
+
+    // format the new line head: "1.  Setting volt to 0v"
+    char line[256];
+    va_list args;
+    va_start(args, fmt);
+    const int n = vsnprintf(line, sizeof(line), fmt, args);
+    va_end(args);
+
+    // append to the big buffer + " ...\n"
+    const char ell[] = " ...\n";
+    const size_t need = (size_t)((n > 0 ? n : 0)) + sizeof(ell) - 1;
+
+    // truncate if needed
+    size_t avail = sizeof(s_logbuf) - s_len - 1;
+    size_t to_copy = avail > need ? (size_t)(n > 0 ? n : 0) : (avail > (sizeof(ell) - 1) ? avail - (sizeof(ell) - 1) : 0);
+
+    if (to_copy > 0)
+    {
+        std::memcpy(s_logbuf + s_len, line, to_copy);
+        s_len += to_copy;
+    }
+    // add " ...\n" if there is room
+    size_t add = sizeof(ell) - 1;
+    if (s_len + add >= sizeof(s_logbuf))
+        add = sizeof(s_logbuf) - s_len - 1;
+    std::memcpy(s_logbuf + s_len, ell, add);
+    s_len += add;
+
+    s_pending = true;
+    log_update_label();
+    myTone(NOTE_A5, 100, false);
+}
+
+// 2) Replace trailing " ...\n" with " done!\n" on the same line
+void log_step_done()
+{
+    if (!s_pending)
+        return;
+
+    const char tail[] = " ...\n";
+    const size_t tail_len = sizeof(tail) - 1;
+
+    if (s_len >= tail_len && std::memcmp(s_logbuf + s_len - tail_len, tail, tail_len) == 0)
+    {
+        // remove " ...\n"
+        s_len -= tail_len;
+
+        // append " done!\n"
+        const char done[] = " done!\n";
+        size_t add = sizeof(done) - 1;
+        if (s_len + add >= sizeof(s_logbuf))
+            add = sizeof(s_logbuf) - s_len - 1;
+        std::memcpy(s_logbuf + s_len, done, add);
+        s_len += add;
+
+        log_update_label();
+    }
+    s_pending = false;
+    myTone(NOTE_A5, 100, false);
+}
+
+void log_step(const char *fmt, ...)
 {
     char buf[256];
     va_list args;
     va_start(args, fmt);
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
-
     const char *old = lv_label_get_text(log_label);
     static char new_txt[1024];
     snprintf(new_txt, sizeof(new_txt), "%s%s\n", old, buf);
-
     lv_label_set_text(log_label, new_txt);
     lv_obj_scroll_to_view(log_label, LV_ANIM_OFF);
 }
 
+void log_clear()
+{
+    if (log_label)
+    {
+        lv_label_set_text(log_label, "");              // wipe text
+        lv_obj_scroll_to_y(log_label, 0, LV_ANIM_OFF); // scroll back to top
+    }
+}
+
 static void auto_measure_cb(lv_timer_t *t)
 {
-    measure_ctx_t *ctx = (measure_ctx_t *)t->user_data;
+    auto *ctx = static_cast<measure_ctx2_t *>(t->user_data);
 
-    switch (ctx->step) {
-    case 0: // Set 0V
-        PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
-        myTone(NOTE_A5, 100, false);
-        Serial.printf("\nInit: set 0V");
-        log_step("Step 1: Set voltage 0V");
+    switch (ctx->step)
+    {
+
+    // Step 1: set 0 V
+    case 0:
+        s_len = 0;
+        s_logbuf[0] = '\0';
+        s_pending = false;
+        log_step_begin("1.  Setting voltage to 0V");
+        PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor +
+                                      PowerSupply.Voltage.adjOffset);
+        lv_timer_set_period(t, 1000);
         ctx->step = 1;
-        lv_timer_set_period(t, 1500);   // 0.5s delay before reset
         break;
 
-    case 1: // Reset stats at 0V
+    // Finish step 1 → reset stats
+    case 1:
+        log_step_done(); // 1 done
+        log_step_begin("2.  Reset statistics");
         PowerSupply.Current.Statistics.ResetStats();
-        Serial.printf("\nStats reset @0V");
-        log_step("Step 2: Reset stats at 0V");
+        lv_timer_set_period(t, 2000);
         ctx->step = 2;
-        lv_timer_set_period(t, 10000); // 10s wait
         break;
 
-    case 2: // Measure at 0V
-        ctx->v0 = PowerSupply.Current.Statistics.Mean();
-        Serial.printf("\nStep 3: v0 = %f", ctx->v0);
-        log_step("Step 3: v0 = %f", ctx->v0);
-        myTone(NOTE_A5, 100, false);
-
-        PowerSupply.Voltage.SetUpdate(32.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
-        Serial.printf("\nSet 32V");
-        log_step("Step 4: Set voltage 32V");
+    // Finish step 2 → prepare measure @0V
+    case 2:
+        log_step_done(); // 2 done
+        lv_timer_set_period(t, 1500);
         ctx->step = 3;
-        lv_timer_set_period(t, 500);   // 0.5s delay before reset
         break;
 
-    case 3: // Reset stats at 32V
-        PowerSupply.Current.Statistics.ResetStats();
-        Serial.printf("\nStats reset @32V");
-        log_step("Step 5: Reset stats at 32V");
+    // Step 3: measure @0V
+    case 3:
+        log_step_begin("3.  Measuring current at 0V");
+        lv_timer_set_period(t, 10000);
         ctx->step = 4;
-        lv_timer_set_period(t, 10000); // 10s wait
         break;
 
-    case 4: // Measure at 32V and finish
+    // Finish step 3 → record v0
+    case 4:
+        ctx->v0 = PowerSupply.Current.Statistics.Mean();
+        log_step_done(); // 3 done
+        lv_timer_set_period(t, 1500);
+        ctx->step = 5;
+        break;
+
+    // Step 4: set 32 V
+    case 5:
+        log_step_begin("4.  Setting volt to 32V");
+        PowerSupply.Voltage.SetUpdate(32.0 * PowerSupply.Voltage.adjFactor +
+                                      PowerSupply.Voltage.adjOffset);
+        lv_timer_set_period(t, 1500);
+        ctx->step = 6;
+        break;
+
+    // Finish step 4 → reset stats
+    case 6:
+        log_step_done(); // 4 done
+        log_step_begin("5.  Reset statistics");
+        PowerSupply.Current.Statistics.ResetStats();
+        lv_timer_set_period(t, 1500);
+        ctx->step = 7;
+        break;
+
+    // Finish step 5 → prepare measure @32V
+    case 7:
+        log_step_done(); // 5 done
+        lv_timer_set_period(t, 1500);
+        ctx->step = 8;
+        break;
+
+    // Step 6: measure @32V
+    case 8:
+        log_step_begin("6.  Measuring current at 32V");
+        lv_timer_set_period(t, 10000);
+        ctx->step = 9;
+        break;
+
+    // Finish step 6 → record v1 and ramp back to 0 V
+    case 9:
         ctx->v1 = PowerSupply.Current.Statistics.Mean();
-        Serial.printf("\nStep 6: v1 = %f", ctx->v1);
-        log_step("Step 6: v1 = %f", ctx->v1);
+        log_step_done(); // 6 done
+        PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor +
+                                      PowerSupply.Voltage.adjOffset);
+        lv_timer_set_period(t, 1500);
+        ctx->step = 10;
+        break;
+
+    // Finalization
+    case 10:
+    {
+        log_step_done(); // safety
+
+        log_step("           i0 = %+1.6f", ctx->v0);
+        log_step("           i1 = %+1.6f", ctx->v1);
 
         float internalTotalRes = 32.0f / (ctx->v1 - ctx->v0) / 1000.0f;
-        Serial.printf("\nMeasured Res: %4.3fk", internalTotalRes);
         log_step("Measured Res: %4.3fk", internalTotalRes);
 
-        lv_spinbox_set_value(Calib_GUI.internalResistor, 1000.0 * internalTotalRes);
-        myTone(NOTE_A4, 500, false);
+        lv_spinbox_set_value(Calib_GUI.internalResistor, 1000.0f * internalTotalRes);
+        PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = internalTotalRes;
 
-        PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+        PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor +
+                                      PowerSupply.Voltage.adjOffset);
 
-        log_step("Done. Closing in 3s...");
         lv_timer_del(t);
         lv_mem_free(ctx);
 
-        lv_timer_t *close_t = lv_timer_create(close_log_cb, 3000, NULL);
+        lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
         lv_timer_set_repeat_count(close_t, 1);
+        break;
+    }
+
+    default:
         break;
     }
 }
 
 static void start_auto_measure()
 {
+    log_clear();
     PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = FLT_MAX;
-    myTone(NOTE_A5, 100, false);
-    Serial.printf("\n\n*************************************** Wait!\n");
 
-    measure_ctx_t *ctx = static_cast<measure_ctx_t *>(lv_mem_alloc(sizeof(measure_ctx_t)));
+    measure_ctx2_t *ctx = static_cast<measure_ctx2_t *>(lv_mem_alloc(sizeof(measure_ctx2_t)));
     ctx->step = 0;
 
     lv_timer_t *t = lv_timer_create(auto_measure_cb, 1, ctx);
@@ -755,7 +1092,7 @@ static void start_auto_measure()
 static void create_log_window()
 {
     log_win = lv_win_create(lv_scr_act(), 40);
-    lv_win_add_title(log_win, "Auto Measure Log");
+    lv_win_add_title(log_win, "Measuring total internal resistor");
 
     lv_obj_t *cont = lv_win_get_content(log_win);
     log_label = lv_label_create(cont);
@@ -767,12 +1104,19 @@ static void create_log_window()
 static void event_cb(lv_event_t *e)
 {
     lv_obj_t *obj = lv_event_get_current_target(e);
-    if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED) {
+    if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+    {
         const char *txt = lv_msgbox_get_active_btn_text(obj);
         lv_msgbox_close(obj);
-        if (txt && strcmp(txt, "OK") == 0) {
+        if (txt && strcmp(txt, "OK") == 0)
+        {
             create_log_window();
-            start_auto_measure();
+            // start_auto_measure();
+            s_len = 0;
+            s_logbuf[0] = '\0';
+            s_pending = false;
+            log_clear();
+            start_auto_measure_with_sequencer();
         }
     }
 }
@@ -784,7 +1128,6 @@ void Warning_msgbox(void)
     lv_obj_add_event_cb(mbox1, event_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_center(mbox1);
 }
-
 
 lv_obj_t *mbox;
 static void AutoMeasureTotalRes_cb(lv_event_t *)
@@ -816,14 +1159,10 @@ void internal_current_calibration_cb(lv_event_t *)
     lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
     lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
 
-    int xPos = 10, xOffset = 10, yPos = 70, yOffset = 25;
-
-    lv_point_t btn_pos{160, 20};
-    LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 75, 35, nullptr, load_cb);
-    LVButton btnSave(cont, "Save", btn_pos.x + 75 + xOffset, btn_pos.y, 75, 35, nullptr, save_cb);
+    int xPos = 10, xOffset = 10, yPos = 25, yOffset = 25;
 
     // int_total_res
-    Calib_GUI.internalResistor = spinbox_pro(cont, "#FFFFF7 Total Internal Resistor (kohm):#", 0, 999'999.9, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 150, 21, &graph_R_16);
+    Calib_GUI.internalResistor = spinbox_pro(cont, "#FFFFF7 Total Internal Resistor (kohm):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 150, 21, &graph_R_16);
 
     PowerSupply.LoadCalibrationData();
     // lv_spinbox_set_value(intRes, 40'000.123*1000.0);
@@ -835,7 +1174,11 @@ void internal_current_calibration_cb(lv_event_t *)
 
     lv_obj_add_event_cb(Calib_GUI.internalResistor, ADC_iinternalRes_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    LVButton btnAutoMeasureTotalRes(cont, "Auto Measure", 80, 120, 120, 35, nullptr, AutoMeasureTotalRes_cb);
+    LVButton btnAutoMeasureTotalRes(cont, "Auto Measure", 10, xOffset + 50, 120, 35, nullptr, AutoMeasureTotalRes_cb);
+
+    lv_point_t btn_pos{80, 100};
+    LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 75, 35, nullptr, load_cb);
+    LVButton btnSave(cont, "Save", btn_pos.x + 75 + xOffset, btn_pos.y, 75, 35, nullptr, save_cb);
 }
 
 // Open/create the DAC calibration window

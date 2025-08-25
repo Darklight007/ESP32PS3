@@ -2792,6 +2792,7 @@ void keyCheckLoop()
                 //  lv_obj_add_flag(voltageCurrentCalibration,LV_OBJ_FLAG_HIDDEN);
                  hide( PowerSupply.gui.win_ADC_voltage_calibration);
                  hide( PowerSupply.gui.win_ADC_current_calibration);
+                 hide( PowerSupply.gui.win_int_current_calibration);
                  hide( PowerSupply.gui.win_DAC_calibration); }
 
     );

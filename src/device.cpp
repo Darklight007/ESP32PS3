@@ -474,11 +474,11 @@ void Device::readCurrent()
         // *Current.Bar.curValuePtr = c * Current.Bar.scaleFactor;
         // lv_obj_invalidate(Current.Bar.bar);
 
-        // Serial.printf("\n\r%9.6f %9.6f %5.2f %i",
-        //               c,
-        //               Current.Statistics.Mean(),
-        //               Current.effectiveResolution.Mean(),
-        //               Current.Statistics.windowSizeIndex_ % Current.Statistics.NofAvgs);
+        Serial.printf("\n\r%9.6f %9.6f %5.2f %i",
+                      c,
+                      Current.Statistics.Mean(),
+                      Current.effectiveResolution.Mean(),
+                      Current.Statistics.windowSizeIndex_ % Current.Statistics.NofAvgs);
 
         static unsigned long loopCount = 0;
         static unsigned long startTime = millis();
