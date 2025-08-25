@@ -17,8 +17,34 @@
 #include <cstdint>
 #include <cstddef>
 #include <functional>
+#include "MonotoneCubicCalibrator.h"
+
+// --- Debug helpers ---
+#if defined(ARDUINO) && defined(ESP32)
+#include <Arduino.h>
+#define DBG_FREE_HEAP() ESP.getFreeHeap()
+#else
+#define DBG_FREE_HEAP() 0u
+#endif
+
+static void dbg_printf(const char *fmt, ...)
+{
+    char buf[192];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+#if defined(ARDUINO)
+    Serial.println(buf);
+#endif
+    // Optional LVGL log
+    extern void log_step(const char *, ...);
+    log_step("%s", buf); // remove if you do not have log_step
+}
 
 // ---------- public objects (one definition) ----------
+extern bool lvglChartIsBusy;
+// Global (or static) residual spline
 
 setting_GUI Calib_GUI{};
 // setting_GUI Calib_GUI.Current{};
@@ -571,8 +597,10 @@ void SettingMenu(lv_obj_t *parent)
     section = lv_menu_section_create(sub_cal);
     create_button_item(section, btn_calibration_ADC_voltage_event_cb, "ADC Voltage");
     create_button_item(section, btn_calibration_ADC_current_event_cb, "ADC Current");
-    create_button_item(section, internal_current_calibration_cb, "Inter. Current");
     create_button_item(section, open_dac_calibration_cb, "V/I DAC");
+    create_button_item(section, internal_current_calibration_cb, "Inter. Current");
+    create_button_item(section, ADC_INL_Voltage_calibration_cb, "ADC INL V_CAL");
+
     create_button_item(section, nullptr /* Stats reset wiring */, "Reset Stats");
     create_button_item(section, LCD_Calibration_cb, "LCD Touch");
 
@@ -749,84 +777,65 @@ static void seq_cb(lv_timer_t *t)
     }
 }
 
-static void start_auto_measure_with_sequencer()
+struct CurrentCalCtx
 {
-    // Create ctx
-    auto *mctx = static_cast<measure_ctx_t *>(lv_mem_alloc(sizeof(measure_ctx_t)));
-    *mctx = measure_ctx_t{};
+    double v0 = 0, v1 = 0;
+};
+static void start_current_totalR()
+{
+    auto *c = (CurrentCalCtx *)lv_mem_alloc(sizeof(CurrentCalCtx));
+    *c = CurrentCalCtx{};
 
-    // Build steps
-    static const SeqStep kSteps[] = {
-        {"Setting voltage to 0V",
-         1000, 0,
+    static const SeqStep steps[] = {
+        {"Setting voltage to 0V", 1500, 500,
          []()
-         { PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); },
-         nullptr},
-        {"Reset statistics",
-         2000, 1500,
+         { PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); }, nullptr},
+        {"Reset statistics", 1000, 1500,
          []()
-         { PowerSupply.Current.Statistics.ResetStats(); },
-         nullptr},
-        {"Measuring current at 0V",
-         10000, 1500,
-         nullptr,
-         [mctx]()
-         { mctx->v0 = PowerSupply.Current.Statistics.Mean(); }},
-        {"Setting voltage to 32V",
-         1500, 0,
+         { PowerSupply.Current.Statistics.ResetStats(); }, nullptr},
+        // {"2nd Reset statistics", 1000, 1500,
+        //  []()
+        //  { PowerSupply.ResetStats(); }, nullptr},
+        {"Measuring current at 0V", 10000, 1500,
+         nullptr, [c]()
+         { c->v0 = PowerSupply.Current.Statistics.Mean(); }},
+        {"Setting voltage to 32V", 1500, 500,
          []()
-         { PowerSupply.Voltage.SetUpdate(32.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); },
-         nullptr},
-        {"Reset statistics",
-         1500, 1500,
+         { PowerSupply.Voltage.SetUpdate((32.0 * PowerSupply.Voltage.adjFactor) + PowerSupply.Voltage.adjOffset); }, nullptr},
+        {"Reset statistics", 1500, 1500,
          []()
-         { PowerSupply.Current.Statistics.ResetStats(); },
-         nullptr},
-        {"Measuring current at 32V",
-         10000, 1500,
-         nullptr,
-         [mctx]()
-         { mctx->v1 = PowerSupply.Current.Statistics.Mean(); }},
-        {"Finalize",
-         0, 0,
-         nullptr,
-         [mctx]()
+         { PowerSupply.Current.Statistics.ResetStats(); }, nullptr},
+
+        // {"2nd Reset statistics", 1000, 1500,
+        //  []()
+        //  { PowerSupply.ResetStats(); }, nullptr},
+
+        {"Measuring current at 32V", 10000, 1500,
+         nullptr, [c]()
+         { c->v1 = PowerSupply.Current.Statistics.Mean(); }},
+        {"Finalize", 0, 0, nullptr,
+         [c]()
          {
-             log_step("           i0 = %+1.6f", mctx->v0);
-             log_step("           i1 = %+1.6f", mctx->v1);
-             const float internalTotalRes = 32.0f / (mctx->v1 - mctx->v0) / 1000.0f;
-             log_step("Measured Res: %4.3fk", internalTotalRes);
-
-             lv_spinbox_set_value(Calib_GUI.internalResistor, 1000.0f * internalTotalRes);
-             PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = internalTotalRes;
-
-             PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor +
-                                           PowerSupply.Voltage.adjOffset);
-
-             // close log later
+             log_step("           i0 = %+1.6f", c->v0);
+             log_step("           i1 = %+1.6f", c->v1);
+             float Rtot = 32.0f / (c->v1 - c->v0) / 1000.0f;
+             log_step("Measured Res: %4.3fk", Rtot);
+             lv_spinbox_set_value(Calib_GUI.internalResistor, 1000.0f * Rtot);
+             PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = Rtot;
+             PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
              lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
              lv_timer_set_repeat_count(close_t, 1);
+             lv_mem_free(c);
          }},
     };
 
-    // Create timer & start
     lv_timer_t *t = lv_timer_create(seq_cb, 1, nullptr);
-    seq_start(t, kSteps, sizeof(kSteps) / sizeof(kSteps[0]), mctx);
+    seq_start(t, steps, sizeof(steps) / sizeof(steps[0]), nullptr);
 }
-
-// ****************************************************************************
-// ****************** Simple logging window for auto-measure *******************
-// ****************************************************************************
 
 static lv_obj_t *log_win;
 static lv_obj_t *log_label;
 
-typedef struct
-{
-    int step;
-    double v0;
-    double v1;
-} measure_ctx2_t;
 static void close_log_cb(lv_timer_t *t)
 {
     if (log_win)
@@ -845,7 +854,7 @@ static inline void log_update_label()
     s_logbuf[s_len] = '\0';
     lv_label_set_text(log_label, s_logbuf);
     lv_obj_scroll_to_view(log_label, LV_ANIM_OFF);
-    myTone(NOTE_A5, 100, false);
+    myTone(NOTE_A3, 50, false);
 }
 
 // 1) Print: "1.  Setting volt to 0v ...\n"
@@ -929,7 +938,7 @@ void log_step_done()
         log_update_label();
     }
     s_pending = false;
-    myTone(NOTE_A5, 100, false);
+    myTone(NOTE_A3, 50, false);
 }
 
 void log_step(const char *fmt, ...)
@@ -955,140 +964,6 @@ void log_clear()
     }
 }
 
-static void auto_measure_cb(lv_timer_t *t)
-{
-    auto *ctx = static_cast<measure_ctx2_t *>(t->user_data);
-
-    switch (ctx->step)
-    {
-
-    // Step 1: set 0 V
-    case 0:
-        s_len = 0;
-        s_logbuf[0] = '\0';
-        s_pending = false;
-        log_step_begin("1.  Setting voltage to 0V");
-        PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor +
-                                      PowerSupply.Voltage.adjOffset);
-        lv_timer_set_period(t, 1000);
-        ctx->step = 1;
-        break;
-
-    // Finish step 1 → reset stats
-    case 1:
-        log_step_done(); // 1 done
-        log_step_begin("2.  Reset statistics");
-        PowerSupply.Current.Statistics.ResetStats();
-        lv_timer_set_period(t, 2000);
-        ctx->step = 2;
-        break;
-
-    // Finish step 2 → prepare measure @0V
-    case 2:
-        log_step_done(); // 2 done
-        lv_timer_set_period(t, 1500);
-        ctx->step = 3;
-        break;
-
-    // Step 3: measure @0V
-    case 3:
-        log_step_begin("3.  Measuring current at 0V");
-        lv_timer_set_period(t, 10000);
-        ctx->step = 4;
-        break;
-
-    // Finish step 3 → record v0
-    case 4:
-        ctx->v0 = PowerSupply.Current.Statistics.Mean();
-        log_step_done(); // 3 done
-        lv_timer_set_period(t, 1500);
-        ctx->step = 5;
-        break;
-
-    // Step 4: set 32 V
-    case 5:
-        log_step_begin("4.  Setting volt to 32V");
-        PowerSupply.Voltage.SetUpdate(32.0 * PowerSupply.Voltage.adjFactor +
-                                      PowerSupply.Voltage.adjOffset);
-        lv_timer_set_period(t, 1500);
-        ctx->step = 6;
-        break;
-
-    // Finish step 4 → reset stats
-    case 6:
-        log_step_done(); // 4 done
-        log_step_begin("5.  Reset statistics");
-        PowerSupply.Current.Statistics.ResetStats();
-        lv_timer_set_period(t, 1500);
-        ctx->step = 7;
-        break;
-
-    // Finish step 5 → prepare measure @32V
-    case 7:
-        log_step_done(); // 5 done
-        lv_timer_set_period(t, 1500);
-        ctx->step = 8;
-        break;
-
-    // Step 6: measure @32V
-    case 8:
-        log_step_begin("6.  Measuring current at 32V");
-        lv_timer_set_period(t, 10000);
-        ctx->step = 9;
-        break;
-
-    // Finish step 6 → record v1 and ramp back to 0 V
-    case 9:
-        ctx->v1 = PowerSupply.Current.Statistics.Mean();
-        log_step_done(); // 6 done
-        PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor +
-                                      PowerSupply.Voltage.adjOffset);
-        lv_timer_set_period(t, 1500);
-        ctx->step = 10;
-        break;
-
-    // Finalization
-    case 10:
-    {
-        log_step_done(); // safety
-
-        log_step("           i0 = %+1.6f", ctx->v0);
-        log_step("           i1 = %+1.6f", ctx->v1);
-
-        float internalTotalRes = 32.0f / (ctx->v1 - ctx->v0) / 1000.0f;
-        log_step("Measured Res: %4.3fk", internalTotalRes);
-
-        lv_spinbox_set_value(Calib_GUI.internalResistor, 1000.0f * internalTotalRes);
-        PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = internalTotalRes;
-
-        PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor +
-                                      PowerSupply.Voltage.adjOffset);
-
-        lv_timer_del(t);
-        lv_mem_free(ctx);
-
-        lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
-        lv_timer_set_repeat_count(close_t, 1);
-        break;
-    }
-
-    default:
-        break;
-    }
-}
-
-static void start_auto_measure()
-{
-    log_clear();
-    PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = FLT_MAX;
-
-    measure_ctx2_t *ctx = static_cast<measure_ctx2_t *>(lv_mem_alloc(sizeof(measure_ctx2_t)));
-    ctx->step = 0;
-
-    lv_timer_t *t = lv_timer_create(auto_measure_cb, 1, ctx);
-    lv_timer_set_repeat_count(t, -1);
-}
-
 static void create_log_window()
 {
     log_win = lv_win_create(lv_scr_act(), 40);
@@ -1112,11 +987,12 @@ static void event_cb(lv_event_t *e)
         {
             create_log_window();
             // start_auto_measure();
+            PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = FLT_MAX;
             s_len = 0;
             s_logbuf[0] = '\0';
             s_pending = false;
             log_clear();
-            start_auto_measure_with_sequencer();
+            start_current_totalR();
         }
     }
 }
@@ -1179,6 +1055,217 @@ void internal_current_calibration_cb(lv_event_t *)
     lv_point_t btn_pos{80, 100};
     LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 75, 35, nullptr, load_cb);
     LVButton btnSave(cont, "Save", btn_pos.x + 75 + xOffset, btn_pos.y, 75, 35, nullptr, save_cb);
+}
+// --- Globals ---
+// ==== Globals (keep ONE definition of each) ====
+// ================= INL CAL (FSM, no std::function, no vectors) =================
+// #include "MonotoneCubicCalibrator.h"
+#include <cstdarg>
+#include <vector>
+
+// --- ONE global calibrator in the whole project ---
+MonotoneCubicCalibrator g_voltINL;
+bool g_voltINL_ready = false;
+
+// --- Debug (Serial only — no LVGL calls here) ---
+static void INL_dbg(const char *fmt, ...)
+{
+    char b[160];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(b, sizeof(b), fmt, ap);
+    va_end(ap);
+#ifdef ARDUINO
+    Serial.println(b);
+#endif
+}
+
+// --- Optional preload (0..32V, 33 pts) ---
+static const double RAW_KNOTS[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32};
+static const double TRUE_V[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32};
+constexpr size_t NPTS = sizeof(RAW_KNOTS) / sizeof(RAW_KNOTS[0]);
+static_assert(NPTS == sizeof(TRUE_V) / sizeof(TRUE_V[0]), "knot sizes must match");
+
+static inline void INL_preload_default()
+{
+    std::vector<double> X(RAW_KNOTS, RAW_KNOTS + NPTS);
+    std::vector<double> Y(TRUE_V, TRUE_V + NPTS);
+    g_voltINL.setPoints(X, Y); // ideal -> true (identity)
+    g_voltINL.build();
+    // g_voltINL_ready = true;
+}
+
+// ================= FSM (LVGL timer) =================
+struct INL_FSM
+{
+    static constexpr int NPTS = 33;
+    double x_raw[NPTS];  // measured (uncorrected) volts  ← X
+    double y_true[NPTS]; // ideal/commanded volts         ← Y
+    int i;               // 0..32
+    enum Phase : uint8_t
+    {
+        PREPARE,
+        SET,
+        SETTLE,
+        MEASURE,
+        COMPUTE,
+        DONE
+    } ph;
+    uint32_t t0;
+    lv_timer_t *timer;
+    double step_V;
+} static inl;
+
+static inline uint32_t now_ms() { return lv_tick_get(); }
+static inline uint32_t since(uint32_t t) { return lv_tick_elaps(t); }
+
+static void INL_timer_cb(lv_timer_t *)
+{
+    switch (inl.ph)
+    {
+    case INL_FSM::PREPARE:
+    {
+        for (int k = 0; k < INL_FSM::NPTS; ++k)
+        {
+            inl.x_raw[k] = 0;
+            inl.y_true[k] = 0;
+        }
+        inl.i = 0;
+        inl.step_V = 32.0 / (INL_FSM::NPTS - 1); // 1.0 V
+        INL_dbg("[INL] PREPARE: 33 pts, settle 000 ms");
+        // Set known start (0V)
+        PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+        inl.ph = INL_FSM::SET;
+    }
+    break;
+
+    case INL_FSM::SET:
+    {
+        double v_cmd = inl.i * inl.step_V; // this is the TRUE value we want
+        INL_dbg("[INL] SET     i=%d  v_cmd=%.3f", inl.i, v_cmd);
+        PowerSupply.Voltage.SetUpdate(v_cmd * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+        inl.t0 = now_ms();
+        inl.ph = INL_FSM::SETTLE;
+    }
+    break;
+
+    case INL_FSM::SETTLE:
+    {
+        if (since(inl.t0) >= 3000)
+        { // 2 s settle (per your request)
+            INL_dbg("[INL] SETTLE  +%u ms", unsigned(since(inl.t0)));
+            inl.ph = INL_FSM::MEASURE;
+        }
+    }
+    break;
+
+    case INL_FSM::MEASURE:
+    {
+        const double v_cmd = inl.i * inl.step_V; // TRUE (setpoint) volts
+
+        // Mean() already = ideal volts (converted from raw)
+        double ideal = PowerSupply.Voltage.measured.Mean(); // volts
+        // If this is mV in your build, uncomment: ideal *= 0.001;
+
+        inl.x_raw[inl.i] = ideal;  // X = ideal (linearized) volts
+        inl.y_true[inl.i] = v_cmd; // Y = true (commanded) volts
+        INL_dbg("[INL] MEASURE i=%d  ideal=%.6fV  true=%.6fV", inl.i, ideal, v_cmd);
+
+        if (++inl.i >= INL_FSM::NPTS)
+            inl.ph = INL_FSM::COMPUTE;
+        else
+            inl.ph = INL_FSM::SET;
+    }
+    break;
+
+    case INL_FSM::COMPUTE:
+    {
+        INL_dbg("[INL] COMPUTE begin");
+
+        for (int k = 1; k < INL_FSM::NPTS; ++k)
+        {
+            if (inl.x_raw[k] <= inl.x_raw[k - 1])
+                inl.x_raw[k] = inl.x_raw[k - 1] + 1e-6; // X strictly inc.
+            if (inl.y_true[k] < inl.y_true[k - 1])
+                inl.y_true[k] = inl.y_true[k - 1]; // Y non-dec.
+        }
+
+        std::vector<double> X(inl.x_raw, inl.x_raw + INL_FSM::NPTS);   // ideal volts (Mean)
+        std::vector<double> Y(inl.y_true, inl.y_true + INL_FSM::NPTS); // true volts (set)
+        g_voltINL.setPoints(X, Y);
+        g_voltINL.build();
+        g_voltINL_ready = true;
+
+        INL_dbg("[INL] COMPUTE done (ready=%d)", int(g_voltINL_ready));
+        inl.ph = INL_FSM::DONE;
+    }
+    break;
+
+    case INL_FSM::DONE:
+    {
+        INL_dbg("[INL] DONE");
+        if (inl.timer)
+        {
+            lv_timer_del(inl.timer);
+            inl.timer = nullptr;
+        }
+    }
+    break;
+    }
+}
+
+// --- Public API ---
+inline void INL_start()
+{
+    if (inl.timer)
+    {
+        lv_timer_del(inl.timer);
+        inl.timer = nullptr;
+    }
+    inl = INL_FSM{};
+    inl.ph = INL_FSM::PREPARE;
+    inl.timer = lv_timer_create(INL_timer_cb, 10, nullptr); // 10ms tick; very light
+    INL_dbg("[INL] START (LVGL timer)");
+}
+
+// Apply during normal reads: pass your uncorrected measured volts
+inline double calib_apply_voltage(double v_measured_uncorrected)
+{
+    return g_voltINL_ready ? g_voltINL.apply(v_measured_uncorrected)
+                           : v_measured_uncorrected;
+}
+
+//******************************************************************* */
+static void ADC_INL_VCalib_cb(lv_event_t *)
+{
+    g_voltINL_ready = false;
+    INL_preload_default();
+    INL_start();
+    // start_adc_inl_cal();
+}
+
+void ADC_INL_Voltage_calibration_cb(lv_event_t *)
+{
+    if (PowerSupply.gui.win_ADC_INL_Voltage_calibration)
+    {
+        lv_obj_clear_flag(PowerSupply.gui.win_ADC_INL_Voltage_calibration, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+
+    PowerSupply.gui.win_ADC_INL_Voltage_calibration = lv_win_create(lv_scr_act(), 36);
+    lv_obj_set_size(PowerSupply.gui.win_ADC_INL_Voltage_calibration, 320, 226);
+    lv_win_add_title(PowerSupply.gui.win_ADC_INL_Voltage_calibration, "ADC INL Voltage Calibration");
+    auto *close = lv_win_add_btn(PowerSupply.gui.win_ADC_INL_Voltage_calibration, LV_SYMBOL_CLOSE, 60);
+    lv_obj_add_event_cb(close, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
+    auto *cont = lv_win_get_content(PowerSupply.gui.win_ADC_INL_Voltage_calibration);
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+
+    PowerSupply.LoadCalibrationData();
+    // lv_spinbox_set_value(intRes, 40'000.123*1000.0);
+
+    LVButton ADC_INL(cont, "Start Calibrating", 10, 50 + 50, 120, 35, nullptr, ADC_INL_VCalib_cb);
 }
 
 // Open/create the DAC calibration window

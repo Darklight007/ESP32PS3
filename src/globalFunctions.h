@@ -2394,7 +2394,7 @@ void Utility_tabview(lv_obj_t *parent)
     // createSpinbox(tab3, "#FFFFF7 Offset:#", -10000, 400000, 6, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2);
     // createSpinbox(tab3, "#FFFFF7 Code2:#", -10000, 8388608, 7, 0, LV_ALIGN_RIGHT_MID, XOffset , verOffset + verPad * 3);
 
-    Utility_objs.fun.Amplitude = spinbox_pro(tab2, "#FFFFF7 Amplitude:#", 0, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0, 98, 0,&graph_R_16);
+    Utility_objs.fun.Amplitude = spinbox_pro(tab2, "#FFFFF7 Amplitude:#", 0, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0, 98, 0, &graph_R_16);
     Utility_objs.fun.Frequency = spinbox_pro(tab2, "#FFFFF7 Frequency [Hz]:#", 0, 10000, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1, 98, 1, &graph_R_16);
     Utility_objs.fun.Offset = spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -32000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2, &graph_R_16);
     Utility_objs.fun.Duty = spinbox_pro(tab2, "#FFFFF7 Duty [%]:#", 0, 10000, 5, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 3, 98, 3, &graph_R_16);
@@ -2616,29 +2616,24 @@ void Utility_tabview(lv_obj_t *parent)
     Utility_objs.table_spinbox_value = spinbox_pro(tab4, "#FFFFF7 Value:#", 0, 10000, 5, 1, LV_ALIGN_RIGHT_MID, -35, -50, 98, 4, &graph_R_16);
     lv_obj_add_event_cb(Utility_objs.table_spinbox_value, spinbox_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
+    // // setup (same as before)
+    // SpinboxPro::Config cfg;
+    // cfg.spinboxFont = &graph_R_16;
+    // cfg.labelFont   = &lv_font_montserrat_12;
+    // cfg.clickBeep   = true;
 
-// // setup (same as before)
-// SpinboxPro::Config cfg;
-// cfg.spinboxFont = &graph_R_16;
-// cfg.labelFont   = &lv_font_montserrat_12;
-// cfg.clickBeep   = true;
-
-// SpinboxPro::BeepFn clickBeep = [](){ myTone(NOTE_A4, 5); };
-// SpinboxPro spx(cfg, clickBeep);
-// // one‑liner builder
-// auto spinOskol = SpinboxPro::Builder(spx)
-//     .parent(tab4)
-//     .label("#FFFFF7 Zero Voltage:#")
-//     .range(0, 65535)
-//     .digits(5, 0)
-//     .align(LV_ALIGN_DEFAULT, 165, 160 )
-//     .width(86)
-//     .id(15)
-//     .create();
- 
-
-
-
+    // SpinboxPro::BeepFn clickBeep = [](){ myTone(NOTE_A4, 5); };
+    // SpinboxPro spx(cfg, clickBeep);
+    // // one‑liner builder
+    // auto spinOskol = SpinboxPro::Builder(spx)
+    //     .parent(tab4)
+    //     .label("#FFFFF7 Zero Voltage:#")
+    //     .range(0, 65535)
+    //     .digits(5, 0)
+    //     .align(LV_ALIGN_DEFAULT, 165, 160 )
+    //     .width(86)
+    //     .id(15)
+    //     .create();
 
     // Saving  ************************************************************
     lv_obj_t *saveButton = lv_btn_create(tab4);
@@ -2793,6 +2788,7 @@ void keyCheckLoop()
                  hide( PowerSupply.gui.win_ADC_voltage_calibration);
                  hide( PowerSupply.gui.win_ADC_current_calibration);
                  hide( PowerSupply.gui.win_int_current_calibration);
+                 hide( PowerSupply.gui.win_ADC_INL_Voltage_calibration);
                  hide( PowerSupply.gui.win_DAC_calibration); }
 
     );
@@ -3833,13 +3829,12 @@ static inline UIMode detect_mode()
         lv_obj_is_visible(PowerSupply.gui.win_DAC_calibration);
 
     const bool adc =
-        (PowerSupply.gui.win_ADC_voltage_calibration  && lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration))  ||
-        (PowerSupply.gui.win_ADC_current_calibration  && lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration))  ||
-        (PowerSupply.gui.win_int_current_calibration  && lv_obj_is_visible(PowerSupply.gui.win_int_current_calibration)); // NEW
+        (PowerSupply.gui.win_ADC_voltage_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration)) ||
+        (PowerSupply.gui.win_ADC_current_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration)) ||
+        (PowerSupply.gui.win_int_current_calibration && lv_obj_is_visible(PowerSupply.gui.win_int_current_calibration)); // NEW
 
     return (!dac && !adc) ? UIMode::Menu : (dac ? UIMode::DAC : UIMode::ADC);
 }
-
 
 // static inline UIMode detect_mode()
 // {

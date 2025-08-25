@@ -1,5 +1,10 @@
 #include "esp_task_wdt.h"
 #include "device.h"
+#include "MonotoneCubicCalibrator.h"
+
+extern bool g_voltINL_ready;
+extern MonotoneCubicCalibrator g_voltINL;
+
 
 extern Calibration StoreData;
 extern bool lvglIsBusy, lvglChartIsBusy, blockAll;
@@ -409,25 +414,33 @@ void Device::readVoltage()
             32.0000f / 31.9882f  // 1000 SPS
         };
 
+
         static double v;
         Voltage.rawValue = adc.readConversion();
         adcDataReady = false;
-        adc.ads1219->setGain(ONE); // Gain 4 for Current
+        adc.ads1219->setGain(ONE); // Gain 1 or 4 for Current
 
         adc.startConversion(CURRENT, REF_EXTERNAL); // REF_EXTERNAL
 
-        v = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
+        double v_ideal = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
 
-        v *= adcRateCompensation[settingParameters.adcRate];
+        // v = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
+
+        v_ideal *= adcRateCompensation[settingParameters.adcRate];
+
+
+// Add monotone cubic residual on top (safe if not built yet)
+double v_corrected = g_voltINL_ready ? (v_ideal + g_voltINL.apply(v_ideal)) : v_ideal;
+
 
         // Voltage.hist[v];
-        Voltage.measureUpdate(v); //  enob(rs[0].StandardDeviation())
+        Voltage.measureUpdate(v_corrected); //  enob(rs[0].StandardDeviation())
         adc.ADC_loopCounter++;
         // myTone(NOTE_A3, 1);
 
         static double factor = lv_bar_get_max_value(Voltage.Bar.bar) / (Voltage.maxValue / Voltage.adjFactor);
 
-        *Voltage.Bar.curValuePtr = v * factor; // uint16_t(v * 8);
+        *Voltage.Bar.curValuePtr = v_corrected * factor; // uint16_t(v * 8);
 
         // lv_obj_invalidate(Voltage.Bar.bar);
 
@@ -474,11 +487,11 @@ void Device::readCurrent()
         // *Current.Bar.curValuePtr = c * Current.Bar.scaleFactor;
         // lv_obj_invalidate(Current.Bar.bar);
 
-        Serial.printf("\n\r%9.6f %9.6f %5.2f %i",
-                      c,
-                      Current.Statistics.Mean(),
-                      Current.effectiveResolution.Mean(),
-                      Current.Statistics.windowSizeIndex_ % Current.Statistics.NofAvgs);
+        // Serial.printf("\n\r%9.6f %9.6f %5.2f %i",
+        //               c,
+        //               Current.Statistics.Mean(),
+        //               Current.effectiveResolution.Mean(),
+        //               Current.Statistics.windowSizeIndex_ % Current.Statistics.NofAvgs);
 
         static unsigned long loopCount = 0;
         static unsigned long startTime = millis();
