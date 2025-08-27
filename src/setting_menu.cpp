@@ -6,6 +6,7 @@
 #include "buzzer.h"   // provides buzzerSound and myTone()
 #include "TFT_eSPI.h" // tft instance
 #include "tabs.h"
+#include "table_pro.h"
 #include "device.h"        // provides PowerSupply and dac_data_g
 #include "lv_gui_helper.h" // LVLabel, LVButton helpers
 #include <float.h>
@@ -1081,15 +1082,156 @@ static void INL_dbg(const char *fmt, ...)
 }
 
 // --- Optional preload (0..32V, 33 pts) ---
-static const double RAW_KNOTS[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32};
-static const double TRUE_V[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32};
-constexpr size_t NPTS = sizeof(RAW_KNOTS) / sizeof(RAW_KNOTS[0]);
-static_assert(NPTS == sizeof(TRUE_V) / sizeof(TRUE_V[0]), "knot sizes must match");
+
+lv_obj_t *table_inl;
+static const double MEASURED[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32};
+static const double TRUE_IDEAL[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32};
+constexpr size_t NPTS = sizeof(MEASURED) / sizeof(MEASURED[0]);
+static_assert(NPTS == sizeof(TRUE_IDEAL) / sizeof(TRUE_IDEAL[0]), "knot sizes must match");
+
+// Event callback to handle row selection
+static void table_touch_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+    {
+        lv_obj_t *table = lv_event_get_target(e);
+        uint16_t row, col;
+        lv_table_get_selected_cell(table, &row, &col);
+        table->user_data = (void *)row;
+        lv_obj_invalidate(table); // Redraw the table to apply changes
+        lv_table_get_cell_value(table, row, col);
+    }
+}
+
+// Custom draw callback for the table
+static void table_draw_cell_event_cb(lv_event_t *e)
+{
+    lv_obj_draw_part_dsc_t *draw_part_dsc = (lv_obj_draw_part_dsc_t *)lv_event_get_param(e);
+
+    if (draw_part_dsc->part == LV_PART_ITEMS)
+    {
+        lv_obj_t *table = lv_event_get_target(e);
+        uint32_t id = draw_part_dsc->id;
+        uint16_t col_cnt = lv_table_get_col_cnt(table);
+
+        // Calculate row and column from cell id
+        uint16_t row = id / col_cnt;
+        uint16_t col = id % col_cnt;
+        uint16_t selected_row = (int)table->user_data;
+
+        if (row == selected_row)
+        {
+            draw_part_dsc->rect_dsc->bg_color = lv_color_hex(0x0000FF); // Highlight color
+            draw_part_dsc->rect_dsc->bg_opa = LV_OPA_COVER;
+        }
+    }
+}
+static void table_draw_cell_event_cb2(lv_event_t *e)
+{
+    lv_obj_draw_part_dsc_t *d = (lv_obj_draw_part_dsc_t *)lv_event_get_param(e);
+    if (d->part != LV_PART_ITEMS)
+        return;
+
+    lv_obj_t *table = lv_event_get_target(e);
+    uint16_t col_cnt = lv_table_get_col_cnt(table);
+
+    uint32_t id = d->id; // linear cell id
+    uint16_t row = id / col_cnt;
+
+    uint16_t selected_row = (uint16_t)(uintptr_t)lv_obj_get_user_data(table);
+    if (row == selected_row)
+    {
+        // background
+        d->rect_dsc->bg_color = lv_color_hex(0x2D6CDF); // blue
+        d->rect_dsc->bg_opa = LV_OPA_COVER;
+
+        // optional: rounded and no border
+        d->rect_dsc->radius = 4;
+        d->rect_dsc->border_opa = LV_OPA_TRANSP;
+
+        // text contrast (if label_dsc exists)
+        if (d->label_dsc)
+        {
+            d->label_dsc->color = lv_color_hex(0xFFFFFF);
+        }
+    }
+}
+static void select_next_row(lv_obj_t *table, lv_coord_t row_height);
+static void table_set_selected_row(lv_obj_t *table, uint16_t row)
+{
+    lv_obj_set_user_data(table, (void *)(uintptr_t)row);
+    lv_obj_invalidate(table); // redraw -> will highlight via draw cb
+
+    select_next_row(table,  2 * 7 + 2 * 5);
+}
+// Center the selected row (stored in table->user_data) in the viewport
+// Center currently selected row in viewport
+static void table_scroll_row_center(lv_obj_t *table, lv_coord_t row_h)
+{
+    lv_obj_update_layout(table);
+
+    uint16_t row_cnt = lv_table_get_row_cnt(table);
+    uint16_t row = (uint16_t)(uintptr_t)lv_obj_get_user_data(table);
+    if (row >= row_cnt)
+        row = row_cnt ? row_cnt - 1 : 0;
+
+    lv_coord_t vis_h = lv_obj_get_height(table);
+    lv_coord_t y_pos = row * row_h;
+
+    // Desired top so that row is centered
+    lv_coord_t target = y_pos + row_h / 2 - vis_h / 2;
+
+    // Clamp inside content
+    lv_coord_t content_h = lv_obj_get_content_height(table);
+    lv_coord_t max_scroll = (content_h > vis_h) ? (content_h - vis_h) : 0;
+    if (target < 0)
+        target = 0;
+    if (target > max_scroll)
+        target = max_scroll;
+
+    // This matches the working convention (y_pos vs scroll_y)
+    lv_obj_scroll_to_y(table, target, LV_ANIM_OFF);
+
+    lv_obj_invalidate(table);
+}
+
+// Function to select the next row
+static void select_next_row(lv_obj_t *table, lv_coord_t row_height)
+{
+    uint16_t row_cnt = lv_table_get_row_cnt(table);
+    // if (selected_row < row_cnt - 1)
+    // {
+    //     selected_row++;
+    // }
+    uint16_t cur_row_number = (int)table->user_data;
+
+    if (cur_row_number < row_cnt - 1)
+    {
+        cur_row_number++;
+        table->user_data = (void *)cur_row_number;
+    }
+
+    lv_coord_t scroll_y = lv_obj_get_scroll_y(table);
+    lv_coord_t visible_h = lv_obj_get_height(table);
+    lv_coord_t y_pos = cur_row_number * row_height;
+
+    if (y_pos < scroll_y)
+        lv_obj_scroll_to_y(table, y_pos, LV_ANIM_OFF);
+    else if (y_pos + row_height > scroll_y + visible_h)
+        lv_obj_scroll_to_y(table, y_pos + row_height - visible_h, LV_ANIM_OFF);
+
+    lv_obj_invalidate(table);
+
+    // const char *cell_str = lv_table_get_cell_value(table, cur_row_number, 1);
+    // Utility_objs.table_current_value = atof(cell_str);
+    // lv_spinbox_set_value(Utility_objs.table_spinbox_value, Utility_objs.table_current_value * 10000.0);
+    // lv_obj_invalidate(Utility_objs.table_spinbox_value);
+}
 
 static inline void INL_preload_default()
 {
-    std::vector<double> X(RAW_KNOTS, RAW_KNOTS + NPTS);
-    std::vector<double> Y(TRUE_V, TRUE_V + NPTS);
+    std::vector<double> X(MEASURED, MEASURED + NPTS);
+    std::vector<double> Y(TRUE_IDEAL, TRUE_IDEAL + NPTS);
     g_voltINL.setPoints(X, Y); // ideal -> true (identity)
     g_voltINL.build();
     // g_voltINL_ready = true;
@@ -1098,7 +1240,8 @@ static inline void INL_preload_default()
 // ================= FSM (LVGL timer) =================
 struct INL_FSM
 {
-    static constexpr int NPTS = 33;
+    static constexpr int NPTS = sizeof(MEASURED) / sizeof(MEASURED[0]);
+    ;
     double x_raw[NPTS];  // measured (uncorrected) volts  ← X
     double y_true[NPTS]; // ideal/commanded volts         ← Y
     int i;               // 0..32
@@ -1132,7 +1275,7 @@ static void INL_timer_cb(lv_timer_t *)
         }
         inl.i = 0;
         inl.step_V = 32.0 / (INL_FSM::NPTS - 1); // 1.0 V
-        INL_dbg("[INL] PREPARE: 33 pts, settle 000 ms");
+        INL_dbg("[INL] PREPARE: 33+ pts, settle 3000 ms");
         // Set known start (0V)
         PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
         inl.ph = INL_FSM::SET;
@@ -1141,7 +1284,8 @@ static void INL_timer_cb(lv_timer_t *)
 
     case INL_FSM::SET:
     {
-        double v_cmd = inl.i * inl.step_V; // this is the TRUE value we want
+        double v_cmd = TRUE_IDEAL[inl.i]; // TRUE (setpoint) volts
+        table_set_selected_row(table_inl, inl.i );
         INL_dbg("[INL] SET     i=%d  v_cmd=%.3f", inl.i, v_cmd);
         PowerSupply.Voltage.SetUpdate(v_cmd * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
         inl.t0 = now_ms();
@@ -1151,7 +1295,7 @@ static void INL_timer_cb(lv_timer_t *)
 
     case INL_FSM::SETTLE:
     {
-        if (since(inl.t0) >= 3000)
+        if (since(inl.t0) >= 3010)
         { // 2 s settle (per your request)
             INL_dbg("[INL] SETTLE  +%u ms", unsigned(since(inl.t0)));
             inl.ph = INL_FSM::MEASURE;
@@ -1161,7 +1305,7 @@ static void INL_timer_cb(lv_timer_t *)
 
     case INL_FSM::MEASURE:
     {
-        const double v_cmd = inl.i * inl.step_V; // TRUE (setpoint) volts
+        const double v_cmd = TRUE_IDEAL[inl.i]; // TRUE (setpoint) volts
 
         // Mean() already = ideal volts (converted from raw)
         double ideal = PowerSupply.Voltage.measured.Mean(); // volts
@@ -1170,6 +1314,13 @@ static void INL_timer_cb(lv_timer_t *)
         inl.x_raw[inl.i] = ideal;  // X = ideal (linearized) volts
         inl.y_true[inl.i] = v_cmd; // Y = true (commanded) volts
         INL_dbg("[INL] MEASURE i=%d  ideal=%.6fV  true=%.6fV", inl.i, ideal, v_cmd);
+        lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 2, "%06.5f", ideal);
+
+
+        // table_set_selected_row(table_inl, inl.i + 1);
+        // select_next_row(table_inl,  2 * 7 + 2 * 5);
+
+             // lv_obj_invalidate(table_inl);
 
         if (++inl.i >= INL_FSM::NPTS)
             inl.ph = INL_FSM::COMPUTE;
@@ -1182,16 +1333,8 @@ static void INL_timer_cb(lv_timer_t *)
     {
         INL_dbg("[INL] COMPUTE begin");
 
-        for (int k = 1; k < INL_FSM::NPTS; ++k)
-        {
-            if (inl.x_raw[k] <= inl.x_raw[k - 1])
-                inl.x_raw[k] = inl.x_raw[k - 1] + 1e-6; // X strictly inc.
-            if (inl.y_true[k] < inl.y_true[k - 1])
-                inl.y_true[k] = inl.y_true[k - 1]; // Y non-dec.
-        }
-
-        std::vector<double> X(inl.x_raw, inl.x_raw + INL_FSM::NPTS);   // ideal volts (Mean)
-        std::vector<double> Y(inl.y_true, inl.y_true + INL_FSM::NPTS); // true volts (set)
+        std::vector<double> X(inl.x_raw, inl.x_raw + INL_FSM::NPTS); // ideal volts (Mean)
+        std::vector<double> Y(TRUE_IDEAL, TRUE_IDEAL + NPTS);        // true volts (set)
         g_voltINL.setPoints(X, Y);
         g_voltINL.build();
         g_voltINL_ready = true;
@@ -1239,10 +1382,13 @@ inline double calib_apply_voltage(double v_measured_uncorrected)
 static void ADC_INL_VCalib_cb(lv_event_t *)
 {
     g_voltINL_ready = false;
-    INL_preload_default();
+    // INL_preload_default();
     INL_start();
     // start_adc_inl_cal();
 }
+void table_touch_event_cb(lv_event_t *e);
+
+void table_draw_cell_event_cb(lv_event_t *e);
 
 void ADC_INL_Voltage_calibration_cb(lv_event_t *)
 {
@@ -1257,7 +1403,8 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
     lv_win_add_title(PowerSupply.gui.win_ADC_INL_Voltage_calibration, "ADC INL Voltage Calibration");
     auto *close = lv_win_add_btn(PowerSupply.gui.win_ADC_INL_Voltage_calibration, LV_SYMBOL_CLOSE, 60);
     lv_obj_add_event_cb(close, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
-    auto *cont = lv_win_get_content(PowerSupply.gui.win_ADC_INL_Voltage_calibration);
+
+    lv_obj_t *cont = lv_win_get_content(PowerSupply.gui.win_ADC_INL_Voltage_calibration);
     lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
     lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
@@ -1265,7 +1412,41 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
     PowerSupply.LoadCalibrationData();
     // lv_spinbox_set_value(intRes, 40'000.123*1000.0);
 
-    LVButton ADC_INL(cont, "Start Calibrating", 10, 50 + 50, 120, 35, nullptr, ADC_INL_VCalib_cb);
+    lv_obj_t *cb = lv_checkbox_create(cont);
+    lv_checkbox_set_text(cb, "INL Calibration");
+    lv_obj_set_pos(cb, 20, 5);
+
+    LVButton ADC_INL(cont, "Auto Calibr", 0, 0, 140, 35, nullptr, ADC_INL_VCalib_cb);
+    lv_obj_align_to(ADC_INL.get_lv_obj(), cb, LV_ALIGN_LEFT_MID, 150, 5);
+
+    // lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_ver(cont, 0, LV_PART_ITEMS);
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
+
+    static lv_style_t style_stats;
+    lv_style_init(&style_stats);
+
+    table_inl = table_pro(cont, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 40, 250, 144, 0, 5);
+
+    lv_table_set_cell_value_fmt(table_inl, 0, 0, "#");
+    lv_table_set_cell_value_fmt(table_inl, 0, 1, "Ideal");
+    lv_table_set_cell_value_fmt(table_inl, 0, 2, "Measured");
+
+    for (int i = 0; i < NPTS; i++)
+    {
+        // Utility_objs.table_points[i] = PowerSupply.funGenMem.table_points[i];
+        lv_table_set_cell_value_fmt(table_inl, i + 1, 0, "%0i", i);
+        lv_table_set_cell_value_fmt(table_inl, i + 1, 1, "%1.3f", TRUE_IDEAL[i]);
+        lv_table_set_cell_value_fmt(table_inl, i + 1, 2, "%1.5f", MEASURED[i]);
+    }
+
+    lv_table_set_col_width(table_inl, 0, 38);
+    lv_table_set_col_width(table_inl, 1, 86);
+    lv_table_set_col_width(table_inl, 2, 130);
+
+    lv_obj_add_event_cb(table_inl, table_touch_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(table_inl, table_draw_cell_event_cb2, LV_EVENT_DRAW_PART_BEGIN, NULL);
 }
 
 // Open/create the DAC calibration window

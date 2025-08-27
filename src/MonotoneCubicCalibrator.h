@@ -1,17 +1,21 @@
 // Monotone Cubic INL Calibrator (Fritsch–Carlson)
-// Usage:
-//   MonotoneCubicCalibrator cal;
-//   cal.setPoints({0, 1024, 2048, 3072, 4095}, {0.0, 1.01, 2.02, 3.01, 4.00});
-//   cal.build();
-//   double corrected = cal.apply(measured_raw);
-
+// Build maps X -> Y with monotonic cubic; optional input bounds (min/max) to skip correction.
 #include <vector>
 #include <stdexcept>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <limits>
+
+// #define MONOTONE_CUBIC_DEBUG
 
 class MonotoneCubicCalibrator {
 public:
+    // Optional bounds on input domain; when set, apply(x) returns x unchanged outside [min,max].
+    // They auto-initialize to [X_.front(), X_.back()] after build(), but you can override.
+    double min = std::numeric_limits<double>::quiet_NaN();
+    double max = std::numeric_limits<double>::quiet_NaN();
+
     void setPoints(const std::vector<double>& x, const std::vector<double>& y) {
         X_ = x; Y_ = y; built_ = false;
     }
@@ -24,8 +28,7 @@ public:
         }
 
         const size_t m = n - 1;
-        h_.resize(m);
-        d_.resize(m);
+        h_.resize(m); d_.resize(m);
         for (size_t i = 0; i < m; ++i) {
             h_[i] = X_[i+1] - X_[i];
             d_[i] = (Y_[i+1] - Y_[i]) / h_[i];
@@ -33,24 +36,14 @@ public:
 
         // Initial slopes
         M_.assign(n, 0.0);
-        M_[0] = endpointSlope0();
-        M_[n-1] = endpointSlopeN();
+        M_[0]    = endpointSlope0();
+        M_[n-1]  = endpointSlopeN();
+        for (size_t i = 1; i < n - 1; ++i)
+            M_[i] = (d_[i-1] * d_[i] > 0.0) ? 0.5 * (d_[i-1] + d_[i]) : 0.0;
 
-        for (size_t i = 1; i < n - 1; ++i) {
-            if (d_[i-1] * d_[i] > 0.0) {
-                M_[i] = (d_[i-1] + d_[i]) * 0.5;
-            } else {
-                M_[i] = 0.0;
-            }
-        }
-
-        // Fritsch–Carlson limiter to preserve monotonicity
+        // Fritsch–Carlson limiter
         for (size_t i = 0; i < m; ++i) {
-            if (std::abs(d_[i]) < 1e-300) { // flat interval
-                M_[i] = 0.0;
-                M_[i+1] = 0.0;
-                continue;
-            }
+            if (std::abs(d_[i]) < 1e-300) { M_[i] = 0.0; M_[i+1] = 0.0; continue; }
             double a = M_[i]     / d_[i];
             double b = M_[i + 1] / d_[i];
             double s = a*a + b*b;
@@ -62,12 +55,26 @@ public:
         }
 
         built_ = true;
+
+        // Auto-bounds to first/last knot if not already set
+        if (!std::isfinite(min)) min = X_.front();
+        if (!std::isfinite(max)) max = X_.back();
+
+#ifdef MONOTONE_CUBIC_DEBUG
+        printKnotTable();
+        printSampleTable((X_.back()-X_.front()) / (n*2.0));
+#endif
     }
 
-    // Map a raw reading x to corrected value via monotone cubic interpolation
+    // Map x via monotone cubic; outside [min,max] return x unchanged (no correction).
     double apply(double x) const {
         ensureBuilt_();
-        // Clamp outside range to end values (or change to linear extrapolation if desired)
+
+        // Skip correction outside optional bounds
+        if (std::isfinite(min) && x < min) return x;
+        if (std::isfinite(max) && x > max) return x;
+
+        // Still guard against numerical strays at ends
         if (x <= X_.front()) return Y_.front();
         if (x >= X_.back())  return Y_.back();
 
@@ -76,14 +83,43 @@ public:
         double t = (x - X_[i]) / h; // in [0,1]
 
         // Hermite basis
-        double t2 = t * t;
-        double t3 = t2 * t;
-        double h00 = 2*t3 - 3*t2 + 1;
-        double h10 = t3 - 2*t2 + t;
+        double t2 = t * t, t3 = t2 * t;
+        double h00 =  2*t3 - 3*t2 + 1;
+        double h10 =      t3 - 2*t2 + t;
         double h01 = -2*t3 + 3*t2;
-        double h11 = t3 - t2;
+        double h11 =      t3 -    t2;
 
         return h00 * Y_[i] + h10 * h * M_[i] + h01 * Y_[i+1] + h11 * h * M_[i+1];
+    }
+
+    // ---------- Debug helpers ----------
+    void printKnotTable() const {
+        ensureBuilt_();
+        std::printf("\n[MonotoneCubicCalibrator] Knot Table   (bounds: [%g, %g])\n", min, max);
+        std::printf("%-4s %-14s %-14s %-14s %-14s %-14s\n",
+                    "i", "X[i]", "Y[i]", "h[i]", "d[i]", "M[i]");
+        const size_t n = X_.size();
+        for (size_t i = 0; i < n; ++i) {
+            const bool hasSeg = (i < n-1);
+            std::printf("%-4zu % -14.8f % -14.8f % -14.8f % -14.8f % -14.8f\n",
+                        i, X_[i], Y_[i],
+                        hasSeg ? h_[i] : NAN,
+                        hasSeg ? d_[i] : NAN,
+                        M_[i]);
+        }
+    }
+
+    void printSampleTable(double step) const {
+        ensureBuilt_();
+        if (step <= 0) return;
+        const double xmin = X_.front();
+        const double xmax = X_.back();
+        std::printf("\n[MonotoneCubicCalibrator] Samples (x, apply(x))\n");
+        std::printf("%-14s %-14s\n", "x", "apply(x)");
+        for (double x = xmin; x <= xmax; x += step)
+            std::printf("% -14.8f % -14.8f\n", x, apply(x));
+        if (std::abs((xmax - xmin)) / step > 1e-9)
+            std::printf("% -14.8f % -14.8f\n", xmax, apply(xmax));
     }
 
 private:
@@ -95,7 +131,6 @@ private:
     }
 
     size_t intervalIndex_(double x) const {
-        // binary search for i such that X_[i] <= x < X_[i+1]
         size_t lo = 0, hi = X_.size() - 1;
         while (hi - lo > 1) {
             size_t mid = (lo + hi) >> 1;
@@ -104,7 +139,7 @@ private:
         return lo;
     }
 
-    // One-sided endpoint slope with Hyman filter
+    // One-sided endpoint slopes with Hyman filter
     double endpointSlope0() const {
         if (X_.size() == 2) return d_[0];
         double h0 = h_[0], h1 = h_[1];
@@ -125,5 +160,3 @@ private:
         return mn;
     }
 };
-
-

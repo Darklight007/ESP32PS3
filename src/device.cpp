@@ -5,7 +5,6 @@
 extern bool g_voltINL_ready;
 extern MonotoneCubicCalibrator g_voltINL;
 
-
 extern Calibration StoreData;
 extern bool lvglIsBusy, lvglChartIsBusy, blockAll;
 // FunGen funGen; // Definition
@@ -133,7 +132,7 @@ void Device::SaveCalibrationData()
     Device::SaveCalibData("cal", CalBank[bankCalibId]);
     Serial.print("\ndata saved.");
 
-    Calibration outputData = CalBank[bankCalibId] ;
+    Calibration outputData = CalBank[bankCalibId];
 
     calibrationUpdate();
 
@@ -141,7 +140,7 @@ void Device::SaveCalibrationData()
                   outputData.macAdd,
                   outputData.vCal.value_1, outputData.vCal.code_1, outputData.vCal.value_2, outputData.vCal.code_2,
                   outputData.iCal.value_1, outputData.iCal.code_1, outputData.iCal.value_2, outputData.iCal.code_2,
-                   outputData.internalResistor);
+                  outputData.internalResistor);
 }
 
 void Device::LoadCalibrationData()
@@ -185,7 +184,7 @@ void Device::LoadCalibrationData()
         Serial.print("\n\n ** WRONG CALIBRATION DATA ** \n");
         Serial.print("\nLoading factory calibration data ...");
 
-        CalBank[bankCalibId] = Calibration(CalBank[bankCalibId].macAdd, {+00.0000, -259, +32.0000, +8164608}, {+00.0000, +104080, +3.0000, +2926000},  40'000.0); // 1/40kOhm /volt
+        CalBank[bankCalibId] = Calibration(CalBank[bankCalibId].macAdd, {+00.0000, -259, +32.0000, +8164608}, {+00.0000, +104080, +3.0000, +2926000}, 40'000.0); // 1/40kOhm /volt
 
         calibrate();
         calibrationUpdate();
@@ -414,7 +413,6 @@ void Device::readVoltage()
             32.0000f / 31.9882f  // 1000 SPS
         };
 
-
         static double v;
         Voltage.rawValue = adc.readConversion();
         adcDataReady = false;
@@ -428,10 +426,8 @@ void Device::readVoltage()
 
         v_ideal *= adcRateCompensation[settingParameters.adcRate];
 
-
-// Add monotone cubic residual on top (safe if not built yet)
-double v_corrected = g_voltINL_ready ? (v_ideal + g_voltINL.apply(v_ideal)) : v_ideal;
-
+        // Add monotone cubic residual on top (safe if not built yet)
+        double v_corrected = g_voltINL_ready ? (g_voltINL.apply(v_ideal)) : v_ideal;
 
         // Voltage.hist[v];
         Voltage.measureUpdate(v_corrected); //  enob(rs[0].StandardDeviation())
@@ -465,8 +461,8 @@ void Device::readCurrent()
         // static double diff_A = (0.000461 - 0.000021) / (32.0 - 0.0); // (0.000594 - 0.000143)
         double internalResistor = CalBank[bankCalibId].internalResistor; // 1.0 / 40'000.0; // 1/40kOhm /volt
 
-        double currentOfInternalRes = 1.0 * Voltage.measured.Mean() / (internalResistor*1000.0) +
-                                       0.0 * 0.000180 * !digitalRead(CCCVPin); // Why?;
+        double currentOfInternalRes = 1.0 * Voltage.measured.Mean() / (internalResistor * 1000.0) +
+                                      0.0 * 0.000180 * !digitalRead(CCCVPin); // Why?;
 
         c = (((Current.rawValue - Current.calib_b) * Current.calib_1m) - currentOfInternalRes); // old value: .0009
         // c=c+c*0.00009901;
@@ -598,9 +594,9 @@ void Device::DACUpdate(void)
         {
             DAC.writeAndPowerAll(DAC_VOLTAGE, v);
             dac_last_Voltage = v;
-        }      
-        
-        uint16_t c = Current.adjValue;                                                                      
+        }
+
+        uint16_t c = Current.adjValue;
         // if (dac_last_Current != c)
         {
             DAC.writeAndPowerAll(DAC_CURRENT, uint16_t(c));
