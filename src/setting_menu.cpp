@@ -1157,42 +1157,48 @@ static void table_draw_cell_event_cb2(lv_event_t *e)
     }
 }
 static void select_next_row(lv_obj_t *table, lv_coord_t row_height);
+static void select_row(lv_obj_t *table, uint16_t cur_row_number, lv_coord_t row_height);
+
+static lv_coord_t table_get_row_h(lv_obj_t *table)
+{
+    const lv_font_t *font = lv_obj_get_style_text_font(table, LV_PART_ITEMS);
+    lv_coord_t h = lv_font_get_line_height(font) + lv_obj_get_style_pad_top(table, LV_PART_ITEMS) + lv_obj_get_style_pad_bottom(table, LV_PART_ITEMS);
+    //  + lv_obj_get_style_pad_row(table, LV_PART_ITEMS);
+
+    return h;
+}
+
 static void table_set_selected_row(lv_obj_t *table, uint16_t row)
 {
+    uint16_t row_cnt = lv_table_get_row_cnt(table);
+    if (row < 0 || row > (row_cnt - 1))
+        return;
     lv_obj_set_user_data(table, (void *)(uintptr_t)row);
+    // select_row(table, row, 2 * 7 + 2 * 5);
+
+    // Serial.println(table_get_row_h(table));
+    select_row(table, row, table_get_row_h(table));
+
     lv_obj_invalidate(table); // redraw -> will highlight via draw cb
 
-    select_next_row(table,  2 * 7 + 2 * 5);
+    // select_next_row(table, 2 * 7 + 2 * 5);
 }
-// Center the selected row (stored in table->user_data) in the viewport
-// Center currently selected row in viewport
-static void table_scroll_row_center(lv_obj_t *table, lv_coord_t row_h)
+
+// Function to select the next row
+static void select_row(lv_obj_t *table, uint16_t cur_row_number, lv_coord_t row_height)
 {
-    lv_obj_update_layout(table);
-
     uint16_t row_cnt = lv_table_get_row_cnt(table);
-    uint16_t row = (uint16_t)(uintptr_t)lv_obj_get_user_data(table);
-    if (row >= row_cnt)
-        row = row_cnt ? row_cnt - 1 : 0;
 
-    lv_coord_t vis_h = lv_obj_get_height(table);
-    lv_coord_t y_pos = row * row_h;
+    lv_coord_t scroll_y = lv_obj_get_scroll_y(table);
+    lv_coord_t visible_h = lv_obj_get_height(table);
+    lv_coord_t y_pos = cur_row_number * row_height;
 
-    // Desired top so that row is centered
-    lv_coord_t target = y_pos + row_h / 2 - vis_h / 2;
+    if (y_pos < scroll_y)
+        lv_obj_scroll_to_y(table, y_pos, LV_ANIM_OFF);
+    else if (y_pos + row_height > scroll_y + visible_h)
+        lv_obj_scroll_to_y(table, y_pos + row_height - visible_h, LV_ANIM_OFF);
 
-    // Clamp inside content
-    lv_coord_t content_h = lv_obj_get_content_height(table);
-    lv_coord_t max_scroll = (content_h > vis_h) ? (content_h - vis_h) : 0;
-    if (target < 0)
-        target = 0;
-    if (target > max_scroll)
-        target = max_scroll;
-
-    // This matches the working convention (y_pos vs scroll_y)
-    lv_obj_scroll_to_y(table, target, LV_ANIM_OFF);
-
-    lv_obj_invalidate(table);
+    // lv_obj_invalidate(table);
 }
 
 // Function to select the next row
@@ -1285,7 +1291,7 @@ static void INL_timer_cb(lv_timer_t *)
     case INL_FSM::SET:
     {
         double v_cmd = TRUE_IDEAL[inl.i]; // TRUE (setpoint) volts
-        table_set_selected_row(table_inl, inl.i );
+        table_set_selected_row(table_inl, inl.i + 1);
         INL_dbg("[INL] SET     i=%d  v_cmd=%.3f", inl.i, v_cmd);
         PowerSupply.Voltage.SetUpdate(v_cmd * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
         inl.t0 = now_ms();
@@ -1295,7 +1301,7 @@ static void INL_timer_cb(lv_timer_t *)
 
     case INL_FSM::SETTLE:
     {
-        if (since(inl.t0) >= 3010)
+        if (since(inl.t0) >= 1010)
         { // 2 s settle (per your request)
             INL_dbg("[INL] SETTLE  +%u ms", unsigned(since(inl.t0)));
             inl.ph = INL_FSM::MEASURE;
@@ -1308,19 +1314,14 @@ static void INL_timer_cb(lv_timer_t *)
         const double v_cmd = TRUE_IDEAL[inl.i]; // TRUE (setpoint) volts
 
         // Mean() already = ideal volts (converted from raw)
-        double ideal = PowerSupply.Voltage.measured.Mean(); // volts
+        double measure = PowerSupply.Voltage.measured.Mean(); // volts
         // If this is mV in your build, uncomment: ideal *= 0.001;
 
-        inl.x_raw[inl.i] = ideal;  // X = ideal (linearized) volts
-        inl.y_true[inl.i] = v_cmd; // Y = true (commanded) volts
-        INL_dbg("[INL] MEASURE i=%d  ideal=%.6fV  true=%.6fV", inl.i, ideal, v_cmd);
-        lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 2, "%06.5f", ideal);
-
-
-        // table_set_selected_row(table_inl, inl.i + 1);
-        // select_next_row(table_inl,  2 * 7 + 2 * 5);
-
-             // lv_obj_invalidate(table_inl);
+        inl.x_raw[inl.i] = measure; // X = ideal (linearized) volts
+        inl.y_true[inl.i] = v_cmd;  // Y = true (commanded) volts
+        INL_dbg("[INL] MEASURE i=%d  ideal=%.6fV  true=%.6fV", inl.i, measure, v_cmd);
+        lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 2, "%+09.5f", measure);
+        lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 3, "%+02.2f", (measure - v_cmd) * 30518.043793393); // 10^6/33.7675
 
         if (++inl.i >= INL_FSM::NPTS)
             inl.ph = INL_FSM::COMPUTE;
@@ -1390,6 +1391,53 @@ void table_touch_event_cb(lv_event_t *e);
 
 void table_draw_cell_event_cb(lv_event_t *e);
 
+void table_autofit_columns(lv_obj_t *table)
+{
+    lv_obj_update_layout(table); // ensure styles computed
+
+    const uint16_t rows = lv_table_get_row_cnt(table);
+    const uint16_t cols = lv_table_get_col_cnt(table);
+
+    const lv_font_t *font = lv_obj_get_style_text_font(table, LV_PART_ITEMS);
+    lv_coord_t lsp = lv_obj_get_style_text_letter_space(table, LV_PART_ITEMS);
+    lv_coord_t lsp_line = lv_obj_get_style_text_line_space(table, LV_PART_ITEMS);
+    lv_coord_t pad_l = lv_obj_get_style_pad_left(table, LV_PART_ITEMS);
+    lv_coord_t pad_r = lv_obj_get_style_pad_right(table, LV_PART_ITEMS);
+
+    lv_coord_t total_w = 0;
+
+    for (uint16_t c = 0; c < cols; ++c)
+    {
+        lv_coord_t w_max = 0;
+
+        for (uint16_t r = 0; r < rows; ++r)
+        {
+            const char *txt = lv_table_get_cell_value(table, r, c);
+            if (!txt)
+                txt = "";
+
+            lv_point_t sz;
+            // single-line measurement; no wrapping
+            lv_txt_get_size(&sz, txt, font, lsp, lsp_line, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+
+            lv_coord_t w = sz.x + pad_l + pad_r;
+            if (w > w_max)
+                w_max = w;
+        }
+
+        // (optional) add a tiny margin so text isn't tight
+        w_max += 4;
+
+        lv_table_set_col_width(table, c, w_max);
+        total_w += w_max;
+    }
+
+    // Make the table as wide as needed (enable horizontal scroll if it overflows parent)
+    lv_obj_set_width(table, total_w);
+    lv_obj_set_scroll_dir(table, LV_DIR_VER | LV_DIR_HOR); // allow horizontal if needed
+    lv_obj_invalidate(table);
+}
+
 void ADC_INL_Voltage_calibration_cb(lv_event_t *)
 {
     if (PowerSupply.gui.win_ADC_INL_Voltage_calibration)
@@ -1414,10 +1462,37 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
 
     lv_obj_t *cb = lv_checkbox_create(cont);
     lv_checkbox_set_text(cb, "INL Calibration");
-    lv_obj_set_pos(cb, 20, 5);
+    lv_obj_set_pos(cb, 3, 5);
 
-    LVButton ADC_INL(cont, "Auto Calibr", 0, 0, 140, 35, nullptr, ADC_INL_VCalib_cb);
-    lv_obj_align_to(ADC_INL.get_lv_obj(), cb, LV_ALIGN_LEFT_MID, 150, 5);
+    static lv_style_t style_lbl, style_val;
+    static bool styles_inited{};
+    if (!styles_inited)
+    {
+        lv_style_init(&style_lbl);
+        lv_style_set_text_font(&style_lbl, &lv_font_montserrat_14);
+        lv_style_init(&style_val);
+        lv_style_set_text_font(&style_val, &graph_R_16);
+        lv_style_set_text_color(&style_val, lv_color_hex(0xFFFFFF));
+        styles_inited = true;
+    }
+
+    auto *lbl_raw = LVLabel::create(cont, "#FFFFF7 Status:", cb, 0, 4, &style_lbl);
+    auto *lbl_rawCode = LVLabel::create(cont, "#FFFF00 Idle#", lbl_raw, 30, 0, &style_lbl);
+    lv_obj_align_to(lbl_rawCode, lbl_raw, LV_ALIGN_TOP_LEFT, 60, 0);
+    auto *lbl_progress = LVLabel::create(cont, "#FFFFF7 Progress:#", lbl_raw, 0, 0, &style_lbl);
+
+    lv_obj_t *bar1 = lv_bar_create(cont);
+    lv_obj_set_size(bar1, 126, 20);
+    lv_obj_center(bar1);
+    lv_bar_set_value(bar1, 0, LV_ANIM_OFF);
+
+    lv_obj_align_to(bar1, lbl_progress, LV_ALIGN_TOP_LEFT, 0, 20);
+
+
+    LVButton ADC_INL(cont, "Auto Calib", 0, 0, 126, 35, nullptr, ADC_INL_VCalib_cb);
+
+    ADC_INL.set_align(LV_ALIGN_TOP_LEFT);
+    lv_obj_align_to(ADC_INL.get_lv_obj(), bar1, LV_ALIGN_TOP_LEFT, 0, 30);
 
     // lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_pad_ver(cont, 0, LV_PART_ITEMS);
@@ -1427,7 +1502,7 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
     static lv_style_t style_stats;
     lv_style_init(&style_stats);
 
-    table_inl = table_pro(cont, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 40, 250, 144, 0, 5);
+    table_inl = table_pro(cont, &style_stats, &graph_R_8, LV_ALIGN_DEFAULT, 160, 3, 200, 186, 0, 5);
 
     lv_table_set_cell_value_fmt(table_inl, 0, 0, "#");
     lv_table_set_cell_value_fmt(table_inl, 0, 1, "Ideal");
@@ -1436,16 +1511,21 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
     for (int i = 0; i < NPTS; i++)
     {
         // Utility_objs.table_points[i] = PowerSupply.funGenMem.table_points[i];
-        lv_table_set_cell_value_fmt(table_inl, i + 1, 0, "%0i", i);
-        lv_table_set_cell_value_fmt(table_inl, i + 1, 1, "%1.3f", TRUE_IDEAL[i]);
-        lv_table_set_cell_value_fmt(table_inl, i + 1, 2, "%1.5f", MEASURED[i]);
+        lv_table_set_cell_value_fmt(table_inl, i + 1, 0, "%02i", i);
+        lv_table_set_cell_value_fmt(table_inl, i + 1, 1, "%+07.3f", TRUE_IDEAL[i]);
+        lv_table_set_cell_value_fmt(table_inl, i + 1, 2, "%+09.5f", MEASURED[i]);
     }
 
-    lv_table_set_col_width(table_inl, 0, 38);
-    lv_table_set_col_width(table_inl, 1, 86);
-    lv_table_set_col_width(table_inl, 2, 130);
+    lv_table_set_col_width(table_inl, 0, 30);
+    lv_table_set_col_width(table_inl, 1, 56);
+    lv_table_set_col_width(table_inl, 2, 76);
 
-    lv_obj_add_event_cb(table_inl, table_touch_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    // after you’ve filled the table text:
+    table_autofit_columns(table_inl);
+
+    lv_table_set_cell_value_fmt(table_inl, 0, 3, "INL[ppmFSR]");
+        lv_table_set_col_width(table_inl, 2, 76);
+    // lv_obj_add_event_cb(table_inl, table_touch_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(table_inl, table_draw_cell_event_cb2, LV_EVENT_DRAW_PART_BEGIN, NULL);
 }
 
