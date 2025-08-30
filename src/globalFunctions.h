@@ -2785,11 +2785,11 @@ void keyCheckLoop()
              {
                  Tabs::goToHomeTab();
                 //  lv_obj_add_flag(voltageCurrentCalibration,LV_OBJ_FLAG_HIDDEN);
-                 hide( PowerSupply.gui.win_ADC_voltage_calibration);
-                 hide( PowerSupply.gui.win_ADC_current_calibration);
-                 hide( PowerSupply.gui.win_int_current_calibration);
-                 hide( PowerSupply.gui.win_ADC_INL_Voltage_calibration);
-                 hide( PowerSupply.gui.win_DAC_calibration); }
+                 hide( PowerSupply.gui.calibration.win_ADC_voltage_calibration);
+                 hide( PowerSupply.gui.calibration.win_ADC_current_calibration);
+                 hide( PowerSupply.gui.calibration.win_int_current_calibration);
+                 hide( PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration);
+                 hide( PowerSupply.gui.calibration.win_DAC_calibration); }
 
     );
 
@@ -3403,7 +3403,7 @@ void StatusBar()
     // if (win_ADC_current_calibration != nullptr)
     //     Serial.printf("\nwin_ADC_current_calibration:%i is vis:%i", win_ADC_current_calibration, lv_obj_is_visible(win_ADC_current_calibration));
 
-    if (PowerSupply.gui.win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration))
+    if (PowerSupply.gui.calibration.win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_voltage_calibration))
     {
 
         int code1 = lv_spinbox_get_value(Calib_GUI.Voltage.code_1);
@@ -3429,7 +3429,7 @@ void StatusBar()
 
         PowerSupply.calibrationUpdate();
     }
-    if (PowerSupply.gui.win_ADC_current_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration))
+    if (PowerSupply.gui.calibration.win_ADC_current_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_current_calibration))
     {
 
         int code1 = lv_spinbox_get_value(Calib_GUI.Current.code_1);
@@ -3789,9 +3789,9 @@ void VCCCInterval(unsigned long interval)
 
 // // Decide which UI we are in (reads your existing windows).
 // static inline UIMode detect_mode() {
-//     if (lv_obj_is_visible(PowerSupply.gui.win_DAC_calibration))           return UIMode::DAC;
-//     if (lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration) ||
-//         lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration))   return UIMode::ADC;
+//     if (lv_obj_is_visible(PowerSupply.gui.calibration.win_DAC_calibration))           return UIMode::DAC;
+//     if (lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_voltage_calibration) ||
+//         lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_current_calibration))   return UIMode::ADC;
 //     return UIMode::Menu;
 // }
 
@@ -3825,13 +3825,13 @@ static inline lv_obj_t *current_sidebar_list()
 static inline UIMode detect_mode()
 {
     const bool dac =
-        PowerSupply.gui.win_DAC_calibration &&
-        lv_obj_is_visible(PowerSupply.gui.win_DAC_calibration);
+        PowerSupply.gui.calibration.win_DAC_calibration &&
+        lv_obj_is_visible(PowerSupply.gui.calibration.win_DAC_calibration);
 
     const bool adc =
-        (PowerSupply.gui.win_ADC_voltage_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration)) ||
-        (PowerSupply.gui.win_ADC_current_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration)) ||
-        (PowerSupply.gui.win_int_current_calibration && lv_obj_is_visible(PowerSupply.gui.win_int_current_calibration)); // NEW
+        (PowerSupply.gui.calibration.win_ADC_voltage_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_voltage_calibration)) ||
+        (PowerSupply.gui.calibration.win_ADC_current_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_current_calibration)) ||
+        (PowerSupply.gui.calibration.win_int_current_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_int_current_calibration)); // NEW
 
     return (!dac && !adc) ? UIMode::Menu : (dac ? UIMode::DAC : UIMode::ADC);
 }
@@ -3839,12 +3839,12 @@ static inline UIMode detect_mode()
 // static inline UIMode detect_mode()
 // {
 //     const bool dac =
-//         PowerSupply.gui.win_DAC_calibration &&
-//         lv_obj_is_visible(PowerSupply.gui.win_DAC_calibration);
+//         PowerSupply.gui.calibration.win_DAC_calibration &&
+//         lv_obj_is_visible(PowerSupply.gui.calibration.win_DAC_calibration);
 
 //     const bool adc =
-//         (PowerSupply.gui.win_ADC_voltage_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_voltage_calibration)) ||
-//         (PowerSupply.gui.win_ADC_current_calibration && lv_obj_is_visible(PowerSupply.gui.win_ADC_current_calibration));
+//         (PowerSupply.gui.calibration.win_ADC_voltage_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_voltage_calibration)) ||
+//         (PowerSupply.gui.calibration.win_ADC_current_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_current_calibration));
 
 //     return (!dac && !adc) ? UIMode::Menu : (dac ? UIMode::DAC : UIMode::ADC);
 // }

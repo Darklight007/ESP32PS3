@@ -10,7 +10,7 @@
 #include "Preferences.h"
 
 #include "DispObject.h"
-#include "device.h"
+#include "device.hpp"
 
 // #include "config.hpp"
 // #include "input_device.h"

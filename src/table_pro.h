@@ -18,15 +18,21 @@
  *
  * @return lv_obj_t* Newly created table.
  */
-lv_obj_t* table_pro(lv_obj_t* parent,
-                    lv_style_t* style,
-                    const lv_font_t* font,
+lv_obj_t *table_pro(lv_obj_t *parent,
+                    lv_style_t *style,
+                    const lv_font_t *font,
                     lv_align_t align,
                     lv_coord_t pos_x, lv_coord_t pos_y,
                     lv_coord_t width, lv_coord_t height,
                     lv_coord_t pad_left, lv_coord_t pad_ver);
 
+
                     
+void table_draw_cell_event_cb2(lv_event_t *e);
+lv_coord_t table_get_row_h(lv_obj_t *table);
+void select_row(lv_obj_t *table, uint16_t cur_row_number, lv_coord_t row_height);
+void table_set_selected_row(lv_obj_t *table, uint16_t row);
+
 // #pragma once
 
 // #include <iostream>

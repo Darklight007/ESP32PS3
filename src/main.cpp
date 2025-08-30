@@ -33,7 +33,7 @@
 #include "tabs.h"
 #include "DispObject.h"
 #include "globalFunctions.h"
-#include "device.h"
+#include "device.hpp"
 #include "input_device.h"
 #include <Keypad_MC17.h>
 #include "FFTHandler.h"
@@ -90,7 +90,7 @@ void setup()
   // pixels.begin();
   // pixels.setPixelColor(0, pixels.Color(0, 0, 0));
   // pixels.show();
-  
+  ADC_INL_Voltage_calibration_cb(nullptr);
 }
 
 void loop()

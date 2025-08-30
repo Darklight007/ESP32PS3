@@ -325,9 +325,9 @@ void setupCalibPage()
     btn_calibration_ADC_current_event_cb(NULL);
     open_dac_calibration_cb(NULL);
 
-    lv_obj_add_flag(PowerSupply.gui.win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(PowerSupply.gui.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(PowerSupply.gui.win_DAC_calibration, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(PowerSupply.gui.calibration.win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(PowerSupply.gui.calibration.win_DAC_calibration, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
 }

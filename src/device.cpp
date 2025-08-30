@@ -1,5 +1,5 @@
 #include "esp_task_wdt.h"
-#include "device.h"
+#include "device.hpp"
 #include "MonotoneCubicCalibrator.h"
 
 extern bool g_voltINL_ready;

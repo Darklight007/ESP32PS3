@@ -8,7 +8,7 @@
 #include <Keypad_MC17.h>
 #include <Wire.h>
 
-#include "device.h"
+#include "device.hpp"
 #include "FFTHandler.h"
 
 
@@ -102,7 +102,7 @@ void IRAM_ATTR ADCPinISR(void *arg);
 // #include <Wire.h>        // I2C library for Keypad_MC17
 // #include <functional>
 // #include <ADS1219.h>
-// #include "device.h"
+// #include "device.hpp"
 // #include "FFTHandler.h"
 // // #include <lvgl.h>
 // #include <TFT_eSPI.h>

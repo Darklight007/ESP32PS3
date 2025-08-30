@@ -38,3 +38,82 @@ lv_obj_t* table_pro(lv_obj_t* parent,
 
     return table;
 }
+
+
+lv_coord_t table_get_row_h(lv_obj_t *table)
+{
+    const lv_font_t *font = lv_obj_get_style_text_font(table, LV_PART_ITEMS);
+    lv_coord_t h = lv_font_get_line_height(font) + lv_obj_get_style_pad_top(table, LV_PART_ITEMS) + lv_obj_get_style_pad_bottom(table, LV_PART_ITEMS);
+    //  + lv_obj_get_style_pad_row(table, LV_PART_ITEMS);
+
+    return h;
+}
+
+
+void select_row(lv_obj_t *table, uint16_t cur_row_number, lv_coord_t row_height)
+{
+    uint16_t row_cnt = lv_table_get_row_cnt(table);
+
+    lv_coord_t scroll_y = lv_obj_get_scroll_y(table);
+    lv_coord_t visible_h = lv_obj_get_height(table);
+    lv_coord_t y_pos = cur_row_number * row_height;
+
+    if (y_pos < scroll_y)
+        lv_obj_scroll_to_y(table, y_pos, LV_ANIM_OFF);
+    else if (y_pos + row_height > scroll_y + visible_h)
+        lv_obj_scroll_to_y(table, y_pos + row_height - visible_h, LV_ANIM_OFF);
+
+    // lv_obj_invalidate(table);
+}
+
+
+
+void table_set_selected_row(lv_obj_t *table, uint16_t row)
+{
+    uint16_t row_cnt = lv_table_get_row_cnt(table);
+    if (row < 0 || row > (row_cnt - 1))
+        return;
+    lv_obj_set_user_data(table, (void *)(uintptr_t)row);
+    // select_row(table, row, 2 * 7 + 2 * 5);
+
+    // Serial.println(table_get_row_h(table));
+    select_row(table, row, table_get_row_h(table));
+
+    lv_obj_invalidate(table); // redraw -> will highlight via draw cb
+
+    // select_next_row(table, 2 * 7 + 2 * 5);
+}
+
+
+
+void table_draw_cell_event_cb2(lv_event_t *e)
+{
+    lv_obj_draw_part_dsc_t *d = (lv_obj_draw_part_dsc_t *)lv_event_get_param(e);
+    if (d->part != LV_PART_ITEMS)
+        return;
+
+    lv_obj_t *table = lv_event_get_target(e);
+    uint16_t col_cnt = lv_table_get_col_cnt(table);
+
+    uint32_t id = d->id; // linear cell id
+    uint16_t row = id / col_cnt;
+
+    uint16_t selected_row = (uint16_t)(uintptr_t)lv_obj_get_user_data(table);
+    if (row == selected_row)
+    {
+        // background
+        d->rect_dsc->bg_color = lv_color_hex(0x2D6CDF); // blue
+        d->rect_dsc->bg_opa = LV_OPA_COVER;
+
+        // optional: rounded and no border
+        d->rect_dsc->radius = 4;
+        d->rect_dsc->border_opa = LV_OPA_TRANSP;
+
+        // text contrast (if label_dsc exists)
+        if (d->label_dsc)
+        {
+            d->label_dsc->color = lv_color_hex(0xFFFFFF);
+        }
+    }
+}
+ 

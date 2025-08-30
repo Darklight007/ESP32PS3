@@ -5,7 +5,7 @@
 #include <Keypad_MC17.h>
 #include <Wire.h>
 
-#include "device.h"
+#include "device.hpp"
 #include "FFTHandler.h"
 
 // ===== Screen =====

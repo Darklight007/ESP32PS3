@@ -7,7 +7,7 @@
 #include "TFT_eSPI.h" // tft instance
 #include "tabs.h"
 #include "table_pro.h"
-#include "device.h"        // provides PowerSupply and dac_data_g
+#include "device.hpp"        // provides PowerSupply and dac_data_g
 #include "lv_gui_helper.h" // LVLabel, LVButton helpers
 #include <float.h>
 
@@ -18,6 +18,9 @@
 #include <cstdint>
 #include <cstddef>
 #include <functional>
+#include <cstdarg>
+#include <vector>
+
 #include "MonotoneCubicCalibrator.h"
 
 // --- Debug helpers ---
@@ -312,7 +315,7 @@ namespace
         PowerSupply.LoadCalibrationData();
         PRESSED_event_cb(nullptr);
 
-        if (PowerSupply.gui.win_ADC_voltage_calibration && !lv_obj_has_flag(PowerSupply.gui.win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN))
+        if (PowerSupply.gui.calibration.win_ADC_voltage_calibration && !lv_obj_has_flag(PowerSupply.gui.calibration.win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN))
         {
             auto &v = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
             lv_spinbox_set_value(Calib_GUI.Voltage.code_1, v.code_1);
@@ -320,7 +323,7 @@ namespace
             lv_spinbox_set_value(Calib_GUI.Voltage.vin_1, (int32_t)llround(10000.0 * v.value_1));
             lv_spinbox_set_value(Calib_GUI.Voltage.vin_2, (int32_t)llround(10000.0 * v.value_2));
         }
-        if (PowerSupply.gui.win_ADC_current_calibration && !lv_obj_has_flag(PowerSupply.gui.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN))
+        if (PowerSupply.gui.calibration.win_ADC_current_calibration && !lv_obj_has_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN))
         {
             auto &i = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
             lv_spinbox_set_value(Calib_GUI.Current.code_1, i.code_1);
@@ -328,7 +331,7 @@ namespace
             lv_spinbox_set_value(Calib_GUI.Current.vin_1, (int32_t)llround(10000.0 * i.value_1));
             lv_spinbox_set_value(Calib_GUI.Current.vin_2, (int32_t)llround(10000.0 * i.value_2));
         }
-        if (PowerSupply.gui.win_int_current_calibration && !lv_obj_has_flag(PowerSupply.gui.win_int_current_calibration, LV_OBJ_FLAG_HIDDEN))
+        if (PowerSupply.gui.calibration.win_int_current_calibration && !lv_obj_has_flag(PowerSupply.gui.calibration.win_int_current_calibration, LV_OBJ_FLAG_HIDDEN))
         {
             // Update internal resistor value in the spinbox
             lv_spinbox_set_value(Calib_GUI.internalResistor, PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor * 1000.0); // Convert to mOhms
@@ -661,14 +664,14 @@ void btn_calibration_ADC_voltage_event_cb(lv_event_t *)
 {
     auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
     CalPrefill pf{cal.code_1, cal.code_2, cal.value_1, cal.value_2, "V"};
-    build_adc_calibration_window(&PowerSupply.gui.win_ADC_voltage_calibration, "ADC Voltage Calibration", Calib_GUI.Voltage, pf);
+    build_adc_calibration_window(&PowerSupply.gui.calibration.win_ADC_voltage_calibration, "ADC Voltage Calibration", Calib_GUI.Voltage, pf);
 }
 
 void btn_calibration_ADC_current_event_cb(lv_event_t *)
 {
     auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
     CalPrefill pf{cal.code_1, cal.code_2, cal.value_1, cal.value_2, "A"};
-    build_adc_calibration_window(&PowerSupply.gui.win_ADC_current_calibration, "ADC Current Calibration", Calib_GUI.Current, pf);
+    build_adc_calibration_window(&PowerSupply.gui.calibration.win_ADC_current_calibration, "ADC Current Calibration", Calib_GUI.Current, pf);
 }
 
 ///*****************************************************************************
@@ -1020,18 +1023,18 @@ static void AutoMeasureTotalRes_cb(lv_event_t *)
 // Open/create the DAC calibration window
 void internal_current_calibration_cb(lv_event_t *)
 {
-    if (PowerSupply.gui.win_int_current_calibration)
+    if (PowerSupply.gui.calibration.win_int_current_calibration)
     {
-        lv_obj_clear_flag(PowerSupply.gui.win_int_current_calibration, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(PowerSupply.gui.calibration.win_int_current_calibration, LV_OBJ_FLAG_HIDDEN);
         return;
     }
 
-    PowerSupply.gui.win_int_current_calibration = lv_win_create(lv_scr_act(), 36);
-    lv_obj_set_size(PowerSupply.gui.win_int_current_calibration, 320, 226);
-    lv_win_add_title(PowerSupply.gui.win_int_current_calibration, "Internal Current Calibration");
-    auto *close = lv_win_add_btn(PowerSupply.gui.win_int_current_calibration, LV_SYMBOL_CLOSE, 60);
+    PowerSupply.gui.calibration.win_int_current_calibration = lv_win_create(lv_scr_act(), 36);
+    lv_obj_set_size(PowerSupply.gui.calibration.win_int_current_calibration, 320, 226);
+    lv_win_add_title(PowerSupply.gui.calibration.win_int_current_calibration, "Internal Current Calibration");
+    auto *close = lv_win_add_btn(PowerSupply.gui.calibration.win_int_current_calibration, LV_SYMBOL_CLOSE, 60);
     lv_obj_add_event_cb(close, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
-    auto *cont = lv_win_get_content(PowerSupply.gui.win_int_current_calibration);
+    auto *cont = lv_win_get_content(PowerSupply.gui.calibration.win_int_current_calibration);
     lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
     lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
@@ -1061,8 +1064,6 @@ void internal_current_calibration_cb(lv_event_t *)
 // ==== Globals (keep ONE definition of each) ====
 // ================= INL CAL (FSM, no std::function, no vectors) =================
 // #include "MonotoneCubicCalibrator.h"
-#include <cstdarg>
-#include <vector>
 
 // --- ONE global calibrator in the whole project ---
 MonotoneCubicCalibrator g_voltINL;
@@ -1088,160 +1089,6 @@ static const double MEASURED[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 
 static const double TRUE_IDEAL[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32};
 constexpr size_t NPTS = sizeof(MEASURED) / sizeof(MEASURED[0]);
 static_assert(NPTS == sizeof(TRUE_IDEAL) / sizeof(TRUE_IDEAL[0]), "knot sizes must match");
-
-// Event callback to handle row selection
-static void table_touch_event_cb(lv_event_t *e)
-{
-    if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
-    {
-        lv_obj_t *table = lv_event_get_target(e);
-        uint16_t row, col;
-        lv_table_get_selected_cell(table, &row, &col);
-        table->user_data = (void *)row;
-        lv_obj_invalidate(table); // Redraw the table to apply changes
-        lv_table_get_cell_value(table, row, col);
-    }
-}
-
-// Custom draw callback for the table
-static void table_draw_cell_event_cb(lv_event_t *e)
-{
-    lv_obj_draw_part_dsc_t *draw_part_dsc = (lv_obj_draw_part_dsc_t *)lv_event_get_param(e);
-
-    if (draw_part_dsc->part == LV_PART_ITEMS)
-    {
-        lv_obj_t *table = lv_event_get_target(e);
-        uint32_t id = draw_part_dsc->id;
-        uint16_t col_cnt = lv_table_get_col_cnt(table);
-
-        // Calculate row and column from cell id
-        uint16_t row = id / col_cnt;
-        uint16_t col = id % col_cnt;
-        uint16_t selected_row = (int)table->user_data;
-
-        if (row == selected_row)
-        {
-            draw_part_dsc->rect_dsc->bg_color = lv_color_hex(0x0000FF); // Highlight color
-            draw_part_dsc->rect_dsc->bg_opa = LV_OPA_COVER;
-        }
-    }
-}
-static void table_draw_cell_event_cb2(lv_event_t *e)
-{
-    lv_obj_draw_part_dsc_t *d = (lv_obj_draw_part_dsc_t *)lv_event_get_param(e);
-    if (d->part != LV_PART_ITEMS)
-        return;
-
-    lv_obj_t *table = lv_event_get_target(e);
-    uint16_t col_cnt = lv_table_get_col_cnt(table);
-
-    uint32_t id = d->id; // linear cell id
-    uint16_t row = id / col_cnt;
-
-    uint16_t selected_row = (uint16_t)(uintptr_t)lv_obj_get_user_data(table);
-    if (row == selected_row)
-    {
-        // background
-        d->rect_dsc->bg_color = lv_color_hex(0x2D6CDF); // blue
-        d->rect_dsc->bg_opa = LV_OPA_COVER;
-
-        // optional: rounded and no border
-        d->rect_dsc->radius = 4;
-        d->rect_dsc->border_opa = LV_OPA_TRANSP;
-
-        // text contrast (if label_dsc exists)
-        if (d->label_dsc)
-        {
-            d->label_dsc->color = lv_color_hex(0xFFFFFF);
-        }
-    }
-}
-static void select_next_row(lv_obj_t *table, lv_coord_t row_height);
-static void select_row(lv_obj_t *table, uint16_t cur_row_number, lv_coord_t row_height);
-
-static lv_coord_t table_get_row_h(lv_obj_t *table)
-{
-    const lv_font_t *font = lv_obj_get_style_text_font(table, LV_PART_ITEMS);
-    lv_coord_t h = lv_font_get_line_height(font) + lv_obj_get_style_pad_top(table, LV_PART_ITEMS) + lv_obj_get_style_pad_bottom(table, LV_PART_ITEMS);
-    //  + lv_obj_get_style_pad_row(table, LV_PART_ITEMS);
-
-    return h;
-}
-
-static void table_set_selected_row(lv_obj_t *table, uint16_t row)
-{
-    uint16_t row_cnt = lv_table_get_row_cnt(table);
-    if (row < 0 || row > (row_cnt - 1))
-        return;
-    lv_obj_set_user_data(table, (void *)(uintptr_t)row);
-    // select_row(table, row, 2 * 7 + 2 * 5);
-
-    // Serial.println(table_get_row_h(table));
-    select_row(table, row, table_get_row_h(table));
-
-    lv_obj_invalidate(table); // redraw -> will highlight via draw cb
-
-    // select_next_row(table, 2 * 7 + 2 * 5);
-}
-
-// Function to select the next row
-static void select_row(lv_obj_t *table, uint16_t cur_row_number, lv_coord_t row_height)
-{
-    uint16_t row_cnt = lv_table_get_row_cnt(table);
-
-    lv_coord_t scroll_y = lv_obj_get_scroll_y(table);
-    lv_coord_t visible_h = lv_obj_get_height(table);
-    lv_coord_t y_pos = cur_row_number * row_height;
-
-    if (y_pos < scroll_y)
-        lv_obj_scroll_to_y(table, y_pos, LV_ANIM_OFF);
-    else if (y_pos + row_height > scroll_y + visible_h)
-        lv_obj_scroll_to_y(table, y_pos + row_height - visible_h, LV_ANIM_OFF);
-
-    // lv_obj_invalidate(table);
-}
-
-// Function to select the next row
-static void select_next_row(lv_obj_t *table, lv_coord_t row_height)
-{
-    uint16_t row_cnt = lv_table_get_row_cnt(table);
-    // if (selected_row < row_cnt - 1)
-    // {
-    //     selected_row++;
-    // }
-    uint16_t cur_row_number = (int)table->user_data;
-
-    if (cur_row_number < row_cnt - 1)
-    {
-        cur_row_number++;
-        table->user_data = (void *)cur_row_number;
-    }
-
-    lv_coord_t scroll_y = lv_obj_get_scroll_y(table);
-    lv_coord_t visible_h = lv_obj_get_height(table);
-    lv_coord_t y_pos = cur_row_number * row_height;
-
-    if (y_pos < scroll_y)
-        lv_obj_scroll_to_y(table, y_pos, LV_ANIM_OFF);
-    else if (y_pos + row_height > scroll_y + visible_h)
-        lv_obj_scroll_to_y(table, y_pos + row_height - visible_h, LV_ANIM_OFF);
-
-    lv_obj_invalidate(table);
-
-    // const char *cell_str = lv_table_get_cell_value(table, cur_row_number, 1);
-    // Utility_objs.table_current_value = atof(cell_str);
-    // lv_spinbox_set_value(Utility_objs.table_spinbox_value, Utility_objs.table_current_value * 10000.0);
-    // lv_obj_invalidate(Utility_objs.table_spinbox_value);
-}
-
-static inline void INL_preload_default()
-{
-    std::vector<double> X(MEASURED, MEASURED + NPTS);
-    std::vector<double> Y(TRUE_IDEAL, TRUE_IDEAL + NPTS);
-    g_voltINL.setPoints(X, Y); // ideal -> true (identity)
-    g_voltINL.build();
-    // g_voltINL_ready = true;
-}
 
 // ================= FSM (LVGL timer) =================
 struct INL_FSM
@@ -1294,6 +1141,7 @@ static void INL_timer_cb(lv_timer_t *)
         table_set_selected_row(table_inl, inl.i + 1);
         INL_dbg("[INL] SET     i=%d  v_cmd=%.3f", inl.i, v_cmd);
         PowerSupply.Voltage.SetUpdate(v_cmd * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+        PowerSupply.Voltage.measured.ResetStats();
         inl.t0 = now_ms();
         inl.ph = INL_FSM::SETTLE;
     }
@@ -1301,7 +1149,7 @@ static void INL_timer_cb(lv_timer_t *)
 
     case INL_FSM::SETTLE:
     {
-        if (since(inl.t0) >= 1010)
+        if (since(inl.t0) >= 3000)
         { // 2 s settle (per your request)
             INL_dbg("[INL] SETTLE  +%u ms", unsigned(since(inl.t0)));
             inl.ph = INL_FSM::MEASURE;
@@ -1372,24 +1220,12 @@ inline void INL_start()
     INL_dbg("[INL] START (LVGL timer)");
 }
 
-// Apply during normal reads: pass your uncorrected measured volts
-inline double calib_apply_voltage(double v_measured_uncorrected)
-{
-    return g_voltINL_ready ? g_voltINL.apply(v_measured_uncorrected)
-                           : v_measured_uncorrected;
-}
-
 //******************************************************************* */
 static void ADC_INL_VCalib_cb(lv_event_t *)
 {
     g_voltINL_ready = false;
-    // INL_preload_default();
     INL_start();
-    // start_adc_inl_cal();
 }
-void table_touch_event_cb(lv_event_t *e);
-
-void table_draw_cell_event_cb(lv_event_t *e);
 
 void table_autofit_columns(lv_obj_t *table)
 {
@@ -1438,112 +1274,234 @@ void table_autofit_columns(lv_obj_t *table)
     lv_obj_invalidate(table);
 }
 
+static lv_style_t style_radio;
+static lv_style_t style_radio_chk;
+static uint32_t active_index_1 = 0;
+static uint32_t active_index_2 = 0;
+
+static void radio_event_handler(lv_event_t *e)
+{
+    auto *active_id = static_cast<uint32_t *>(lv_event_get_user_data(e)); // ✅ cast
+
+    lv_obj_t *cont = lv_event_get_current_target(e);
+    lv_obj_t *act_cb = lv_event_get_target(e);
+    lv_obj_t *old_cb = lv_obj_get_child(cont, *active_id);
+
+    /*Do nothing if the container was clicked*/
+    if (act_cb == cont)
+        return;
+
+    lv_obj_clear_state(old_cb, LV_STATE_CHECKED); /*Uncheck the previous radio button*/
+    lv_obj_add_state(act_cb, LV_STATE_CHECKED);   /*Uncheck the current radio button*/
+
+    *active_id = lv_obj_get_index(act_cb);
+
+    LV_LOG_USER("Selected radio buttons: %d, %d", (int)active_index_1, (int)active_index_2);
+}
+
+static lv_obj_t *radiobutton_create(lv_obj_t *parent, const char *txt)
+{
+    lv_obj_t *obj = lv_checkbox_create(parent);
+    lv_checkbox_set_text(obj, txt);
+    lv_obj_add_flag(obj, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_style(obj, &style_radio, LV_PART_INDICATOR);
+    lv_obj_add_style(obj, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    return obj;
+}
+
 void ADC_INL_Voltage_calibration_cb(lv_event_t *)
 {
-    if (PowerSupply.gui.win_ADC_INL_Voltage_calibration)
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [0] Re-open existing window (if already created)
+    // ─────────────────────────────────────────────────────────────────────────────
+    if (PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration)
     {
-        lv_obj_clear_flag(PowerSupply.gui.win_ADC_INL_Voltage_calibration, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration, LV_OBJ_FLAG_HIDDEN);
         return;
     }
+    uint8_t y_off = 5;
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [1] Create window shell (title + close)
+    // ─────────────────────────────────────────────────────────────────────────────
+    PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration = lv_win_create(lv_scr_act(), 36);
+    lv_obj_set_size(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration, 320, 226);
+    lv_win_add_title(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration, "ADC INL Voltage Calibration");
 
-    PowerSupply.gui.win_ADC_INL_Voltage_calibration = lv_win_create(lv_scr_act(), 36);
-    lv_obj_set_size(PowerSupply.gui.win_ADC_INL_Voltage_calibration, 320, 226);
-    lv_win_add_title(PowerSupply.gui.win_ADC_INL_Voltage_calibration, "ADC INL Voltage Calibration");
-    auto *close = lv_win_add_btn(PowerSupply.gui.win_ADC_INL_Voltage_calibration, LV_SYMBOL_CLOSE, 60);
-    lv_obj_add_event_cb(close, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t *btn_close = lv_win_add_btn(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration, LV_SYMBOL_CLOSE, 60);
+    lv_obj_add_event_cb(btn_close, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
 
-    lv_obj_t *cont = lv_win_get_content(PowerSupply.gui.win_ADC_INL_Voltage_calibration);
-    lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
-    lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [2] Content container (layout/padding/scroll)
+    // ─────────────────────────────────────────────────────────────────────────────
+    lv_obj_t *cont = lv_win_get_content(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration);
     lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [3] Load persisted calibration data (if any)
+    // ─────────────────────────────────────────────────────────────────────────────
     PowerSupply.LoadCalibrationData();
-    // lv_spinbox_set_value(intRes, 40'000.123*1000.0);
+    // lv_spinbox_set_value(intRes, 40'000.123 * 1000.0);
 
-    lv_obj_t *cb = lv_checkbox_create(cont);
-    lv_checkbox_set_text(cb, "INL Calibration");
-    lv_obj_set_pos(cb, 3, 5);
-
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [4] Styles (labels / values) - init once
+    // ─────────────────────────────────────────────────────────────────────────────
     static lv_style_t style_lbl, style_val;
-    static bool styles_inited{};
+    static bool styles_inited = false;
     if (!styles_inited)
     {
         lv_style_init(&style_lbl);
         lv_style_set_text_font(&style_lbl, &lv_font_montserrat_14);
+
         lv_style_init(&style_val);
         lv_style_set_text_font(&style_val, &graph_R_16);
         lv_style_set_text_color(&style_val, lv_color_hex(0xFFFFFF));
+
         styles_inited = true;
     }
 
-    auto *lbl_raw = LVLabel::create(cont, "#FFFFF7 Status:", cb, 0, 4, &style_lbl);
-    auto *lbl_rawCode = LVLabel::create(cont, "#FFFF00 Idle#", lbl_raw, 30, 0, &style_lbl);
-    lv_obj_align_to(lbl_rawCode, lbl_raw, LV_ALIGN_TOP_LEFT, 60, 0);
-    auto *lbl_progress = LVLabel::create(cont, "#FFFFF7 Progress:#", lbl_raw, 0, 0, &style_lbl);
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [5] Header row: checkbox + status/progress labels
+    // ─────────────────────────────────────────────────────────────────────────────
+    lv_obj_t *cb = lv_checkbox_create(cont);
+    lv_checkbox_set_text(cb, "INL Calibration");
+    lv_obj_set_pos(cb, 3, y_off);
 
+    lv_obj_t *lbl_status = LVLabel::create(cont, "#FFFFF7 Status:", cb, 0, y_off, &style_lbl);
+    lv_obj_t *lbl_state = LVLabel::create(cont, "#FFFF00 Idle#", lbl_status, 0, 0, &style_lbl);
+    lv_obj_align_to(lbl_state, lbl_status, LV_ALIGN_OUT_RIGHT_TOP, y_off * 2, 0);
+    //    lv_obj_set_style_align(lbl_state, LV_ALIGN_TOP_LEFT, 0);
+
+    lv_obj_t *lbl_bar_progress = LVLabel::create(cont, "#FFFFF7 Progress:#", lbl_status, 0, y_off, &style_lbl);
+    // lv_obj_align_to(lbl_bar_progress, lbl_status, LV_ALIGN_OUT_BOTTOM_LEFT, 0, y_off);
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [6] Progress bar
+    // ─────────────────────────────────────────────────────────────────────────────
     lv_obj_t *bar1 = lv_bar_create(cont);
-    lv_obj_set_size(bar1, 126, 20);
-    lv_obj_center(bar1);
+    lv_obj_set_size(bar1, 126, 5);
     lv_bar_set_value(bar1, 0, LV_ANIM_OFF);
+    lv_obj_align_to(bar1, lbl_bar_progress, LV_ALIGN_OUT_BOTTOM_LEFT, 0, y_off);
 
-    lv_obj_align_to(bar1, lbl_progress, LV_ALIGN_TOP_LEFT, 0, 20);
+    lv_style_init(&style_radio);
+    lv_style_set_radius(&style_radio, LV_RADIUS_CIRCLE);
 
+    lv_style_init(&style_radio_chk);
+    lv_style_set_bg_img_src(&style_radio_chk, NULL);
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [6.5] Progress bar
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    char buf[32];
+
+    lv_obj_t *cont2 = lv_obj_create(cont);
+    lv_obj_set_flex_flow(cont2, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_size(cont2, lv_pct(40), lv_pct(40));
+    lv_obj_set_x(cont2, lv_pct(1));
+    lv_obj_set_y(cont2, lv_pct(60));
+    lv_obj_add_event_cb(cont2, radio_event_handler, LV_EVENT_CLICKED, &active_index_2);
+
+    radiobutton_create(cont2, "Internal DAC");
+
+    lv_obj_t *rb_dmm = radiobutton_create(cont2, "DMM");
+
+    // make it inactive (grayed out, ignores clicks/focus)
+    lv_obj_add_state(rb_dmm, LV_STATE_DISABLED);
+    /*Make the first checkbox checked*/
+    lv_obj_add_state(lv_obj_get_child(cont2, 0), LV_STATE_CHECKED);
+    lv_obj_align_to(cont2, bar1, LV_ALIGN_OUT_BOTTOM_LEFT, 0, y_off * 2);
+
+    // Zero container padding (inner padding of the box)
+    lv_obj_set_style_pad_all(cont2, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_left(cont2, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(cont2, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(cont2, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(cont2, 0, LV_PART_MAIN);
+
+    // Zero gaps between flex items
+    lv_obj_set_style_pad_row(cont2, 5, LV_PART_MAIN);    // gap along cross axis
+    lv_obj_set_style_pad_column(cont2, 0, LV_PART_MAIN); // gap along main axis
+
+    // (Optional) No border/background so it hugs tightly
+    lv_obj_set_style_border_width(cont2, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(cont2, LV_OPA_TRANSP, LV_PART_MAIN);
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [7] Action button: "Auto Calib"
+    // ─────────────────────────────────────────────────────────────────────────────
     LVButton ADC_INL(cont, "Auto Calib", 0, 0, 126, 35, nullptr, ADC_INL_VCalib_cb);
-
     ADC_INL.set_align(LV_ALIGN_TOP_LEFT);
-    lv_obj_align_to(ADC_INL.get_lv_obj(), bar1, LV_ALIGN_TOP_LEFT, 0, 30);
+    lv_obj_align_to(ADC_INL.get_lv_obj(), rb_dmm, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 2*y_off);
 
-    // lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_pad_ver(cont, 0, LV_PART_ITEMS);
-    lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
-
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [8] Table: create + basic style
+    // ─────────────────────────────────────────────────────────────────────────────
     static lv_style_t style_stats;
     lv_style_init(&style_stats);
 
-    table_inl = table_pro(cont, &style_stats, &graph_R_8, LV_ALIGN_DEFAULT, 160, 3, 200, 186, 0, 5);
+    // table_inl:  (x=154, y=3, w=200, h=186, border=0, rows=5)  ← params per your table_pro()
+    table_inl = table_pro(cont, &style_stats, &graph_R_8,
+                          LV_ALIGN_DEFAULT, 154, 3, 200, 186, 0, y_off);
 
+    // Headers
     lv_table_set_cell_value_fmt(table_inl, 0, 0, "#");
     lv_table_set_cell_value_fmt(table_inl, 0, 1, "Ideal");
     lv_table_set_cell_value_fmt(table_inl, 0, 2, "Measured");
 
-    for (int i = 0; i < NPTS; i++)
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [9] Table: populate rows
+    // ─────────────────────────────────────────────────────────────────────────────
+    for (int i = 0; i < NPTS; ++i)
     {
-        // Utility_objs.table_points[i] = PowerSupply.funGenMem.table_points[i];
         lv_table_set_cell_value_fmt(table_inl, i + 1, 0, "%02i", i);
         lv_table_set_cell_value_fmt(table_inl, i + 1, 1, "%+07.3f", TRUE_IDEAL[i]);
         lv_table_set_cell_value_fmt(table_inl, i + 1, 2, "%+09.5f", MEASURED[i]);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [10] Table: sizing (fixed cols then auto-fit)
+    // ─────────────────────────────────────────────────────────────────────────────
     lv_table_set_col_width(table_inl, 0, 30);
     lv_table_set_col_width(table_inl, 1, 56);
     lv_table_set_col_width(table_inl, 2, 76);
 
-    // after you’ve filled the table text:
+    // After filling text, let columns auto-fit to content (helper you added)
     table_autofit_columns(table_inl);
 
+    // Optional extra header (4th column title) and width tweak
     lv_table_set_cell_value_fmt(table_inl, 0, 3, "INL[ppmFSR]");
-        lv_table_set_col_width(table_inl, 2, 76);
-    // lv_obj_add_event_cb(table_inl, table_touch_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_table_set_col_width(table_inl, 2, 76); // keep Measured column readable
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [11] Events (draw/highlight, touch if needed)
+    // ─────────────────────────────────────────────────────────────────────────────
+    // lv_obj_add_event_cb(table_inl, table_touch_event_cb,      LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(table_inl, table_draw_cell_event_cb2, LV_EVENT_DRAW_PART_BEGIN, NULL);
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // [12] Final layout nits (avoid duplicates)
+    // ─────────────────────────────────────────────────────────────────────────────
+    lv_obj_set_style_pad_ver(cont, 0, LV_PART_ITEMS);
+    lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
 }
 
 // Open/create the DAC calibration window
 void open_dac_calibration_cb(lv_event_t *)
 {
-    if (PowerSupply.gui.win_DAC_calibration)
+    if (PowerSupply.gui.calibration.win_DAC_calibration)
     {
-        lv_obj_clear_flag(PowerSupply.gui.win_DAC_calibration, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(PowerSupply.gui.calibration.win_DAC_calibration, LV_OBJ_FLAG_HIDDEN);
         return;
     }
 
-    PowerSupply.gui.win_DAC_calibration = lv_win_create(lv_scr_act(), 36);
-    lv_obj_set_size(PowerSupply.gui.win_DAC_calibration, 320, 226);
-    lv_win_add_title(PowerSupply.gui.win_DAC_calibration, "DAC Calibration");
-    auto *close = lv_win_add_btn(PowerSupply.gui.win_DAC_calibration, LV_SYMBOL_CLOSE, 60);
+    PowerSupply.gui.calibration.win_DAC_calibration = lv_win_create(lv_scr_act(), 36);
+    lv_obj_set_size(PowerSupply.gui.calibration.win_DAC_calibration, 320, 226);
+    lv_win_add_title(PowerSupply.gui.calibration.win_DAC_calibration, "DAC Calibration");
+    auto *close = lv_win_add_btn(PowerSupply.gui.calibration.win_DAC_calibration, LV_SYMBOL_CLOSE, 60);
     lv_obj_add_event_cb(close, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
-    auto *cont = lv_win_get_content(PowerSupply.gui.win_DAC_calibration);
+    auto *cont = lv_win_get_content(PowerSupply.gui.calibration.win_DAC_calibration);
     lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
     lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
