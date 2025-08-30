@@ -1,5 +1,4 @@
-#ifndef DEVICE_H
-#define DEVICE_H
+#pragma once
 
 // #include "gLobalVariables.h"
 #include <vector>
@@ -86,17 +85,22 @@ struct SettingParameters
     bool buzzer = false;
     bool isPowerSupplyOn = true;
 };
+struct Calibration_gui
+{
+    lv_obj_t *win_ADC_voltage_calibration = nullptr;
+    lv_obj_t *win_ADC_current_calibration = nullptr;
+    lv_obj_t *win_int_current_calibration = nullptr;
+    lv_obj_t *win_ADC_INL_Voltage_calibration = nullptr;
+    lv_obj_t *win_DAC_calibration = nullptr;
+};
 
 struct GUI
 {
     lv_obj_t *slider_Avgs = nullptr;
     lv_obj_t *setting_menu = nullptr;
-    lv_obj_t *win_ADC_voltage_calibration= nullptr;
-    lv_obj_t *win_ADC_current_calibration= nullptr;
-    lv_obj_t *win_int_current_calibration= nullptr;
-    lv_obj_t *win_ADC_INL_Voltage_calibration= nullptr;
-    lv_obj_t *win_DAC_calibration= nullptr;
     lv_obj_t *textarea_set_value = nullptr;
+
+    Calibration_gui calibration;
 };
 
 struct Graph_
@@ -254,9 +258,9 @@ public:
         String t_macAdd,
         calibPoints t_vcalib,
         calibPoints t_icalib,
-    double icpv) : macAdd(t_macAdd),
-                                vCal(t_vcalib),
-                                iCal(t_icalib),internalResistor(icpv)
+        double icpv) : macAdd(t_macAdd),
+                       vCal(t_vcalib),
+                       iCal(t_icalib), internalResistor(icpv)
     {
     }
 
@@ -469,6 +473,5 @@ public:
             *p++ = EEPROM.read(ee++);
         return i;
     }
-};
 
-#endif // DEVICE_H
+};
