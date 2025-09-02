@@ -3831,6 +3831,7 @@ static inline UIMode detect_mode()
     const bool adc =
         (PowerSupply.gui.calibration.win_ADC_voltage_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_voltage_calibration)) ||
         (PowerSupply.gui.calibration.win_ADC_current_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_current_calibration)) ||
+        (PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration)) ||
         (PowerSupply.gui.calibration.win_int_current_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_int_current_calibration)); // NEW
 
     return (!dac && !adc) ? UIMode::Menu : (dac ? UIMode::DAC : UIMode::ADC);

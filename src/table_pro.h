@@ -32,7 +32,7 @@ void table_draw_cell_event_cb2(lv_event_t *e);
 lv_coord_t table_get_row_h(lv_obj_t *table);
 void select_row(lv_obj_t *table, uint16_t cur_row_number, lv_coord_t row_height);
 void table_set_selected_row(lv_obj_t *table, uint16_t row);
-
+void table_autofit_columns(lv_obj_t *table);
 // #pragma once
 
 // #include <iostream>

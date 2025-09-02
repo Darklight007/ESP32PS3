@@ -13,7 +13,7 @@ public:
              lv_style_t *style,
              lv_event_cb_t callback);
 
-    lv_obj_t *get() { return btn_; }
+    lv_obj_t *get_lv_obj() { return btn_; }
     lv_coord_t pos_x;
     lv_coord_t pos_y;
     lv_coord_t width;
@@ -42,10 +42,10 @@ public:
     {
         lv_obj_set_style_align(btn_, align, 0);
     }
-    lv_obj_t *get_lv_obj()
-    {
-        return btn_;
-    }
+    // lv_obj_t *get_lv_obj()
+    // {
+    //     return btn_;
+    // }
 
 private:
     lv_obj_t *btn_{nullptr};
@@ -57,7 +57,46 @@ public:
     // Creates a label aligned relative to `base` with optional style.
     static lv_obj_t *create(lv_obj_t *parent, const char *labelText, const lv_obj_t *base,
                             lv_coord_t x_ofs, lv_coord_t y_ofs, lv_style_t *style);
+
+    
+
+        // helper (works only if you pass lv_obj_t directly)
+    static void set_text(lv_obj_t *lbl, const char *text);
 };
+
+
+class LVLabel_class {
+public:
+    // Constructor creates the label
+    LVLabel_class(lv_obj_t *parent,
+            const char *labelText,
+            const lv_obj_t *base = nullptr,
+            lv_coord_t x_ofs = 0,
+            lv_coord_t y_ofs = 0,
+            lv_style_t *style = nullptr);
+
+    // API
+    void set_text(const char *text);
+    void set_color(lv_color_t color);
+    void align(lv_align_t align, lv_coord_t x_ofs, lv_coord_t y_ofs); 
+    void align_to(lv_align_t align, LVLabel_class base , lv_coord_t x_ofs, lv_coord_t y_ofs) ;
+
+    // Access to raw pointer if needed
+    lv_obj_t *get_lv_obj() const { return label; }
+
+    // Define template fully in header!
+    template <typename... Args>
+    void set_text_fmt(const char *fmt, Args... args) {
+        if (label)
+            lv_label_set_text_fmt(label, fmt, args...);
+    }
+
+
+private:
+    lv_obj_t *label{nullptr};
+};
+
+
 
 class LVLine2
 {

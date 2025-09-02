@@ -91,6 +91,16 @@ void Device::calibrationUpdate(void)
     Current.hist.Reset();
     Voltage.hist.Reset();
     // SaveCalibrationData();
+    // for (int i = 0; i < 35; i++)
+        // Serial.printf("\nMeasuere:%+09.5f Ideal:%+07.3f", CalBank[bankCalibId].adc_inl_measure[i], CalBank[bankCalibId].adc_inl_ideal[i]); // g_voltINL.printKnotTable();
+
+    std::vector<double> X(CalBank[bankCalibId].adc_inl_measure, CalBank[bankCalibId].adc_inl_measure + 35); // ideal volts (Mean)
+    std::vector<double> Y(CalBank[bankCalibId].adc_inl_ideal, CalBank[bankCalibId].adc_inl_ideal + 35);     // true volts (set)
+
+    g_voltINL.setPoints(X, Y);
+
+    g_voltINL.build();
+    g_voltINL_ready = true;
 }
 
 //  std::vector<Calibration> CalBank
@@ -148,6 +158,13 @@ void Device::LoadCalibrationData()
     Calibration outputData = Device::LoadCalibData("cal");
     CalBank[bankCalibId] = {outputData};
 
+    // for (int i = 0; i < 33; i++)
+    // {
+    //     CalBank[bankCalibId].adc_inl_measure[i] = outputData.adc_inl_measure[i];
+    //     CalBank[bankCalibId].adc_inl_ideal[i] == outputData.adc_inl_ideal[i];
+    //     Serial.printf("\nMeasuere:%+09.5f Ideal:%+07.3f",outputData.adc_inl_measure[i], outputData.adc_inl_ideal[i]); // g_voltINL.printKnotTable();
+    // }
+
     calibrationUpdate();
 
     Serial.printf("\nCalibration data loaded:%s {%+08.4f %+08i %+08.4f %+08i}, {%+08.4f %+08i %+08.4f %+08i}, %4.4f",
@@ -155,6 +172,8 @@ void Device::LoadCalibrationData()
                   outputData.vCal.value_1, outputData.vCal.code_1, outputData.vCal.value_2, outputData.vCal.code_2,
                   outputData.iCal.value_1, outputData.iCal.code_1, outputData.iCal.value_2, outputData.iCal.code_2,
                   outputData.internalResistor);
+
+    // g_voltINL.build();
 
     // CalBank[bankCalibId].vCal.value_1 = outputData.vCal.value_1;
     // CalBank[bankCalibId].vCal.value_2 = outputData.vCal.value_2;
@@ -178,6 +197,20 @@ void Device::LoadCalibrationData()
     Serial.printf("\nVoltage Calibration b:%7.3f", Voltage.calib_b);
     Serial.printf("\nCurrent Calibration m:%7.3f", Current.calib_m);
     Serial.printf("\nCurrent Calibration b:%7.3f", Current.calib_b);
+
+    // CalBank[bankCalibId].adc_inl_measure;
+    // CalBank[bankCalibId].adc_inl_ideal ;
+
+    // for (int i = 0; i < 33; i++)
+    //     Serial.printf("\nMeasuere:%+09.5f Ideal:%+07.3f",
+    //                   CalBank[bankCalibId].adc_inl_measure[i],
+    //                   CalBank[bankCalibId].adc_inl_ideal[i]); // g_voltINL.printKnotTable();
+
+    // g_voltINL.build();
+    // g_voltINL.setPoints(CalBank[bankCalibId].adc_inl_measure, CalBank[bankCalibId].adc_inl_ideal);
+    // g_voltINL.build();
+
+    // g_voltINL_ready = true;
 
     if (!isfinite(Voltage.calib_m) || !std::isfinite(Voltage.calib_b) || !std::isfinite(Current.calib_m) || !std::isfinite(Current.calib_b))
     {

@@ -52,6 +52,8 @@
 
 void setup()
 {
+  esp_task_wdt_init(20, false);  // 10s instead of default ~5s
+
 
   // Disable Task Watchdog Timer
   // esp_task_wdt_deinit(); // Deinitializes the task watchdog timer
@@ -76,21 +78,21 @@ void setup()
   setupDAC();
   // SetupOVP();  // Create OVP/OCP protection
 
-  
   setupCalibPage();
   createTasks();
   initialMemory();
-  
 
   Serial.printf("\nSetup() run on core: #%i \n\n", xPortGetCoreID());
-  
+
   myTone(NOTE_A5, 200, true);
   myTone(NOTE_A3, 200, true);
-  
+
   // pixels.begin();
   // pixels.setPixelColor(0, pixels.Color(0, 0, 0));
   // pixels.show();
-  ADC_INL_Voltage_calibration_cb(nullptr);
+  // ADC_INL_Voltage_calibration_cb(nullptr);
+
+
 }
 
 void loop()

@@ -16,7 +16,7 @@ LVButton::LVButton(lv_obj_t *parent,
     lv_obj_set_pos(btn_, x, y);
     lv_obj_set_size(btn_, w, h);
     lv_obj_align_to(btn_, parent, LV_ALIGN_DEFAULT, x, y);
-    
+
     pos_x = x;
     pos_y = y;
     width = w;
@@ -26,6 +26,54 @@ LVButton::LVButton(lv_obj_t *parent,
         lv_obj_add_style(btn_, style, LV_PART_MAIN);
     if (callback)
         lv_obj_add_event_cb(btn_, callback, LV_EVENT_RELEASED, nullptr);
+}
+
+LVLabel_class::LVLabel_class(lv_obj_t *parent,
+                             const char *labelText,
+                             const lv_obj_t *base,
+                             lv_coord_t x_ofs,
+                             lv_coord_t y_ofs,
+                             lv_style_t *style)
+{
+    label = lv_label_create(parent);
+    lv_obj_remove_style_all(label);
+    lv_label_set_recolor(label, true);
+    lv_label_set_text(label, labelText ? labelText : "");
+
+    if (base)
+        lv_obj_align_to(label, base, LV_ALIGN_OUT_BOTTOM_LEFT, x_ofs, y_ofs);
+
+    if (style)
+        lv_obj_add_style(label, style, LV_PART_MAIN);
+}
+
+void LVLabel_class::set_text(const char *text)
+{
+    if (label)
+        lv_label_set_text(label, text);
+}
+
+
+
+
+
+void LVLabel_class::set_color(lv_color_t color)
+{
+    if (label)
+        lv_obj_set_style_text_color(label, color, LV_PART_MAIN);
+}
+
+void LVLabel_class::align(lv_align_t align, lv_coord_t x_ofs, lv_coord_t y_ofs)
+{
+    if (label)
+        lv_obj_align(label, align, x_ofs, y_ofs);
+}
+
+void LVLabel_class::align_to(lv_align_t align, LVLabel_class base, lv_coord_t x_ofs, lv_coord_t y_ofs)
+{
+    if (label)
+        lv_obj_align(label, align, x_ofs, y_ofs);
+    lv_obj_align_to(label, base.get_lv_obj(), align, x_ofs, y_ofs);
 }
 
 lv_obj_t *LVLabel::create(lv_obj_t *parent, const char *labelText, const lv_obj_t *base,
@@ -41,6 +89,12 @@ lv_obj_t *LVLabel::create(lv_obj_t *parent, const char *labelText, const lv_obj_
     if (style)
         lv_obj_add_style(label, style, LV_PART_MAIN);
     return label;
+}
+
+void LVLabel::set_text(lv_obj_t *lbl, const char *text)
+{
+    if (lbl)
+        lv_label_set_text(lbl, text);
 }
 
 lv_obj_t *LVLine2::create(lv_obj_t *parent,

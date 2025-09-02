@@ -117,3 +117,50 @@ void table_draw_cell_event_cb2(lv_event_t *e)
     }
 }
  
+
+void table_autofit_columns(lv_obj_t *table)
+{
+    lv_obj_update_layout(table); // ensure styles computed
+
+    const uint16_t rows = lv_table_get_row_cnt(table);
+    const uint16_t cols = lv_table_get_col_cnt(table);
+
+    const lv_font_t *font = lv_obj_get_style_text_font(table, LV_PART_ITEMS);
+    lv_coord_t lsp = lv_obj_get_style_text_letter_space(table, LV_PART_ITEMS);
+    lv_coord_t lsp_line = lv_obj_get_style_text_line_space(table, LV_PART_ITEMS);
+    lv_coord_t pad_l = lv_obj_get_style_pad_left(table, LV_PART_ITEMS);
+    lv_coord_t pad_r = lv_obj_get_style_pad_right(table, LV_PART_ITEMS);
+
+    lv_coord_t total_w = 0;
+
+    for (uint16_t c = 0; c < cols; ++c)
+    {
+        lv_coord_t w_max = 0;
+
+        for (uint16_t r = 0; r < rows; ++r)
+        {
+            const char *txt = lv_table_get_cell_value(table, r, c);
+            if (!txt)
+                txt = "";
+
+            lv_point_t sz;
+            // single-line measurement; no wrapping
+            lv_txt_get_size(&sz, txt, font, lsp, lsp_line, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+
+            lv_coord_t w = sz.x + pad_l + pad_r;
+            if (w > w_max)
+                w_max = w;
+        }
+
+        // (optional) add a tiny margin so text isn't tight
+        w_max += 4;
+
+        lv_table_set_col_width(table, c, w_max);
+        total_w += w_max;
+    }
+
+    // Make the table as wide as needed (enable horizontal scroll if it overflows parent)
+    lv_obj_set_width(table, total_w);
+    lv_obj_set_scroll_dir(table, LV_DIR_VER | LV_DIR_HOR); // allow horizontal if needed
+    lv_obj_invalidate(table);
+}

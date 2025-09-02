@@ -308,6 +308,11 @@ void setupPowerSupply()
 
     // btn_calibration_ADC_voltage_event_cb(NULL);
     // btn_calibration_ADC_current_event_cb(NULL);
+
+        // g_voltINL.setPoints(CalBank[bankCalibId].adc_inl_measure, CalBank[bankCalibId].adc_inl_ideal);
+    // g_voltINL.build();
+    // g_voltINL_ready = true;
+    // g_voltINL.printKnotTable();
 }
 
 // Setup the calibration page

@@ -85,6 +85,23 @@ struct SettingParameters
     bool buzzer = false;
     bool isPowerSupplyOn = true;
 };
+
+class LVLabel_class; // Forward declaration
+struct Inl_window
+{
+    lv_obj_t *win{};
+    lv_obj_t *chbx_inl_activate{};
+    LVLabel_class *lbl_inl_state{};
+    LVLabel_class *lbl_bar_progress{};
+    lv_obj_t *bar_progress{};
+    lv_obj_t *rb_dmm{};
+    lv_obj_t *rb_dac{};
+    lv_obj_t *btn_idl_activation{};
+    lv_obj_t *settle_time{};
+
+    lv_obj_t *table{};
+};
+
 struct Calibration_gui
 {
     lv_obj_t *win_ADC_voltage_calibration = nullptr;
@@ -92,6 +109,8 @@ struct Calibration_gui
     lv_obj_t *win_int_current_calibration = nullptr;
     lv_obj_t *win_ADC_INL_Voltage_calibration = nullptr;
     lv_obj_t *win_DAC_calibration = nullptr;
+
+    Inl_window inl;
 };
 
 struct GUI
@@ -254,13 +273,17 @@ public:
     calibPoints vCal;
     calibPoints iCal;
     double internalResistor; // 1/40kOhm /volt
+    double adc_inl_measure[36];
+    double adc_inl_ideal[36];
     Calibration(
         String t_macAdd,
         calibPoints t_vcalib,
         calibPoints t_icalib,
         double icpv) : macAdd(t_macAdd),
                        vCal(t_vcalib),
-                       iCal(t_icalib), internalResistor(icpv)
+                       iCal(t_icalib), internalResistor(icpv),
+                       adc_inl_measure{-.001, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,32,32.75}, // ✅ initialize vector here
+                       adc_inl_ideal{-.001,0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,32,32.75}    // ✅ initialize vector here
     {
     }
 
@@ -473,5 +496,4 @@ public:
             *p++ = EEPROM.read(ee++);
         return i;
     }
-
 };
