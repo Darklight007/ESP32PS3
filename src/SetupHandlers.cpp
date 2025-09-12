@@ -21,9 +21,9 @@
 // - High-speed mode (Hs-mode) is not supported
 
 // **I2C Clock Rate Definitions**
-#define I2C_CLKRATE_400K 400000UL  // Speed of I2C bus 400 KHz
-#define I2C_CLKRATE_1M 1000000UL   // Speed of I2C bus 1 MHz
-#define I2C_CLKRATE_1_7M 1700000UL // Speed of I2C bus 1.7 MHz
+#define I2C_CLKRATE_400K 400'000UL   // Speed of I2C bus 400 KHz
+#define I2C_CLKRATE_1M 1'000'000UL   // Speed of I2C bus 1 MHz
+#define I2C_CLKRATE_1_7M 1'700'000UL // Speed of I2C bus 1.7 MHz
 
 // **Global Variables and External Declarations**
 extern bool wireConnected;  // Flag indicating if device is connected on Wire
@@ -74,7 +74,7 @@ void initializeI2C()
     // Initialize I2C buses with appropriate clock rates
     Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_1_7M); // For ADS1219 (supports up to 1 Mbps)
     Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_1_7M);  // For other devices (supports up to 1.7 Mbps)
-    delay(100);                                          // Wait for I2C buses to stabilize
+    // delay(100);                                          // Wait for I2C buses to stabilize
     // Scan the default I2C bus (Wire)
     wireConnected = scanI2CBus(Wire, 0x20);
 
@@ -189,13 +189,18 @@ void setupPowerSupply()
 #define LV_EVENT_REFR_EXT_DRAW_SIZE
 
     // Setup code for power supply
-    pinMode(PowerSupply.CCCVPin, INPUT); // Configure CCCV pin as input
-    // pinMode(PowerSupply.CCCVPin, INPUT_PULLUP);  // Alternative configuration
 
     // Initialize the power supply display and pages
     PowerSupply.setupDisplay(lv_scr_act());
     PowerSupply.setupPages("Stats", "Graph", "Main", "Utility", "Setting");
     PowerSupply.setPagesCallback(updateObjectPos_cb);
+
+    pinMode(PowerSupply.CCCVPin, INPUT); // Configure CCCV pin as input
+
+    pinMode(PowerSupply.AuA_Pin, OUTPUT);
+    digitalWrite(PowerSupply.AuA_Pin, LOW);
+
+    // pinMode(PowerSupply.CCCVPin, INPUT_PULLUP);  // Alternative configuration
 
     // Setup on/off touch switch on page 3
     PowerSupply.setupSwitch(PowerSupply.page[2], 0, 240, 160, btn_event_cb);
@@ -204,12 +209,12 @@ void setupPowerSupply()
     PowerSupply.dac_data = PowerSupply.LoadDACdata("dac_data_");
     delay(500);
     PowerSupply.Voltage.adjOffset = PowerSupply.dac_data.zero_voltage;
-    PowerSupply.Voltage.minValue = (-PowerSupply.dac_data.zero_voltage);                         // 2000.0;
+    PowerSupply.Voltage.minValue = (-PowerSupply.dac_data.zero_voltage);                                   // 2000.0;
     PowerSupply.Voltage.maxValue = (PowerSupply.dac_data.max_voltage - PowerSupply.dac_data.zero_voltage); // 2000.0;
     PowerSupply.Voltage.adc_maxValue = 32.768;
 
     PowerSupply.Current.adjOffset = PowerSupply.dac_data.zero_current;
-    PowerSupply.Current.minValue = (-PowerSupply.dac_data.zero_current);                         // 10000.0;
+    PowerSupply.Current.minValue = (-PowerSupply.dac_data.zero_current);                                   // 10000.0;
     PowerSupply.Current.maxValue = (PowerSupply.dac_data.max_current - PowerSupply.dac_data.zero_current); // 10000.0;
     PowerSupply.Current.adc_maxValue = 6.5536;
 
@@ -233,7 +238,6 @@ void setupPowerSupply()
     PowerSupply.Power.effectiveResolution.SetWindowSize(1);
 
     // Setup current parameters
-
     PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", PowerSupply.Current.maxValue, PowerSupply.Current.minValue,
                               1.0, PowerSupply.dac_data.zero_current, 10000);
 
@@ -287,6 +291,7 @@ void setupPowerSupply()
 
     PowerSupply.Voltage.SetUpdate(PowerSupply.Voltage.adjValue);
     PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue);
+
     // MemArray mem;
     // for (int i = 0; i < 20; ++i)
     // {
@@ -309,7 +314,7 @@ void setupPowerSupply()
     // btn_calibration_ADC_voltage_event_cb(NULL);
     // btn_calibration_ADC_current_event_cb(NULL);
 
-        // g_voltINL.setPoints(CalBank[bankCalibId].adc_inl_measure, CalBank[bankCalibId].adc_inl_ideal);
+    // g_voltINL.setPoints(CalBank[bankCalibId].adc_inl_measure, CalBank[bankCalibId].adc_inl_ideal);
     // g_voltINL.build();
     // g_voltINL_ready = true;
     // g_voltINL.printKnotTable();
@@ -343,7 +348,8 @@ void setupADC()
     // Bank of calibration data for different devices based on MAC address
     PowerSupply.CalBank = {
         {"7C:9E:BD:4D:C7:08", {0.005000, 121, 32.7503, 3353431}, {0.0000, 124955, 3.000, 1746856} // v1.6
-    ,40'000.0} // Internal current consumption in Amperes;
+         ,
+         40'000.0} // Internal current consumption in Amperes;
     };
 
     // Setup ADC with READY pin number, ISR function, and I2C bus

@@ -1289,7 +1289,7 @@ void initBuckets(TFT_eSPI &tft)
 
 void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *series)
 {
-    if (!chart || !series)
+    if (!chart || !series || lv_obj_is_visible(chart) == false || Tabs::getCurrentPage() != 3) // || lv_tabview_get_tab_act(tabview_utility) !=3)
         return;
 
     if (y > 30 && y < 190 && x > 5)
@@ -2810,12 +2810,16 @@ void keyCheckLoop()
 
     );
 
-    keyMenus('T', " RELEASED.", [&]
-             {
-                 //  lv_obj_del_async(Utility);
-                 //  lv_obj_del(Utility);
-                 //   hackerUtilityObj = NULL;
-             });
+    keyMenusPage('T', " RELEASED.", 2, [&]
+                 {
+                     myTone(NOTE_A4, 50, false);
+                     Serial.println("\nToggle Amp measurement");
+
+                     digitalWrite(PowerSupply.AuA_Pin, digitalRead(PowerSupply.AuA_Pin) ^ 1); // Toggle the pin state
+                     //  lv_obj_del_async(Utility);
+                     //  lv_obj_del(Utility);
+                     //   hackerUtilityObj = NULL;
+                 });
     keyMenusPage('-', " RELEASED.", 0, [&]
                  {
                      int32_t newEncoder1Value = encoder1_value +1;

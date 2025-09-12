@@ -92,7 +92,7 @@ void Device::calibrationUpdate(void)
     Voltage.hist.Reset();
     // SaveCalibrationData();
     // for (int i = 0; i < 35; i++)
-        // Serial.printf("\nMeasuere:%+09.5f Ideal:%+07.3f", CalBank[bankCalibId].adc_inl_measure[i], CalBank[bankCalibId].adc_inl_ideal[i]); // g_voltINL.printKnotTable();
+    // Serial.printf("\nMeasuere:%+09.5f Ideal:%+07.3f", CalBank[bankCalibId].adc_inl_measure[i], CalBank[bankCalibId].adc_inl_ideal[i]); // g_voltINL.printKnotTable();
 
     std::vector<double> X(CalBank[bankCalibId].adc_inl_measure, CalBank[bankCalibId].adc_inl_measure + 35); // ideal volts (Mean)
     std::vector<double> Y(CalBank[bankCalibId].adc_inl_ideal, CalBank[bankCalibId].adc_inl_ideal + 35);     // true volts (set)
@@ -439,6 +439,19 @@ void Device::readVoltage()
                                     ))
 
     {
+
+
+        // static int throw_away = 0;
+        // if (throw_away < 2)
+        // {
+        //     throw_away++;
+        //     adcDataReady = false;
+        //     adc.startConversion(VOLTAGE, REF_EXTERNAL);
+        //     return;
+        // } // throw away first 2 readings after changing rate
+        // throw_away = 0;
+
+
         constexpr float adcRateCompensation[4] = {
             1.00000f,            // 20 SPS
             32.0000f / 31.9985f, // 90 SPS
@@ -450,7 +463,7 @@ void Device::readVoltage()
         Voltage.rawValue = adc.readConversion();
         adcDataReady = false;
         adc.ads1219->setGain(ONE); // Gain 1 or 4 for Current
-
+        // adc.ads1219->setDataRate(1000); //settingParameters.adcRate
         adc.startConversion(CURRENT, REF_EXTERNAL); // REF_EXTERNAL
 
         double v_ideal = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
@@ -484,6 +497,19 @@ void Device::readCurrent()
 {
     if ((adcDataReady || false) && (adc.busyChannel == CURRENT) /* && ads.checkDataReady() */)
     {
+
+        // static int throw_away = 0;
+        // if (throw_away < 2)
+        // {
+        //     throw_away++;
+        //     adcDataReady = false;
+        //     // if (throw_away == 1)
+        //         // adc.ads1219->setDataRate(settingParameters.adcRate); //
+        //     adc.startConversion(CURRENT, REF_EXTERNAL);
+        //     return;
+        // } // throw away first 2 readings after changing rate
+        // throw_away = 0;
+
         static double c;
         Current.rawValue = adc.readConversion();
         adcDataReady = false;
@@ -500,7 +526,7 @@ void Device::readCurrent()
         c = (((Current.rawValue - Current.calib_b) * Current.calib_1m) - currentOfInternalRes); // old value: .0009
         // c=c+c*0.00009901;
 
-        // Current.hist[c];
+        // Current.hist[c]; 
 
         Current.measureUpdate(c);
         *Current.Bar.curValuePtr = c / (Current.maxValue / Current.adjFactor) * lv_bar_get_max_value(Current.Bar.bar); // uint16_t(v * 8);
@@ -516,11 +542,11 @@ void Device::readCurrent()
         // *Current.Bar.curValuePtr = c * Current.Bar.scaleFactor;
         // lv_obj_invalidate(Current.Bar.bar);
 
-        // Serial.printf("\n\r%9.6f %9.6f %5.2f %i",
-        //               c,
-        //               Current.Statistics.Mean(),
-        //               Current.effectiveResolution.Mean(),
-        //               Current.Statistics.windowSizeIndex_ % Current.Statistics.NofAvgs);
+        Serial.printf("\n\r%9.6f %9.6f %5.2f %i",
+                      c,
+                      Current.Statistics.Mean(),
+                      Current.effectiveResolution.Mean(),
+                      Current.Statistics.windowSizeIndex_ % Current.Statistics.NofAvgs);
 
         static unsigned long loopCount = 0;
         static unsigned long startTime = millis();
@@ -590,13 +616,14 @@ void Device::VCCCStatusUpdate(void)
 {
 
     static int last_status = false;
-    if (last_status == digitalRead(CCCVPin) || getStatus() == DEVICE::FUN)
+    if (last_status == digitalRead(CCCVPin) || getStatus() == DEVICE::OFF || getStatus() == DEVICE::FUN)
         return;
 
     if (digitalRead(CCCVPin) == false)
         setStatus(DEVICE::CC);
     else if (getStatus() != DEVICE::OFF && digitalRead(CCCVPin) == true)
         setStatus(DEVICE::VC);
+
     last_status = digitalRead(CCCVPin);
 }
 

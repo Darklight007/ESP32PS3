@@ -273,6 +273,7 @@ public:
     calibPoints vCal;
     calibPoints iCal;
     double internalResistor; // 1/40kOhm /volt
+    // double currentSense_offset; // 1/40kOhm /volt
     double adc_inl_measure[36];
     double adc_inl_ideal[36];
     Calibration(
@@ -396,6 +397,7 @@ public:
     Graph_ graph;
     Stats_ stats;
     const byte CCCVPin = 12;
+    const byte AuA_Pin = 13;
 
     SettingParameters settingParameters;
     GUI gui;

@@ -47,7 +47,8 @@ static void dbg_printf(const char *fmt, ...)
 }
 
 // ---------- public objects (one definition) ----------
-extern bool lvglChartIsBusy;
+// extern bool lvglChartIsBusy;
+extern bool lvglIsBusy;
 // Global (or static) residual spline
 
 setting_GUI Calib_GUI{};
@@ -805,7 +806,10 @@ static void start_current_totalR()
          { c->v0 = PowerSupply.Current.Statistics.Mean(); }},
         {"Setting voltage to 32V", 1500, 500,
          []()
-         { PowerSupply.Voltage.SetUpdate((32.0 * PowerSupply.Voltage.adjFactor) + PowerSupply.Voltage.adjOffset); }, nullptr},
+         {
+             PowerSupply.Voltage.SetUpdate(32.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+         },
+         nullptr},
         {"Reset statistics", 1500, 1500,
          []()
          { PowerSupply.Current.Statistics.ResetStats(); }, nullptr},
@@ -822,12 +826,14 @@ static void start_current_totalR()
          {
              log_step("           i0 = %+1.6f", c->v0);
              log_step("           i1 = %+1.6f", c->v1);
-             float Rtot = 32.0f / (c->v1 - c->v0) / 1000.0f;
+             double Rtot = 32.0f / (c->v1 - c->v0) / 1000.0f;
              log_step("Measured Res: %4.3fk", Rtot);
+
              lv_spinbox_set_value(Calib_GUI.internalResistor, 1000.0f * Rtot);
              PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = Rtot;
              PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
              lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
+
              lv_timer_set_repeat_count(close_t, 1);
              lv_mem_free(c);
          }},
@@ -924,7 +930,7 @@ void log_step_done()
         return;
 
     const char tail[] = " ...\n";
-    const size_t tail_len = sizeof(tail) - 1;
+     const size_t tail_len = sizeof(tail) - 1;
 
     if (s_len >= tail_len && std::memcmp(s_logbuf + s_len - tail_len, tail, tail_len) == 0)
     {
@@ -947,16 +953,20 @@ void log_step_done()
 
 void log_step(const char *fmt, ...)
 {
+     if (!lvglIsBusy){
     char buf[256];
     va_list args;
     va_start(args, fmt);
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
+    
     const char *old = lv_label_get_text(log_label);
     static char new_txt[1024];
     snprintf(new_txt, sizeof(new_txt), "%s%s\n", old, buf);
+
     lv_label_set_text(log_label, new_txt);
     lv_obj_scroll_to_view(log_label, LV_ANIM_OFF);
+     }
 }
 
 void log_clear()
@@ -1024,9 +1034,10 @@ void Warning_msgbox(const char *title, lv_event_cb_t event_cb)
     // Style for red background + white text
     static lv_style_t style_warn;
     static bool inited = false;
-    if (!inited) {
+    if (!inited)
+    {
         lv_style_init(&style_warn);
-        lv_style_set_bg_color(&style_warn, lv_color_hex(0xFF0000));  // red background
+        lv_style_set_bg_color(&style_warn, lv_color_hex(0xFF0000)); // red background
         lv_style_set_bg_opa(&style_warn, LV_OPA_COVER);
         lv_style_set_text_color(&style_warn, lv_color_hex(0xFFFFFF)); // white text
         inited = true;
@@ -1181,38 +1192,45 @@ static inline uint32_t since(uint32_t t) { return lv_tick_elaps(t); }
 uint16_t last_adjValue;
 void inl_gui_prepare()
 {
+ if (!lvglIsBusy){
     last_adjValue = PowerSupply.Voltage.adjValue;
     // Set start (0V)
     PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
     PowerSupply.gui.calibration.inl.lbl_inl_state->set_text("#FFFF00 Running");
+ }
 }
 
 void inl_gui_set(double v_cmd)
 {
+    
     table_set_selected_row(table_inl, inl.i + 1);
     PowerSupply.Voltage.SetUpdate(v_cmd * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
     PowerSupply.Voltage.measured.ResetStats();
     lv_bar_set_value(PowerSupply.gui.calibration.inl.bar_progress, inl.i, LV_ANIM_OFF);
     // lv_label_set_text_fmt(PowerSupply.gui.calibration.inl.lbl_bar_progress->get_lv_obj, "Progress: %i%%", inl.i * 100 / NPTS);
     PowerSupply.gui.calibration.inl.lbl_bar_progress->set_text_fmt("Progress: %i%%", inl.i * 100 / NPTS);
+    
 }
 
 void inl_gui_measure(double measure, double v_cmd)
 {
-    
+ if (!lvglIsBusy){
     lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 1, "%+08.4f", inl.y_true[inl.i]);
     lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 2, "%+09.5f", measure);
     lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 3, "%+02.2f", (measure - v_cmd) * 30518.043793393); // 10^6/33.7675
+ }
 }
 
 void inl_gui_compute()
 {
+     if (!lvglIsBusy){
     PowerSupply.gui.calibration.inl.lbl_inl_state->set_text("#FFFF00 Done");
     PowerSupply.gui.calibration.inl.lbl_bar_progress->set_text_fmt("Progress: 100%%");
 
     lv_bar_set_value(PowerSupply.gui.calibration.inl.bar_progress, NPTS, LV_ANIM_OFF);
     table_set_selected_row(table_inl, 1);
     PowerSupply.Voltage.SetUpdate(last_adjValue);
+     }
 }
 
 static void INL_timer_cb(lv_timer_t *)
@@ -1239,8 +1257,8 @@ static void INL_timer_cb(lv_timer_t *)
     {
         double v_cmd = TRUE_IDEAL[inl.i]; // TRUE (setpoint) volts
 
-        if (v_cmd > 32.0)                         // Set the max
-            v_cmd = PowerSupply.Voltage.maxValue*.0005; // Maxvolate
+        if (v_cmd > 32.0)                                 // Set the max
+            v_cmd = PowerSupply.Voltage.maxValue * .0005; // Maxvolate
         // v_cmd = 32.7675 - PowerSupply.dac_data.zero_voltage * .0005; // se t to max of range
 
         INL_dbg("[INL] SET     i=%d  v_cmd=%.3f", inl.i, v_cmd);
