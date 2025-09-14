@@ -219,9 +219,8 @@ void setupPowerSupply()
     PowerSupply.Current.adc_maxValue = 6.5536;
 
     // Setup voltage, current, and power parameters for page 3
-    PowerSupply.Voltage.setup(PowerSupply.page[2], "V-Set:", -14, -8, "V",
-                              PowerSupply.Voltage.maxValue, PowerSupply.Voltage.minValue,
-                              5.0, PowerSupply.dac_data.zero_voltage, 2000);
+    PowerSupply.Voltage.setup(PowerSupply.page[2], "V-Set:", -14, -8, "V",PowerSupply.Voltage.maxValue, PowerSupply.Voltage.minValue,
+                              5.0, PowerSupply.dac_data.zero_voltage, 2000,"");
 
     // Set window sizes for measurements and statistics
     PowerSupply.Voltage.measured.SetWindowSize(MAX_NO_OF_AVG);
@@ -239,10 +238,10 @@ void setupPowerSupply()
 
     // Setup current parameters
     PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", PowerSupply.Current.maxValue, PowerSupply.Current.minValue,
-                              1.0, PowerSupply.dac_data.zero_current, 10000);
+                              1.0, PowerSupply.dac_data.zero_current, 10000,"m");
 
     // Setup power display parameters
-    PowerSupply.Power.setup(PowerSupply.page[2], "", -14, 144, "W", 0, 0, 0, 0, 0, &dseg_b_24, &Tauri_R_28);
+    PowerSupply.Power.setup(PowerSupply.page[2], "", -14, 144, "W", 0, 0, 0, 0, 0,"", &dseg_b_24, &Tauri_R_28);
 
     Serial.println("Power Supply Setup Completed.");
 

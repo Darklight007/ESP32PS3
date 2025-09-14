@@ -38,7 +38,8 @@ static void ensure_styles_once(const lv_font_t *font=nullptr)
     lv_style_set_text_color(&s_style_spinbox, lv_color_hex(0xFFFF00));
 
     lv_style_init(&s_style_spinbox_lbl);
-    lv_style_set_text_font(&s_style_spinbox_lbl, &lv_font_montserrat_12);
+    // lv_style_set_text_font(&s_style_spinbox_lbl, &lv_font_montserrat_12);   //lv_style_set_text_font(&style_si_prefix, &DejaVuSans_R_24);
+    lv_style_set_text_font(&s_style_spinbox_lbl, &montserrat_b_12); // custom font with Greek chars
     lv_style_set_bg_color(&s_style_spinbox_lbl, lv_color_hex(0xFF0000));
 }
 

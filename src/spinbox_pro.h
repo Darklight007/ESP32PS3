@@ -1,7 +1,7 @@
 #pragma once
 #include <lvgl.h>
 #include <stdint.h>
-
+#include "myFonts.h"
 #ifdef __cplusplus
 extern "C"
 {

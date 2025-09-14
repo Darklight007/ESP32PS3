@@ -1117,7 +1117,7 @@ void internal_current_calibration_cb(lv_event_t *)
     int xPos = 10, xOffset = 10, yPos = 25, yOffset = 25;
 
     // int_total_res
-    Calib_GUI.internalResistor = spinbox_pro(cont, "#FFFFF7 Total Internal Resistor (kohm):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 150, 21, &graph_R_16);
+    Calib_GUI.internalResistor = spinbox_pro(cont, "#FFFFF7 Total Internal Resistor (kΩ):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 150, 21, &graph_R_16);
 
     PowerSupply.LoadCalibrationData();
     // lv_spinbox_set_value(intRes, 40'000.123*1000.0);

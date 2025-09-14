@@ -2813,13 +2813,18 @@ void keyCheckLoop()
     keyMenusPage('T', " RELEASED.", 2, [&]
                  {
                      myTone(NOTE_A4, 50, false);
-                     Serial.println("\nToggle Amp measurement");
+                     Serial.println("\nToggle A/mA measurement");
 
                      digitalWrite(PowerSupply.AuA_Pin, digitalRead(PowerSupply.AuA_Pin) ^ 1); // Toggle the pin state
-                     //  lv_obj_del_async(Utility);
-                     //  lv_obj_del(Utility);
-                     //   hackerUtilityObj = NULL;
+
+                     if (digitalRead(PowerSupply.AuA_Pin))
+                         lv_obj_clear_flag(PowerSupply.Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
+                     else
+                         lv_obj_add_flag(PowerSupply.Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
+
                  });
+
+
     keyMenusPage('-', " RELEASED.", 0, [&]
                  {
                      int32_t newEncoder1Value = encoder1_value +1;

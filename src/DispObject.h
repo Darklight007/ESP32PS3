@@ -349,7 +349,7 @@ public:
     double Mean() const
     {
         // size_t currentSize = std::min(windowSizeIndex_, static_cast<uint64_t>(NofAvgs));
-            return sum_ / std::max(uint64_t(1), std::min(windowSizeIndex_, uint64_t(NofAvgs)));
+        return sum_ / std::max(uint64_t(1), std::min(windowSizeIndex_, uint64_t(NofAvgs)));
     }
 
     // Get the sum of the samples
@@ -579,6 +579,7 @@ class DispObjects
 private:
 public:
     lv_obj_t *label_set;
+    lv_obj_t *label_si_prefix;
     lv_obj_t *label_setValue;
     lv_obj_t *label_measureValue;
     lv_obj_t *label_unit;
@@ -600,8 +601,7 @@ public:
     double calib_m;
     double calib_1m;
     double calib_b;
-    double internalResistance = (80e3*80e3)/(80e3+80e3);  // 40kOhm
-    
+    double internalResistance = (80e3 * 80e3) / (80e3 + 80e3); // 40kOhm
 
     double maxValue;
     double dac_maxValue;
@@ -628,6 +628,7 @@ public:
 
     lv_style_t style_measure;
     lv_style_t style_unit;
+    lv_style_t style_si_prefix;
     lv_style_t style_deviceColor;
     lv_style_t stat_style1;
     lv_style_t stat_style2;
@@ -663,7 +664,7 @@ public:
     void setMeasureColor(lv_color_t color);
     void setStatsColor(lv_color_t color);
     void setup(lv_obj_t *parent, const char *_text, int x, int y, const char *_unit, double maxValue_, double minValue_, double mTick,
-               double offset, double factor, const lv_font_t *font_measure = &dseg_b_48, const lv_font_t *font_unit = &Tauri_R_62);
+               double offset, double factor, const char *si_prefix, const lv_font_t *font_measure = &dseg_b_48, const lv_font_t *font_unit = &Tauri_R_62);
     // const lv_font_t *font_measure, const lv_font_t *font_unit);
     void SetupStyles();
 };

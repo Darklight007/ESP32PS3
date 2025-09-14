@@ -89,19 +89,19 @@ void DispObjects::barUpdate(void)
 
     if (Bar.changed)
     {
-        lv_bar_set_value(Bar.bar, measured.value / (maxValue/adjFactor) * lv_bar_get_max_value(Bar.bar), LV_ANIM_OFF);
+        lv_bar_set_value(Bar.bar, measured.value / (maxValue / adjFactor) * lv_bar_get_max_value(Bar.bar), LV_ANIM_OFF);
         lv_obj_invalidate(Bar.bar);
         static double oldMaxValue{0};
         if (measured.absMax != oldMaxValue)
         {
-            lv_obj_set_x(Bar.bar_maxMarker, lv_obj_get_x(Bar.bar) + int(measured.absMax * lv_obj_get_width(Bar.bar) / (maxValue/adjFactor)) - 3);
+            lv_obj_set_x(Bar.bar_maxMarker, lv_obj_get_x(Bar.bar) + int(measured.absMax * lv_obj_get_width(Bar.bar) / (maxValue / adjFactor)) - 3);
             oldMaxValue = measured.absMax;
         }
 
         static double oldMinValue{0};
         if (measured.absMin != oldMinValue)
         {
-            lv_obj_set_x(Bar.bar_minMarker, lv_obj_get_x(Bar.bar) + int(measured.absMin * lv_obj_get_width(Bar.bar) / (maxValue/adjFactor)) - 3);
+            lv_obj_set_x(Bar.bar_minMarker, lv_obj_get_x(Bar.bar) + int(measured.absMin * lv_obj_get_width(Bar.bar) / (maxValue / adjFactor)) - 3);
             oldMinValue = measured.absMin;
         }
         // lv_obj_set_width(Bar.bar_adjValue, ((adjValue-adjOffset) ) / maxValue * lv_bar_get_max_value(Bar.bar));
@@ -133,7 +133,7 @@ void DispObjects::SetUpdate(int value)
 {
     // value-= adjOffset;
     // if (lock || value / adjFactor < minValue || value / adjFactor > maxValue)
-    if (lock || (value)  < 0 || (value-adjOffset) > maxValue)
+    if (lock || (value) < 0 || (value - adjOffset) > maxValue)
     {
         myTone(NOTE_A5, 50);
         return;
@@ -153,8 +153,8 @@ void DispObjects::SetUpdate(int value)
     // LV_LOG_USER("LOG: %s", "Beep!");
     // lv_disp_enable_invalidation( lv_disp_get_default(), false);
     // if (!lvglIsBusy)
-    lv_label_set_text_fmt(label_setValue, "%+08.4f%s", (adjValue-adjOffset) / adjFactor, lv_label_get_text(label_unit));
-    lv_obj_set_width(Bar.bar_adjValue, ((adjValue-adjOffset) ) / maxValue * lv_bar_get_max_value(Bar.bar));
+    lv_label_set_text_fmt(label_setValue, "%+08.4f%s", (adjValue - adjOffset) / adjFactor, lv_label_get_text(label_unit));
+    lv_obj_set_width(Bar.bar_adjValue, ((adjValue - adjOffset)) / maxValue * lv_bar_get_max_value(Bar.bar));
     // lv_obj_invalidate(label_setValue);
 
     // Serial.printf("\nmaxValue %15.5f  ",maxValue);
@@ -237,6 +237,11 @@ void DispObjects::setMeasureColor(lv_color_t color)
     lv_obj_remove_style(label_unit, &style_deviceColor, LV_STATE_DEFAULT);
     lv_obj_add_style(label_unit, &style_deviceColor, LV_STATE_DEFAULT);
 
+    lv_obj_remove_style(label_si_prefix, &style_deviceColor, LV_STATE_DEFAULT);
+    lv_obj_add_style(label_si_prefix, &style_deviceColor, LV_STATE_DEFAULT);
+
+
+
     lv_style_set_bg_color(&style_deviceColor, color);
     lv_obj_remove_style(Bar.bar, &style_deviceColor, LV_PART_INDICATOR);
     lv_obj_add_style(Bar.bar, &style_deviceColor, LV_PART_INDICATOR);
@@ -297,7 +302,7 @@ void DispObjects::SetupStyles()
 }
 
 void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const char *_unit, double maxValue_, double minValue_, double mTick,
-                        double offset_, double factor_,
+                        double offset_, double factor_,const char * si_prefix,
                         const lv_font_t *font_measure, const lv_font_t *font_unit)
 {
     maxValue = maxValue_;
@@ -446,6 +451,24 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     lv_obj_add_style(label_unit, &style_unit, LV_STATE_DEFAULT);
 
     /******************************
+     **   SI_Prefix
+     ******************************/
+    label_si_prefix = lv_label_create(parent);
+    lv_obj_remove_style_all(label_si_prefix);
+    lv_label_set_text(label_si_prefix, si_prefix); // µΩm
+    lv_obj_align(label_si_prefix, LV_ALIGN_DEFAULT, x + 269-15, y + 3);
+
+    lv_style_init(&style_si_prefix);
+    lv_style_set_text_letter_space(&style_si_prefix, 0);
+    lv_style_set_text_color(&style_si_prefix, measureColor);
+    lv_style_set_text_font(&style_si_prefix, &DejaVuSans_R_24);
+    lv_obj_remove_style(label_si_prefix, &style_si_prefix, LV_STATE_DEFAULT);
+    lv_obj_add_style(label_si_prefix, &style_si_prefix, LV_STATE_DEFAULT);
+
+    lv_obj_add_flag(label_si_prefix, LV_OBJ_FLAG_HIDDEN);
+
+
+    /******************************
      **   Bar
      ******************************/
     auto barLength = 290.0;
@@ -508,7 +531,7 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     lv_obj_t *lineMj[7];
     lv_obj_t *lineMn[32];
 
-    double tickDist = barLength / floor(maxValue/adjFactor * 5.0 / mTick);
+    double tickDist = barLength / floor(maxValue / adjFactor * 5.0 / mTick);
 
     for (auto i = 0; i < 7; i++)
     {
@@ -540,7 +563,7 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     lv_obj_add_style(Bar.bar_maxValue, &style_barMaxValue, LV_STATE_DEFAULT);
     lv_obj_align(Bar.bar_maxValue, LV_ALIGN_DEFAULT, x + barLength + 26, 70 - 2);
     // voltageScaleFactor
-    Bar.scaleFactor = lv_bar_get_max_value(Bar.bar) / (maxValue/adjFactor)*.5;
+    Bar.scaleFactor = lv_bar_get_max_value(Bar.bar) / (maxValue / adjFactor) * .5;
     Bar.curValuePtr = &((lv_bar_t *)Bar.bar)->cur_value;
 
     //  int32_t *curValuePtr = &((lv_bar_t *)PowerSupply.Voltage.Bar.bar)->cur_value;
