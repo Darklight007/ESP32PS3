@@ -593,6 +593,8 @@ public:
     MovingStatistics measured;
     MovingStatistics Statistics;
     MovingStatistics effectiveResolution;
+    
+    MovingStatistics rawValueStats;
     //  MovingStats measuredRaw;
 
     Histogram hist;
@@ -650,6 +652,7 @@ public:
     void measureUpdate(double value);
     void StatisticsUpdate(double value);
     void displayUpdate(void);
+    void displayUpdate(bool update);
     void statUpdate(void);
     void barUpdate(void);
 

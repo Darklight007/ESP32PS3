@@ -266,30 +266,32 @@ struct calibPoints
     // uint16_t code2EEPROMAddress;
 };
 
-class Calibration
-{
+class Calibration {
 public:
     String macAdd;
     calibPoints vCal;
-    calibPoints iCal;
-    double internalResistor; // 1/40kOhm /volt
-    // double currentSense_offset; // 1/40kOhm /volt
+    std::array<calibPoints, 2> iCal;  
+    // calibPoints iCal[2];
+    // calibPoints mACal;             // ← renamed from miCal
+    double internalLeakage;       // 1/40kΩ / V
     double adc_inl_measure[36];
     double adc_inl_ideal[36];
-    Calibration(
-        String t_macAdd,
-        calibPoints t_vcalib,
-        calibPoints t_icalib,
-        double icpv) : macAdd(t_macAdd),
-                       vCal(t_vcalib),
-                       iCal(t_icalib), internalResistor(icpv),
-                       adc_inl_measure{-.001, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,32,32.75}, // ✅ initialize vector here
-                       adc_inl_ideal{-.001,0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,32,32.75}    // ✅ initialize vector here
-    {
-    }
 
-    ~Calibration() {};
+    Calibration(String t_macAdd,
+                calibPoints t_vcalib,
+                calibPoints t_icalib,
+                calibPoints t_mAcalib,
+                double icpv)
+    : macAdd(t_macAdd),
+      vCal(t_vcalib),
+      iCal{ t_icalib, t_mAcalib },     // ✅ valid init
+      internalLeakage(icpv),
+      adc_inl_measure{ -0.001,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,32.75 },
+      adc_inl_ideal  { -0.001,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,32.75 }
+    {}
+    ~Calibration() = default;
 };
+
 
 class ADC
 {
@@ -397,7 +399,8 @@ public:
     Graph_ graph;
     Stats_ stats;
     const byte CCCVPin = 12;
-    const byte AuA_Pin = 13;
+    const byte AmA_Pin = 13;
+    bool mA_Active = false;
 
     SettingParameters settingParameters;
     GUI gui;
@@ -438,6 +441,9 @@ public:
     void LoadCalibrationData(void);
     void LoadSetting(void);
     void SaveSetting(void);
+
+    void toggle_measure_unit(void);
+
 
     void SaveCalibData(const String &key, const Calibration &data);
     Calibration LoadCalibData(const String &key);

@@ -44,8 +44,16 @@ struct setting_GUI
     setting_ Voltage;
     setting_ Current;
     
-    lv_obj_t *internalResistor{};
+    lv_obj_t *internalLeakage{};
 };
+
+    // shared ADC window builder
+    struct CalPrefill
+    {
+        int32_t code1, code2;
+        double val1, val2;
+        const char *unit;
+    };
 
 
 extern setting_GUI Calib_GUI;
@@ -64,3 +72,9 @@ void internal_current_calibration_cb(lv_event_t *e);
 void ADC_INL_Voltage_calibration_cb(lv_event_t *e);
 
 void open_dac_calibration_cb(lv_event_t *e);
+
+
+// void build_adc_calibration_window(lv_obj_t **win_holder,
+//                                   const char *title,
+//                                   setting_ &gui,
+//                                   const CalPrefill &pf);

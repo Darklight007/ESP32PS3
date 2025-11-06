@@ -197,8 +197,8 @@ void setupPowerSupply()
 
     pinMode(PowerSupply.CCCVPin, INPUT); // Configure CCCV pin as input
 
-    pinMode(PowerSupply.AuA_Pin, OUTPUT);
-    digitalWrite(PowerSupply.AuA_Pin, LOW);
+    pinMode(PowerSupply.AmA_Pin, OUTPUT);
+    digitalWrite(PowerSupply.AmA_Pin, LOW);
 
     // pinMode(PowerSupply.CCCVPin, INPUT_PULLUP);  // Alternative configuration
 
@@ -236,6 +236,7 @@ void setupPowerSupply()
     PowerSupply.Current.effectiveResolution.SetWindowSize(32);
     PowerSupply.Power.effectiveResolution.SetWindowSize(1);
 
+    PowerSupply.Current.rawValueStats.SetWindowSize(2048);
     // Setup current parameters
     PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", PowerSupply.Current.maxValue, PowerSupply.Current.minValue,
                               1.0, PowerSupply.dac_data.zero_current, 10000,"m");
@@ -347,6 +348,8 @@ void setupADC()
     // Bank of calibration data for different devices based on MAC address
     PowerSupply.CalBank = {
         {"7C:9E:BD:4D:C7:08", {0.005000, 121, 32.7503, 3353431}, {0.0000, 124955, 3.000, 1746856} // v1.6
+        ,
+        {0.0000, 124955, 3.000, 1746856}
          ,
          40'000.0} // Internal current consumption in Amperes;
     };

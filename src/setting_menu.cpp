@@ -46,12 +46,179 @@ static void dbg_printf(const char *fmt, ...)
     log_step("%s", buf); // remove if you do not have log_step
 }
 
+///*****************************************************************************
+// ****************** Simple sequencer for auto-measure *************************
+// *****************************************************************************
+
+static char s_logbuf[2048];
+static size_t s_len = 0;
+static bool s_pending = false; // true after _begin(), cleared by _done()
+// ---------- Reuse your existing logger ----------
+void log_step_begin(const char *fmt, ...);
+void log_step_done();
+void log_step(const char *fmt, ...);
+namespace
+{
+    static void auto_zero_event_cb(lv_event_t *e);
+
+    static void autoZeroCurrent_cb(lv_event_t *);
+}
 // ---------- public objects (one definition) ----------
+
 // extern bool lvglChartIsBusy;
 extern bool lvglIsBusy;
 // Global (or static) residual spline
 
 setting_GUI Calib_GUI{};
+
+static lv_obj_t *log_win;
+static lv_obj_t *log_label;
+
+static void close_log_cb(lv_timer_t *t)
+{
+    if (log_win)
+    {
+        lv_obj_del(log_win);
+        log_win = NULL;
+        log_label = NULL;
+    }
+    lv_timer_del(t);
+}
+
+// Replace your log_step() with this pair
+
+static inline void log_update_label()
+{
+    s_logbuf[s_len] = '\0';
+    lv_label_set_text(log_label, s_logbuf);
+    lv_obj_scroll_to_view(log_label, LV_ANIM_OFF);
+    myTone(NOTE_A3, 50, false);
+}
+
+// 1) Print: "1.  Setting volt to 0v ...\n"
+void log_step_begin(const char *fmt, ...)
+{
+    // auto-close any previous pending step
+    if (s_pending)
+    {
+        // replace the previous " ...\n" with " done!\n"
+        // (safe even if buffer tight; see _done code)
+        // You can call log_step_done(); but inline is faster.
+        const char tail[] = " ...\n";
+        const size_t tail_len = sizeof(tail) - 1;
+        if (s_len >= tail_len && std::memcmp(s_logbuf + s_len - tail_len, tail, tail_len) == 0)
+        {
+            s_len -= tail_len;
+            const char done[] = " done!\n";
+            size_t add = strlen(done);
+            if (s_len + add >= sizeof(s_logbuf))
+                add = sizeof(s_logbuf) - s_len - 1;
+            std::memcpy(s_logbuf + s_len, done, add);
+            s_len += add;
+        }
+        s_pending = false;
+    }
+
+    // format the new line head: "1.  Setting volt to 0v"
+    char line[256];
+    va_list args;
+    va_start(args, fmt);
+    const int n = vsnprintf(line, sizeof(line), fmt, args);
+    va_end(args);
+
+    // append to the big buffer + " ...\n"
+    const char ell[] = " ...\n";
+    const size_t need = (size_t)((n > 0 ? n : 0)) + sizeof(ell) - 1;
+
+    // truncate if needed
+    size_t avail = sizeof(s_logbuf) - s_len - 1;
+    size_t to_copy = avail > need ? (size_t)(n > 0 ? n : 0) : (avail > (sizeof(ell) - 1) ? avail - (sizeof(ell) - 1) : 0);
+
+    if (to_copy > 0)
+    {
+        std::memcpy(s_logbuf + s_len, line, to_copy);
+        s_len += to_copy;
+    }
+    // add " ...\n" if there is room
+    size_t add = sizeof(ell) - 1;
+    if (s_len + add >= sizeof(s_logbuf))
+        add = sizeof(s_logbuf) - s_len - 1;
+    std::memcpy(s_logbuf + s_len, ell, add);
+    s_len += add;
+
+    s_pending = true;
+    log_update_label();
+    myTone(NOTE_A5, 100, false);
+}
+
+// 2) Replace trailing " ...\n" with " done!\n" on the same line
+void log_step_done()
+{
+    if (!s_pending)
+        return;
+
+    const char tail[] = " ...\n";
+    const size_t tail_len = sizeof(tail) - 1;
+
+    if (s_len >= tail_len && std::memcmp(s_logbuf + s_len - tail_len, tail, tail_len) == 0)
+    {
+        // remove " ...\n"
+        s_len -= tail_len;
+
+        // append " done!\n"
+        const char done[] = " done!\n";
+        size_t add = sizeof(done) - 1;
+        if (s_len + add >= sizeof(s_logbuf))
+            add = sizeof(s_logbuf) - s_len - 1;
+        std::memcpy(s_logbuf + s_len, done, add);
+        s_len += add;
+
+        log_update_label();
+    }
+    s_pending = false;
+    myTone(NOTE_A3, 50, false);
+}
+
+void log_step(const char *fmt, ...)
+{
+    if (!lvglIsBusy)
+    {
+        char buf[256];
+        va_list args;
+        va_start(args, fmt);
+        vsnprintf(buf, sizeof(buf), fmt, args);
+        va_end(args);
+
+        const char *old = lv_label_get_text(log_label);
+        static char new_txt[1024];
+        snprintf(new_txt, sizeof(new_txt), "%s%s\n", old, buf);
+
+        lv_label_set_text(log_label, new_txt);
+        lv_obj_scroll_to_view(log_label, LV_ANIM_OFF);
+    }
+}
+
+void log_clear()
+{
+    if (log_label)
+    {
+        lv_label_set_text(log_label, "");              // wipe text
+        lv_obj_scroll_to_y(log_label, 0, LV_ANIM_OFF); // scroll back to top
+    }
+}
+
+static void create_log_window()
+{
+    log_win = lv_win_create(lv_scr_act(), 40);
+    lv_win_add_title(log_win, "Measuring total internal resistor");
+
+    lv_obj_t *cont = lv_win_get_content(log_win);
+    log_label = lv_label_create(cont);
+    lv_label_set_text(log_label, "");
+    lv_label_set_long_mode(log_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(log_label, lv_pct(100));
+}
+
 // setting_GUI Calib_GUI.Current{};
 
 // ---------- internal state / helpers ----------
@@ -327,15 +494,15 @@ namespace
         if (PowerSupply.gui.calibration.win_ADC_current_calibration && !lv_obj_has_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN))
         {
             auto &i = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
-            lv_spinbox_set_value(Calib_GUI.Current.code_1, i.code_1);
-            lv_spinbox_set_value(Calib_GUI.Current.code_2, i.code_2);
-            lv_spinbox_set_value(Calib_GUI.Current.vin_1, (int32_t)llround(10000.0 * i.value_1));
-            lv_spinbox_set_value(Calib_GUI.Current.vin_2, (int32_t)llround(10000.0 * i.value_2));
+            lv_spinbox_set_value(Calib_GUI.Current.code_1, i[PowerSupply.mA_Active].code_1);
+            lv_spinbox_set_value(Calib_GUI.Current.code_2, i[PowerSupply.mA_Active].code_2);
+            lv_spinbox_set_value(Calib_GUI.Current.vin_1, (int32_t)llround(10000.0 * i[PowerSupply.mA_Active].value_1));
+            lv_spinbox_set_value(Calib_GUI.Current.vin_2, (int32_t)llround(10000.0 * i[PowerSupply.mA_Active].value_2));
         }
         if (PowerSupply.gui.calibration.win_int_current_calibration && !lv_obj_has_flag(PowerSupply.gui.calibration.win_int_current_calibration, LV_OBJ_FLAG_HIDDEN))
         {
             // Update internal resistor value in the spinbox
-            lv_spinbox_set_value(Calib_GUI.internalResistor, PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor * 1000.0); // Convert to mOhms
+            lv_spinbox_set_value(Calib_GUI.internalLeakage, PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage * 1000.0); // Convert to mOhms
         }
     }
 
@@ -368,21 +535,27 @@ namespace
         return obj;
     }
 
-    // shared ADC window builder
-    struct CalPrefill
-    {
-        int32_t code1, code2;
-        double val1, val2;
-        const char *unit;
-    };
+    // // shared ADC window builder
+    // struct CalPrefill
+    // {
+    //     int32_t code1, code2;
+    //     double val1, val2;
+    //     const char *unit;
+    // };
+    static void start_current_zeros(lv_event_t *);
 
-    static void build_adc_calibration_window(lv_obj_t **win_holder,
-                                             const char *title,
-                                             setting_ &gui,
-                                             const CalPrefill &pf)
+    void build_adc_calibration_window(lv_obj_t **win_holder,
+                                      const char *title,
+                                      setting_ &gui,
+                                      const CalPrefill &pf)
     {
         if (*win_holder)
         {
+            lv_spinbox_set_value(gui.code_1, pf.code1);
+            lv_spinbox_set_value(gui.code_2, pf.code2);
+            lv_spinbox_set_value(gui.vin_1, (int32_t)llround(10000.0 * pf.val1));
+            lv_spinbox_set_value(gui.vin_2, (int32_t)llround(10000.0 * pf.val2));
+
             lv_obj_clear_flag(*win_holder, LV_OBJ_FLAG_HIDDEN);
             return;
         }
@@ -445,6 +618,8 @@ namespace
         LVButton btnSave(cont, "Save", btn_pos.x + 62, btn_pos.y, 54, 26, nullptr, save_cb);
         LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 54, 26, nullptr, load_cb);
 
+        LVButton btnAutoZeros(cont, "Auto zeros", btn_pos.x +5, btn_pos.y+31, 2 * 54, 26, nullptr, autoZeroCurrent_cb);
+
         // m, b, and Vin_cal notes (simple labels)
         auto *label_m = lv_label_create(cont);
         auto *label_m_num = lv_label_create(cont);
@@ -471,6 +646,8 @@ namespace
 
         lv_label_set_text(label_vin, "Vin_cal = (Code-b)/m");
         lv_obj_align(label_vin, LV_ALIGN_TOP_LEFT, 0, verPad + 90);
+
+        // LVButton btnAutoZeros(cont, "Auto zeros", btn_pos.x + 62 - 54 - 54 / 2, verPad + 125, 2 * 54, 26, nullptr, autoZeroCurrent_cb);
     }
 
     // DAC handlers
@@ -478,8 +655,8 @@ namespace
     {
         if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED)
             return;
-        double internalResistor = lv_spinbox_get_value(Calib_GUI.internalResistor) / 1000.0; // Convert from mOhms to Ohms
-        PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = internalResistor;
+        double internalLeakage = lv_spinbox_get_value(Calib_GUI.internalLeakage) / 1000.0; // Convert from mOhms to Ohms
+        PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage = internalLeakage;
     }
 
     // DAC handlers
@@ -671,21 +848,10 @@ void btn_calibration_ADC_voltage_event_cb(lv_event_t *)
 void btn_calibration_ADC_current_event_cb(lv_event_t *)
 {
     auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
-    CalPrefill pf{cal.code_1, cal.code_2, cal.value_1, cal.value_2, "A"};
-    build_adc_calibration_window(&PowerSupply.gui.calibration.win_ADC_current_calibration, "ADC Current Calibration", Calib_GUI.Current, pf);
+    CalPrefill pf{cal[PowerSupply.mA_Active].code_1, cal[PowerSupply.mA_Active].code_2, cal[PowerSupply.mA_Active].value_1, cal[PowerSupply.mA_Active].value_2, "A"};
+    build_adc_calibration_window(&PowerSupply.gui.calibration.win_ADC_current_calibration, "ADC Current Calibration [A]", Calib_GUI.Current, pf);
 }
 
-///*****************************************************************************
-// ****************** Simple sequencer for auto-measure *************************
-// *****************************************************************************
-
-static char s_logbuf[2048];
-static size_t s_len = 0;
-static bool s_pending = false; // true after _begin(), cleared by _done()
-// ---------- Reuse your existing logger ----------
-void log_step_begin(const char *fmt, ...);
-void log_step_done();
-void log_step(const char *fmt, ...);
 static void close_log_cb(lv_timer_t *t);
 
 // ---------- Your measurement context ----------
@@ -801,7 +967,7 @@ static void start_current_totalR()
         // {"2nd Reset statistics", 1000, 1500,
         //  []()
         //  { PowerSupply.ResetStats(); }, nullptr},
-        {"Measuring current at 0V", 10000, 1500,
+        {"Measuring current at 0V", 30000, 1500,
          nullptr, [c]()
          { c->v0 = PowerSupply.Current.Statistics.Mean(); }},
         {"Setting voltage to 32V", 1500, 500,
@@ -818,176 +984,31 @@ static void start_current_totalR()
         //  []()
         //  { PowerSupply.ResetStats(); }, nullptr},
 
-        {"Measuring current at 32V", 10000, 1500,
+        {"Measuring current at 32V", 30000, 1000,
          nullptr, [c]()
          { c->v1 = PowerSupply.Current.Statistics.Mean(); }},
-        {"Finalize", 0, 0, nullptr,
+        {"Finalize", 100, 100, nullptr,
          [c]()
          {
+            blockAll = true;
              log_step("           i0 = %+1.6f", c->v0);
              log_step("           i1 = %+1.6f", c->v1);
-             double Rtot = 32.0f / (c->v1 - c->v0) / 1000.0f;
+             double Rtot = (PowerSupply.mA_Active ? 1000.0 : 1.0) * 32.0f / (c->v1 - c->v0) / 1000.0f;
              log_step("Measured Res: %4.3fk", Rtot);
 
-             lv_spinbox_set_value(Calib_GUI.internalResistor, 1000.0f * Rtot);
-             PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = Rtot;
+             lv_spinbox_set_value(Calib_GUI.internalLeakage, 1000.0f * Rtot);
+             PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage = Rtot;
              PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
              lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
 
              lv_timer_set_repeat_count(close_t, 1);
              lv_mem_free(c);
+             blockAll = false;
          }},
     };
 
     lv_timer_t *t = lv_timer_create(seq_cb, 1, nullptr);
     seq_start(t, steps, sizeof(steps) / sizeof(steps[0]), nullptr);
-}
-
-static lv_obj_t *log_win;
-static lv_obj_t *log_label;
-
-static void close_log_cb(lv_timer_t *t)
-{
-    if (log_win)
-    {
-        lv_obj_del(log_win);
-        log_win = NULL;
-        log_label = NULL;
-    }
-    lv_timer_del(t);
-}
-
-// Replace your log_step() with this pair
-
-static inline void log_update_label()
-{
-    s_logbuf[s_len] = '\0';
-    lv_label_set_text(log_label, s_logbuf);
-    lv_obj_scroll_to_view(log_label, LV_ANIM_OFF);
-    myTone(NOTE_A3, 50, false);
-}
-
-// 1) Print: "1.  Setting volt to 0v ...\n"
-void log_step_begin(const char *fmt, ...)
-{
-    // auto-close any previous pending step
-    if (s_pending)
-    {
-        // replace the previous " ...\n" with " done!\n"
-        // (safe even if buffer tight; see _done code)
-        // You can call log_step_done(); but inline is faster.
-        const char tail[] = " ...\n";
-        const size_t tail_len = sizeof(tail) - 1;
-        if (s_len >= tail_len && std::memcmp(s_logbuf + s_len - tail_len, tail, tail_len) == 0)
-        {
-            s_len -= tail_len;
-            const char done[] = " done!\n";
-            size_t add = strlen(done);
-            if (s_len + add >= sizeof(s_logbuf))
-                add = sizeof(s_logbuf) - s_len - 1;
-            std::memcpy(s_logbuf + s_len, done, add);
-            s_len += add;
-        }
-        s_pending = false;
-    }
-
-    // format the new line head: "1.  Setting volt to 0v"
-    char line[256];
-    va_list args;
-    va_start(args, fmt);
-    const int n = vsnprintf(line, sizeof(line), fmt, args);
-    va_end(args);
-
-    // append to the big buffer + " ...\n"
-    const char ell[] = " ...\n";
-    const size_t need = (size_t)((n > 0 ? n : 0)) + sizeof(ell) - 1;
-
-    // truncate if needed
-    size_t avail = sizeof(s_logbuf) - s_len - 1;
-    size_t to_copy = avail > need ? (size_t)(n > 0 ? n : 0) : (avail > (sizeof(ell) - 1) ? avail - (sizeof(ell) - 1) : 0);
-
-    if (to_copy > 0)
-    {
-        std::memcpy(s_logbuf + s_len, line, to_copy);
-        s_len += to_copy;
-    }
-    // add " ...\n" if there is room
-    size_t add = sizeof(ell) - 1;
-    if (s_len + add >= sizeof(s_logbuf))
-        add = sizeof(s_logbuf) - s_len - 1;
-    std::memcpy(s_logbuf + s_len, ell, add);
-    s_len += add;
-
-    s_pending = true;
-    log_update_label();
-    myTone(NOTE_A5, 100, false);
-}
-
-// 2) Replace trailing " ...\n" with " done!\n" on the same line
-void log_step_done()
-{
-    if (!s_pending)
-        return;
-
-    const char tail[] = " ...\n";
-     const size_t tail_len = sizeof(tail) - 1;
-
-    if (s_len >= tail_len && std::memcmp(s_logbuf + s_len - tail_len, tail, tail_len) == 0)
-    {
-        // remove " ...\n"
-        s_len -= tail_len;
-
-        // append " done!\n"
-        const char done[] = " done!\n";
-        size_t add = sizeof(done) - 1;
-        if (s_len + add >= sizeof(s_logbuf))
-            add = sizeof(s_logbuf) - s_len - 1;
-        std::memcpy(s_logbuf + s_len, done, add);
-        s_len += add;
-
-        log_update_label();
-    }
-    s_pending = false;
-    myTone(NOTE_A3, 50, false);
-}
-
-void log_step(const char *fmt, ...)
-{
-     if (!lvglIsBusy){
-    char buf[256];
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, args);
-    va_end(args);
-    
-    const char *old = lv_label_get_text(log_label);
-    static char new_txt[1024];
-    snprintf(new_txt, sizeof(new_txt), "%s%s\n", old, buf);
-
-    lv_label_set_text(log_label, new_txt);
-    lv_obj_scroll_to_view(log_label, LV_ANIM_OFF);
-     }
-}
-
-void log_clear()
-{
-    if (log_label)
-    {
-        lv_label_set_text(log_label, "");              // wipe text
-        lv_obj_scroll_to_y(log_label, 0, LV_ANIM_OFF); // scroll back to top
-    }
-}
-
-static void create_log_window()
-{
-    log_win = lv_win_create(lv_scr_act(), 40);
-    lv_win_add_title(log_win, "Measuring total internal resistor");
-
-    lv_obj_t *cont = lv_win_get_content(log_win);
-    log_label = lv_label_create(cont);
-    lv_label_set_text(log_label, "");
-    lv_label_set_long_mode(log_label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(log_label, lv_pct(100));
 }
 
 static void event_cb(lv_event_t *e)
@@ -999,14 +1020,16 @@ static void event_cb(lv_event_t *e)
         lv_msgbox_close(obj);
         if (txt && strcmp(txt, "OK") == 0)
         {
+            blockAll = true;
             create_log_window();
             // start_auto_measure();
-            PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = FLT_MAX;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage = FLT_MAX;
             s_len = 0;
             s_logbuf[0] = '\0';
             s_pending = false;
             log_clear();
             start_current_totalR();
+            blockAll = false;
         }
     }
 }
@@ -1117,17 +1140,17 @@ void internal_current_calibration_cb(lv_event_t *)
     int xPos = 10, xOffset = 10, yPos = 25, yOffset = 25;
 
     // int_total_res
-    Calib_GUI.internalResistor = spinbox_pro(cont, "#FFFFF7 Total Internal Resistor (kΩ):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 150, 21, &graph_R_16);
+    Calib_GUI.internalLeakage = spinbox_pro(cont, "#FFFFF7 Total Internal Resistor (kΩ):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 150, 21, &graph_R_16);
 
     PowerSupply.LoadCalibrationData();
     // lv_spinbox_set_value(intRes, 40'000.123*1000.0);
-    lv_spinbox_set_value(Calib_GUI.internalResistor, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor);
+    lv_spinbox_set_value(Calib_GUI.internalLeakage, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage);
 
-    Serial.printf("\nInternal Current Calibration: %f", PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor);
+    Serial.printf("\nInternal Current Calibration: %f", PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage);
 
-    PowerSupply.CalBank[PowerSupply.bankCalibId].internalResistor = lv_spinbox_get_value(Calib_GUI.internalResistor) / 1000.0;
+    PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage = lv_spinbox_get_value(Calib_GUI.internalLeakage) / 1000.0;
 
-    lv_obj_add_event_cb(Calib_GUI.internalResistor, ADC_iinternalRes_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+    lv_obj_add_event_cb(Calib_GUI.internalLeakage, ADC_iinternalRes_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     LVButton btnAutoMeasureTotalRes(cont, "Auto Measure", 10, xOffset + 50, 120, 35, nullptr, AutoMeasureTotalRes_cb);
 
@@ -1160,8 +1183,8 @@ static void INL_dbg(const char *fmt, ...)
 // --- Optional preload (0..32V, 33 pts) ---
 
 lv_obj_t *table_inl;
-static const double MEASURED[] = {-.0045, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33};
-static const double TRUE_IDEAL[] = {-.0045, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33};
+static const double MEASURED[] = {-.0045, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 32.5};
+static const double TRUE_IDEAL[] = {-.0045, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 32.5};
 constexpr size_t NPTS = sizeof(MEASURED) / sizeof(MEASURED[0]);
 static_assert(NPTS == sizeof(TRUE_IDEAL) / sizeof(TRUE_IDEAL[0]), "knot sizes must match");
 
@@ -1192,45 +1215,47 @@ static inline uint32_t since(uint32_t t) { return lv_tick_elaps(t); }
 uint16_t last_adjValue;
 void inl_gui_prepare()
 {
- if (!lvglIsBusy){
-    last_adjValue = PowerSupply.Voltage.adjValue;
-    // Set start (0V)
-    PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
-    PowerSupply.gui.calibration.inl.lbl_inl_state->set_text("#FFFF00 Running");
- }
+    if (!lvglIsBusy)
+    {
+        last_adjValue = PowerSupply.Voltage.adjValue;
+        // Set start (0V)
+        PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+        PowerSupply.gui.calibration.inl.lbl_inl_state->set_text("#FFFF00 Running");
+    }
 }
 
 void inl_gui_set(double v_cmd)
 {
-    
+
     table_set_selected_row(table_inl, inl.i + 1);
     PowerSupply.Voltage.SetUpdate(v_cmd * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
     PowerSupply.Voltage.measured.ResetStats();
     lv_bar_set_value(PowerSupply.gui.calibration.inl.bar_progress, inl.i, LV_ANIM_OFF);
     // lv_label_set_text_fmt(PowerSupply.gui.calibration.inl.lbl_bar_progress->get_lv_obj, "Progress: %i%%", inl.i * 100 / NPTS);
     PowerSupply.gui.calibration.inl.lbl_bar_progress->set_text_fmt("Progress: %i%%", inl.i * 100 / NPTS);
-    
 }
 
 void inl_gui_measure(double measure, double v_cmd)
 {
- if (!lvglIsBusy){
-    lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 1, "%+08.4f", inl.y_true[inl.i]);
-    lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 2, "%+09.5f", measure);
-    lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 3, "%+02.2f", (measure - v_cmd) * 30518.043793393); // 10^6/33.7675
- }
+    if (!lvglIsBusy)
+    {
+        lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 1, "%+08.4f", inl.y_true[inl.i]);
+        lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 2, "%+09.5f", measure);
+        lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 3, "%+02.2f", (measure - v_cmd) * 30518.043793393); // 10^6/33.7675
+    }
 }
 
 void inl_gui_compute()
 {
-     if (!lvglIsBusy){
-    PowerSupply.gui.calibration.inl.lbl_inl_state->set_text("#FFFF00 Done");
-    PowerSupply.gui.calibration.inl.lbl_bar_progress->set_text_fmt("Progress: 100%%");
+    if (!lvglIsBusy)
+    {
+        PowerSupply.gui.calibration.inl.lbl_inl_state->set_text("#FFFF00 Done");
+        PowerSupply.gui.calibration.inl.lbl_bar_progress->set_text_fmt("Progress: 100%%");
 
-    lv_bar_set_value(PowerSupply.gui.calibration.inl.bar_progress, NPTS, LV_ANIM_OFF);
-    table_set_selected_row(table_inl, 1);
-    PowerSupply.Voltage.SetUpdate(last_adjValue);
-     }
+        lv_bar_set_value(PowerSupply.gui.calibration.inl.bar_progress, NPTS, LV_ANIM_OFF);
+        table_set_selected_row(table_inl, 1);
+        PowerSupply.Voltage.SetUpdate(last_adjValue);
+    }
 }
 
 static void INL_timer_cb(lv_timer_t *)
@@ -1760,3 +1785,81 @@ void open_dac_calibration_cb(lv_event_t *)
     lv_obj_add_event_cb(s_zc, DAC_current_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
     lv_obj_add_event_cb(s_mc, DAC_current_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 }
+
+namespace
+{
+
+    static void autoZeroCurrent_cb(lv_event_t *)
+    {
+        Warning_msgbox("Auto Zero", auto_zero_event_cb);
+    }
+
+    static void auto_zero_event_cb(lv_event_t *e)
+    {
+        lv_obj_t *obj = lv_event_get_current_target(e);
+        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+        {
+            const char *txt = lv_msgbox_get_active_btn_text(obj);
+            lv_msgbox_close(obj);
+            if (txt && strcmp(txt, "OK") == 0)
+            {
+                create_log_window();
+                s_len = 0;
+                s_logbuf[0] = '\0';
+                s_pending = false;
+                log_clear();
+                start_current_zeros(nullptr);
+            }
+        }
+    }
+
+    static void start_current_zeros(lv_event_t *e)
+    {
+        // auto *c = (CurrentCalCtx *)lv_mem_alloc(sizeof(CurrentCalCtx));
+        static int32_t c0_raw = 0;  
+
+        static const SeqStep steps[] = {
+            {"Setting voltage to 0V", 1500, 500,
+             []()
+             { PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); }, nullptr},
+            {"Reset statistics", 1000, 1500,
+             []()
+             { PowerSupply.Current.rawValueStats.ResetStats(); }, nullptr},
+            // {"2nd Reset statistics", 1000, 1500,
+            //  []()
+            //  { PowerSupply.ResetStats(); }, nullptr},
+            {"Measuring current at 0V", 10000, 1500,
+             nullptr, [&]()
+             {
+                 c0_raw = PowerSupply.Current.rawValueStats.Mean();
+                 Serial.printf("\n Code 1 at zero current:%i", c0_raw);
+             }},
+            {"Setting code for 0.0A", 1500, 500, [&]()
+             {
+                 lv_spinbox_set_value(Calib_GUI.Current.code_1, c0_raw);
+             },
+             nullptr},
+            {"Finalize", 1500, 1500, [&]()
+             {
+                 lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
+                 lv_timer_set_repeat_count(close_t, 1);
+
+                 lv_spinbox_set_value(Calib_GUI.Current.code_1, c0_raw);
+
+                 auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
+                 cal[PowerSupply.mA_Active].code_1 = c0_raw;
+
+                 Serial.printf("\n Code 1 at zero current:%i", c0_raw);
+             },
+             nullptr},
+
+            // {"2nd Reset statistics", 1000, 1500,
+            //  []()
+            //  { PowerSupply.ResetStats(); }, nullptr},
+
+        };
+
+        lv_timer_t *t = lv_timer_create(seq_cb, 1, nullptr);
+        seq_start(t, steps, sizeof(steps) / sizeof(steps[0]), nullptr);
+    }
+} // namespace

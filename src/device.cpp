@@ -78,29 +78,29 @@ void Device::calibrationUpdate(void)
 
     Voltage.calib_1m = 1.0 / Voltage.calib_m;
 
-    Current.calib_m = (CalBank[bankCalibId].iCal.code_2 - CalBank[bankCalibId].iCal.code_1) /
-                      (CalBank[bankCalibId].iCal.value_2 - CalBank[bankCalibId].iCal.value_1);
-    Current.calib_b = CalBank[bankCalibId].iCal.code_1 - Current.calib_m * CalBank[bankCalibId].iCal.value_1;
+    Current.calib_m = (CalBank[bankCalibId].iCal[mA_Active].code_2 - CalBank[bankCalibId].iCal[mA_Active].code_1) /
+                      (CalBank[bankCalibId].iCal[mA_Active].value_2 - CalBank[bankCalibId].iCal[mA_Active].value_1);
+    Current.calib_b = CalBank[bankCalibId].iCal[mA_Active].code_1 - Current.calib_m * CalBank[bankCalibId].iCal[mA_Active].value_1;
 
     Current.calib_1m = 1.0 / Current.calib_m;
 
-    Power.measured.ResetStats();
-    Voltage.measured.ResetStats();
-    Current.measured.ResetStats();
+    // Power.measured.ResetStats();
+    // Voltage.measured.ResetStats();
+    // Current.measured.ResetStats();
 
-    Current.hist.Reset();
-    Voltage.hist.Reset();
-    // SaveCalibrationData();
-    // for (int i = 0; i < 35; i++)
-    // Serial.printf("\nMeasuere:%+09.5f Ideal:%+07.3f", CalBank[bankCalibId].adc_inl_measure[i], CalBank[bankCalibId].adc_inl_ideal[i]); // g_voltINL.printKnotTable();
+    // Current.hist.Reset();
+    // Voltage.hist.Reset();
+    // // SaveCalibrationData();
+    // // for (int i = 0; i < 35; i++)
+    // // Serial.printf("\nMeasuere:%+09.5f Ideal:%+07.3f", CalBank[bankCalibId].adc_inl_measure[i], CalBank[bankCalibId].adc_inl_ideal[i]); // g_voltINL.printKnotTable();
 
-    std::vector<double> X(CalBank[bankCalibId].adc_inl_measure, CalBank[bankCalibId].adc_inl_measure + 35); // ideal volts (Mean)
-    std::vector<double> Y(CalBank[bankCalibId].adc_inl_ideal, CalBank[bankCalibId].adc_inl_ideal + 35);     // true volts (set)
+    // std::vector<double> X(CalBank[bankCalibId].adc_inl_measure, CalBank[bankCalibId].adc_inl_measure + 35); // ideal volts (Mean)
+    // std::vector<double> Y(CalBank[bankCalibId].adc_inl_ideal, CalBank[bankCalibId].adc_inl_ideal + 35);     // true volts (set)
 
-    g_voltINL.setPoints(X, Y);
+    // g_voltINL.setPoints(X, Y);
 
-    g_voltINL.build();
-    g_voltINL_ready = true;
+    // g_voltINL.build();
+    // g_voltINL_ready = true;
 }
 
 //  std::vector<Calibration> CalBank
@@ -149,8 +149,8 @@ void Device::SaveCalibrationData()
     Serial.printf("\nSaved calibration data:%s {%+08.4f %+08i %+08.4f %+08i}, {%+08.4f %+08i %+08.4f %+08i}, %4.4f",
                   outputData.macAdd,
                   outputData.vCal.value_1, outputData.vCal.code_1, outputData.vCal.value_2, outputData.vCal.code_2,
-                  outputData.iCal.value_1, outputData.iCal.code_1, outputData.iCal.value_2, outputData.iCal.code_2,
-                  outputData.internalResistor);
+                  outputData.iCal[mA_Active].value_1, outputData.iCal[mA_Active].code_1, outputData.iCal[mA_Active].value_2, outputData.iCal[mA_Active].code_2,
+                  outputData.internalLeakage);
 }
 
 void Device::LoadCalibrationData()
@@ -170,8 +170,8 @@ void Device::LoadCalibrationData()
     Serial.printf("\nCalibration data loaded:%s {%+08.4f %+08i %+08.4f %+08i}, {%+08.4f %+08i %+08.4f %+08i}, %4.4f",
                   outputData.macAdd,
                   outputData.vCal.value_1, outputData.vCal.code_1, outputData.vCal.value_2, outputData.vCal.code_2,
-                  outputData.iCal.value_1, outputData.iCal.code_1, outputData.iCal.value_2, outputData.iCal.code_2,
-                  outputData.internalResistor);
+                  outputData.iCal[mA_Active].value_1, outputData.iCal[mA_Active].code_1, outputData.iCal[mA_Active].value_2, outputData.iCal[mA_Active].code_2,
+                  outputData.internalLeakage);
 
     // g_voltINL.build();
 
@@ -217,7 +217,11 @@ void Device::LoadCalibrationData()
         Serial.print("\n\n ** WRONG CALIBRATION DATA ** \n");
         Serial.print("\nLoading factory calibration data ...");
 
-        CalBank[bankCalibId] = Calibration(CalBank[bankCalibId].macAdd, {+00.0000, -259, +32.0000, +8164608}, {+00.0000, +104080, +3.0000, +2926000}, 40'000.0); // 1/40kOhm /volt
+        CalBank[bankCalibId] = Calibration(CalBank[bankCalibId].macAdd,
+                                           {+00.0000, -259, +32.0000, +8164608},
+                                           {+00.0000, +104080, +3.0000, +2926000},
+                                           {+00.0000, +104080, +3.0000, +2926000},
+                                           40'000.0); // 1/40kOhm /volt
 
         calibrate();
         calibrationUpdate();
@@ -440,7 +444,6 @@ void Device::readVoltage()
 
     {
 
-
         // static int throw_away = 0;
         // if (throw_away < 2)
         // {
@@ -450,7 +453,6 @@ void Device::readVoltage()
         //     return;
         // } // throw away first 2 readings after changing rate
         // throw_away = 0;
-
 
         constexpr float adcRateCompensation[4] = {
             1.00000f,            // 20 SPS
@@ -518,15 +520,15 @@ void Device::readCurrent()
 
         // Current used by R11&R12 and arrR2
         // static double diff_A = (0.000461 - 0.000021) / (32.0 - 0.0); // (0.000594 - 0.000143)
-        double internalResistor = CalBank[bankCalibId].internalResistor; // 1.0 / 40'000.0; // 1/40kOhm /volt
+        double internalLeakage = CalBank[bankCalibId].internalLeakage; // 1.0 / 40'000.0; // 1/40kOhm /volt
 
-        double currentOfInternalRes = 1.0 * Voltage.measured.Mean() / (internalResistor * 1000.0) +
-                                      0.0 * 0.000180 * !digitalRead(CCCVPin); // Why?;
+        double currentOfInternalRes =(mA_Active ? 1000.0 : 1.0) *  (Voltage.measured.Mean() / (internalLeakage * 1000.0)) +
+                                      0.0 * 0.000180 * !digitalRead(CCCVPin); // Why?; (mA_Active ? .001 : 1.0) * 
 
         c = (((Current.rawValue - Current.calib_b) * Current.calib_1m) - currentOfInternalRes); // old value: .0009
         // c=c+c*0.00009901;
 
-        // Current.hist[c]; 
+        // Current.hist[c];
 
         Current.measureUpdate(c);
         *Current.Bar.curValuePtr = c / (Current.maxValue / Current.adjFactor) * lv_bar_get_max_value(Current.Bar.bar); // uint16_t(v * 8);
@@ -559,9 +561,12 @@ void Device::readCurrent()
             adc.ADC_loopCounter = 0;
             startTime = millis();
         }
+
+         Current.rawValueStats(Current.rawValue);
     }
     static unsigned long loopCount = 0;
     static unsigned long startTime = millis();
+
 
     static unsigned ADC_loopCheckCounter;
     ADC_loopCheckCounter++;
@@ -573,12 +578,14 @@ void Device::readCurrent()
         startTime = millis();
     }
 }
+
+
 void Device::getPower()
 {
     // if (Current.changed || Voltage.changed)
     // {
 
-    Power.measureUpdate(Current.measured.Mean() * Voltage.measured.Mean());
+    Power.measureUpdate(Current.measured.Mean() * Voltage.measured.Mean() * (mA_Active ? 0.001 : 1.0));
 
     // Serial.printf("Power:%+07.3f Current:%+07.3f Voltage:%+07.3f  Voltage.changed %i Current.changed %i\n",
     //               Power.measured.Mean(),
@@ -603,10 +610,38 @@ void Device::getPower()
     //     loopCount = 0;
     // }
 }
+
+void Device::toggle_measure_unit()
+{
+    mA_Active = digitalRead(AmA_Pin) ^ 1;
+
+            
+    digitalWrite(AmA_Pin, mA_Active); // Toggle the pin state
+
+    lv_obj_t *hdr = lv_win_get_header(gui.calibration.win_ADC_current_calibration);
+    lv_obj_t *title_lbl = lv_obj_get_child(hdr, 0);
+
+    if (mA_Active)
+    {
+        lv_obj_clear_flag(Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(title_lbl, "ADC Current Calibration [mA]");
+        // Current.adc_maxValue = 3.964;
+
+    }
+    else
+    {
+        lv_obj_add_flag(Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(title_lbl, "ADC Current Calibration [A]");
+        // Current.adc_maxValue = 6.5536;
+    }
+    // lv_obj_invalidate(title_lbl);
+}
+
 void Device::writeDAC_Voltage(uint16_t value)
 {
     DAC.writeUpdate(DAC_VOLTAGE, value);
 }
+
 void Device::writeDAC_Current(uint16_t value)
 {
     DAC.writeUpdate(DAC_CURRENT, value);

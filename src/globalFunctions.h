@@ -13,6 +13,8 @@
 #include "SpinboxPro.hpp"
 #include "table_pro.h"
 
+#include "setting_menu.h"
+
 #define PI 3.14159265358979323846
 
 /**********************
@@ -69,6 +71,8 @@ typedef struct
     const char *name;
     WaveformFunction function;
 } Waveform;
+
+void btn_calibration_ADC_voltage_event_cb(lv_event_t *e);
 
 // Array of waveform structs (declaration)
 extern Waveform waveforms[];
@@ -1518,7 +1522,7 @@ void Task_ADC(void *pvParameters)
             PowerSupply.readCurrent();
         }
 
-        PowerSupply.Power.measureUpdate(PowerSupply.Current.measured.Mean() * PowerSupply.Voltage.measured.Mean());
+        PowerSupply.Power.measureUpdate(PowerSupply.Current.measured.Mean() * (PowerSupply.mA_Active ? 0.001 : 1.0) * PowerSupply.Voltage.measured.Mean());
         // if (Tabs::getCurrentPage() != 2)
         // moved to measured of Display object
         // {
@@ -1696,7 +1700,7 @@ static void btnm_event_handler(lv_event_t *e)
         const char *txt = lv_textarea_get_text(ta);
         PowerSupply.Current.SetUpdate(strtod(txt, NULL) * 10.0 + PowerSupply.Current.adjOffset);
         lv_textarea_set_text(ta, "");
-        ismyTextHiddenChange = true;
+        ismyTextHiddenChange = true;        
     }
     else
         lv_textarea_add_text(ta, txt);
@@ -2812,18 +2816,26 @@ void keyCheckLoop()
 
     keyMenusPage('T', " RELEASED.", 2, [&]
                  {
-                     myTone(NOTE_A4, 50, false);
-                     Serial.println("\nToggle A/mA measurement");
+                     myTone(NOTE_A4, 10);
+                     PowerSupply.toggle_measure_unit();
 
-                     digitalWrite(PowerSupply.AuA_Pin, digitalRead(PowerSupply.AuA_Pin) ^ 1); // Toggle the pin state
-
-                     if (digitalRead(PowerSupply.AuA_Pin))
-                         lv_obj_clear_flag(PowerSupply.Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
-                     else
-                         lv_obj_add_flag(PowerSupply.Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
-
+                     blockAll = true;
+                     btn_calibration_ADC_current_event_cb(nullptr); // Refresh the calibration window if open
+                     lv_obj_add_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
+                     PowerSupply.calibrationUpdate();
+                     PowerSupply.Current.displayUpdate(true);
+                     blockAll = false;
                  });
 
+    keyMenusPage('T', " RELEASED.", 4, [&]
+                 {
+                     myTone(NOTE_A4, 10, false);
+                     PowerSupply.toggle_measure_unit();
+                     
+                     blockAll = true;
+                     btn_calibration_ADC_current_event_cb(nullptr); // Refresh the calibration window if open
+                     lv_obj_invalidate(PowerSupply.gui.calibration.win_ADC_current_calibration);
+                     blockAll = false; });
 
     keyMenusPage('-', " RELEASED.", 0, [&]
                  {
@@ -3437,6 +3449,22 @@ void StatusBar()
         PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_2 = vin2;
 
         PowerSupply.calibrationUpdate();
+
+        PowerSupply.Power.measured.ResetStats();
+        PowerSupply.Voltage.measured.ResetStats();
+
+        PowerSupply.Voltage.hist.Reset();
+        // SaveCalibrationData();
+        // for (int i = 0; i < 35; i++)
+        // Serial.printf("\nMeasuere:%+09.5f Ideal:%+07.3f", CalBank[bankCalibId].adc_inl_measure[i], CalBank[bankCalibId].adc_inl_ideal[i]); // g_voltINL.printKnotTable();
+
+        // std::vector<double> X(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure, PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure + 35); // ideal volts (Mean)
+        // std::vector<double> Y(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal, PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal + 35);     // true volts (set)
+
+        // g_voltINL.setPoints(X, Y);
+
+        // g_voltINL.build();
+        // g_voltINL_ready = true;
     }
     if (PowerSupply.gui.calibration.win_ADC_current_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_current_calibration))
     {
@@ -3457,12 +3485,26 @@ void StatusBar()
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Current.measured.Mean());
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_ER, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
 
-        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_1 = code1;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.code_2 = code2;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.value_1 = vin1;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal.value_2 = vin2;
+        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_1 = code1;
+        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_2 = code2;
+        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_1 = vin1;
+        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_2 = vin2;
 
         PowerSupply.calibrationUpdate();
+
+        // PowerSupply.Current.calib_m = (PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_2 - PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_1) /
+        //                               (PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_2 - PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_1);
+        // PowerSupply.Current.calib_b = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_1 -
+        //                               PowerSupply.Current.calib_m * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_1;
+
+        // PowerSupply.Current.calib_1m = 1.0 / PowerSupply.Current.calib_m;
+
+        PowerSupply.Power.measured.ResetStats();
+        PowerSupply.Voltage.measured.ResetStats();
+        PowerSupply.Voltage.hist.Reset();
+
+        PowerSupply.Current.measured.ResetStats();
+        PowerSupply.Current.hist.Reset();
     }
 
     // if (PowerSupply.eepromWriteFlag)
@@ -3687,6 +3729,7 @@ void LvglUpdatesInterval(unsigned long interval)
                      // PowerSupply.adc.ads1219->pause();
                      lvglIsBusy = 1;
                      lv_timer_handler();
+                     vTaskDelay(pdMS_TO_TICKS(1)); // ~5ms
                      lvglIsBusy = 0;
                      //  PowerSupply.adc.ads1219->begin();
                  }
@@ -3716,12 +3759,12 @@ void statisticUpdateInterval(unsigned long interval)
              {
             // if (!lvglIsBusy)
             //     lv_chart_refresh(PowerSupply.stats.chart);
-        PowerSupply.settingParameters.SetVoltage = PowerSupply.Voltage.adjValue;
-        PowerSupply.settingParameters.SetCurrent = PowerSupply.Current.adjValue;
-        PowerSupply.SaveSetting();
-
-             PowerSupply.Voltage.statUpdate();
-             PowerSupply.Current.statUpdate(); },
+                PowerSupply.settingParameters.SetVoltage = PowerSupply.Voltage.adjValue;
+                PowerSupply.settingParameters.SetCurrent = PowerSupply.Current.adjValue;
+                PowerSupply.SaveSetting();
+                
+                PowerSupply.Voltage.statUpdate();
+                PowerSupply.Current.statUpdate(); },
              interval, timer_);
 }
 

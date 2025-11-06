@@ -73,6 +73,14 @@ void DispObjects::displayUpdate(void)
     // }
 }
 
+void DispObjects::displayUpdate(bool update)
+{
+    static double mean_;
+    mean_ = measured.Mean();
+    // Display mean  of measured data not the value
+    lv_label_set_text_fmt(label_measureValue, restrict, mean_);
+}
+
 void DispObjects::statUpdate(void)
 {
 
@@ -240,8 +248,6 @@ void DispObjects::setMeasureColor(lv_color_t color)
     lv_obj_remove_style(label_si_prefix, &style_deviceColor, LV_STATE_DEFAULT);
     lv_obj_add_style(label_si_prefix, &style_deviceColor, LV_STATE_DEFAULT);
 
-
-
     lv_style_set_bg_color(&style_deviceColor, color);
     lv_obj_remove_style(Bar.bar, &style_deviceColor, LV_PART_INDICATOR);
     lv_obj_add_style(Bar.bar, &style_deviceColor, LV_PART_INDICATOR);
@@ -302,7 +308,7 @@ void DispObjects::SetupStyles()
 }
 
 void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const char *_unit, double maxValue_, double minValue_, double mTick,
-                        double offset_, double factor_,const char * si_prefix,
+                        double offset_, double factor_, const char *si_prefix,
                         const lv_font_t *font_measure, const lv_font_t *font_unit)
 {
     maxValue = maxValue_;
@@ -453,20 +459,21 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     /******************************
      **   SI_Prefix
      ******************************/
-    label_si_prefix = lv_label_create(parent);
+    lv_obj_add_flag(label_unit, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+    label_si_prefix = lv_label_create(label_unit);
     lv_obj_remove_style_all(label_si_prefix);
     lv_label_set_text(label_si_prefix, si_prefix); // µΩm
-    lv_obj_align(label_si_prefix, LV_ALIGN_DEFAULT, x + 269-15, y + 3);
+    // lv_obj_align(label_si_prefix, LV_ALIGN_DEFAULT, x + 269-15, y + 3);
+    lv_obj_align(label_si_prefix, LV_ALIGN_DEFAULT, -12, +2);
 
     lv_style_init(&style_si_prefix);
     lv_style_set_text_letter_space(&style_si_prefix, 0);
     lv_style_set_text_color(&style_si_prefix, measureColor);
-    lv_style_set_text_font(&style_si_prefix, &DejaVuSans_R_24);
+    lv_style_set_text_font(&style_si_prefix, &DejaVuSans_b_22); //&DejaVuSans_R_24 &Tauri_R_20
     lv_obj_remove_style(label_si_prefix, &style_si_prefix, LV_STATE_DEFAULT);
     lv_obj_add_style(label_si_prefix, &style_si_prefix, LV_STATE_DEFAULT);
 
     lv_obj_add_flag(label_si_prefix, LV_OBJ_FLAG_HIDDEN);
-
 
     /******************************
      **   Bar

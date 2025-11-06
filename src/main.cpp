@@ -100,9 +100,10 @@ void loop()
   // pixels.setPixelColor(0, pixels.Color(0, 0, 0)); // Red
   // neopixelWrite(RGB_BUILTIN,0,0,0); // Green
 
+  StatusBarUpdateInterval(443);
   LvglUpdatesInterval(0);
   // trackLoopExecution(__func__);
-  StatusBarUpdateInterval(333);
+  
 
   if ((millis() - encoderTimeStamp) > 33)
     FlushMeasuresInterval(75 + 60 * PowerSupply.Voltage.measured.NofAvgs); // PowerSupply.Voltage.measured.NofAvgs
