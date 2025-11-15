@@ -1442,6 +1442,7 @@ void Task_ADC(void *pvParameters)
     // ************************ Temperature DS18B20 Sensor ********************************************************
     for (;;)
     {
+
         // if (lvglIsBusy)
         // {
 
@@ -1516,6 +1517,7 @@ void Task_ADC(void *pvParameters)
         //     if (adcDataReady && PowerSupply.adc.busyChannel == CURRENT)
         //         I.shift(); // Shift for new sample
         // }
+        // ulTaskNotifyTake(pdTRUE, portMAX_DELAY);   // wait until ready
         if (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0) // avid conversion when spi is working!
         {
             PowerSupply.readVoltage();
@@ -1700,7 +1702,7 @@ static void btnm_event_handler(lv_event_t *e)
         const char *txt = lv_textarea_get_text(ta);
         PowerSupply.Current.SetUpdate(strtod(txt, NULL) * 10.0 + PowerSupply.Current.adjOffset);
         lv_textarea_set_text(ta, "");
-        ismyTextHiddenChange = true;        
+        ismyTextHiddenChange = true;
     }
     else
         lv_textarea_add_text(ta, txt);
@@ -2824,8 +2826,7 @@ void keyCheckLoop()
                      lv_obj_add_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
                      PowerSupply.calibrationUpdate();
                      PowerSupply.Current.displayUpdate(true);
-                     blockAll = false;
-                 });
+                     blockAll = false; });
 
     keyMenusPage('T', " RELEASED.", 4, [&]
                  {
@@ -3160,7 +3161,8 @@ void keyCheckLoop()
                      }
                      else if (strcmp(lv_label_get_text(unit_label), "V") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
 
-                         key_event_handler(8); });
+                         key_event_handler(8);
+                        lv_obj_invalidate(lv_scr_act()); });
 
     keyMenusPage('v', " RELEASED.", 2, []
                  {
@@ -3172,7 +3174,7 @@ void keyCheckLoop()
                          delay(100);
                      }
                      else if (strcmp(lv_label_get_text(unit_label), "mV") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-                         key_event_handler(9); });
+                         key_event_handler(9);lv_obj_invalidate(lv_scr_act());  });
 
     keyMenusPage('A', " RELEASED.", 2, []
                  {
@@ -3184,7 +3186,7 @@ void keyCheckLoop()
                            delay(100);
                      }
                      else if (strcmp(lv_label_get_text(unit_label), "A") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-                         key_event_handler(13); });
+                         key_event_handler(13); lv_obj_invalidate(lv_scr_act()); });
 
     keyMenusPage('a', " RELEASED.", 2, []
                  {
@@ -3196,7 +3198,7 @@ void keyCheckLoop()
                   delay(100);
             }
             else if (strcmp(lv_label_get_text(unit_label), "mA") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-                key_event_handler(14); });
+                key_event_handler(14);lv_obj_invalidate(lv_scr_act());  });
 
     keyMenusPage('W', " RELEASED.", 2, []
                  {
@@ -3714,7 +3716,8 @@ void trackLoopExecution(const char *callerName)
 
 void LvglUpdatesInterval(unsigned long interval)
 {
-    static unsigned long timer_ = {0}; // Interval in milliseconds
+    static unsigned long timer_ = {0};  // Interval in milliseconds
+    static unsigned long timer_2 = {0}; // Interval in milliseconds
     if (lvglChartIsBusy)
     {
         vTaskDelay(1);
@@ -3738,6 +3741,16 @@ void LvglUpdatesInterval(unsigned long interval)
              },
 
              interval, timer_);
+
+    schedule([]
+             { lv_obj_invalidate(lv_scr_act()); }, 60000, timer_2);
+}
+
+void LvglFullUpdates(unsigned long interval)
+{
+    static unsigned long timer_ = {0}; // Interval in milliseconds
+    schedule([]
+             { lv_obj_invalidate(lv_scr_act()); }, interval, timer_);
 }
 
 void StatusBarUpdateInterval(unsigned long interval)
@@ -3799,6 +3812,7 @@ void EncoderRestartInterval(unsigned long interval)
                  temp = PowerSupply.Current.encoder.getCount();
                  PowerSupply.Current.encoder.clearCount();
                  PowerSupply.Current.encoder.setCount(temp);
+               
                  // toneOff();
              },
              interval, timer_);

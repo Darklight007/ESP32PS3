@@ -366,6 +366,9 @@ void setupDAC()
     PowerSupply.DAC.writeAndPowerAll(DAC_VOLTAGE, 0); // Initialize DAC outputs
     Serial.print("\nDAC Setup Completed.");
 }
+// void startTasks(){
+//   xTaskCreatePinnedToCore(adc_task, "ADC_TASK", 4096, nullptr, 4, &adcTaskHandle, 0);
+// }
 
 // Create tasks for FreeRTOS
 void createTasks()
@@ -392,6 +395,7 @@ void createTasks()
         0                        /* Pin task to core 0 */
     );
 
+ 
     // Create a task for ADC reading, with priority 1, pinned to core 0
     // xTaskCreatePinnedToCore(
     //     Task_DAC,                /* Task function */

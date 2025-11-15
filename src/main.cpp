@@ -52,8 +52,8 @@
 
 void setup()
 {
-  esp_task_wdt_init(20, false);  // 10s instead of default ~5s
-
+  esp_task_wdt_init(120, false); // X second timeout
+  esp_task_wdt_add(NULL);       // Add current task to watchdog
 
   // Disable Task Watchdog Timer
   // esp_task_wdt_deinit(); // Deinitializes the task watchdog timer
@@ -91,19 +91,23 @@ void setup()
   // pixels.setPixelColor(0, pixels.Color(0, 0, 0));
   // pixels.show();
   // ADC_INL_Voltage_calibration_cb(nullptr);
-
-
 }
 
-void loop()
-{
+bool oneTimeCommandDone = false;
+
+void loop() {
+  if (!oneTimeCommandDone) {
+  esp_task_wdt_init(120, false); // X second timeout
+  esp_task_wdt_add(NULL);       // Add current task to watchdog
+    oneTimeCommandDone = true;
+  }
   // pixels.setPixelColor(0, pixels.Color(0, 0, 0)); // Red
   // neopixelWrite(RGB_BUILTIN,0,0,0); // Green
 
   StatusBarUpdateInterval(443);
   LvglUpdatesInterval(0);
+
   // trackLoopExecution(__func__);
-  
 
   if ((millis() - encoderTimeStamp) > 33)
     FlushMeasuresInterval(75 + 60 * PowerSupply.Voltage.measured.NofAvgs); // PowerSupply.Voltage.measured.NofAvgs

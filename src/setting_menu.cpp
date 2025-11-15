@@ -20,6 +20,7 @@
 #include <functional>
 #include <cstdarg>
 #include <vector>
+#include "esp_task_wdt.h"
 
 #include "MonotoneCubicCalibrator.h"
 
@@ -618,7 +619,7 @@ namespace
         LVButton btnSave(cont, "Save", btn_pos.x + 62, btn_pos.y, 54, 26, nullptr, save_cb);
         LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 54, 26, nullptr, load_cb);
 
-        LVButton btnAutoZeros(cont, "Auto zeros", btn_pos.x +5, btn_pos.y+31, 2 * 54, 26, nullptr, autoZeroCurrent_cb);
+        LVButton btnAutoZeros(cont, "Auto zeros", btn_pos.x + 5, btn_pos.y + 31, 2 * 54, 26, nullptr, autoZeroCurrent_cb);
 
         // m, b, and Vin_cal notes (simple labels)
         auto *label_m = lv_label_create(cont);
@@ -888,7 +889,14 @@ static void seq_cb(lv_timer_t *t);
 // Create and start the runner
 static SeqRunner *seq_start(lv_timer_t *t, const SeqStep *steps, size_t count, measure_ctx_t *mctx)
 {
+
     auto *r = static_cast<SeqRunner *>(lv_mem_alloc(sizeof(SeqRunner)));
+    if (!r)
+    {
+        Serial.println("ERROR: Failed to allocate memory!");
+        lv_timer_del(t);
+        return nullptr;
+    }
     r->timer = t;
     r->steps = steps;
     r->count = count;
@@ -956,7 +964,7 @@ static void start_current_totalR()
 {
     auto *c = (CurrentCalCtx *)lv_mem_alloc(sizeof(CurrentCalCtx));
     *c = CurrentCalCtx{};
-
+     esp_task_wdt_reset();
     static const SeqStep steps[] = {
         {"Setting voltage to 0V", 1500, 500,
          []()
@@ -967,7 +975,7 @@ static void start_current_totalR()
         // {"2nd Reset statistics", 1000, 1500,
         //  []()
         //  { PowerSupply.ResetStats(); }, nullptr},
-        {"Measuring current at 0V", 30000, 1500,
+        {"Measuring current at 0V", 60000, 1500,
          nullptr, [c]()
          { c->v0 = PowerSupply.Current.Statistics.Mean(); }},
         {"Setting voltage to 32V", 1500, 500,
@@ -984,13 +992,14 @@ static void start_current_totalR()
         //  []()
         //  { PowerSupply.ResetStats(); }, nullptr},
 
-        {"Measuring current at 32V", 30000, 1000,
+        {"Measuring current at 32V", 60000, 1000,
          nullptr, [c]()
          { c->v1 = PowerSupply.Current.Statistics.Mean(); }},
         {"Finalize", 100, 100, nullptr,
          [c]()
          {
-            blockAll = true;
+             esp_task_wdt_reset();
+             blockAll = true;
              log_step("           i0 = %+1.6f", c->v0);
              log_step("           i1 = %+1.6f", c->v1);
              double Rtot = (PowerSupply.mA_Active ? 1000.0 : 1.0) * 32.0f / (c->v1 - c->v0) / 1000.0f;
@@ -1000,14 +1009,14 @@ static void start_current_totalR()
              PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage = Rtot;
              PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
              lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
-
+             esp_task_wdt_reset();
              lv_timer_set_repeat_count(close_t, 1);
              lv_mem_free(c);
              blockAll = false;
          }},
     };
 
-    lv_timer_t *t = lv_timer_create(seq_cb, 1, nullptr);
+    lv_timer_t *t = lv_timer_create(seq_cb, 50, nullptr);
     seq_start(t, steps, sizeof(steps) / sizeof(steps[0]), nullptr);
 }
 
@@ -1050,7 +1059,8 @@ void Warning_msgbox(const char *title, lv_event_cb_t event_cb)
     // // Enable recolor so LVGL applies the #RRGGBB tags
     // lv_label_set_recolor(lv_msgbox_get_text(mbox1), true);
     // lv_obj_center(mbox1);
-
+    // esp_task_wdt_reset();
+      esp_task_wdt_reset();
     static const char *btns[] = {"OK", "Cancel", ""};
     lv_obj_t *mbox1 = lv_msgbox_create(NULL, title, "Disconnect any load!", btns, true);
 
@@ -1110,6 +1120,7 @@ void Warning_msgbox(const char *title, lv_event_cb_t event_cb)
 lv_obj_t *mbox;
 static void AutoMeasureTotalRes_cb(lv_event_t *)
 {
+      esp_task_wdt_reset();
     // static const char *btns[] = {"OK", "Cancel", ""};
 
     // mbox = lv_msgbox_create(NULL, "Auto Measure", "Disconnect any load!", btns, true);
@@ -1215,7 +1226,7 @@ static inline uint32_t since(uint32_t t) { return lv_tick_elaps(t); }
 uint16_t last_adjValue;
 void inl_gui_prepare()
 {
-    if (!lvglIsBusy)
+    // if (!lvglIsBusy)
     {
         last_adjValue = PowerSupply.Voltage.adjValue;
         // Set start (0V)
@@ -1237,7 +1248,8 @@ void inl_gui_set(double v_cmd)
 
 void inl_gui_measure(double measure, double v_cmd)
 {
-    if (!lvglIsBusy)
+    // if (!lvglIsBusy  && table_inl && lv_obj_is_valid(table_inl))
+    if (table_inl && lv_obj_is_valid(table_inl))
     {
         lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 1, "%+08.4f", inl.y_true[inl.i]);
         lv_table_set_cell_value_fmt(table_inl, inl.i + 1, 2, "%+09.5f", measure);
@@ -1247,7 +1259,7 @@ void inl_gui_measure(double measure, double v_cmd)
 
 void inl_gui_compute()
 {
-    if (!lvglIsBusy)
+    // if (!lvglIsBusy)
     {
         PowerSupply.gui.calibration.inl.lbl_inl_state->set_text("#FFFF00 Done");
         PowerSupply.gui.calibration.inl.lbl_bar_progress->set_text_fmt("Progress: 100%%");
@@ -1332,7 +1344,7 @@ static void INL_timer_cb(lv_timer_t *)
     case INL_FSM::COMPUTE:
     {
         INL_dbg("[INL] COMPUTE begin");
-
+        //  vTaskDelay(1); // gives other tasks a chance
         std::vector<double> X(inl.x_raw, inl.x_raw + INL_FSM::NPTS); // ideal volts (Mean)
         std::vector<double> Y(TRUE_IDEAL, TRUE_IDEAL + NPTS);        // true volts (set)
         g_voltINL.setPoints(X, Y);
@@ -1796,6 +1808,7 @@ namespace
 
     static void auto_zero_event_cb(lv_event_t *e)
     {
+          esp_task_wdt_reset();
         lv_obj_t *obj = lv_event_get_current_target(e);
         if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
         {
@@ -1816,7 +1829,7 @@ namespace
     static void start_current_zeros(lv_event_t *e)
     {
         // auto *c = (CurrentCalCtx *)lv_mem_alloc(sizeof(CurrentCalCtx));
-        static int32_t c0_raw = 0;  
+        static int32_t c0_raw = 0;
 
         static const SeqStep steps[] = {
             {"Setting voltage to 0V", 1500, 500,
@@ -1859,7 +1872,7 @@ namespace
 
         };
 
-        lv_timer_t *t = lv_timer_create(seq_cb, 1, nullptr);
+        lv_timer_t *t = lv_timer_create(seq_cb, 50, nullptr);
         seq_start(t, steps, sizeof(steps) / sizeof(steps[0]), nullptr);
     }
 } // namespace
