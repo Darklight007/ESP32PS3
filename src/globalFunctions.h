@@ -2817,60 +2817,9 @@ void trackLoopExecution(const char *callerName)
     }
 }
 
-void LvglUpdatesInterval(unsigned long interval)
-{
-    static unsigned long timer_ = {0};  // Interval in milliseconds
-    static unsigned long timer_2 = {0}; // Interval in milliseconds
-    if (lvglChartIsBusy)
-    {
-        vTaskDelay(1);
-        // return;
-    }
-    schedule([]
-             {
-                 if (!lvglChartIsBusy && !blockAll && adcDataReady) //&& adcDataReady
-                                                                    //  when adcDataReady is set, it means the data is ready and conversion has stoped.
-                                                                    /// Best time to run SPI to not generate noise on ADC
-                 {
-                     // PowerSupply.adc.ads1219->pause();
-                     lvglIsBusy = 1;
-                     lv_timer_handler();
-                     vTaskDelay(pdMS_TO_TICKS(1)); // ~5ms
-                     lvglIsBusy = 0;
-                     //  PowerSupply.adc.ads1219->begin();
-                 }
-                 //  else
-                 //  delay(10);
-             },
-
-             interval, timer_);
-
-    schedule([]
-             { lv_obj_invalidate(lv_scr_act()); }, 60000, timer_2);
-}
-
-// LvglFullUpdates, StatusBarUpdateInterval, FlushMeasuresInterval, and statisticUpdateInterval moved to intervals.cpp
-
-void FFTUpdateInterval(unsigned long interval)
-{
-    static unsigned long timer_ = {0};
-    schedule([]
-             {
-                 /*FFT_v*/
-
-                 V.computeFFT(PowerSupply.adc.realADCSpeed /* 1/2.02 */);
-                 I.computeFFT(PowerSupply.adc.realADCSpeed /**/);
-
-                 lv_label_set_text_fmt(PowerSupply.Voltage.statLabels.label_fft, "V-FFT:%5.1f Hz", V.peak);
-                 lv_label_set_text_fmt(PowerSupply.Current.statLabels.label_fft, "I-FFT:%5.1f Hz", I.peak);
-
-                 //   lv_label_set_text_fmt(label_statMenu_VFFT, "V-FFT_v:%5.1f Hz", V.peak);
-                 //   lv_label_set_text_fmt(label_statMenu_IFFT, "I-FFT_i:%5.1f Hz", I.peak);
-             },
-             interval, timer_);
-}
-
-// EncoderRestartInterval, KeyCheckInterval, and VCCCInterval moved to intervals.cpp
+// All interval functions (LvglUpdatesInterval, FFTUpdateInterval, LvglFullUpdates, StatusBarUpdateInterval,
+// FlushMeasuresInterval, statisticUpdateInterval, EncoderRestartInterval, KeyCheckInterval, and VCCCInterval)
+// have been moved to intervals.cpp
 
 // void DACInterval(unsigned long interval)
 // {

@@ -14,3 +14,5 @@ void EncoderRestartInterval(unsigned long interval);
 void KeyCheckInterval(unsigned long interval);
 void LvglFullUpdates(unsigned long interval);
 void VCCCInterval(unsigned long interval);
+void LvglUpdatesInterval(unsigned long interval);
+void FFTUpdateInterval(unsigned long interval);
