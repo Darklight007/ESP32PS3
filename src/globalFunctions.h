@@ -2943,21 +2943,7 @@ void LvglFullUpdates(unsigned long interval)
 }
 
 // StatusBarUpdateInterval and FlushMeasuresInterval moved to intervals.cpp
-void statisticUpdateInterval(unsigned long interval)
-{
-    static unsigned long timer_ = {0};
-    schedule([]
-             {
-            // if (!lvglIsBusy)
-            //     lv_chart_refresh(PowerSupply.stats.chart);
-                PowerSupply.settingParameters.SetVoltage = PowerSupply.Voltage.adjValue;
-                PowerSupply.settingParameters.SetCurrent = PowerSupply.Current.adjValue;
-                PowerSupply.SaveSetting();
-                
-                PowerSupply.Voltage.statUpdate();
-                PowerSupply.Current.statUpdate(); },
-             interval, timer_);
-}
+// statisticUpdateInterval moved to intervals.cpp
 
 void FFTUpdateInterval(unsigned long interval)
 {
@@ -2978,23 +2964,7 @@ void FFTUpdateInterval(unsigned long interval)
              interval, timer_);
 }
 
-void EncoderRestartInterval(unsigned long interval)
-{
-    static unsigned long timer_ = {0};
-    schedule([]
-             {
-                 int64_t temp = PowerSupply.Voltage.encoder.getCount();
-                 PowerSupply.Voltage.encoder.clearCount();
-                 PowerSupply.Voltage.encoder.setCount(temp);
-                 // toneOff();
-                 temp = PowerSupply.Current.encoder.getCount();
-                 PowerSupply.Current.encoder.clearCount();
-                 PowerSupply.Current.encoder.setCount(temp);
-               
-                 // toneOff();
-             },
-             interval, timer_);
-}
+// EncoderRestartInterval moved to intervals.cpp
 
 void KeyCheckInterval(unsigned long interval)
 {
