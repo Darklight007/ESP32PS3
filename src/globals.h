@@ -1,0 +1,60 @@
+#pragma once
+
+#include <lvgl.h>
+#include <TFT_eSPI.h>
+
+// Global variables for chart data
+#define CHART_SIZE 240 * 5
+extern lv_coord_t graph_data_V[CHART_SIZE];
+extern lv_coord_t graph_data_I[CHART_SIZE];
+
+extern int32_t barGraph_V[1];
+extern int32_t barGraph_I[1];
+
+// UI objects
+extern lv_obj_t *tabview_utility;
+extern lv_obj_t *btn_function_gen;
+
+// Encoder values
+extern int globalSliderXValue;
+extern int32_t encoder1_value, encoder2_value;
+
+// Waveform data
+extern bool blockAll;
+
+// Function generator structures
+struct function
+{
+    lv_obj_t *Amplitude;
+    lv_obj_t *Frequency;
+    lv_obj_t *Offset;
+    lv_obj_t *Duty;
+};
+
+struct objs_list
+{
+    lv_obj_t *table_fun_gen_list;
+    function fun;
+    lv_obj_t *table_point_list;
+    lv_obj_t *table_spinbox_value;
+    double table_current_value;
+    lv_obj_t *switch_keys_scan;
+    lv_obj_t *switch_keys_label;
+    lv_coord_t arbitrary_points[20][2];
+};
+
+extern struct objs_list Utility_objs;
+
+// Waveform function pointer type
+typedef double (*WaveformFunction)(double);
+
+// Struct for waveform function and name
+typedef struct
+{
+    const char *name;
+    WaveformFunction function;
+} Waveform;
+
+// Array of waveform structs
+extern Waveform waveforms[];
+extern int numWaveforms;
