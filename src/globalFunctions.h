@@ -19,12 +19,11 @@
 #include "ui_helpers.h"
 #include "tasks.h"
 #include "input_handler.h"
+#include "intervals.h"
 
 // Forward declarations for functions defined later in this file
 void GraphPush();
 void HistPush();
-void schedule(std::function<void(void)> func, unsigned long &&interval, unsigned long &startTime);
-void schedule(std::function<void(void)> func, unsigned long &interval, unsigned long &startTime);
 void KeyCheckInterval(unsigned long interval);
 void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data);
 bool functionGenerator();
@@ -2721,22 +2720,7 @@ void StatusBar()
     // }
 }
 
-void schedule(std::function<void(void)> func, unsigned long &&interval, unsigned long &startTime)
-{
-    if ((millis() - startTime) < interval)
-        return;
-
-    startTime = millis();
-    func();
-}
-void schedule(std::function<void(void)> func, unsigned long &interval, unsigned long &startTime)
-{
-    if ((millis() - startTime) < interval)
-        return;
-    startTime = millis();
-    func();
-    // getSettingEncoder(NULL, NULL);
-}
+// schedule() functions moved to intervals.cpp
 // class RepeatedScheduler
 // {
 // public:
