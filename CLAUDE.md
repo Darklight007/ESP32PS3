@@ -310,13 +310,13 @@ After making changes:
 **Progress**:
 - ✅ `globals.h/cpp` - Global variables centralized
 - ✅ `functions.h` - Forward declarations for circular dependency resolution
-- ✅ `ui_helpers.h/cpp` - Chart and graph UI functions (~400 lines extracted)
+- ✅ `ui_helpers.h/cpp` - Chart/graph UI and data update functions (~420 lines extracted)
 - ✅ `tasks.h/cpp` - FreeRTOS task implementations (~200 lines extracted)
 - ✅ `input_handler.h/cpp` - Touch calibration and handlers (~100 lines extracted)
-- ✅ `intervals.h/cpp` - Schedule function overloads (~20 lines extracted)
-- ⏳ Future: Additional modularization of remaining ~3800 lines in `globalFunctions.h`
+- ✅ `intervals.h/cpp` - Schedule functions + 7 interval functions (~80 lines extracted)
+- ⏳ Future: Additional modularization of remaining ~3700 lines in `globalFunctions.h`
 
-**File size reduction**: 4,878 lines → 3,865 lines (21% reduction so far)
+**File size reduction**: 4,878 lines → 3,771 lines (22.7% reduction, 1,107 lines extracted)
 
 **Known Issues Being Fixed**:
 - Static function linkage errors when calling from new modules
