@@ -51,10 +51,11 @@ This is an ESP32-S3 based programmable power supply with advanced features inclu
 - Touch input via resistive touchscreen
 
 **Task Architecture (FreeRTOS)**:
-- `Task_adc`: High-priority ADC reading task
-- `Task1`: General UI and system management
+- `Task_ADC` (`tasks.cpp`): High-priority ADC reading, measurements, charts, encoder input, DAC updates
+- `Task_BarGraph` (`tasks.cpp`): Updates bar graph displays on page 2
 - Watchdog timer: 120 second timeout
 - Runs on dual-core ESP32-S3
+- Tasks communicate via flags: `adcDataReady`, `lvglIsBusy`, `lvglChartIsBusy`, `blockAll`
 
 ### Code Organization (Recently Refactored)
 
@@ -62,9 +63,22 @@ This is an ESP32-S3 based programmable power supply with advanced features inclu
 - `config.hpp`: Global configuration, extern declarations, pin definitions
 - `device.hpp`: Device class, enums (DEVICE states), calibration structures
 - `globals.h/cpp`: Global variables (chart data, UI objects, encoders)
-- `functions.h`: Function prototypes
+- `functions.h`: Forward declarations to avoid circular includes
 - `waveform_generator.h/cpp`: All waveform generation functions (19 waveforms)
-- `globalFunctions.h`: Large file (~4500 lines) with UI implementations, callbacks, utility functions
+- `ui_helpers.h/cpp`: UI chart/graph drawing functions (extracted from globalFunctions.h)
+- `tasks.h/cpp`: FreeRTOS task implementations (Task_ADC, Task_BarGraph)
+- `input_handler.h/cpp`: Touch calibration and encoder page handlers
+- `globalFunctions.h`: Large file (~3500 lines, being progressively reduced) with remaining UI implementations and callbacks
+
+**Important constants** (defined across various headers):
+- `CHART_SIZE`: 240 × 5 = 1200 points (graph chart buffer)
+- `BUCKET_COUNT`: 100 (histogram buckets)
+- `CHART_POINTS`: 20 (chart display points, defined in `ui_helpers.h`)
+- `NUM_LABELS`: 7 (chart axis labels)
+- `VOLTAGE`: 1 (ADC channel)
+- `CURRENT`: 3 (ADC channel)
+- `DAC_VOLTAGE`: CHANNEL_D (DAC channel)
+- `DAC_CURRENT`: CHANNEL_B (DAC channel)
 
 **Setup flow** (`main.cpp`):
 1. `initializeSerial()`, `initialMemory()`
@@ -126,10 +140,59 @@ This is an ESP32-S3 based programmable power supply with advanced features inclu
    - Test after each step (compile + upload + verify)
    - Never batch multiple risky changes together
 
-4. **Recent Example**: When splitting `globalFunctions.h` (4878 lines), changes were made in 3 separate steps with compilation and hardware testing after each:
-   - Step 1: Extract globals → compile → upload → test → ✓
-   - Step 2: Extract function declarations → compile → upload → test → ✓
-   - Step 3: Extract waveform code → compile → upload → test → ✓
+4. **Recent Example**: When splitting `globalFunctions.h` (originally 4878 lines → now ~3500 lines), changes were made in multiple steps with compilation and hardware testing after each:
+   - Step 1: Extract globals to `globals.h/cpp` → compile → upload → test → ✓
+   - Step 2: Extract UI helpers to `ui_helpers.h/cpp` → compile → upload → test → ✓
+   - Step 3: Extract tasks to `tasks.h/cpp` → compile → upload → test → ✓
+   - Step 4: Extract input handlers to `input_handler.h/cpp` → compile → fix errors → upload → test → ✓
+   - Each step reduced file by ~400-500 lines, with systematic error fixing (linkage, multiple definitions, missing declarations)
+
+### Refactoring Pattern for Extracting from globalFunctions.h
+
+When extracting functions to a new module, follow this systematic approach:
+
+1. **Create header and implementation files**:
+   ```bash
+   touch src/module_name.h src/module_name.cpp
+   ```
+
+2. **In the `.h` file**:
+   - Add `#pragma once`
+   - Include necessary dependencies (`<lvgl.h>`, `<TFT_eSPI.h>`, etc.)
+   - Add function declarations (prototypes only)
+   - Declare any `extern` variables needed
+
+3. **In the `.cpp` file**:
+   - Include the header file
+   - Include `device.hpp`, `globals.h`, `functions.h` as needed
+   - Copy function implementations from `globalFunctions.h`
+   - Define any variables (not `extern`, actual definitions)
+   - Add forward declarations for functions still in `globalFunctions.h`
+
+4. **Update globalFunctions.h**:
+   - Add `#include "module_name.h"` at the top
+   - Remove the extracted functions
+   - Remove any structs/variables moved to the new module
+
+5. **Fix linkage issues**:
+   - If getting "undefined reference" errors, the function may be `static` in `globalFunctions.h`
+   - Remove `static` keyword to allow external linkage, OR
+   - Add forward declaration to `functions.h`
+   - For callback functions used by LVGL, add declarations to `functions.h`
+
+6. **Compile and fix errors incrementally**:
+   ```bash
+   ~/.platformio/penv/bin/pio run
+   ```
+   - Fix "multiple definition" errors by moving variables to `globals.cpp` or making them `static` in `.cpp` files
+   - Fix "undefined reference" errors by adding forward declarations or removing `static`
+   - Fix "not declared in scope" by adding necessary includes or `#define` constants
+
+7. **Upload and test**:
+   ```bash
+   ~/.platformio/penv/bin/pio run --target upload
+   ```
+   Wait for user to confirm "ok" before proceeding
 
 ### Code Style & Patterns
 
@@ -137,7 +200,7 @@ This is an ESP32-S3 based programmable power supply with advanced features inclu
 - Declarations in `.h` files, definitions in `.cpp` files
 - Exception: `globalFunctions.h` contains implementations (legacy, being refactored)
 - Use `#pragma once` for include guards
-- Forward declarations in `config.hpp` to avoid circular dependencies
+- Forward declarations in `functions.h` to avoid circular dependencies
 
 **Global state**:
 - Singletons declared `extern` in `config.hpp`, defined in `config.cpp`
@@ -159,9 +222,19 @@ This is an ESP32-S3 based programmable power supply with advanced features inclu
 
 1. **Don't use `pio` directly** - it may not be in PATH. Use `~/.platformio/penv/bin/pio`
 
-2. **Static functions in headers** - Functions declared `static` in headers (like `draw_event_cb`) need implementations in the same file due to static linkage
+2. **Static functions and linkage issues** - When extracting functions from headers:
+   - Functions marked `static` have internal linkage (file-scope only)
+   - To call from another module, remove `static` keyword
+   - Variables marked `static` in headers cause multiple definition errors
+   - Move static variables to `globals.h/cpp` and declare with `extern` in header
+   - Add forward declarations to `functions.h` for callbacks used across modules
 
-3. **Circular dependencies** - Use forward declarations and include order:
+3. **Multiple definition errors** - Common during refactoring:
+   - Variables: Declare with `extern` in `.h` file, define in `.cpp` file (only once)
+   - Structs defined in headers are now in implementation files (e.g., `TouchAttr` in `input_handler.cpp`)
+   - Arrays like `dataBuckets[]` should be declared `extern` in header, defined in `.cpp`
+
+4. **Circular dependencies** - Use forward declarations and include order:
    ```cpp
    // In header:
    class Device; // forward decl
@@ -169,10 +242,20 @@ This is an ESP32-S3 based programmable power supply with advanced features inclu
    // In .cpp:
    #include "device.hpp" // full definition
    ```
+   - `functions.h` exists specifically to provide forward declarations and break circular includes
 
-4. **LVGL threading** - LVGL calls must be from main thread or protected by `lv_lock()`/`lv_unlock()`
+5. **LVGL threading** - LVGL calls must be from main thread or protected by `lv_lock()`/`lv_unlock()`
+   - Check `lvglIsBusy` and `blockAll` flags before LVGL operations from tasks
+   - Charts use `lvglChartIsBusy` flag for additional protection
 
-5. **Memory constraints** - ESP32-S3 has limited RAM; use PSRAM for large buffers, avoid heap fragmentation
+6. **Memory constraints** - ESP32-S3 has limited RAM; use PSRAM for large buffers, avoid heap fragmentation
+
+7. **Schedule function overloads** - Two signatures exist for different interval parameter types:
+   ```cpp
+   void schedule(std::function<void(void)> func, unsigned long &&interval, unsigned long &startTime);
+   void schedule(std::function<void(void)> func, unsigned long &interval, unsigned long &startTime);
+   ```
+   Both must be forward-declared if used from another module
 
 ## Hardware-Specific Notes
 
@@ -218,3 +301,23 @@ After making changes:
 2. For hardware-affecting changes, user tests on actual power supply
 3. User confirms with "ok" if power supply works correctly
 4. If issues occur, be prepared to rollback via `git reset --hard`
+
+## Current Refactoring Status
+
+**Ongoing Work**: Extracting functions from `globalFunctions.h` to improve maintainability
+
+**Progress**:
+- ✅ `globals.h/cpp` - Global variables centralized
+- ✅ `functions.h` - Forward declarations for circular dependency resolution
+- ✅ `ui_helpers.h/cpp` - Chart and graph UI functions (~400 lines extracted)
+- ✅ `tasks.h/cpp` - FreeRTOS task implementations (~200 lines extracted)
+- 🔄 `input_handler.h/cpp` - Touch and encoder handlers (~500 lines extracted, fixing compilation errors)
+- ⏳ Future: Additional modularization of remaining ~3000 lines in `globalFunctions.h`
+
+**File size reduction**: 4,878 lines → ~3,500 lines (28% reduction so far)
+
+**Known Issues Being Fixed**:
+- Static function linkage errors when calling from new modules
+- Multiple definition errors for variables declared in headers
+- Missing forward declarations for callback functions
+- `CHART_POINTS` constant availability across modules
