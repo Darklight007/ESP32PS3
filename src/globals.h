@@ -26,6 +26,13 @@ extern int32_t encoder1_value, encoder2_value;
 // Waveform data
 extern bool blockAll;
 
+// Input state
+extern bool dropdown_active;
+
+// Utility charts
+extern lv_obj_t *util_Arbit_chart;
+extern lv_chart_series_t *util_Arbit_chart_series;
+
 // Bucket and label data
 extern uint16_t dataBuckets[BUCKET_COUNT];
 extern char tickLabels_x[NUM_LABELS][10];

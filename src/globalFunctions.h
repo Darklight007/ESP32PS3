@@ -719,70 +719,7 @@ void SetupOVP()
     lv_style_set_text_font(&style_ovctp, &ATARISTOCRAT_16bt);
     lv_obj_add_style(ovpLabel, &style_ovctp, LV_STATE_DEFAULT);
 };
-// Code to run a screen calibration, not needed when calibration values set in setup()
-void touch_calibrate()
-{
-    uint16_t calData[5];
-    uint8_t calDataOK = 0;
-
-    // Calibrate
-    tft.fillScreen(TFT_BLACK);
-    tft.setCursor(20, 0);
-    tft.setTextFont(2);
-    tft.setTextSize(1);
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-
-    tft.println("Touch corners as indicated");
-
-    tft.setTextFont(1);
-    tft.println();
-
-    tft.calibrateTouch(calData, TFT_MAGENTA, TFT_BLACK, 15);
-
-    Serial.println();
-    Serial.println();
-    Serial.println("// Use this calibration code in setup():");
-    Serial.print("  uint16_t calData[5] = ");
-    Serial.print("{ ");
-
-    for (uint8_t i = 0; i < 5; i++)
-    {
-        Serial.print(calData[i]);
-        if (i < 4)
-            Serial.print(", ");
-    }
-
-    Serial.println(" };");
-    Serial.print("  tft.setTouch(calData);");
-    Serial.println();
-    Serial.println();
-
-    tft.fillScreen(TFT_BLACK);
-
-    tft.setTextColor(TFT_GREEN, TFT_BLACK);
-    tft.println("Calibration complete!");
-    tft.println("Calibration code sent to Serial port.");
-
-    delay(4000);
-}
-// Touch VAriables
-struct TouchAttr_
-{
-    uint16_t x = 0, y = 0; // To store the touch coordinates
-    bool pressed;
-    // uint32_t startTime;
-    // uint32_t stopTime;
-    // uint16_t x0 = 0, y0 = 0; // To store the first touch coordinates
-    // uint16_t x1 = 0, y1 = 0; // To store the last touch coordinates
-    // int xDir;
-    // int yDir;
-
-    bool getTouched(TFT_eSPI t)
-    {
-        return (t.getTouch(&x, &y));
-    }
-
-} TouchAttr;
+// touch_calibrate() and TouchAttr moved to input_handler.cpp
 
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 180
@@ -790,13 +727,8 @@ struct TouchAttr_
 #define DOT_SIZE 3
 #define CHART_Y_MAX 100 // Adjust this to match your lv_chart_set_range()
 #define CHART_POINTS 20 // Adjust this to match your lv_chart_set_range()
-static bool dropdown_active = false;
 
-// Set dot size to 3x3
-// dataBuckets moved to globals.h/cpp
-
-lv_obj_t *util_Arbit_chart;
-lv_chart_series_t *util_Arbit_chart_series;
+// dataBuckets, dropdown_active, util_Arbit_chart moved to globals.h/cpp
 
 // Update a single X with a new Y
 // void plotToBucket2(uint16_t x, uint16_t y, TFT_eSPI &tft)
@@ -850,73 +782,7 @@ lv_chart_series_t *util_Arbit_chart_series;
 //     }
 // }
 
-void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
-{
-
-    uint16_t x, y;
-    bool touched = tft.getTouch(&x, &y);
-
-    if (TouchAttr.getTouched(tft))
-    {
-        data->state = LV_INDEV_STATE_PR;
-        data->point.x = TouchAttr.x;
-        data->point.y = TouchAttr.y;
-
-        if (touched)
-        {
-            if (dropdown_active)
-                return; // Ignore touch when dropdown is open
-            lv_obj_clear_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
-            plotToBucket(x, y, util_Arbit_chart, util_Arbit_chart_series); // Reverse X and Y
-            // plotSmoothCurve(x, y, util_Arbit_chart, util_Arbit_chart_series); // Reverse X and Y
-        }
-    }
-    else
-    {
-        data->state = LV_INDEV_STATE_REL;
-        lv_obj_add_flag(lv_obj_get_parent(util_Arbit_chart), LV_OBJ_FLAG_SCROLLABLE); // Re-enable scrolling
-    }
-}
-
-// /*Read the touchpad*/
-// void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
-// {
-//     uint16_t x, y;
-//     bool touched = tft.getTouch(&x, &y);
-
-//     // Retrieve and store LVGL data
-//     if (TouchAttr.getTouched(tft))
-//     {
-//         data->state = LV_INDEV_STATE_PR;
-//         data->point.x = TouchAttr.x;
-//         data->point.y = TouchAttr.y;
-
-//         if (touched)
-//         {
-
-//             // Now do "one Y per X"
-//             // drawOneYPerX(tft, x, y, TFT_CYAN);
-//             plotToBucket(x, y, tft);
-//             // plotToBucket(x, y, tft);
-//         }
-//     }
-//     else
-//     {
-//         data->state = LV_INDEV_STATE_REL;
-//         lv_obj_add_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
-//     }
-// }
-
-/// @brief
-void init_touch()
-{
-    /*Initialize the (dummy) input device driver*/
-    static lv_indev_drv_t indev_drv;
-    lv_indev_drv_init(&indev_drv);
-    indev_drv.type = LV_INDEV_TYPE_POINTER;
-    indev_drv.read_cb = my_touchpad_read;
-    lv_indev_drv_register(&indev_drv);
-}
+// my_touchpad_read() and init_touch() moved to input_handler.cpp
 
 // Task_BarGraph and Task_ADC moved to tasks.cpp
 

@@ -15,6 +15,13 @@ int32_t encoder1_value = 0, encoder2_value = 0;
 
 struct objs_list Utility_objs;
 
+// Input state
+bool dropdown_active = false;
+
+// Utility charts
+lv_obj_t *util_Arbit_chart;
+lv_chart_series_t *util_Arbit_chart_series;
+
 // Bucket and label data definitions
 uint16_t dataBuckets[BUCKET_COUNT];
 char tickLabels_x[NUM_LABELS][10];
