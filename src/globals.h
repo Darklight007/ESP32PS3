@@ -3,8 +3,12 @@
 #include <lvgl.h>
 #include <TFT_eSPI.h>
 
-// Global variables for chart data
+// Constants
 #define CHART_SIZE 240 * 5
+#define BUCKET_COUNT 100
+#define NUM_LABELS 7
+
+// Global variables for chart data
 extern lv_coord_t graph_data_V[CHART_SIZE];
 extern lv_coord_t graph_data_I[CHART_SIZE];
 
@@ -21,6 +25,10 @@ extern int32_t encoder1_value, encoder2_value;
 
 // Waveform data
 extern bool blockAll;
+
+// Bucket and label data
+extern uint16_t dataBuckets[BUCKET_COUNT];
+extern char tickLabels_x[NUM_LABELS][10];
 
 // Function generator structures
 struct function

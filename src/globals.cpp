@@ -14,3 +14,7 @@ int globalSliderXValue;
 int32_t encoder1_value = 0, encoder2_value = 0;
 
 struct objs_list Utility_objs;
+
+// Bucket and label data definitions
+uint16_t dataBuckets[BUCKET_COUNT];
+char tickLabels_x[NUM_LABELS][10];

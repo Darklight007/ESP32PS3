@@ -1,0 +1,404 @@
+#include "ui_helpers.h"
+#include "functions.h"
+#include "myFonts.h"
+#include "buzzer.h"
+#include "tabs.h"
+
+void hide(lv_obj_t *obj)
+{
+    if (obj)
+    {
+        lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+void initBuckets(TFT_eSPI &tft)
+{
+    for (uint16_t x = 0; x < BUCKET_COUNT; x++)
+    {
+        dataBuckets[x] = 180;
+        SCREEN_HEIGHT - 1;                                                                              // Default Y to bottom
+        tft.fillRect(x * (SCREEN_WIDTH / BUCKET_COUNT), dataBuckets[x], DOT_SIZE, DOT_SIZE, TFT_WHITE); // Draw initial dots
+    }
+}
+
+// Update a single X with a new Y
+void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *series)
+{
+    if (!chart || !series || lv_obj_is_visible(chart) == false || Tabs::getCurrentPage() != 3) // || lv_tabview_get_tab_act(tabview_utility) !=3)
+        return;
+
+    if (y > 30 && y < 190 && x > 5)
+    {
+        // Disable scrolling before plotting
+        // lv_obj_clear_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
+
+        // Swap X and Y to match LVGL's coordinate system
+        // uint16_t temp = x;
+        // x = y;
+        y = CHART_Y_MAX - y; // Flip Y-axis so 0 is at the bottom
+
+        // Plot the point at the correct position
+        lv_chart_set_value_by_id(chart, series, (x - 20) / (100 / CHART_POINTS * 2.9), y + 80);
+
+        // Refresh the chart
+        lv_chart_refresh(chart);
+
+        // Re-enable scrolling after updating the chart
+        // lv_obj_add_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
+    }
+}
+
+/* Read the touchpad */
+// void my_touchpad_read2(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
+// {
+//     uint16_t x, y;
+//     bool touched = tft.getTouch(&x, &y);
+
+//     // Retrieve and store LVGL data
+//     if (TouchAttr.getTouched(tft))
+//     {
+//         data->state = LV_INDEV_STATE_PR;
+//         data->point.x = TouchAttr.x;
+//         data->point.y = TouchAttr.y;
+
+//         if (touched)
+//         {
+//             plotToBucket(x, y, tft); // Update display with new dot
+//         }
+//     }
+//     else
+//     {
+//         data->state = LV_INDEV_STATE_REL;
+//         lv_obj_add_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
+
+
+// GraphChart function
+void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
+{ /*Create a chart*/
+
+    PowerSupply.graph.chart = lv_chart_create(parent);
+    lv_obj_set_size(PowerSupply.graph.chart, 242, 154);
+    lv_obj_align(PowerSupply.graph.chart, LV_ALIGN_DEFAULT, x, y);
+
+    lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_Y, -.3 * 1000, 32000);  // 40000mv
+    lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_Y, -.3 * 1000, 8000); // 8000ma
+    lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_X, 0, 300);
+    // lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_X, -.3 * 1000, 32000); // 40000mv
+
+    lv_chart_set_div_line_count(PowerSupply.graph.chart, 9, 13);
+    lv_obj_set_style_text_color(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_GREY), LV_PART_TICKS);
+    lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_Y, 5, 3, 9, 4, true, 40);
+    lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_X, 5, 3, 7, 10, true, 50);
+    lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_Y, 5, 3, 9, 10, true, 50);
+    // lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_X, 5, 3, 7, 10, true, 50);
+
+    // /*Do not display points on the data*/
+    // lv_obj_set_style_size(PowerSupply.graph.chart, 0, LV_PART_INDICATOR);
+    lv_chart_set_type(PowerSupply.graph.chart, LV_CHART_TYPE_LINE);
+
+    lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_SHIFT);
+    lv_obj_add_event_cb(PowerSupply.graph.chart, draw_event_cb2, LV_EVENT_DRAW_PART_BEGIN, NULL);
+
+    PowerSupply.graph.serI = lv_chart_add_series(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_AMBER), LV_CHART_AXIS_SECONDARY_Y);
+    PowerSupply.graph.serV = lv_chart_add_series(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_BLUE), LV_CHART_AXIS_PRIMARY_Y);
+
+    // uint32_t pcnt = sizeof(ecg_sample) / sizeof(ecg_sample[0]);
+    lv_chart_set_point_count(PowerSupply.graph.chart, CHART_SIZE);
+    // lv_chart_set_ext_y_array(PowerSupply.graph.chart, ser, (lv_coord_t *)ecg_sample);
+    PowerSupply.graph.serV->y_points = graph_data_V;
+    PowerSupply.graph.serI->y_points = graph_data_I;
+
+    static lv_style_t style_slider;
+    lv_style_init(&style_slider);
+    lv_style_set_bg_opa(&style_slider, LV_OPA_50);
+    lv_style_set_bg_color(&style_slider, lv_palette_main(LV_PALETTE_LIGHT_GREEN));
+
+    // lv_obj_t *slider_x;
+    slider_x = lv_slider_create(parent);
+
+    lv_obj_remove_style(slider_x, &style_slider, LV_STATE_DEFAULT);
+    // lv_obj_remove_style_all(slider);
+    lv_slider_set_range(slider_x, LV_IMG_ZOOM_NONE, LV_IMG_ZOOM_NONE * 120);
+    lv_obj_add_event_cb(slider_x, slider_x_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_add_event_cb(slider_x, slider_x_event_cb, LV_EVENT_CLICKED, NULL);
+
+    // lv_obj_add_event_cb(slider_x, slider_x_event_enc_cb, LV_EVENT_SHORT_CLICKED, NULL);
+
+    lv_obj_set_size(slider_x, 228, 6);
+    lv_obj_align_to(slider_x, PowerSupply.graph.chart, LV_ALIGN_OUT_BOTTOM_MID, 0, -5);
+    // return;
+
+    //  lv_obj_add_style(slider, &style_slider, LV_STATE_DEFAULT);
+    lv_obj_add_style(slider_x, &style_slider, LV_PART_INDICATOR);
+    lv_obj_add_style(slider_x, &style_slider, LV_PART_MAIN);
+    lv_obj_add_style(slider_x, &style_slider, LV_PART_KNOB);
+    lv_obj_t *slider;
+    slider = lv_slider_create(parent);
+    lv_slider_set_range(slider, LV_IMG_ZOOM_NONE, LV_IMG_ZOOM_NONE * 20);
+    lv_obj_add_event_cb(slider, slider_y_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_set_size(slider, 6, 140);
+    lv_obj_align_to(slider, PowerSupply.graph.chart, LV_ALIGN_OUT_RIGHT_MID, -4, +2);
+
+    //  lv_obj_add_style(slider, &style_slider, LV_STATE_DEFAULT);
+    lv_obj_add_style(slider, &style_slider, LV_PART_INDICATOR);
+    lv_obj_add_style(slider, &style_slider, LV_PART_MAIN);
+    lv_obj_add_style(slider, &style_slider, LV_PART_KNOB);
+
+    // Chart Scrollbar
+    // static lv_style_t style;
+    // lv_style_init(&style);
+    // lv_style_set_width(&style, 4);       /*Width of the scrollbar*/
+    // lv_style_set_pad_right(&style, 10);  /*Space from the parallel side*/
+    // lv_style_set_pad_top(&style, 5);     /*Space from the perpendicular side*/
+    // lv_style_set_pad_bottom(&style, 10); /*Space from the perpendicular side*/
+
+    // lv_style_set_radius(&style, 2);
+    // lv_style_set_bg_opa(&style, LV_OPA_70);
+    // lv_style_set_bg_color(&style, lv_palette_lighten(LV_PALETTE_GREY, 1));
+    // lv_style_set_border_color(&style, lv_palette_lighten(LV_PALETTE_GREY, 2));
+    // lv_style_set_border_width(&style, 2);
+    // lv_style_set_shadow_width(&style, 8);
+    // lv_style_set_shadow_spread(&style, 2);
+    // lv_style_set_shadow_color(&style, lv_palette_darken(LV_PALETTE_GREY, 1));
+
+    // lv_style_set_transition(&style, &trans);
+
+    /*Make the scrollbars wider and use 100% opacity when scrolled*/
+    // static lv_style_t style_scrolled;
+    // lv_style_init(&style_scrolled);
+    // lv_style_set_width(&style_scrolled, 8);
+    // lv_style_set_bg_opa(&style_scrolled, LV_OPA_COVER);
+
+    // lv_obj_remove_style(PowerSupply.graph.chart, &style, LV_STATE_DEFAULT);
+    // lv_obj_add_style(PowerSupply.graph.chart, &style, LV_PART_SCROLLBAR);
+    // lv_obj_add_style(PowerSupply.graph.chart, &style_scrolled, LV_PART_SCROLLBAR | LV_STATE_SCROLLED);
+
+    // legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V", lv_palette_main(LV_PALETTE_AMBER), "A", 30, 0);
+
+    // lv_obj_t * bed;
+    // bed = lv_obj_create(parent);
+    // lv_obj_set_size(bed, 100, 30);
+    // lv_obj_add_event_cb(bed, drag_event_handler, LV_EVENT_PRESSING, NULL);
+
+    // PowerSupply.Voltage.statLabels.label_fft = lv_label_create(parent);
+    // label_graphMenu_IFFT = lv_label_create(parent);
+
+    legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V-Set", lv_palette_main(LV_PALETTE_AMBER), "I-set", 25, 0);
+
+    static lv_style_t style_FFT;
+    if (false)
+    {
+        overlay(PowerSupply.Voltage.statLabels.label_fft, "", &style_FFT, lv_palette_lighten(LV_PALETTE_AMBER, 4), 160, 0);
+        overlay(PowerSupply.Current.statLabels.label_fft, "", &style_FFT, lv_palette_lighten(LV_PALETTE_AMBER, 4), 160, 14);
+    }
+
+    lv_obj_set_parent(PowerSupply.Voltage.statLabels.label_fft, parent);
+    lv_obj_set_parent(PowerSupply.Current.statLabels.label_fft, parent);
+    // lv_obj_add_event_cb(PowerSupply.Voltage.statLabels.label_fft, drag_event_handler, LV_EVENT_PRESSING, NULL);
+
+    // /******************************
+    //  **   Stats
+    //  ******************************/
+    // auto stat_ = [](lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
+    // {
+    //     static lv_style_t style_stats;
+    //     lv_style_init(&style_stats);
+    //     lv_style_set_text_font(&style_stats, &lv_font_unscii_8);
+    //     lv_style_set_text_letter_space(&style_stats, 1);
+    //     lv_style_set_text_color(&style_stats, lv_palette_main(LV_PALETTE_GREY));
+    //     lv_style_set_text_letter_space(&style_stats, -1);
+
+    //     lv_obj_set_parent(PowerSupply.Voltage.statLabels.label_legend, parent);
+    //     lv_label_set_text(PowerSupply.Voltage.statLabels.label_legend, " Set      Mean     STD      Max      Min");
+    //     //                                                            "+00.0000 +00.0000 +00.0000 +00.0000 +00.0000
+    //     lv_obj_align(PowerSupply.Voltage.statLabels.label_legend, LV_ALIGN_DEFAULT, x, y);
+    //     lv_obj_remove_style(PowerSupply.Voltage.statLabels.label_legend, &style_stats, LV_STATE_DEFAULT);
+    //     lv_obj_add_style(PowerSupply.Voltage.statLabels.label_legend, &style_stats, LV_STATE_DEFAULT);
+
+    //     // int offset = x;  unused variable
+    //     int offsetY = 10 + y;
+
+    //     lv_style_init(&PowerSupply.graph.style_statsVolt);
+    //     lv_style_set_text_color(&PowerSupply.graph.style_statsVolt, lv_palette_main(LV_PALETTE_BLUE));
+
+    //     lv_style_init(&PowerSupply.graph.style_statsCurrent);
+    //     lv_style_set_text_color(&PowerSupply.graph.style_statsCurrent, lv_palette_main(LV_PALETTE_AMBER));
+    //     // Display mean max min ...
+    //     auto stat_obj = [](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
+    //     {
+    //         lv_style_set_text_font(style_, &lv_font_unscii_8);
+    //         lv_style_set_text_letter_space(style_, 1);
+    //         lv_style_set_text_letter_space(style_, -1);
+
+    //         int space = 61;
+
+    //         lv_obj_remove_style_all(dObj.statLabels.label_unit);
+    //         lv_obj_set_parent(dObj.statLabels.label_unit, parent);
+    //         lv_label_set_text(dObj.statLabels.label_unit, lv_label_get_text(dObj.label_unit));
+    //         lv_obj_align(dObj.statLabels.label_unit, LV_ALIGN_DEFAULT, x + -10, y);
+    //         lv_obj_add_style(dObj.statLabels.label_unit, style_, LV_STATE_DEFAULT);
+
+    //         lv_obj_remove_style_all(dObj.statLabels.label_value);
+    //         lv_obj_set_parent(dObj.statLabels.label_value, parent);
+    //         lv_obj_align(dObj.statLabels.label_value, LV_ALIGN_DEFAULT, 0, -500);
+    //         lv_obj_add_style(dObj.statLabels.label_value, style_, LV_STATE_DEFAULT);
+
+    //         lv_obj_remove_style_all(dObj.statLabels.label_setSmallFont);
+    //         lv_obj_set_parent(dObj.statLabels.label_setSmallFont, parent);
+    //         lv_obj_align(dObj.statLabels.label_setSmallFont, LV_ALIGN_DEFAULT, x + space * 0, y);
+    //         lv_obj_add_style(dObj.statLabels.label_setSmallFont, style_, LV_STATE_DEFAULT);
+
+    //         lv_obj_remove_style_all(dObj.statLabels.label_mean);
+    //         lv_obj_set_parent(dObj.statLabels.label_mean, parent);
+    //         lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, x + space * 1, y);
+    //         lv_obj_add_style(dObj.statLabels.label_mean, style_, LV_STATE_DEFAULT);
+
+    //         lv_obj_remove_style_all(dObj.statLabels.label_std);
+    //         lv_obj_set_parent(dObj.statLabels.label_std, parent);
+    //         lv_obj_align(dObj.statLabels.label_std, LV_ALIGN_DEFAULT, x + space * 2 + 4, y);
+    //         lv_obj_add_style(dObj.statLabels.label_std, style_, LV_STATE_DEFAULT);
+
+    //         lv_obj_remove_style_all(dObj.statLabels.label_max);
+    //         lv_obj_set_parent(dObj.statLabels.label_max, parent);
+    //         lv_obj_align(dObj.statLabels.label_max, LV_ALIGN_DEFAULT, x + space * 3, y);
+    //         lv_obj_add_style(dObj.statLabels.label_max, style_, LV_STATE_DEFAULT);
+
+    //         lv_obj_remove_style_all(dObj.statLabels.label_min);
+    //         lv_obj_set_parent(dObj.statLabels.label_min, parent);
+    //         lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, x + space * 4, y);
+    //         lv_obj_add_style(dObj.statLabels.label_min, style_, LV_STATE_DEFAULT);
+    //     };
+
+    //     stat_obj(parent, PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, x - 8, offsetY);
+    //     stat_obj(parent, PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, x - 8, offsetY + 10);
+    // };
+    // stat_(parent, 10, 167);
+}
+
+
+// stat_measure function
+void stat_measure(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
+{
+
+    /******************************}
+     **   Stats
+     ******************************/
+    // auto stat_ = [](lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
+    // {
+    static lv_style_t style_stats;
+    lv_style_init(&style_stats);
+    lv_style_set_text_font(&style_stats, &lv_font_unscii_8);
+    lv_style_set_text_letter_space(&style_stats, 1);
+    lv_style_set_text_color(&style_stats, lv_palette_main(LV_PALETTE_GREY));
+    lv_style_set_text_letter_space(&style_stats, -1);
+
+    lv_obj_set_parent(PowerSupply.Voltage.statLabels.label_legend, parent);
+    lv_label_set_text(PowerSupply.Voltage.statLabels.label_legend, " Set      Mean     STD      Max      Min");
+    //                                                            "+00.0000 +00.0000 +00.0000 +00.0000 +00.0000
+    lv_obj_align(PowerSupply.Voltage.statLabels.label_legend, LV_ALIGN_DEFAULT, x, y);
+    lv_obj_remove_style(PowerSupply.Voltage.statLabels.label_legend, &style_stats, LV_STATE_DEFAULT);
+    lv_obj_add_style(PowerSupply.Voltage.statLabels.label_legend, &style_stats, LV_STATE_DEFAULT);
+
+    // int offset = x;  unused variable
+    int offsetY = 10 + y;
+
+    lv_style_init(&PowerSupply.graph.style_statsVolt);
+    lv_style_set_text_color(&PowerSupply.graph.style_statsVolt, lv_palette_main(LV_PALETTE_BLUE));
+
+    lv_style_init(&PowerSupply.graph.style_statsCurrent);
+    lv_style_set_text_color(&PowerSupply.graph.style_statsCurrent, lv_palette_main(LV_PALETTE_AMBER));
+    // Display mean max min ...
+    auto stat_obj = [](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
+    {
+        lv_style_set_text_font(style_, &lv_font_unscii_8);
+        lv_style_set_text_letter_space(style_, 1);
+        lv_style_set_text_letter_space(style_, -1);
+
+        int space = 61;
+
+        lv_obj_remove_style_all(dObj.statLabels.label_unit);
+        lv_obj_set_parent(dObj.statLabels.label_unit, parent);
+        lv_label_set_text(dObj.statLabels.label_unit, lv_label_get_text(dObj.label_unit));
+        lv_obj_align(dObj.statLabels.label_unit, LV_ALIGN_DEFAULT, x + -10, y);
+        lv_obj_add_style(dObj.statLabels.label_unit, style_, LV_STATE_DEFAULT);
+
+        lv_obj_remove_style_all(dObj.statLabels.label_value);
+        lv_obj_set_parent(dObj.statLabels.label_value, parent);
+        lv_obj_align(dObj.statLabels.label_value, LV_ALIGN_DEFAULT, 0, -500);
+        lv_obj_add_style(dObj.statLabels.label_value, style_, LV_STATE_DEFAULT);
+
+        lv_obj_remove_style_all(dObj.statLabels.label_setSmallFont);
+        lv_obj_set_parent(dObj.statLabels.label_setSmallFont, parent);
+        lv_obj_align(dObj.statLabels.label_setSmallFont, LV_ALIGN_DEFAULT, x + space * 0, y);
+        lv_obj_add_style(dObj.statLabels.label_setSmallFont, style_, LV_STATE_DEFAULT);
+
+        lv_obj_remove_style_all(dObj.statLabels.label_mean);
+        lv_obj_set_parent(dObj.statLabels.label_mean, parent);
+        lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, x + space * 1, y);
+        lv_obj_add_style(dObj.statLabels.label_mean, style_, LV_STATE_DEFAULT);
+
+        lv_obj_remove_style_all(dObj.statLabels.label_std);
+        lv_obj_set_parent(dObj.statLabels.label_std, parent);
+        lv_obj_align(dObj.statLabels.label_std, LV_ALIGN_DEFAULT, x + space * 2 + 4, y);
+        lv_obj_add_style(dObj.statLabels.label_std, style_, LV_STATE_DEFAULT);
+
+        lv_obj_remove_style_all(dObj.statLabels.label_max);
+        lv_obj_set_parent(dObj.statLabels.label_max, parent);
+        lv_obj_align(dObj.statLabels.label_max, LV_ALIGN_DEFAULT, x + space * 3, y);
+        lv_obj_add_style(dObj.statLabels.label_max, style_, LV_STATE_DEFAULT);
+
+        lv_obj_remove_style_all(dObj.statLabels.label_min);
+        lv_obj_set_parent(dObj.statLabels.label_min, parent);
+        lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, x + space * 4, y);
+        lv_obj_add_style(dObj.statLabels.label_min, style_, LV_STATE_DEFAULT);
+    };
+
+    stat_obj(parent, PowerSupply.Voltage, &PowerSupply.graph.style_statsVolt, x - 8, offsetY);
+    stat_obj(parent, PowerSupply.Current, &PowerSupply.graph.style_statsCurrent, x - 8, offsetY + 10);
+    // };
+    // stat_(parent, 10, 167);
+}
+
+
+
+// StatsChart function
+void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
+{ /*Create a chart*/
+
+    PowerSupply.stats.chart = lv_chart_create(parent);
+    lv_obj_set_size(PowerSupply.stats.chart, 260, 160);
+    lv_obj_center(PowerSupply.stats.chart);
+    lv_obj_align(PowerSupply.stats.chart, LV_ALIGN_DEFAULT, x, y + 0);
+
+    lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_Y, 0, 160);   // 40000mv
+    lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_SECONDARY_Y, 0, 160); // 8000ma
+    lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_X, 0, 350);
+    // lv_chart_set_range(PowerSupply.stats.chart, LV_CHART_AXIS_SECONDARY_X, -10, 50);
+
+    lv_chart_set_div_line_count(PowerSupply.stats.chart, 5, 13);
+    lv_obj_set_style_text_color(PowerSupply.stats.chart, lv_palette_main(LV_PALETTE_GREY), LV_PART_TICKS);
+    lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_Y, 5, 3, 5, 4, true, 40);
+    lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_X, 5, 3, 3, 10, true, 50);
+    // lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_SECONDARY_X, 5, 3, 7, 10, true, 50);
+
+    lv_chart_set_type(PowerSupply.stats.chart, LV_CHART_TYPE_LINE);
+    lv_chart_set_update_mode(PowerSupply.stats.chart, LV_CHART_UPDATE_MODE_CIRCULAR);
+    lv_obj_add_event_cb(PowerSupply.stats.chart, draw_event_stat_chart_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
+    lv_obj_set_style_line_width(PowerSupply.stats.chart, 2, LV_PART_ITEMS);
+
+    // /*Do not display points on the data*/
+    lv_obj_set_style_size(PowerSupply.stats.chart, 0, LV_PART_INDICATOR);
+
+    PowerSupply.stats.serI = lv_chart_add_series(PowerSupply.stats.chart, lv_palette_main(LV_PALETTE_AMBER), LV_CHART_AXIS_SECONDARY_Y);
+    PowerSupply.stats.serV = lv_chart_add_series(PowerSupply.stats.chart, lv_palette_main(LV_PALETTE_BLUE), LV_CHART_AXIS_PRIMARY_Y);
+
+    lv_chart_set_point_count(PowerSupply.stats.chart, 350);
+    PowerSupply.stats.serI->y_points = PowerSupply.Current.hist.data;
+    PowerSupply.stats.serV->y_points = PowerSupply.Voltage.hist.data;
+
+    // legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V", lv_palette_main(LV_PALETTE_AMBER), "A", 25, 0);
+}
+
+#define NUM_LABELS 7
+
