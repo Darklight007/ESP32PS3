@@ -18,13 +18,13 @@
 #include "functions.h"
 #include "ui_helpers.h"
 #include "tasks.h"
+#include "input_handler.h"
 
 // Forward declarations for functions defined later in this file
 void GraphPush();
 void HistPush();
 void schedule(std::function<void(void)> func, unsigned long &&interval, unsigned long &startTime);
 void schedule(std::function<void(void)> func, unsigned long &interval, unsigned long &startTime);
-void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value);
 void KeyCheckInterval(unsigned long interval);
 void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data);
 bool functionGenerator();
