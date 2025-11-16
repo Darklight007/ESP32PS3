@@ -62,13 +62,14 @@ This is an ESP32-S3 based programmable power supply with advanced features inclu
 **Core headers** (read these first):
 - `config.hpp`: Global configuration, extern declarations, pin definitions
 - `device.hpp`: Device class, enums (DEVICE states), calibration structures
-- `globals.h/cpp`: Global variables (chart data, UI objects, encoders)
+- `globals.h/cpp`: Global variables (chart data, UI objects, encoders, dropdown_active, util charts)
 - `functions.h`: Forward declarations to avoid circular includes
 - `waveform_generator.h/cpp`: All waveform generation functions (19 waveforms)
 - `ui_helpers.h/cpp`: UI chart/graph drawing functions (extracted from globalFunctions.h)
 - `tasks.h/cpp`: FreeRTOS task implementations (Task_ADC, Task_BarGraph)
-- `input_handler.h/cpp`: Touch calibration and encoder page handlers
-- `globalFunctions.h`: Large file (~3500 lines, being progressively reduced) with remaining UI implementations and callbacks
+- `input_handler.h/cpp`: Touch calibration and input handlers (touch_calibrate, my_touchpad_read, init_touch)
+- `intervals.h/cpp`: Scheduling functions (schedule overloads for periodic execution)
+- `globalFunctions.h`: Large file (~3865 lines, being progressively reduced) with remaining UI implementations and callbacks
 
 **Important constants** (defined across various headers):
 - `CHART_SIZE`: 240 × 5 = 1200 points (graph chart buffer)
@@ -311,10 +312,11 @@ After making changes:
 - ✅ `functions.h` - Forward declarations for circular dependency resolution
 - ✅ `ui_helpers.h/cpp` - Chart and graph UI functions (~400 lines extracted)
 - ✅ `tasks.h/cpp` - FreeRTOS task implementations (~200 lines extracted)
-- 🔄 `input_handler.h/cpp` - Touch and encoder handlers (~500 lines extracted, fixing compilation errors)
-- ⏳ Future: Additional modularization of remaining ~3000 lines in `globalFunctions.h`
+- ✅ `input_handler.h/cpp` - Touch calibration and handlers (~100 lines extracted)
+- ✅ `intervals.h/cpp` - Schedule function overloads (~20 lines extracted)
+- ⏳ Future: Additional modularization of remaining ~3800 lines in `globalFunctions.h`
 
-**File size reduction**: 4,878 lines → ~3,500 lines (28% reduction so far)
+**File size reduction**: 4,878 lines → 3,865 lines (21% reduction so far)
 
 **Known Issues Being Fixed**:
 - Static function linkage errors when calling from new modules
