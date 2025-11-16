@@ -2942,18 +2942,7 @@ void LvglFullUpdates(unsigned long interval)
              { lv_obj_invalidate(lv_scr_act()); }, interval, timer_);
 }
 
-void StatusBarUpdateInterval(unsigned long interval)
-{
-    static unsigned long timer_ = {0}; // Interval in milliseconds
-    schedule(&StatusBar, interval, timer_);
-}
-
-void FlushMeasuresInterval(unsigned long interval)
-{
-    static unsigned long timer_ = {0}; // Interval in milliseconds
-    schedule([]
-             { PowerSupply.FlushMeasures(); }, interval, timer_);
-}
+// StatusBarUpdateInterval and FlushMeasuresInterval moved to intervals.cpp
 void statisticUpdateInterval(unsigned long interval)
 {
     static unsigned long timer_ = {0};
@@ -3016,15 +3005,7 @@ void KeyCheckInterval(unsigned long interval)
              interval, timer_2);
 }
 
-void VCCCInterval(unsigned long interval)
-{
-    static unsigned long timer_ = {0};
-    schedule([]
-             {
-                if (!lvglChartIsBusy && !blockAll)
-                     PowerSupply.VCCCStatusUpdate(); },
-             interval, timer_);
-}
+// VCCCInterval moved to intervals.cpp
 
 // void DACInterval(unsigned long interval)
 // {
