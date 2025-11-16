@@ -11,4 +11,5 @@ void StatusBarUpdateInterval(unsigned long interval);
 void FlushMeasuresInterval(unsigned long interval);
 void statisticUpdateInterval(unsigned long interval);
 void EncoderRestartInterval(unsigned long interval);
+void KeyCheckInterval(unsigned long interval);
 void VCCCInterval(unsigned long interval);

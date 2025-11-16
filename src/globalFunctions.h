@@ -24,7 +24,6 @@
 // Forward declarations for functions defined later in this file
 void GraphPush();
 void HistPush();
-void KeyCheckInterval(unsigned long interval);
 void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data);
 bool functionGenerator();
 
@@ -2964,18 +2963,7 @@ void FFTUpdateInterval(unsigned long interval)
              interval, timer_);
 }
 
-// EncoderRestartInterval moved to intervals.cpp
-
-void KeyCheckInterval(unsigned long interval)
-{
-    static unsigned long timer_2 = {0}; // Interval in milliseconds
-    // static unsigned long timer_;
-    schedule([]
-             { keyCheckLoop(); },
-             interval, timer_2);
-}
-
-// VCCCInterval moved to intervals.cpp
+// EncoderRestartInterval, KeyCheckInterval, and VCCCInterval moved to intervals.cpp
 
 // void DACInterval(unsigned long interval)
 // {

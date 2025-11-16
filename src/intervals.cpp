@@ -10,6 +10,7 @@ extern bool blockAll;
 
 // Forward declarations for functions still in globalFunctions.h
 void StatusBar();
+void keyCheckLoop();
 
 void schedule(std::function<void(void)> func, unsigned long &&interval, unsigned long &startTime)
 {
@@ -69,6 +70,14 @@ void EncoderRestartInterval(unsigned long interval)
                  PowerSupply.Current.encoder.setCount(temp);
              },
              interval, timer_);
+}
+
+void KeyCheckInterval(unsigned long interval)
+{
+    static unsigned long timer_2 = {0};
+    schedule([]
+             { keyCheckLoop(); },
+             interval, timer_2);
 }
 
 void VCCCInterval(unsigned long interval)
