@@ -402,3 +402,21 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 
 #define NUM_LABELS 7
 
+
+void GraphPush()
+{
+    // First shift everything left by one position
+    memcpy(&graph_data_V[0], &graph_data_V[1], (CHART_SIZE - 1) * sizeof(graph_data_V[0]));
+    memcpy(&graph_data_I[0], &graph_data_I[1], (CHART_SIZE - 1) * sizeof(graph_data_I[0]));
+
+    // Now place the new value at the end
+    graph_data_V[CHART_SIZE - 1] = PowerSupply.Voltage.measured.value * 1000.0;
+    graph_data_I[CHART_SIZE - 1] = PowerSupply.Current.measured.value * 1000.0;
+}
+
+void HistPush()
+{
+    // Histogram
+    PowerSupply.Current.hist[PowerSupply.Current.measured.Mean()];
+    PowerSupply.Voltage.hist[PowerSupply.Voltage.measured.Mean()];
+}

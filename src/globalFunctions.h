@@ -22,8 +22,6 @@
 #include "intervals.h"
 
 // Forward declarations for functions defined later in this file
-void GraphPush();
-void HistPush();
 void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data);
 bool functionGenerator();
 
@@ -2783,30 +2781,7 @@ void ChartUpdate()
     // lv_chart_refresh(PowerSupply.stats.chart);
 }
 
-void GraphPush()
-
-{
-    // // graph_data_V[graph_v_i++] = PowerSupply.Voltage.measured.value * 1000.0;
-    // graph_data_V[CHART_SIZE - 1] = PowerSupply.Voltage.measured.value * 1000.0;
-    // for (int i = 1; i < CHART_SIZE; i++)
-    // graph_data_V[i - 1] = graph_data_V[i];
-
-    // First shift everything left by one position
-    memcpy(&graph_data_V[0], &graph_data_V[1], (CHART_SIZE - 1) * sizeof(graph_data_V[0]));
-    memcpy(&graph_data_I[0], &graph_data_I[1], (CHART_SIZE - 1) * sizeof(graph_data_I[0]));
-
-    // Now place the new value at the end
-    graph_data_V[CHART_SIZE - 1] = PowerSupply.Voltage.measured.value * 1000.0;
-    graph_data_I[CHART_SIZE - 1] = PowerSupply.Current.measured.value * 1000.0;
-}
-
-void HistPush()
-{
-    // Histogram
-    PowerSupply.Current.hist[PowerSupply.Current.measured.Mean()];
-    PowerSupply.Voltage.hist[PowerSupply.Voltage.measured.Mean()];
-    // lv_chart_refresh(PowerSupply.stats.chart);
-}
+// GraphPush() and HistPush() moved to ui_helpers.cpp
 void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
 {
     if (encoder2Flag /*&& (Tabs::getCurrentPage() == 4)*/)

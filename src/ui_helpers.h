@@ -45,6 +45,6 @@ void stat_measure(lv_obj_t *parent, lv_coord_t x, lv_coord_t y);
 void initBuckets(TFT_eSPI &tft);
 void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *series);
 
-// Internal helper functions (declared here for use within ui_helpers.cpp)
-// Note: These are static in globalFunctions.h but we'll keep them there for now
-// to avoid linkagelinkage issues with their current usage patterns
+// Chart data update functions
+void GraphPush();
+void HistPush();
