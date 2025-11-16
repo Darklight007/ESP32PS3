@@ -48,3 +48,11 @@ void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *se
 // Chart data update functions
 void GraphPush();
 void HistPush();
+
+// UI styling helper functions
+void legend(lv_obj_t *parent, lv_color16_t c1, const char *ser1, lv_color16_t c2, const char *ser2, int x, int y);
+void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_color16_t c1, int x, int y);
+
+// External UI objects
+extern lv_obj_t *label_legend1;
+extern lv_obj_t *label_legend2;

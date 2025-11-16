@@ -127,47 +127,6 @@ void slider_y_event_cb(lv_event_t *e)
     lv_obj_scroll_to_y(PowerSupply.graph.chart, 32000, LV_ANIM_OFF);
 }
 
-lv_obj_t *label_legend1;
-lv_obj_t *label_legend2;
-void legend(lv_obj_t *parent, lv_color16_t c1, const char *ser1, lv_color16_t c2, const char *ser2, int x, int y)
-{
-
-    int height = 0;
-    // int x = 30;
-
-    lv_style_init(&PowerSupply.graph.style_legend1);
-    lv_style_set_text_letter_space(&PowerSupply.graph.style_legend1, -2);
-    lv_style_set_text_color(&PowerSupply.graph.style_legend1, c1);
-    lv_style_set_text_font(&PowerSupply.graph.style_legend1, &Undertale_16b);
-    lv_style_set_bg_color(&PowerSupply.graph.style_legend1, lv_palette_darken(LV_PALETTE_GREY, 4));
-    lv_style_set_bg_opa(&PowerSupply.graph.style_legend1, LV_OPA_50);
-    lv_style_set_border_opa(&PowerSupply.graph.style_legend1, LV_OPA_50);
-    lv_style_set_border_width(&PowerSupply.graph.style_legend1, 2);
-
-    // static lv_obj_t *label_legend1;
-    label_legend1 = lv_label_create(parent);
-    lv_label_set_text(label_legend1, "---  V");
-    lv_obj_align(label_legend1, LV_ALIGN_DEFAULT, x, y);
-    lv_obj_remove_style(label_legend1, &PowerSupply.graph.style_legend1, LV_STATE_DEFAULT);
-    lv_obj_add_style(label_legend1, &PowerSupply.graph.style_legend1, LV_STATE_DEFAULT);
-
-    lv_style_init(&PowerSupply.graph.style_legend2);
-    lv_style_set_text_letter_space(&PowerSupply.graph.style_legend2, -2);
-    lv_style_set_text_color(&PowerSupply.graph.style_legend2, c2);
-    lv_style_set_text_font(&PowerSupply.graph.style_legend2, &Undertale_16b);
-    lv_style_set_bg_color(&PowerSupply.graph.style_legend2, lv_palette_darken(LV_PALETTE_GREY, 4));
-    lv_style_set_bg_opa(&PowerSupply.graph.style_legend2, LV_OPA_50);
-    lv_style_set_border_opa(&PowerSupply.graph.style_legend2, LV_OPA_50);
-    lv_style_set_border_width(&PowerSupply.graph.style_legend2, 2);
-
-    // static lv_obj_t *label_legend2;
-    label_legend2 = lv_label_create(parent);
-    lv_label_set_text(label_legend2, "---  A");
-    lv_obj_align(label_legend2, LV_ALIGN_DEFAULT, x, height + 4 + 8);
-    lv_obj_remove_style(label_legend2, &PowerSupply.graph.style_legend2, LV_STATE_DEFAULT);
-    lv_obj_add_style(label_legend2, &PowerSupply.graph.style_legend2, LV_STATE_DEFAULT);
-}
-
 static void drag_event_handler(lv_event_t *e)
 {
     lv_obj_t *obj = lv_event_get_target(e);
@@ -182,25 +141,6 @@ static void drag_event_handler(lv_event_t *e)
     lv_coord_t x = lv_obj_get_x(obj) + vect.x;
     lv_coord_t y = lv_obj_get_y(obj) + vect.y;
     lv_obj_set_pos(obj, x, y);
-}
-
-void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_color16_t c1, int x, int y)
-{
-    lv_style_init(style);
-    lv_style_set_text_letter_space(style, -2);
-    lv_style_set_text_color(style, c1);
-    lv_style_set_text_font(style, &lv_font_unscii_8);
-    lv_style_set_bg_color(style, lv_palette_darken(LV_PALETTE_GREY, 4));
-    lv_style_set_bg_opa(style, LV_OPA_50);
-    lv_style_set_border_opa(style, LV_OPA_50);
-    lv_style_set_border_width(style, 2);
-
-    lv_label_set_text(label, text);
-    lv_obj_align(label, LV_ALIGN_DEFAULT, x, y);
-    lv_obj_remove_style(label, style, LV_STATE_DEFAULT);
-    lv_obj_add_style(label, style, LV_STATE_DEFAULT);
-    //   lv_obj_set_size(label, 150, 50);
-    lv_obj_add_event_cb(label, drag_event_handler, LV_EVENT_PRESSING, NULL);
 }
 
 lv_obj_t *slider_x;
