@@ -1,5 +1,6 @@
 #include "intervals.h"
 #include <Arduino.h>
+#include <lvgl.h>
 #include "device.hpp"
 #include "globals.h"
 
@@ -78,6 +79,13 @@ void KeyCheckInterval(unsigned long interval)
     schedule([]
              { keyCheckLoop(); },
              interval, timer_2);
+}
+
+void LvglFullUpdates(unsigned long interval)
+{
+    static unsigned long timer_ = {0};
+    schedule([]
+             { lv_obj_invalidate(lv_scr_act()); }, interval, timer_);
 }
 
 void VCCCInterval(unsigned long interval)

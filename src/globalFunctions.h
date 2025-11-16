@@ -2909,15 +2909,7 @@ void LvglUpdatesInterval(unsigned long interval)
              { lv_obj_invalidate(lv_scr_act()); }, 60000, timer_2);
 }
 
-void LvglFullUpdates(unsigned long interval)
-{
-    static unsigned long timer_ = {0}; // Interval in milliseconds
-    schedule([]
-             { lv_obj_invalidate(lv_scr_act()); }, interval, timer_);
-}
-
-// StatusBarUpdateInterval and FlushMeasuresInterval moved to intervals.cpp
-// statisticUpdateInterval moved to intervals.cpp
+// LvglFullUpdates, StatusBarUpdateInterval, FlushMeasuresInterval, and statisticUpdateInterval moved to intervals.cpp
 
 void FFTUpdateInterval(unsigned long interval)
 {
