@@ -11,10 +11,6 @@ extern Device PowerSupply;
 extern lv_obj_t *util_Arbit_chart;
 extern lv_chart_series_t *util_Arbit_chart_series;
 
-// Forward declarations for functions still in globalFunctions.h
-double scaleVoltage(uint16_t voltage);
-double scaleCurrent(uint16_t current);
-
 void loadMemory(lv_obj_t *btn)
 {
     myTone(NOTE_A4, 50, true);

@@ -1,6 +1,11 @@
 #pragma once
 
 #include <lvgl.h>
+#include <stdint.h>
+
+// Utility functions for scaling ADC values
+double scaleVoltage(uint16_t voltage);
+double scaleCurrent(uint16_t current);
 
 // Forward declarations for functions defined in globalFunctions.h
 // These are needed by ui_helpers.cpp to avoid circular includes

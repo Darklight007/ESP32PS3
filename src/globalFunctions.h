@@ -996,16 +996,7 @@ static void scroll_begin_event(lv_event_t *e)
             a->time = 0;
     }
 }
-double scaleVoltage(uint16_t voltage)
-{
-    return (voltage - PowerSupply.Voltage.adjOffset) / PowerSupply.Voltage.adjFactor;
-}
-
-double scaleCurrent(uint16_t current)
-{
-    return (current - PowerSupply.Current.adjOffset) / PowerSupply.Current.adjFactor;
-}
-
+// scaleVoltage and scaleCurrent moved to functions.cpp
 // loadMemory and saveMemory moved to memory.cpp
 
 static void mem_btn_event_cb(lv_event_t *e)
