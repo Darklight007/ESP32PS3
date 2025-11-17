@@ -68,7 +68,7 @@ namespace
 extern bool lvglIsBusy;
 // Global (or static) residual spline
 
-setting_GUI Calib_GUI{};
+CalibrationGui Calib_GUI{};
 
 // ---------- internal state / helpers ----------
 namespace

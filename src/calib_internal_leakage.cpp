@@ -9,7 +9,7 @@
 
 // External references
 extern Device PowerSupply;
-extern setting_GUI Calib_GUI;
+extern CalibrationGui Calib_GUI;
 extern bool blockAll;
 
 // Context for leakage resistance measurement

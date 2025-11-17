@@ -9,7 +9,7 @@
 // Build/show ADC calibration window (generic for voltage or current)
 void build_adc_calibration_window(lv_obj_t **win_holder,
                                    const char *title,
-                                   setting_ &gui,
+                                   AdcCalibrationControls &gui,
                                    const CalPrefill &pf);
 
 // Button callbacks (declared in setting_menu.h, implemented here for proximity)

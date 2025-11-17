@@ -21,7 +21,8 @@ extern bool buzzerSound;
 extern TFT_eSPI tft;
 
 // ---- GUI bundle shared with other files ----
-struct setting_
+// ADC calibration window controls for voltage and current calibration
+struct AdcCalibrationControls
 {
     lv_obj_t *vin_1{};
     lv_obj_t *vin_2{};
@@ -39,11 +40,11 @@ struct setting_
 };
 
 
-struct setting_GUI
+struct CalibrationGui
 {
-    setting_ Voltage;
-    setting_ Current;
-    
+    AdcCalibrationControls Voltage;
+    AdcCalibrationControls Current;
+
     lv_obj_t *internalLeakage{};
 };
 
@@ -56,7 +57,7 @@ struct setting_GUI
     };
 
 
-extern setting_GUI Calib_GUI;
+extern CalibrationGui Calib_GUI;
 
 // ---- public API ----
 void SettingMenu(lv_obj_t *parent);

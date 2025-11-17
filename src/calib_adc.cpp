@@ -12,7 +12,7 @@
 
 // External references
 extern Device PowerSupply;
-extern setting_GUI Calib_GUI;
+extern CalibrationGui Calib_GUI;
 
 namespace
 {
@@ -58,7 +58,7 @@ namespace
 
 void build_adc_calibration_window(lv_obj_t **win_holder,
                                    const char *title,
-                                   setting_ &gui,
+                                   AdcCalibrationControls &gui,
                                    const CalPrefill &pf)
 {
     if (*win_holder)
