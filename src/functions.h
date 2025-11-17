@@ -21,6 +21,7 @@ void legend(lv_obj_t *parent, lv_color16_t c1, const char *ser1, lv_color16_t c2
 void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_color16_t c1, int x, int y);
 void draw_event_cb2(lv_event_t *e);
 void draw_event_stat_chart_cb(lv_event_t *e);
+void autoScrollY();
 
 // External variables from globalFunctions.h
 extern lv_obj_t *label_legend1;
