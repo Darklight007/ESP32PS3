@@ -7,8 +7,10 @@
 double scaleVoltage(uint16_t voltage);
 double scaleCurrent(uint16_t current);
 
-// Debug utility
+// Debug and monitoring utilities
 void print_obj_type(lv_obj_t *obj);
+void trackLoopExecution(const char *callerName);
+double monitorMinChanges(double currentValue, double currentTimeMicros);
 
 // Forward declarations for functions defined in globalFunctions.h
 // These are needed by ui_helpers.cpp to avoid circular includes

@@ -2519,23 +2519,7 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
     }
 }
 
-void trackLoopExecution(const char *callerName)
-{
-    static constexpr int loopInterval = 1000; // Time interval in milliseconds
-    static unsigned long lastLoopTime = 0;
-    static unsigned long loopCount = 0;
-
-    loopCount++;
-    unsigned long currentTime = millis();
-    if ((currentTime - lastLoopTime) >= loopInterval)
-    {
-        // Print the caller's name along with the loop count and time
-        Serial.printf("\n%s: Loop Count: %5.0f @ %07.2f seconds.%c", callerName, loopCount * 1000.0 / loopInterval, currentTime / 1000.0, keyChar);
-        lastLoopTime = currentTime;
-        loopCount = 0;
-        // Serial.printf("\n%i", digitalRead(PowerSupply.CCCVPin));
-    }
-}
+// trackLoopExecution() moved to functions.cpp
 
 // All interval functions (LvglUpdatesInterval, FFTUpdateInterval, LvglFullUpdates, StatusBarUpdateInterval,
 // FlushMeasuresInterval, statisticUpdateInterval, EncoderRestartInterval, KeyCheckInterval, and VCCCInterval)
@@ -3190,60 +3174,7 @@ void MiscPriority()
     // Serial.printf("3 \n");
 }
 
-#define CHANGE_THRESHOLD 0.09 / 32 / .5 // Adjust this for desired sensitivity
-
-double monitorMinChanges(double currentValue, double currentTimeMicros)
-{
-    static double lastValue = 0.0;
-    static bool isFirstRun = true;
-    static bool isStable = false;
-    static double startStableTime = 0;
-    static double endStableTime = 0;
-    static double diff_min = 0;
-
-    // For the first run, just initialize lastValue and return
-    if (isFirstRun)
-    {
-        lastValue = currentValue;
-        isFirstRun = false;
-        return 10.0;
-    }
-
-    double diff = fabs(currentValue - lastValue);
-
-    if (diff < CHANGE_THRESHOLD)
-    {
-        // Value is nearly unchanged
-        if (!isStable)
-        {
-            // Just entered a stable period
-            startStableTime = currentTimeMicros;
-            Serial.printf("Stable period started at %1.3f\n", startStableTime);
-            isStable = true;
-        }
-        // If already stable, continue without printing
-    }
-
-    else
-    {
-        // Value changed significantly
-        if (isStable)
-        {
-            // We are leaving a stable period
-            endStableTime = currentTimeMicros;
-            // Serial.printf("Stable period ended at %1.3f  micros diff:%f\n", endStableTime, diff);
-
-            // Print the duration
-            double duration = endStableTime - startStableTime;
-            // Serial.printf("Stable period duration: %1.3f  micros\n", duration);
-            // triggerTime = startStableTime;
-            isStable = false;
-        }
-    }
-
-    lastValue = currentValue;
-    return fabs(startStableTime - currentTimeMicros);
-}
+// CHANGE_THRESHOLD and monitorMinChanges() moved to functions.cpp
 
 // Function to generate waveform based on parameters
 bool functionGenerator()
