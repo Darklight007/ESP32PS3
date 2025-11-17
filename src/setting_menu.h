@@ -69,7 +69,7 @@ double get_b(double code, double m, double vin);
 void btn_calibration_ADC_voltage_event_cb(lv_event_t *e);
 void btn_calibration_ADC_current_event_cb(lv_event_t *e);
 void internal_current_calibration_cb(lv_event_t *e);
-void ADC_INL_Voltage_calibration_cb(lv_event_t *e);
+// ADC_INL_Voltage_calibration_cb moved to calib_inl.h
 
 void open_dac_calibration_cb(lv_event_t *e);
 void btn_close_hide_obj_cb(lv_event_t *e);
