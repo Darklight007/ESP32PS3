@@ -81,16 +81,28 @@ void inl_gui_prepare()
     last_adjValue = PowerSupply.Voltage.adjValue;
     // Set start (0V)
     PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
-    PowerSupply.gui.calibration.inl.lbl_inl_state->set_text("#FFFF00 Running");
+
+    // Safety check: only update GUI if window is visible
+    if (PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration &&
+        !lv_obj_has_flag(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration, LV_OBJ_FLAG_HIDDEN))
+    {
+        PowerSupply.gui.calibration.inl.lbl_inl_state->set_text("#FFFF00 Running");
+    }
 }
 
 void inl_gui_set(double v_cmd)
 {
-    table_set_selected_row(table_inl, inl.i + 1);
     PowerSupply.Voltage.SetUpdate(v_cmd * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
     PowerSupply.Voltage.measured.ResetStats();
-    lv_bar_set_value(PowerSupply.gui.calibration.inl.bar_progress, inl.i, LV_ANIM_OFF);
-    PowerSupply.gui.calibration.inl.lbl_bar_progress->set_text_fmt("Progress: %i%%", inl.i * 100 / NPTS);
+
+    // Safety check: only update GUI if window is visible
+    if (PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration &&
+        !lv_obj_has_flag(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration, LV_OBJ_FLAG_HIDDEN))
+    {
+        table_set_selected_row(table_inl, inl.i + 1);
+        lv_bar_set_value(PowerSupply.gui.calibration.inl.bar_progress, inl.i, LV_ANIM_OFF);
+        PowerSupply.gui.calibration.inl.lbl_bar_progress->set_text_fmt("Progress: %i%%", inl.i * 100 / NPTS);
+    }
 }
 
 void inl_gui_measure(double measure, double v_cmd)
@@ -105,11 +117,17 @@ void inl_gui_measure(double measure, double v_cmd)
 
 void inl_gui_compute()
 {
-    PowerSupply.gui.calibration.inl.lbl_inl_state->set_text("#FFFF00 Done");
-    PowerSupply.gui.calibration.inl.lbl_bar_progress->set_text_fmt("Progress: 100%%");
-    lv_bar_set_value(PowerSupply.gui.calibration.inl.bar_progress, NPTS, LV_ANIM_OFF);
-    table_set_selected_row(table_inl, 1);
     PowerSupply.Voltage.SetUpdate(last_adjValue);
+
+    // Safety check: only update GUI if window is visible
+    if (PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration &&
+        !lv_obj_has_flag(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration, LV_OBJ_FLAG_HIDDEN))
+    {
+        PowerSupply.gui.calibration.inl.lbl_inl_state->set_text("#FFFF00 Done");
+        PowerSupply.gui.calibration.inl.lbl_bar_progress->set_text_fmt("Progress: 100%%");
+        lv_bar_set_value(PowerSupply.gui.calibration.inl.bar_progress, NPTS, LV_ANIM_OFF);
+        table_set_selected_row(table_inl, 1);
+    }
 }
 
 // =============================================================================
@@ -247,6 +265,28 @@ static void ADC_INL_VCalib_cb(lv_event_t *)
 }
 
 // =============================================================================
+// INL window close handler - stops timer to prevent crashes
+// =============================================================================
+
+static void inl_close_window_cb(lv_event_t *e)
+{
+    // Stop the calibration timer if running
+    if (inl.timer)
+    {
+        INL_dbg("[INL] Window closed - stopping timer");
+        lv_timer_del(inl.timer);
+        inl.timer = nullptr;
+    }
+
+    // Reset FSM to idle state
+    inl.ph = INL_FSM::DONE;
+
+    // Hide the window (standard close behavior)
+    auto *btn = lv_event_get_target(e);
+    lv_obj_add_flag(lv_obj_get_parent(lv_obj_get_parent(btn)), LV_OBJ_FLAG_HIDDEN);
+}
+
+// =============================================================================
 // Radio button and style helpers
 // =============================================================================
 
@@ -321,7 +361,7 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
     lv_win_add_title(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration, "ADC INL Voltage Calibration");
 
     lv_obj_t *btn_close = lv_win_add_btn(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration, LV_SYMBOL_CLOSE, 60);
-    lv_obj_add_event_cb(btn_close, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(btn_close, inl_close_window_cb, LV_EVENT_CLICKED, nullptr);
 
     // Content container
     lv_obj_t *cont = lv_win_get_content(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration);
