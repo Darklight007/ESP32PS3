@@ -53,6 +53,11 @@ void HistPush();
 void legend(lv_obj_t *parent, lv_color16_t c1, const char *ser1, lv_color16_t c2, const char *ser2, int x, int y);
 void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_color16_t c1, int x, int y);
 
+// UI event callbacks
+void draw_event_stat_chart_cb(lv_event_t *e);
+void draw_event_cb2(lv_event_t *e);
+void btn_function_gen_event_cb(lv_event_t *e);
+
 // External UI objects
 extern lv_obj_t *label_legend1;
 extern lv_obj_t *label_legend2;

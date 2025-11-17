@@ -3,6 +3,7 @@
 #include "myFonts.h"
 #include "buzzer.h"
 #include "tabs.h"
+#include "spinbox_pro.h"
 
 // UI object definitions
 lv_obj_t *label_legend1;
@@ -475,4 +476,308 @@ void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_color16_t 
     lv_obj_align(label, LV_ALIGN_DEFAULT, x, y);
     lv_obj_remove_style(label, style, LV_STATE_DEFAULT);
     lv_obj_add_style(label, style, LV_STATE_DEFAULT);
+}
+
+// UI event callbacks (moved from globalFunctions.h)
+
+void draw_event_stat_chart_cb(lv_event_t *e)
+{
+    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
+
+    // Check if the part being drawn is a tick label on the primary X-axis
+    if (dsc->id == LV_CHART_AXIS_PRIMARY_Y &&
+        dsc->text && dsc->label_dsc && dsc->part == LV_PART_TICKS)
+
+    {
+        dsc->label_dsc->font = &lv_font_montserrat_10;
+        dsc->label_dsc->color = lv_color_hex(0xFFFFFF);
+    }
+
+    if (dsc->part == LV_PART_TICKS && dsc->id == LV_CHART_AXIS_PRIMARY_X && dsc->text)
+    {
+
+        int VI_hidden = 0;
+
+        if (PowerSupply.stats.serV->hidden == PowerSupply.stats.serI->hidden &&
+            PowerSupply.stats.serV->hidden == false)
+            VI_hidden = 3;
+        else if (PowerSupply.stats.serV->hidden == false)
+            VI_hidden = 1;
+        else if (PowerSupply.stats.serI->hidden == false)
+            VI_hidden = 2;
+
+        // Number of ticks is 7
+        const int numTicks = 3;
+
+        // Arrays to hold tick labels for 7 ticks
+        char tickLabels[3][80]; // Adjust size as needed
+
+        // Calculate the step sizes for voltage and current
+        double voltageStep = (PowerSupply.Voltage.hist.histWinMax - PowerSupply.Voltage.hist.histWinMin) / (numTicks - 1);
+        double currentStep = (PowerSupply.Current.hist.histWinMax - PowerSupply.Current.hist.histWinMin) / (numTicks - 1);
+
+        // Generate tick labels
+        for (int i = 0; i < numTicks; i++)
+        {
+            // **Set labels at positions 1, 2, 4, and 5 to empty strings**
+            // if (i == 1 || i == 2 || i == 4 || i == 5)
+            // {
+            //     strcpy(tickLabels[i], "");
+            //     continue; // Skip to the next iteration
+            // }
+
+            double voltageValue = PowerSupply.Voltage.hist.histWinMin + i * voltageStep;
+            double currentValue = PowerSupply.Current.hist.histWinMin + i * currentStep;
+
+            // Initialize units as empty strings
+            char v_unit[3] = "V";
+            char c_unit[3] = "A";
+
+            // Format the voltage value with appropriate precision
+            char voltageStr[20];
+            if (fabs(voltageStep) >= 1.0)
+                snprintf(voltageStr, sizeof(voltageStr), "%3.4f", voltageValue);
+            else if (fabs(voltageStep) >= 0.1)
+                snprintf(voltageStr, sizeof(voltageStr), "%3.1f", voltageValue);
+            else if (fabs(voltageStep) >= 0.01)
+                snprintf(voltageStr, sizeof(voltageStr), "%3.2f", voltageValue);
+            else
+            {
+                // Convert to millivolts if the step is very small
+                voltageValue *= 1000;
+                snprintf(voltageStr, sizeof(voltageStr), "%3.2f", voltageValue);
+                strcpy(v_unit, "mV");
+            }
+
+            // Format the current value with appropriate precision
+            char currentStr[20];
+            if (fabs(currentStep) >= 1.0)
+                snprintf(currentStr, sizeof(currentStr), "%3.0f", currentValue);
+            else if (fabs(currentStep) >= 0.1)
+                snprintf(currentStr, sizeof(currentStr), "%3.1f", currentValue);
+            else if (fabs(currentStep) >= 0.01)
+                snprintf(currentStr, sizeof(currentStr), "%3.2f", currentValue);
+            else
+            {
+                // Convert to milliamps if the step is very small
+                currentValue *= 1000;
+                snprintf(currentStr, sizeof(currentStr), "%3.2f", currentValue);
+                strcpy(c_unit, "mA");
+            }
+
+            // **Add units only to the middle tick label (position 3)**
+            if (i == 1)
+            {
+                strcat(voltageStr, v_unit);
+                strcat(currentStr, c_unit);
+            }
+
+            // Combine voltage and current strings into one label
+
+            switch (VI_hidden)
+            {
+            case 1:
+                lv_obj_set_size(PowerSupply.stats.chart, 260, 150);
+                snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s", voltageStr);
+                break;
+
+            case 2:
+                lv_obj_set_size(PowerSupply.stats.chart, 260, 150);
+                snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s", currentStr);
+                break;
+
+            case 3:
+                lv_obj_set_size(PowerSupply.stats.chart, 260, 140);
+                snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s\n%s", voltageStr, currentStr);
+                break;
+
+            default:
+                snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s", "");
+                break;
+            }
+        }
+
+        // **Boundary Check to Prevent Out-of-Bounds Access**
+        if (dsc->value >= 0 && dsc->value < numTicks)
+        {
+            // Set the tick label for the current value
+            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabels[dsc->value]);
+        }
+        else
+        {
+            // If out of bounds, set an empty label
+            lv_snprintf(dsc->text, dsc->text_length, "");
+        }
+
+        // **Change the font size of the tick labels**
+        // Ensure that the label_dsc is valid before modifying it
+        if (dsc->label_dsc)
+        {
+            // Set the desired font
+            // You can use one of the built-in fonts or a custom font
+            // Example using a built-in font: &lv_font_montserrat_14
+            dsc->label_dsc->font = &lv_font_montserrat_10; // Replace with your desired font
+                                                           // Optionally, adjust other text properties
+
+            switch (VI_hidden)
+            {
+            case 1:
+                dsc->label_dsc->color = lv_palette_main(LV_PALETTE_BLUE);
+                break;
+
+            case 2:
+                dsc->label_dsc->color = lv_palette_main(LV_PALETTE_AMBER);
+                break;
+
+            case 3:
+
+                dsc->label_dsc->color = lv_color_hex(0xFFFFFF);
+                break;
+
+            default:
+                break;
+            }
+        }
+    }
+}
+
+void draw_event_cb2(lv_event_t *e)
+{
+    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
+
+    if (!dsc)
+        return;
+
+    /* Customize division lines */
+    if (dsc->part == LV_PART_MAIN)
+    {
+        if (!dsc->line_dsc || !dsc->p1 || !dsc->p2)
+            return;
+
+        dsc->line_dsc->color = lv_palette_main(LV_PALETTE_GREY);
+
+        /* Vertical lines */
+        if (dsc->p1->x == dsc->p2->x)
+        {
+            if (dsc->id == 0)
+            {
+                dsc->line_dsc->width = 1;
+                dsc->line_dsc->dash_gap = 0;
+                dsc->line_dsc->dash_width = 0;
+            }
+            else
+            {
+                dsc->line_dsc->width = 1;
+                dsc->line_dsc->dash_gap = 5;
+                dsc->line_dsc->dash_width = 5;
+            }
+            return;
+        }
+        /* Horizontal lines */
+        else
+        {
+            if (dsc->id == 8)
+            {
+                dsc->line_dsc->width = 1;
+                dsc->line_dsc->dash_gap = 0;
+            }
+            else
+            {
+                dsc->line_dsc->width = 1;
+                dsc->line_dsc->dash_gap = 5;
+                dsc->line_dsc->dash_width = 5;
+            }
+            return;
+        }
+    }
+
+    /* Customize tick labels */
+    if (dsc->part == LV_PART_TICKS && dsc->text)
+    {
+        /* Handle LV_CHART_AXIS_PRIMARY_X */
+        if (dsc->id == LV_CHART_AXIS_PRIMARY_X)
+        {
+            for (int i = 0; i < NUM_LABELS; i++)
+            {
+                if (i == NUM_LABELS - 1)
+                {
+                    strcpy(tickLabels_x[i], "0 pts");
+                }
+                else
+                {
+                    int value = CHART_SIZE * (NUM_LABELS - 1 - i) / (NUM_LABELS - 1);
+                    sprintf(tickLabels_x[i], "%d", value);
+                }
+            }
+
+            static int index_x = 0;
+            // static char *tickLabels_x[] = {"300", "250", "200", "150", "100", "50", "0 pts"};
+            // Initialize tick labels based on CHART_SIZE and fractions
+
+            if (index_x == 7)
+                index_x = 0;
+
+            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabels_x[index_x++]);
+
+            if (dsc->label_dsc)
+                dsc->label_dsc->font = &lv_font_montserrat_10;
+        }
+        /* Handle LV_CHART_AXIS_PRIMARY_Y */
+        else if (dsc->id == LV_CHART_AXIS_PRIMARY_Y)
+        {
+            static int index_y = 0;
+            static char *tickLabels_y[] = {"32.0V", "28.0", "24.0", "20.0", "16.0", "12.0", "8.0", "4.0", "0.0"};
+
+            if (strcmp(dsc->text, "32000") == 0)
+                index_y = 0;
+
+            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabels_y[index_y++]);
+
+            if (dsc->label_dsc)
+                dsc->label_dsc->font = &lv_font_montserrat_10;
+        }
+        /* Handle LV_CHART_AXIS_SECONDARY_Y */
+        else if (dsc->id == LV_CHART_AXIS_SECONDARY_Y)
+        {
+            static int index_sy = 0;
+            static char *tickLabels_sy[] = {"8.0A", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0"};
+
+            if (strcmp(dsc->text, "8000") == 0)
+                index_sy = 0;
+
+            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabels_sy[index_sy++]);
+
+            if (dsc->label_dsc)
+                dsc->label_dsc->font = &lv_font_montserrat_10;
+        }
+    }
+}
+
+void btn_function_gen_event_cb(lv_event_t *e)
+{
+
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_obj_t *btn = lv_event_get_target(e);
+    lv_obj_t *label = lv_obj_get_child(btn, 0);
+
+    if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+    {
+        lv_label_set_text(label, "ON");
+        if (PowerSupply.getStatus() != DEVICE::FUN)
+            PowerSupply.setStatus(DEVICE::FUN);
+    }
+    else
+    {
+        lv_label_set_text(label, "OFF");
+        PowerSupply.setStatus(DEVICE::ON);
+    }
+
+    // if (get_selected_spinbox())
+    // {
+    //     remove_red_border(get_selected_spinbox());
+    //     get_selected_spinbox() = nullptr;
+    // }
+    remove_selected_spinbox();
+    // Serial.printf("\nDebug check points!");
+    // trackLoopExecution(__func__);
 }
