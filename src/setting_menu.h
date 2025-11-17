@@ -73,6 +73,7 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *e);
 
 void open_dac_calibration_cb(lv_event_t *e);
 void btn_close_hide_obj_cb(lv_event_t *e);
+void Warning_msgbox(const char *title, lv_event_cb_t event_cb);
 
 
 // void build_adc_calibration_window(lv_obj_t **win_holder,
