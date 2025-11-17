@@ -238,29 +238,70 @@ static void INL_timer_cb(lv_timer_t *)
 
 static void INL_start(lv_event_t *e)
 {
+    INL_dbg("[INL] INL_start callback triggered");
+
+    if (!e)
+    {
+        INL_dbg("[INL] ERROR: Null event");
+        return;
+    }
+
     lv_obj_t *obj = lv_event_get_current_target(e);
+    if (!obj || !lv_obj_is_valid(obj))
+    {
+        INL_dbg("[INL] ERROR: Invalid msgbox object");
+        return;
+    }
+
     if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
     {
+        INL_dbg("[INL] VALUE_CHANGED event received");
+
         // Get button text BEFORE closing msgbox (to avoid use-after-free)
         const char *txt = lv_msgbox_get_active_btn_text(obj);
-        bool is_ok = (txt && strcmp(txt, "OK") == 0);
+
+        // COPY the button text to local buffer (extra safety)
+        char btn_text[16] = {0};
+        if (txt)
+        {
+            strncpy(btn_text, txt, sizeof(btn_text) - 1);
+            INL_dbg("[INL] Button pressed: '%s'", btn_text);
+        }
+        else
+        {
+            INL_dbg("[INL] WARNING: Null button text");
+        }
 
         // Now safe to close the msgbox
         lv_msgbox_close(obj);
+        INL_dbg("[INL] Msgbox closed");
+
+        // Check the COPIED string (not the freed pointer!)
+        bool is_ok = (btn_text[0] != '\0' && strcmp(btn_text, "OK") == 0);
 
         if (is_ok)
         {
+            INL_dbg("[INL] Starting INL calibration");
             g_voltINL_ready = false;
             if (inl.timer)
             {
+                INL_dbg("[INL] Deleting existing timer");
                 lv_timer_del(inl.timer);
                 inl.timer = nullptr;
             }
             inl = INL_FSM{};
             inl.ph = INL_FSM::PREPARE;
             inl.timer = lv_timer_create(INL_timer_cb, 10, nullptr); // 10ms tick
-            INL_dbg("[INL] START (LVGL timer)");
+            INL_dbg("[INL] Timer created, calibration started");
         }
+        else
+        {
+            INL_dbg("[INL] User cancelled - no action taken");
+        }
+    }
+    else
+    {
+        INL_dbg("[INL] Non-VALUE_CHANGED event: %d", lv_event_get_code(e));
     }
 }
 
@@ -393,22 +434,59 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
     // Event handler for checkbox-toggled enable/disable
     static auto set_siblings_enabled_by_checkbox = [](lv_event_t *e)
     {
-        ensure_disabled_style_once();
+        INL_dbg("[INL] Checkbox event triggered");
 
         lv_obj_t *chk = lv_event_get_target(e);
-        lv_obj_t *parent = lv_obj_get_parent(chk);
-        if (!parent)
+        if (!chk || !lv_obj_is_valid(chk))
+        {
+            INL_dbg("[INL] ERROR: Invalid checkbox object");
             return;
+        }
+
+        lv_obj_t *parent = lv_obj_get_parent(chk);
+        if (!parent || !lv_obj_is_valid(parent))
+        {
+            INL_dbg("[INL] ERROR: Invalid parent object");
+            return;
+        }
 
         const bool enabled = lv_obj_has_state(chk, LV_STATE_CHECKED);
         const bool disabled = !enabled;
 
+        INL_dbg("[INL] Checkbox state: %s", enabled ? "ENABLED" : "DISABLED");
+
+        if (disabled)
+        {
+            // CRITICAL: Stop calibration timer FIRST before any UI changes
+            if (inl.timer)
+            {
+                INL_dbg("[INL] Stopping calibration timer");
+                lv_timer_del(inl.timer);
+                inl.timer = nullptr;
+            }
+            // Reset FSM to idle state
+            inl.ph = INL_FSM::DONE;
+            g_voltINL_ready = false;
+            INL_dbg("[INL] Timer stopped, FSM reset");
+        }
+
+        // Now safe to modify UI (timer is stopped if it was running)
+        ensure_disabled_style_once();
+
         uint32_t n = lv_obj_get_child_cnt(parent);
+        INL_dbg("[INL] Processing %u child objects", (unsigned)n);
+
         for (uint32_t i = 0; i < n; ++i)
         {
             lv_obj_t *ch = lv_obj_get_child(parent, i);
-            if (ch == chk)
+            if (!ch || ch == chk)
                 continue;
+
+            if (!lv_obj_is_valid(ch))
+            {
+                INL_dbg("[INL] WARNING: Skipping invalid child %u", (unsigned)i);
+                continue;
+            }
 
             if (disabled)
                 lv_obj_add_flag(ch, LV_OBJ_FLAG_HIDDEN);
@@ -417,30 +495,31 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
             lv_obj_invalidate(ch);
         }
 
-        if (disabled)
+        if (enabled)
         {
-            // CRITICAL: Stop calibration timer if running to prevent crashes
-            if (inl.timer)
-            {
-                INL_dbg("[INL] Checkbox unchecked - stopping timer");
-                lv_timer_del(inl.timer);
-                inl.timer = nullptr;
-            }
-            // Reset FSM to idle state
-            inl.ph = INL_FSM::DONE;
-            g_voltINL_ready = false;
-        }
-        else
-        {
+            // Re-enabling: Load calibration data
+            INL_dbg("[INL] Re-enabling: loading calibration data");
             PowerSupply.LoadCalibrationData();
-            std::vector<double> X(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure,
-                                  PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure + NPTS);
-            std::vector<double> Y(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal,
-                                  PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal + NPTS);
-            g_voltINL.setPoints(X, Y);
-            g_voltINL.build();
-            g_voltINL_ready = true;
+
+            try
+            {
+                std::vector<double> X(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure,
+                                      PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure + NPTS);
+                std::vector<double> Y(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal,
+                                      PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal + NPTS);
+                g_voltINL.setPoints(X, Y);
+                g_voltINL.build();
+                g_voltINL_ready = true;
+                INL_dbg("[INL] Calibration data loaded successfully");
+            }
+            catch (...)
+            {
+                INL_dbg("[INL] ERROR: Failed to load calibration data");
+                g_voltINL_ready = false;
+            }
         }
+
+        INL_dbg("[INL] Checkbox event complete");
     };
 
     // Header: checkbox + status/progress labels
