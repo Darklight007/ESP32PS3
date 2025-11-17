@@ -10,8 +10,6 @@
 #include "spinbox_pro.h"
 #include "SpinboxPro.hpp"
 #include "table_pro.h"
-
-#include "setting_menu.h"
 #include "globals.h"
 #include "functions.h"
 #include "ui_helpers.h"
@@ -21,150 +19,32 @@
 #include "memory.h"
 #include "ui_creation.h"
 
-// Forward declarations for functions defined later in this file
+// ============================================================================
+// Forward Declarations
+// ============================================================================
+
 void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data);
 bool functionGenerator();
 lv_obj_t *find_btn_by_tag(lv_obj_t *parent, uint32_t tag);
 
+// ============================================================================
+// Configuration Defines
+// ============================================================================
+
 #define LV_TICK_CUSTOM 1
-
-// draw_event_stat_chart_cb() moved to ui_helpers.cpp
-
-static void draw_event_stat_chart_cb_old(lv_event_t *e)
-{
-    /*Hook the division lines too*/
-    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
-
-    if (dsc->text)
-    {
-        if (dsc->id == LV_CHART_AXIS_PRIMARY_X)
-        {
-            static const char *tickLabel[] = {"0.0\n0.0", "5.0\n1.0", "10\n2.0", "15\n3.0", "20\n4.0", "25\n5.0", "30[V]\n6.0[A]"};
-
-            static char str[7][18];
-
-            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabel[dsc->value]);
-        }
-    }
-};
-
-// tickLabels_x moved to globals.h/cpp
-
-// draw_event_cb2() moved to ui_helpers.cpp
-
-static void draw_event_cb2_old(lv_event_t *e)
-{
-    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
-
-    /*Hook the division lines too*/
-    if (dsc->part == LV_PART_MAIN)
-    {
-        if (dsc->line_dsc == NULL || dsc->p1 == NULL || dsc->p2 == NULL)
-            return;
-
-        dsc->line_dsc->color = lv_palette_main(LV_PALETTE_GREY);
-        /*Vertical line*/
-        if (dsc->p1->x == dsc->p2->x)
-        {
-
-            if (dsc->id == 0)
-            {
-                dsc->line_dsc->width = 1;
-                dsc->line_dsc->dash_gap = 0;
-                dsc->line_dsc->dash_width = 0;
-            }
-            else
-            {
-                dsc->line_dsc->width = 1;
-                dsc->line_dsc->dash_gap = 5;
-                dsc->line_dsc->dash_width = 5;
-            }
-
-            return;
-        }
-        /*Horizontal line*/
-        else
-        {
-            if (dsc->id == 8)
-            {
-                dsc->line_dsc->width = 1;
-                dsc->line_dsc->dash_gap = 0;
-            }
-            else
-            {
-                dsc->line_dsc->width = 1;
-                dsc->line_dsc->dash_gap = 5;
-                dsc->line_dsc->dash_width = 5;
-            }
-            return;
-        }
-    }
-    if (dsc->text)
-    {
-
-        if (dsc->id == LV_CHART_AXIS_PRIMARY_X)
-        {
-            static char c[6][6];
-            static uint16_t pointCount = lv_chart_get_point_count(PowerSupply.graph.chart);
-
-            std::sprintf(c[5], "%d", pointCount);
-            std::sprintf(c[4], "%d", pointCount * 5 / 6);
-            std::sprintf(c[3], "%d", pointCount * 4 / 6);
-            std::sprintf(c[2], "%d", pointCount * 3 / 6);
-            std::sprintf(c[1], "%d", pointCount * 2 / 6);
-            std::sprintf(c[0], "%d", pointCount * 1 / 6);
-
-            static char *tickLabel[] = {c[5], c[4], c[3], c[2], c[1], c[0], "pts"};
-
-            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabel[dsc->value]);
-
-            if (dsc->label_dsc)
-                dsc->label_dsc->font = &lv_font_montserrat_10;
-        }
-        else if (dsc->id == LV_CHART_AXIS_SECONDARY_Y)
-        {
-            static int i = 0;
-
-            static char *tickLabel_sy[] = {"8.0A", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0"};
-
-            if (strcmp(dsc->text, "8000") == 0)
-                i = 0;
-            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabel_sy[i++]);
-
-            if (dsc->label_dsc)
-                dsc->label_dsc->font = &lv_font_montserrat_10;
-        }
-
-        else if (dsc->id == LV_CHART_AXIS_PRIMARY_Y)
-        {
-            static int i = 0;
-            static char *tickLabel_y[] = {"32.0\nVolt", "28.0", "24.0", "20.0", "16.0", "12.0", "8.0", "4.0", "0.0"};
-
-            if (strcmp(dsc->text, "32000") == 0)
-                i = 0;
-            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabel_y[i++]);
-
-            if (dsc->label_dsc)
-                dsc->label_dsc->font = &lv_font_montserrat_10;
-        }
-    }
-}
-
-// touch_calibrate() and TouchAttr moved to input_handler.cpp
-
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 180
 #define BUCKET_COUNT 100
 #define DOT_SIZE 3
 #define CHART_Y_MAX 100
 #define CHART_POINTS 20
+#define NUM_LABELS 7
 
-// dataBuckets, dropdown_active, util_Arbit_chart moved to globals.h/cpp
+// ============================================================================
+// Active Event Callbacks (still in use)
+// ============================================================================
 
-// my_touchpad_read() and init_touch() moved to input_handler.cpp
-
-// Task_BarGraph and Task_ADC moved to tasks.cpp
-
+// Switch event callback for list scrolling mode
 static void sw_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
@@ -181,6 +61,7 @@ static void sw_event_cb(lv_event_t *e)
     }
 }
 
+// Key event handler - shows textarea for value entry
 static void key_event_handler(uint16_t btn_id)
 {
     lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
@@ -190,12 +71,14 @@ static void key_event_handler(uint16_t btn_id)
     ismyTextHiddenChange = true;
 }
 
+// Callback version of readback handler
 static void key_event_handler_readBack_clb(const char *txt)
 {
     lv_textarea_set_text(ta, txt);
     lv_label_set_text(unit_label, "");
 }
 
+// Read back current value from display object in base units (V or A)
 static void key_event_handler_readBack(DispObjects dp)
 {
     if (strcmp(lv_label_get_text(dp.label_unit), "V") == 0)
@@ -213,6 +96,7 @@ static void key_event_handler_readBack(DispObjects dp)
     lv_textarea_del_char(ta);
 }
 
+// Read back current value in milli units (mV or mA)
 static void key_event_handler_readBack_k(DispObjects dp)
 {
     if (strcmp(lv_label_get_text(dp.label_unit), "V") == 0)
@@ -233,9 +117,7 @@ static void key_event_handler_readBack_k(DispObjects dp)
     lv_textarea_del_char(ta);
 }
 
-// scaleVoltage and scaleCurrent moved to functions.cpp
-// loadMemory and saveMemory moved to memory.cpp
-
+// Table selection event - updates spinbox with selected value
 static void table_get_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
@@ -249,10 +131,7 @@ static void table_get_event_cb(lv_event_t *e)
     }
 }
 
-#define NUM_LABELS 7
-
-// saveToBank and loadFromBank moved to memory.cpp
-
+// Dropdown event callback - handles bank save/load and waveform selection
 static void dropdownEventCb(lv_event_t *e)
 {
     lv_obj_t *dropdown = lv_event_get_target(e);
@@ -301,33 +180,3 @@ static void dropdownEventCb(lv_event_t *e)
         lv_chart_refresh(util_Arbit_chart);
     }
 }
-
-// select_next_row and select_previous_row moved to table_pro.cpp
-
-// btn_function_gen_event_cb() moved to ui_helpers.cpp
-
-// schedule() functions moved to intervals.cpp
-
-// GraphPush() and HistPush() moved to ui_helpers.cpp
-// getSettingEncoder() moved to input_handler.cpp
-
-// trackLoopExecution() moved to functions.cpp
-
-// All interval functions (LvglUpdatesInterval, FFTUpdateInterval, LvglFullUpdates, StatusBarUpdateInterval,
-// FlushMeasuresInterval, statisticUpdateInterval, EncoderRestartInterval, KeyCheckInterval, and VCCCInterval)
-// have been moved to intervals.cpp
-
-// ===================== Page handler functions moved to input_handler.cpp =====================
-// The following functions have been moved to input_handler.cpp:
-// - handleCalibrationPage()
-// - handleGraphPage()
-// - handleHistogramPage()
-// - handleUtilityPage()
-// - handleUtility_function_Page()
-// Along with their helper functions and static variables.
-
-// managePageEncoderInteraction() moved to input_handler.cpp
-
-// CHANGE_THRESHOLD and monitorMinChanges() moved to functions.cpp
-
-// functionGenerator() and functionGenerator_demo() moved to waveform_generator.cpp
