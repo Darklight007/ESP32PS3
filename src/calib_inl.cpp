@@ -418,7 +418,18 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
         }
 
         if (disabled)
+        {
+            // CRITICAL: Stop calibration timer if running to prevent crashes
+            if (inl.timer)
+            {
+                INL_dbg("[INL] Checkbox unchecked - stopping timer");
+                lv_timer_del(inl.timer);
+                inl.timer = nullptr;
+            }
+            // Reset FSM to idle state
+            inl.ph = INL_FSM::DONE;
             g_voltINL_ready = false;
+        }
         else
         {
             PowerSupply.LoadCalibrationData();
