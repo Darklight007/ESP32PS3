@@ -241,9 +241,14 @@ static void INL_start(lv_event_t *e)
     lv_obj_t *obj = lv_event_get_current_target(e);
     if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
     {
+        // Get button text BEFORE closing msgbox (to avoid use-after-free)
         const char *txt = lv_msgbox_get_active_btn_text(obj);
+        bool is_ok = (txt && strcmp(txt, "OK") == 0);
+
+        // Now safe to close the msgbox
         lv_msgbox_close(obj);
-        if (txt && strcmp(txt, "OK") == 0)
+
+        if (is_ok)
         {
             g_voltINL_ready = false;
             if (inl.timer)

@@ -544,13 +544,18 @@ static void event_cb(lv_event_t *e)
     lv_obj_t *obj = lv_event_get_current_target(e);
     if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
     {
+        // Get button text BEFORE closing msgbox (to avoid use-after-free)
         const char *txt = lv_msgbox_get_active_btn_text(obj);
+        bool is_ok = (txt && strcmp(txt, "OK") == 0);
+
+        // Now safe to close the msgbox
         lv_msgbox_close(obj);
-        if (txt && strcmp(txt, "OK") == 0)
+
+        if (is_ok)
         {
             blockAll = true;
-                esp_task_wdt_reset();  // Reset watchdog immediately
-    vTaskDelay(pdMS_TO_TICKS(100));  // Small delay to stabilize
+            esp_task_wdt_reset();  // Reset watchdog immediately
+            vTaskDelay(pdMS_TO_TICKS(100));  // Small delay to stabilize
             create_log_window();
             // start_auto_measure();
             PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage = FLT_MAX;
