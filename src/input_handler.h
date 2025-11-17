@@ -8,6 +8,9 @@ void touch_calibrate();
 void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data);
 void init_touch();
 
+// Encoder functions
+void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data);
+
 // Encoder page handler functions
 void handleCalibrationPage(int32_t encoder1_last_value, int32_t encoder2_last_value);
 void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value);

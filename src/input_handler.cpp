@@ -618,3 +618,120 @@ void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_l
         // Serial.printf("\nSpinbox_pro%i", get_spinbox_data_by_id(parent, 2));
     }
 }
+
+void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
+{
+    if (encoder2Flag /*&& (Tabs::getCurrentPage() == 4)*/)
+    {
+        // encoder2Flag = 0;
+
+        int64_t count = PowerSupply.Current.encoder.getCount() >> 1; // / 2;
+        // PowerSupply.Current.encoder.pauseCount();
+
+        static int64_t rotaryOldValue2 = 0;
+
+        // encoder2_value = count;
+        if (count > rotaryOldValue2)
+            encoder2_value++;
+        // PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue + PowerSupply.Current.rotaryEncoderStep);
+
+        else if (count < rotaryOldValue2)
+            encoder2_value--;
+        // PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue - PowerSupply.Current.rotaryEncoderStep);
+
+        rotaryOldValue2 = count;
+        // encoder2_value = std::clamp(encoder2_value, -500, 500);
+        // encoder2Flag = (encoder2Flag > 300) ? 300 : encoder2Flag - 1;
+        encoder2Flag = 0;
+        // if (encoder2Flag == 0)
+        //   PowerSupply.Current.encoder.setCount(0);
+        switch (Tabs::getCurrentPage())
+        {
+        // case 4:
+        //     break;
+        case 2:
+            PowerSupply.Current.SetEncoderUpdate();
+            // PowerSupply.FlushSettings();
+            // PowerSupply.Voltage.SetEncoderUpdate();
+            break;
+        }
+        // LV_LOG_USER("encoder2_value:%i encoder2Flag:%i count:%i", encoder2_value, encoder2Flag, count);
+        encoderTimeStamp = millis();
+    }
+
+    if (encoder1Flag /*&& (Tabs::getCurrentPage() == 4)*/)
+    {
+
+        int64_t count = PowerSupply.Voltage.encoder.getCount() >> 1; // / 2;
+        // // PowerSupply.Current.encoder.pauseCount();
+
+        static int64_t rotaryOldValue = 0;
+
+        // encoder2_value = count;
+        if (count > rotaryOldValue)
+            encoder1_value++;
+
+        else if (count < rotaryOldValue)
+            encoder1_value--;
+
+        rotaryOldValue = count;
+        // encoder1Flag = (encoder1Flag > 300) ? 300 : encoder1Flag - 1;
+        // encoder1_value = PowerSupply.Voltage.encoder.getCount() / 2;
+        encoder1Flag = 0;
+        switch (Tabs::getCurrentPage())
+        {
+        // case 4:
+        //     break;
+        case 2:
+            PowerSupply.Voltage.SetEncoderUpdate();
+            // PowerSupply.FlushSettings();
+
+            // PowerSupply.Voltage.Flush();
+            break;
+        }
+        // PowerSupply.Current.encoder.resumeCount();
+
+        // LV_LOG_USER("encoder2_value:%i encoder1Flag:%i count:%i", 0, encoder1Flag,
+        encoderTimeStamp = millis();
+    }
+}
+
+void managePageEncoderInteraction()
+{
+    // // Variables to store the last encoder values
+    static int32_t encoder1_last_value = 0;
+    static int32_t encoder2_last_value = 0;
+
+    // Get the current page from the Tabs
+    switch (Tabs::getCurrentPage())
+    {
+    case 0: // Histogram Page
+        handleHistogramPage(encoder1_last_value, encoder2_last_value);
+        break;
+
+    case 1: // Graph Page
+        handleGraphPage(encoder1_last_value, encoder2_last_value);
+        // lv_slider_set_value(slider_x, encoder2_last_value,LV_ANIM_OFF);
+        break;
+
+    case 2: // main Page
+        break;
+    case 3:
+        handleUtility_function_Page(encoder1_last_value, encoder2_last_value);
+        break;
+
+    case 4: // Calibration Page
+
+        handleCalibrationPage(encoder1_last_value, encoder2_last_value);
+        break;
+
+    default:
+
+        break;
+    }
+
+    if (encoder1_last_value != encoder1_value)
+        encoder1_last_value = encoder1_value;
+    if (encoder2_last_value != encoder2_value)
+        encoder2_last_value = encoder2_value;
+}
