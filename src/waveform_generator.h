@@ -36,3 +36,7 @@ double arbitraryBank1(double t);
 // Waveform array
 extern Waveform waveforms[];
 extern int numWaveforms;
+
+// Function generator functions
+bool functionGenerator();
+void functionGenerator_demo();

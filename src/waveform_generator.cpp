@@ -180,3 +180,77 @@ Waveform waveforms[] = {
 };
 
 int numWaveforms = sizeof(waveforms) / sizeof(waveforms[0]);
+
+// Function to generate waveform based on parameters
+bool functionGenerator()
+{
+
+    static unsigned long startTime = micros();
+    unsigned long currentTime = micros();
+    double elapsedTime = (currentTime - startTime) / 1'000'000.0;
+    double t = fmod(elapsedTime * PowerSupply.funGenMem.frequency, 1.0);
+    int selected_row = (int)Utility_objs.table_fun_gen_list->user_data;
+    Waveform currentWaveform = waveforms[selected_row];
+    double value = currentWaveform.function(t);
+    // Serial.println(t);
+    double outputValue = value * PowerSupply.funGenMem.amplitude + PowerSupply.funGenMem.offset;
+
+    static double lastOutputValue = 0.0;
+    if (outputValue != lastOutputValue)
+    {
+        PowerSupply.Voltage.SetUpdate(outputValue * PowerSupply.Voltage.adjFactor);
+        // PowerSupply.Voltage.adjValue = outputValue;
+        lastOutputValue = outputValue;
+        // Serial.printf("\nSet output: %8.4f ", outputValue*2000.0);
+    }
+
+    // Track minimal change intervals
+    //  Serial.printf("\nmonitor output: %1.3f ", monitorMinChanges(value, t) );
+    // return (monitorMinChanges(value, t) < (.008));
+    return true;
+    Serial.print("Waveform: ");
+    Serial.print(currentWaveform.name);
+    Serial.print(" - Value: ");
+    Serial.println(outputValue);
+}
+
+void functionGenerator_demo()
+{
+    static const unsigned long periodTotal = 100000000UL;    // 10 seconds in microseconds
+    static const unsigned long periodWave = periodTotal / 3; // ~3.333 seconds per period
+    static unsigned long startTime = micros();
+
+    unsigned long currentTime = micros();
+    unsigned long elapsedTime = currentTime - startTime;
+
+    unsigned long totalDuration = numWaveforms * periodTotal;
+    unsigned long timeInTotal = elapsedTime % totalDuration;
+
+    int currentWaveformIndex = timeInTotal / periodTotal;
+    unsigned long timeInWave = timeInTotal % periodTotal;
+    unsigned long timeInPeriod = timeInWave % periodWave;
+    double t = (double)timeInPeriod / (double)periodWave;
+
+    double amplitude = 16.0;
+    double offset = 16.0;
+
+    // Get the current waveform struct
+    Waveform currentWaveform = waveforms[currentWaveformIndex];
+    double value = currentWaveform.function(t);
+    double outputValue = value * amplitude + offset;
+
+    // Get the current waveform name
+    const char *currentWaveformName = currentWaveform.name;
+
+    // Print the output value and waveform name
+    if (!lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+        return;
+
+    Serial.print("Waveform: ");
+    Serial.print(currentWaveformName);
+    Serial.print(" - Value: ");
+    Serial.println(outputValue);
+
+    // Reduce delay to improve smoothness
+    delay(1);
+}
