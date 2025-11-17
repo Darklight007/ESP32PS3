@@ -1,7 +1,7 @@
 #include "setting_menu.h"
 #include "calib_log_window.h"
 #include "calib_sequencer.h"
-#include "calib_internal_current.h"
+#include "calib_internal_leakage.h"
 #include "calib_dac.h"
 #include "calib_adc.h"
 #include "calib_inl.h"
@@ -476,7 +476,7 @@ void SettingMenu(lv_obj_t *parent)
     create_button_item(section, btn_calibration_ADC_voltage_event_cb, "ADC Voltage");
     create_button_item(section, btn_calibration_ADC_current_event_cb, "ADC Current");
     create_button_item(section, open_dac_calibration_cb, "V/I DAC");
-    create_button_item(section, internal_current_calibration_cb, "Inter. Current");
+    create_button_item(section, internal_leakage_calibration_cb, "Inter. Current");
     create_button_item(section, ADC_INL_Voltage_calibration_cb, "ADC INL V_CAL");
 
     create_button_item(section, nullptr /* Stats reset wiring */, "Reset Stats");
@@ -537,7 +537,7 @@ void SettingMenu(lv_obj_t *parent)
 // btn_calibration_ADC_voltage_event_cb() and btn_calibration_ADC_current_event_cb() moved to calib_adc.cpp
 // close_log_cb() moved to calib_log_window.cpp
 // measure_ctx_t, SeqStep, SeqRunner, seq_start(), seq_cb() moved to calib_sequencer.cpp
-// CurrentCalCtx, start_current_totalR(), start_current_zeros() moved to calib_internal_current.cpp
+// LeakageCalCtx, start_leakage_resistance_measurement(), start_current_zero_calibration() moved to calib_internal_leakage.cpp
 
 static void event_cb(lv_event_t *e)
 {
@@ -557,7 +557,7 @@ static void event_cb(lv_event_t *e)
             log_reset();
             log_clear();
             esp_task_wdt_reset();  // Reset again before starting
-            start_current_totalR();
+            start_leakage_resistance_measurement(nullptr);
             blockAll = false;
         }
     }
@@ -650,7 +650,7 @@ static void AutoMeasureTotalRes_cb(lv_event_t *)
 }
 
 // Open/create the DAC calibration window
-void internal_current_calibration_cb(lv_event_t *)
+void internal_leakage_calibration_cb(lv_event_t *)
 {
     if (PowerSupply.gui.calibration.win_int_current_calibration)
     {
@@ -700,6 +700,6 @@ namespace
 {
 
     // autoZeroCurrent_cb, auto_zero_event_cb moved to calib_adc.cpp
-    // start_current_zeros() implementation moved to calib_internal_current.cpp
+    // start_current_zero_calibration() implementation moved to calib_internal_leakage.cpp
 
 } // namespace

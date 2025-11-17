@@ -1,5 +1,5 @@
 #include "calib_adc.h"
-#include "calib_internal_current.h"
+#include "calib_internal_leakage.h"
 #include "calib_log_window.h"
 #include "device.hpp"
 #include "spinbox_pro.h"
@@ -50,7 +50,7 @@ namespace
                 create_log_window();
                 log_reset();
                 log_clear();
-                start_current_zeros(nullptr);
+                start_current_zero_calibration(nullptr);
             }
         }
     }
