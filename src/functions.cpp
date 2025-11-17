@@ -58,6 +58,35 @@ static const class_map_t class_map[] = {
     {NULL, NULL} // Sentinel
 };
 
+
+void autoScrollY()
+{
+
+    double ratio;
+
+    if (PowerSupply.graph.serV->hidden == PowerSupply.graph.serI->hidden &&
+        PowerSupply.graph.serV->hidden == false)
+
+        ratio = .5 * ((PowerSupply.Current.measured.Mean() / (PowerSupply.Current.maxValue / PowerSupply.Current.adjFactor) +
+                       PowerSupply.Voltage.measured.Mean() / (PowerSupply.Voltage.maxValue / PowerSupply.Voltage.adjFactor)));
+
+    else if (!PowerSupply.graph.serV->hidden)
+        ratio = (PowerSupply.Voltage.measured.Mean() / (PowerSupply.Voltage.maxValue / PowerSupply.Voltage.adjFactor));
+
+    else if (!PowerSupply.graph.serI->hidden)
+        ratio = (PowerSupply.Current.measured.Mean() / (PowerSupply.Current.maxValue / PowerSupply.Current.adjFactor));
+
+    double calc = (lv_chart_get_zoom_y(PowerSupply.graph.chart) -
+                   (ratio) * (lv_chart_get_zoom_y(PowerSupply.graph.chart) + 256)) /
+                  2;
+
+    Serial.printf("\nhidden%i ratio:%5.3f  Calc Y:%5.3f", PowerSupply.graph.serV->hidden,
+                  ratio, lv_coord_t(calc));
+
+    lv_obj_scroll_to_y(PowerSupply.graph.chart, lv_coord_t(calc), LV_ANIM_OFF);
+}
+
+
 void print_obj_type(lv_obj_t *obj)
 {
     const lv_obj_class_t *obj_class = lv_obj_get_class(obj);

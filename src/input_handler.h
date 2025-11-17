@@ -2,6 +2,9 @@
 
 #include <lvgl.h>
 #include <TFT_eSPI.h>
+#include "setting_menu.h"
+#include "ui_creation.h"
+#include "memory.h"
 
 // Touch/calibration functions
 void touch_calibrate();
@@ -18,3 +21,6 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
 void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value);
 void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_last_value);
 void managePageEncoderInteraction();
+
+// Keyboard input handler
+void keyCheckLoop();
