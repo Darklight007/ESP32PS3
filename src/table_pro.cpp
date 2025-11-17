@@ -1,4 +1,5 @@
 #include "table_pro.h"
+#include "globals.h"
 
 lv_obj_t* table_pro(lv_obj_t* parent,
                     lv_style_t* style,
@@ -163,4 +164,62 @@ void table_autofit_columns(lv_obj_t *table)
     lv_obj_set_width(table, total_w);
     lv_obj_set_scroll_dir(table, LV_DIR_VER | LV_DIR_HOR); // allow horizontal if needed
     lv_obj_invalidate(table);
+}
+
+// External reference
+extern struct objs_list Utility_objs;
+
+void select_next_row(lv_obj_t *table, lv_coord_t row_height)
+{
+    uint16_t row_cnt = lv_table_get_row_cnt(table);
+    uint16_t cur_row_number = (int)table->user_data;
+
+    if (cur_row_number < row_cnt - 1)
+    {
+        cur_row_number++;
+        table->user_data = (void *)cur_row_number;
+    }
+
+    lv_coord_t scroll_y = lv_obj_get_scroll_y(table);
+    lv_coord_t visible_h = lv_obj_get_height(table);
+    lv_coord_t y_pos = cur_row_number * row_height;
+
+    if (y_pos < scroll_y)
+        lv_obj_scroll_to_y(table, y_pos, LV_ANIM_OFF);
+    else if (y_pos + row_height > scroll_y + visible_h)
+        lv_obj_scroll_to_y(table, y_pos + row_height - visible_h, LV_ANIM_OFF);
+
+    lv_obj_invalidate(table);
+
+    const char *cell_str = lv_table_get_cell_value(table, cur_row_number, 1);
+    Utility_objs.table_current_value = atof(cell_str);
+    lv_spinbox_set_value(Utility_objs.table_spinbox_value, Utility_objs.table_current_value * 10000.0);
+    lv_obj_invalidate(Utility_objs.table_spinbox_value);
+}
+
+void select_previous_row(lv_obj_t *table, lv_coord_t row_height)
+{
+    int cur_row_number = (int)table->user_data;
+
+    if (cur_row_number > 0)
+    {
+        cur_row_number--;
+        table->user_data = (void *)cur_row_number;
+    }
+
+    lv_coord_t scroll_y = lv_obj_get_scroll_y(table);
+    lv_coord_t visible_h = lv_obj_get_height(table);
+    lv_coord_t y_pos = cur_row_number * row_height;
+
+    if (y_pos < scroll_y)
+        lv_obj_scroll_to_y(table, y_pos, LV_ANIM_OFF);
+    else if (y_pos + row_height > scroll_y + visible_h)
+        lv_obj_scroll_to_y(table, y_pos + row_height - visible_h, LV_ANIM_OFF);
+
+    lv_obj_invalidate(table);
+
+    const char *cell_str = lv_table_get_cell_value(table, cur_row_number, 1);
+    Utility_objs.table_current_value = atof(cell_str);
+    lv_spinbox_set_value(Utility_objs.table_spinbox_value, Utility_objs.table_current_value * 10000.0);
+    lv_obj_invalidate(Utility_objs.table_spinbox_value);
 }

@@ -33,6 +33,8 @@ lv_coord_t table_get_row_h(lv_obj_t *table);
 void select_row(lv_obj_t *table, uint16_t cur_row_number, lv_coord_t row_height);
 void table_set_selected_row(lv_obj_t *table, uint16_t row);
 void table_autofit_columns(lv_obj_t *table);
+void select_next_row(lv_obj_t *table, lv_coord_t row_height);
+void select_previous_row(lv_obj_t *table, lv_coord_t row_height);
 // #pragma once
 
 // #include <iostream>

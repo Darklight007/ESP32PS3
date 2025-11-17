@@ -47,78 +47,14 @@ lv_obj_t *find_btn_by_tag(lv_obj_t *parent, uint32_t tag);
  * @param ...
 }
 
-/********************************************************/
-// void btn_event_cb(lv_event_t *e)
-// {
-//     lv_event_code_t code = lv_event_get_code(e);
-//     lv_obj_t *btn = lv_event_get_target(e);
-//     // Serial.printf("Code: %i",code );
-//     if (code == LV_EVENT_VALUE_CHANGED)
-//     {
-//         if (lv_obj_get_state(btn) & LV_STATE_CHECKED)
-//         {
-//             myTone(NOTE_A5, 200);
-//             PowerSupply.setStatus(DEVICE::ON);
-//         }
-//         else
-//         {
-//             myTone(NOTE_A3, 200);
-//             PowerSupply.setStatus(DEVICE::OFF);
-//         }
-//     }
-// }
+
 
 /* Source: https://github.com/ankur219/ECG-Arrhythmia-classification/blob/642230149583adfae1e4bd26c6f0e1fd8af2be0e/sample.csv*/
 // static lv_coord_t ecg_sample[800] = {0};
 
-// void slider_x_event_cb(lv_event_t *e)
-// {
-//     if (!e)
-//         return; // Safety check
-//     lv_obj_t *obj = lv_event_get_target(e);
-//     if (!obj)
-//         return; // Safety check
-//     //  int32_t v = lv_slider_get_value(obj);
 
-//     // lv_coord_t l = lv_obj_get_scroll_left(chart); unused variable
-//     // lv_coord_t r = lv_obj_get_scroll_right(chart);unused variable
-//     // lv_coord_t x = lv_obj_get_scroll_x(PowerSupply.graph.chart);
-//     // lv_coord_t v0 = lv_chart_get_zoom_x(PowerSupply.graph.chart);
-//     int value = (uint16_t)lv_slider_get_value(obj);
-//     lv_chart_set_zoom_x(PowerSupply.graph.chart, value);
 
-//     globalSliderXValue = value;
-//     // encoder2_value = value;
 
-//     // Serial.print("v0:");
-//     // Serial.print(int(v0));
-//     // Serial.print("v:");
-//     // Serial.print(int(v));
-//     // Serial.print("\tx:");
-//     // Serial.print(int(x));
-//     // Serial.print("\tl:");
-//     // Serial.print(int(l));
-//     // Serial.print("\tr:");
-//     // Serial.print(int(r));
-//     // Serial.print("\tmean");
-//     // Serial.println(int((l+r)/2));
-
-//     // lv_obj_scroll_to_x(PowerSupply.graph.chart, 1 + x * v / v0, LV_ANIM_OFF);
-//     lv_obj_scroll_to_x(PowerSupply.graph.chart, 32000, LV_ANIM_OFF);
-// }
-
-// static void slider_x_event_enc_cb(lv_event_t *e)
-// {
-//     if (!e)
-//         return; // Safety check
-//     lv_obj_t *obj = lv_event_get_target(e);
-//     if (!obj)
-//         return; // Safety check
-//     int value = (uint16_t)lv_slider_get_value(obj);
-//     // lv_chart_set_zoom_x(PowerSupply.graph.chart, value);
-
-//     encoder2_value = value;
-// }
 // void slider_y_event_cb(lv_event_t *e)
 // {
 //     lv_obj_t *obj = lv_event_get_target(e);
@@ -996,71 +932,7 @@ static void table_get_event_cb(lv_event_t *e)
 // }
 
 // Function to select the next row
-void select_next_row(lv_obj_t *table, lv_coord_t row_height)
-{
-    uint16_t row_cnt = lv_table_get_row_cnt(table);
-    // if (selected_row < row_cnt - 1)
-    // {
-    //     selected_row++;
-    // }
-    uint16_t cur_row_number = (int)table->user_data;
-
-    if (cur_row_number < row_cnt - 1)
-    {
-        cur_row_number++;
-        table->user_data = (void *)cur_row_number;
-    }
-
-    lv_coord_t scroll_y = lv_obj_get_scroll_y(table);
-    lv_coord_t visible_h = lv_obj_get_height(table);
-    lv_coord_t y_pos = cur_row_number * row_height;
-
-    if (y_pos < scroll_y)
-        lv_obj_scroll_to_y(table, y_pos, LV_ANIM_OFF);
-    else if (y_pos + row_height > scroll_y + visible_h)
-        lv_obj_scroll_to_y(table, y_pos + row_height - visible_h, LV_ANIM_OFF);
-
-    lv_obj_invalidate(table);
-
-    const char *cell_str = lv_table_get_cell_value(table, cur_row_number, 1);
-    Utility_objs.table_current_value = atof(cell_str);
-    lv_spinbox_set_value(Utility_objs.table_spinbox_value, Utility_objs.table_current_value * 10000.0);
-    lv_obj_invalidate(Utility_objs.table_spinbox_value);
-}
-
-// Function to select the previous row
-void select_previous_row(lv_obj_t *table, lv_coord_t row_height)
-{
-    // uint16_t row_cnt = lv_table_get_row_cnt(table);
-    // if (selected_row > 0)
-    // {
-    //     selected_row--;
-    // }
-
-    int cur_row_number = (int)table->user_data;
-
-    if (cur_row_number > 0)
-    {
-        cur_row_number--;
-        table->user_data = (void *)cur_row_number;
-    }
-
-    lv_coord_t scroll_y = lv_obj_get_scroll_y(table);
-    lv_coord_t visible_h = lv_obj_get_height(table);
-    lv_coord_t y_pos = cur_row_number * row_height;
-
-    if (y_pos < scroll_y)
-        lv_obj_scroll_to_y(table, y_pos, LV_ANIM_OFF);
-    else if (y_pos + row_height > scroll_y + visible_h)
-        lv_obj_scroll_to_y(table, y_pos + row_height - visible_h, LV_ANIM_OFF);
-
-    lv_obj_invalidate(table);
-
-    const char *cell_str = lv_table_get_cell_value(table, cur_row_number, 1);
-    Utility_objs.table_current_value = atof(cell_str);
-    lv_spinbox_set_value(Utility_objs.table_spinbox_value, Utility_objs.table_current_value * 10000.0);
-    lv_obj_invalidate(Utility_objs.table_spinbox_value);
-}
+// select_next_row and select_previous_row moved to table_pro.cpp
 
 void btn_function_gen_event_cb(lv_event_t *e)
 {
