@@ -4,322 +4,303 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an ESP32-S3 based programmable power supply with advanced features including function generation, calibration, FFT analysis, and LVGL-based touchscreen UI. The firmware runs on ESP32-S3-DevKitC-1 with 16MB flash and 8MB PSRAM.
+This is an ESP32-S3 based precision power supply with touchscreen GUI, dual rotary encoders, and keypad input. The firmware is built with PlatformIO using the Arduino framework and LVGL 8.4 for graphics.
+
+**Hardware:**
+- ESP32-S3-N16R8 (16MB Flash, 8MB PSRAM)
+- 320x240 ILI9341 touchscreen (TFT_eSPI driver)
+- ADS1219 24-bit ADC for precision voltage/current measurement
+- LTC2655 16-bit DAC for voltage/current control
+- Dual rotary encoders (ESP32Encoder library)
+- Matrix keypad (Keypad_MC17 via MCP23017 I2C expander)
 
 ## Build Commands
 
-**Platform**: PlatformIO (not Arduino IDE)
-
+**Compile the project:**
 ```bash
-# Build firmware (use full path to pio)
 ~/.platformio/penv/bin/pio run
-
-# Upload to device
-~/.platformio/penv/bin/pio run --target upload
-
-# Clean build
-~/.platformio/penv/bin/pio run --target clean
-
-# Monitor serial output
-~/.platformio/penv/bin/pio device monitor
+# or
+pio run
 ```
 
-**Important Build Notes**:
-- Uses C++20 standard (`-std=gnu++2a`)
-- Optimized with `-O3` flag
-- Custom partition table: `par/default_16MB_2.csv`
-- Pre-build script `update_version.py` auto-updates version from git tags
-- Upload speed: 921600 baud
-- Monitor speed: 115200 baud
+**Upload to device:**
+```bash
+~/.platformio/penv/bin/pio run --target upload
+```
 
-## Architecture Overview
+**Clean build:**
+```bash
+~/.platformio/penv/bin/pio run --target clean
+```
 
-### Core Components
+**Monitor serial output:**
+```bash
+~/.platformio/penv/bin/pio device monitor
+# Baud rate: 115200
+```
 
-**Device Class (`device.hpp`)**: Central power supply control
-- Manages voltage/current setpoints and measurements
-- Handles ADC readings (ADS1219) and DAC outputs (LTC2655)
-- Contains calibration data and state machine (OFF/ON/CV/CC/OVP/OCP)
-- Stores function generator configuration and memory presets
-- Instance: `PowerSupply` (global singleton in `config.hpp`)
+**Build flags:**
+- Compiler: `-O3` optimization, `-std=gnu++2a` (C++20)
+- `-w` suppresses warnings
+- `-D RELEASE` for release builds
 
-**Display System**:
-- **LVGL 8.4**: UI framework with hardware-accelerated DMA rendering
-- **TFT_eSPI**: 320x240 ILI9341 display driver
-- **DispObject.h**: Custom display objects (labels, charts, histograms, statistics)
-- DMA double-buffering via `TFT_eSprite` for flicker-free rendering
-- Touch input via resistive touchscreen
+## Architecture
 
-**Task Architecture (FreeRTOS)**:
-- `Task_ADC` (`tasks.cpp`): High-priority ADC reading, measurements, charts, encoder input, DAC updates
-- `Task_BarGraph` (`tasks.cpp`): Updates bar graph displays on page 2
-- Watchdog timer: 120 second timeout
-- Runs on dual-core ESP32-S3
-- Tasks communicate via flags: `adcDataReady`, `lvglIsBusy`, `lvglChartIsBusy`, `blockAll`
+### Core Design Pattern
 
-### Code Organization (Recently Refactored)
+The codebase uses a **centralized Device object** (`PowerSupply`) that coordinates all hardware and UI components. This is a global singleton defined in `device.hpp` and instantiated in `globals.cpp`.
 
-**Core headers** (read these first):
-- `config.hpp`: Global configuration, extern declarations, pin definitions
-- `device.hpp`: Device class, enums (DEVICE states), calibration structures
-- `globals.h/cpp`: Global variables (chart data, UI objects, encoders, dropdown_active, util charts)
-- `functions.h`: Forward declarations to avoid circular includes
-- `waveform_generator.h/cpp`: All waveform generation functions (19 waveforms)
-- `ui_helpers.h/cpp`: UI chart/graph drawing functions (extracted from globalFunctions.h)
-- `tasks.h/cpp`: FreeRTOS task implementations (Task_ADC, Task_BarGraph)
-- `input_handler.h/cpp`: Touch calibration and input handlers (touch_calibrate, my_touchpad_read, init_touch)
-- `intervals.h/cpp`: Scheduling functions (schedule overloads for periodic execution)
-- `globalFunctions.h`: Large file (~3865 lines, being progressively reduced) with remaining UI implementations and callbacks
+```cpp
+Device PowerSupply;  // The central controller object
+```
 
-**Important constants** (defined across various headers):
-- `CHART_SIZE`: 240 × 5 = 1200 points (graph chart buffer)
-- `BUCKET_COUNT`: 100 (histogram buckets)
-- `CHART_POINTS`: 20 (chart display points, defined in `ui_helpers.h`)
-- `NUM_LABELS`: 7 (chart axis labels)
-- `VOLTAGE`: 1 (ADC channel)
-- `CURRENT`: 3 (ADC channel)
-- `DAC_VOLTAGE`: CHANNEL_D (DAC channel)
-- `DAC_CURRENT`: CHANNEL_B (DAC channel)
+All major subsystems interact through this object:
+- `PowerSupply.Voltage` - Voltage channel (ADC, DAC, display, calibration)
+- `PowerSupply.Current` - Current channel (ADC, DAC, display, calibration)
+- `PowerSupply.gui` - All LVGL UI object references
+- `PowerSupply.graph` / `PowerSupply.stats` - Chart objects
+- `PowerSupply.page[0-4]` - Tab pages (Histogram, Graph, Main, Utility, Calibration)
 
-**Setup flow** (`main.cpp`):
-1. `initializeSerial()`, `initialMemory()`
-2. `initializeI2C()`, `initializeDisplay()`, `initializeTouch()`
-3. `setupLVGL()`, `setupDMA()`
-4. `setupPowerSupply()`, `setupPreferences()`, `setupADC()`, `setupDAC()`
-5. `setupCalibPage()`, `createTasks()`
+### Task Architecture (FreeRTOS)
 
-### Key Subsystems
+Two main tasks run on separate cores:
+- **Task_ADC** (Core 0) - High-priority ADC sampling and measurement processing
+- **Task_BarGraph** (Core 1) - LVGL rendering, UI updates, and user input handling
 
-**ADC System**:
-- ADS1219: 24-bit delta-sigma ADC for voltage/current measurement
-- Multi-channel: voltage (CH1), current (CH3)
-- Configurable averaging (up to 128 samples)
-- Data-ready interrupt (DRDY pin) triggers ISR
-- INL (Integral Non-Linearity) calibration using monotone cubic interpolation
+Task creation happens in `createTasks()` (tasks.cpp). The GUI task must run on Core 1 because LVGL is not thread-safe across cores.
 
-**DAC System**:
-- LTC2655: 16-bit quad DAC for voltage/current control
-- Channels: DAC_VOLTAGE (D), DAC_CURRENT (B)
-- I2C interface
-- Two-point calibration per channel
+### Module Organization (Post-Refactoring)
 
-**Function Generator**:
-- 19 waveform types (sine, square, triangle, sawtooth, PWM, exponential, gaussian, chirp, arbitrary, etc.)
-- Configurable frequency, amplitude, offset, duty cycle
-- Arbitrary waveform support (100-point table + 2 banks of custom points)
-- See `waveform_generator.cpp` for implementations
+The codebase was recently refactored (91.7% reduction) from a 4,015-line monolithic `globalFunctions.h` into focused modules:
 
-**Calibration System** (`Calibration` class):
-- Stores per-device calibration (MAC address-based)
-- Two-point calibration: voltage, current (2 ranges), internal leakage
-- ADC INL calibration: 36-point lookup table
-- Persisted to EEPROM/Preferences
+**Core Modules:**
+- `device.hpp/.cpp` - Device class definition and hardware abstraction
+- `DispObject.h/.cpp` - Display object wrapper for voltage/current channels
+- `globals.h/.cpp` - Global variables and shared state
+- `config.hpp/.cpp` - Hardware pin definitions and configuration
 
-**Input Devices**:
-- ESP32Encoder: Dual rotary encoders for voltage/current adjustment
-- Keypad_MC17: I2C 6x6 keypad matrix (MCP23017 expander)
-- Touchscreen: Resistive touch via TFT_eSPI
+**UI Modules:**
+- `ui_creation.h/.cpp` - UI initialization and widget creation
+- `ui_helpers.h/.cpp` - UI event callbacks (draw_event_stat_chart_cb, draw_event_cb2, btn_function_gen_event_cb)
+- `input_handler.h/.cpp` - All input handling (touch, encoders, keyboard)
+  - Page handlers: `handleGraphPage()`, `handleHistogramPage()`, `handleCalibrationPage()`, `handleUtilityPage()`, `handleUtility_function_Page()`
+  - `keyCheckLoop()` - Main keyboard input dispatcher with `keyMenus()` and `keyMenusPage()` lambdas
+  - `managePageEncoderInteraction()` - Routes encoder events to active page
+  - `getSettingEncoder()` - Encoder input processing
+- `table_pro.h/.cpp` - Enhanced table widget with selection/scrolling
+- `spinbox_pro.h/.cpp` - Enhanced spinbox widget
 
-## Critical Development Guidelines
+**Functionality Modules:**
+- `waveform_generator.h/.cpp` - Function generator with 18 waveform types plus functionGenerator() and functionGenerator_demo()
+- `functions.h/.cpp` - Utility functions (scaleVoltage, scaleCurrent, print_obj_type, trackLoopExecution, monitorMinChanges, autoScrollY)
+- `intervals.h/.cpp` - Periodic update functions (LvglUpdatesInterval, FFTUpdateInterval, statisticUpdateInterval, etc.)
+- `memory.h/.cpp` - Preset memory save/load functionality
+- `setting_menu.h/.cpp` - Settings and calibration menus
 
-### Incremental Changes & Testing
-**This is paramount**: The power supply hardware is connected and must remain functional.
+**Hardware Modules:**
+- `input_device.h/.cpp` - Touch calibration (touch_calibrate, my_touchpad_read, init_touch)
+- `LTC2655.h/.cpp` - DAC driver
+- `FFTHandler.h/.cpp` - FFT processing for waveform analysis
+- `buzzer.h/.cpp` - Tone generation
 
-1. **Always compile after each change**:
+**Navigation:**
+- `tabs.h/.cpp` - Static tab/page management class with `Tabs::getCurrentPage()`, `Tabs::nextPage()`, etc.
+
+**Remaining:**
+- `globalFunctions.h` - Now only 333 lines (91.7% reduced), contains remaining event callbacks and helper functions
+
+### Key Data Flow
+
+1. **ADC Sampling** (Task_ADC, Core 0):
+   - ADS1219 reads voltage/current → stores in `PowerSupply.Voltage.measured.value`
+   - Statistics updated: `Mean()`, `StandardDeviation()`, `Min()`, `Max()`
+   - Histogram bins populated: `PowerSupply.Voltage.hist.data[]`
+
+2. **DAC Control**:
+   - User input → `PowerSupply.Voltage.SetUpdate(value)` → LTC2655 DAC
+   - Encoder changes call `SetEncoderUpdate()` with rotary step size
+
+3. **UI Updates** (Task_BarGraph, Core 1):
+   - Interval functions called periodically (defined in intervals.cpp)
+   - `LvglUpdatesInterval()` - Fast UI updates (values, bars)
+   - `LvglFullUpdates()` - Slow updates (charts, statistics)
+   - `ChartUpdate()` - Adds new points to voltage/current charts
+
+4. **Input Handling**:
+   - Touch events → `my_touchpad_read()` callback
+   - Encoder events → `getSettingEncoder()` → `managePageEncoderInteraction()` → page-specific handlers
+   - Keyboard events → `getKeys()` → `keyCheckLoop()` with lambda handlers
+
+### LVGL Integration
+
+LVGL 8.4 runs in buffered mode with DMA transfers. Key points:
+
+- Display buffer: 320x30 pixels (one-tenth screen height)
+- Tick handler: `lv_tick_inc(1)` called every 1ms
+- Rendering: `lv_timer_handler()` called in main loop
+- Thread safety: All LVGL calls must be on Core 1 (Task_BarGraph)
+- Custom widgets use LVGL's object-oriented API (classes, inheritance, events)
+
+### Calibration System
+
+Uses `MonotoneCubicCalibrator` for non-linear ADC/DAC calibration:
+- Multi-point calibration with cubic interpolation
+- Separate calibration for voltage/current, ADC/DAC
+- Data stored in Preferences (NVS flash)
+- INL (Integral Non-Linearity) calibration for enhanced accuracy
+
+### Important Globals
+
+These are defined in `globals.h/.cpp`:
+```cpp
+extern Device PowerSupply;          // Main device object
+extern lv_obj_t *slider_x;          // Graph horizontal slider
+extern lv_obj_t *label_legend1/2;   // Chart legends
+extern int32_t encoder1_value;      // Encoder 1 count
+extern int32_t encoder2_value;      // Encoder 2 count
+extern char keyChar;                // Last key pressed
+extern String msg;                  // Key state (" RELEASED.", " HOLD.", " IDLE.")
+extern bool blockAll;               // Global input blocking flag
+extern Waveform waveforms[];        // Waveform function array (in waveform_generator.cpp)
+extern bool lvglChartIsBusy;        // Chart update lock flag
+extern unsigned long encoderTimeStamp; // Last encoder activity timestamp
+```
+
+## Common Development Tasks
+
+**Adding a new UI page:**
+1. Add page object to `PowerSupply.page[]` array
+2. Create page in `ui_creation.cpp` using `lv_tabview_add_tab()`
+3. Add handler function in `input_handler.cpp` (follow pattern of existing handlers)
+4. Register handler in `managePageEncoderInteraction()` switch statement
+5. Add keyboard shortcuts in `keyCheckLoop()` if needed
+
+**Adding a new waveform:**
+1. Define waveform function in `waveform_generator.cpp` with signature `double func(double t)` where t ∈ [0,1]
+2. Add function declaration to `waveform_generator.h`
+3. Add entry to `waveforms[]` array with name and function pointer
+4. Table will auto-populate from array
+
+**Modifying calibration:**
+1. Edit calibration UI in `setupCalibPage()` (setting_menu.cpp)
+2. Calibration data stored via `PowerSupply.SaveCalibration()` / `LoadCalibration()`
+3. Preferences namespace: "CalibrationV", "CalibrationI", etc.
+
+**Hardware testing after changes:**
+Always compile, upload, and verify on actual hardware - this controls a real power supply and must function correctly to avoid damage.
+
+## Refactoring Guidelines
+
+### Pattern for Extracting from globalFunctions.h
+
+When extracting functions to a new module:
+
+1. **Identify cohesive group of functions** (e.g., all keyboard handlers, all waveform functions)
+
+2. **Create or update module files:**
    ```bash
-   ~/.platformio/penv/bin/pio run
-   ```
-
-2. **For critical changes, upload and test on hardware**:
-   ```bash
-   ~/.platformio/penv/bin/pio run --target upload
-   # User will verify: "ok" means working, otherwise debug
-   ```
-
-3. **Make small, testable changes**:
-   - Split large refactorings into multiple commits
-   - Test after each step (compile + upload + verify)
-   - Never batch multiple risky changes together
-
-4. **Recent Example**: When splitting `globalFunctions.h` (originally 4878 lines → now ~3500 lines), changes were made in multiple steps with compilation and hardware testing after each:
-   - Step 1: Extract globals to `globals.h/cpp` → compile → upload → test → ✓
-   - Step 2: Extract UI helpers to `ui_helpers.h/cpp` → compile → upload → test → ✓
-   - Step 3: Extract tasks to `tasks.h/cpp` → compile → upload → test → ✓
-   - Step 4: Extract input handlers to `input_handler.h/cpp` → compile → fix errors → upload → test → ✓
-   - Each step reduced file by ~400-500 lines, with systematic error fixing (linkage, multiple definitions, missing declarations)
-
-### Refactoring Pattern for Extracting from globalFunctions.h
-
-When extracting functions to a new module, follow this systematic approach:
-
-1. **Create header and implementation files**:
-   ```bash
+   # If creating new module:
    touch src/module_name.h src/module_name.cpp
    ```
 
-2. **In the `.h` file**:
+3. **In the `.h` file:**
    - Add `#pragma once`
-   - Include necessary dependencies (`<lvgl.h>`, `<TFT_eSPI.h>`, etc.)
+   - Include necessary dependencies (`<lvgl.h>`, `device.hpp`, etc.)
    - Add function declarations (prototypes only)
    - Declare any `extern` variables needed
 
-3. **In the `.cpp` file**:
-   - Include the header file
-   - Include `device.hpp`, `globals.h`, `functions.h` as needed
-   - Copy function implementations from `globalFunctions.h`
-   - Define any variables (not `extern`, actual definitions)
-   - Add forward declarations for functions still in `globalFunctions.h`
+4. **In the `.cpp` file:**
+   - Include the header file first
+   - Include dependencies: `device.hpp`, `globals.h`, `functions.h`
+   - Copy/move function implementations from `globalFunctions.h`
+   - Add any necessary `extern` references
 
-4. **Update globalFunctions.h**:
-   - Add `#include "module_name.h"` at the top
+5. **Update globalFunctions.h:**
+   - Add `#include "module_name.h"` at the top if needed
    - Remove the extracted functions
-   - Remove any structs/variables moved to the new module
+   - Replace with comment: `// functionName() moved to module_name.cpp`
 
-5. **Fix linkage issues**:
-   - If getting "undefined reference" errors, the function may be `static` in `globalFunctions.h`
-   - Remove `static` keyword to allow external linkage, OR
-   - Add forward declaration to `functions.h`
-   - For callback functions used by LVGL, add declarations to `functions.h`
-
-6. **Compile and fix errors incrementally**:
+6. **Compile and fix errors incrementally:**
    ```bash
    ~/.platformio/penv/bin/pio run
    ```
-   - Fix "multiple definition" errors by moving variables to `globals.cpp` or making them `static` in `.cpp` files
-   - Fix "undefined reference" errors by adding forward declarations or removing `static`
-   - Fix "not declared in scope" by adding necessary includes or `#define` constants
+   Common issues:
+   - Missing includes → add to header
+   - Undefined references → check extern declarations
+   - Multiple definitions → ensure variables only defined once in .cpp
 
-7. **Upload and test**:
+7. **Test on hardware:**
    ```bash
    ~/.platformio/penv/bin/pio run --target upload
    ```
    Wait for user to confirm "ok" before proceeding
 
-### Code Style & Patterns
+8. **Commit with descriptive message:**
+   ```bash
+   git add src/module_name.h src/module_name.cpp src/globalFunctions.h
+   git commit -m "Extract [feature] functions to module_name.cpp
 
-**Header organization**:
-- Declarations in `.h` files, definitions in `.cpp` files
-- Exception: `globalFunctions.h` contains implementations (legacy, being refactored)
-- Use `#pragma once` for include guards
-- Forward declarations in `functions.h` to avoid circular dependencies
+   Moved [function1], [function2], etc. from globalFunctions.h.
 
-**Global state**:
-- Singletons declared `extern` in `config.hpp`, defined in `config.cpp`
-- Example: `extern Device PowerSupply;`
-- New globals go in `globals.h/cpp`
+   Progress: X → Y lines (Z lines extracted)
+   Total reduction: A lines (B%)
 
-**LVGL patterns**:
-- Event callbacks: `static void my_event_cb(lv_event_t *e)`
-- Always check null pointers in callbacks
-- Use `lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN)` to hide objects
-- Chart data stored in `graph_data_V[]`, `graph_data_I[]` arrays
-
-**FreeRTOS/ISR**:
-- ISRs marked `IRAM_ATTR` for fast execution from RAM
-- Minimal work in ISRs (set flags, trigger tasks)
-- Use `portYIELD_FROM_ISR()` when waking tasks
-
-### Common Pitfalls
-
-1. **Don't use `pio` directly** - it may not be in PATH. Use `~/.platformio/penv/bin/pio`
-
-2. **Static functions and linkage issues** - When extracting functions from headers:
-   - Functions marked `static` have internal linkage (file-scope only)
-   - To call from another module, remove `static` keyword
-   - Variables marked `static` in headers cause multiple definition errors
-   - Move static variables to `globals.h/cpp` and declare with `extern` in header
-   - Add forward declarations to `functions.h` for callbacks used across modules
-
-3. **Multiple definition errors** - Common during refactoring:
-   - Variables: Declare with `extern` in `.h` file, define in `.cpp` file (only once)
-   - Structs defined in headers are now in implementation files (e.g., `TouchAttr` in `input_handler.cpp`)
-   - Arrays like `dataBuckets[]` should be declared `extern` in header, defined in `.cpp`
-
-4. **Circular dependencies** - Use forward declarations and include order:
-   ```cpp
-   // In header:
-   class Device; // forward decl
-
-   // In .cpp:
-   #include "device.hpp" // full definition
+   🤖 Generated with [Claude Code](https://claude.com/claude-code)
+   Co-Authored-By: Claude <noreply@anthropic.com>"
+   git push
    ```
-   - `functions.h` exists specifically to provide forward declarations and break circular includes
 
-5. **LVGL threading** - LVGL calls must be from main thread or protected by `lv_lock()`/`lv_unlock()`
-   - Check `lvglIsBusy` and `blockAll` flags before LVGL operations from tasks
-   - Charts use `lvglChartIsBusy` flag for additional protection
+### Recent Refactoring Success (Example)
 
-6. **Memory constraints** - ESP32-S3 has limited RAM; use PSRAM for large buffers, avoid heap fragmentation
+**From 4,015 lines to 333 lines (91.7% reduction):**
 
-7. **Schedule function overloads** - Two signatures exist for different interval parameter types:
-   ```cpp
-   void schedule(std::function<void(void)> func, unsigned long &&interval, unsigned long &startTime);
-   void schedule(std::function<void(void)> func, unsigned long &interval, unsigned long &startTime);
-   ```
-   Both must be forward-declared if used from another module
+1. ✅ Monitoring utilities → functions.cpp (69 lines)
+2. ✅ Function generators → waveform_generator.cpp (72 lines)
+3. ✅ Page handlers → input_handler.cpp (538 lines)
+4. ✅ Encoder handlers → input_handler.cpp (113 lines)
+5. ✅ UI event callbacks → ui_helpers.cpp (296 lines)
+6. ✅ Keyboard input → input_handler.cpp (558 lines)
+7. ✅ Auto scroll → functions.cpp (26 lines)
+8. ✅ Cleanup: Removed 1,340 lines of commented-out dead code
 
-## Hardware-Specific Notes
+Each extraction was compiled, tested on hardware, and committed separately.
 
-**Pin Configuration** (see `config.hpp`):
-- LCD Backlight: GPIO 26 (PWM channel 1)
-- ADC DRDY: Interrupt-driven
-- I2C: Wire (ADC, DAC), Wire1 (Keypad expander at 0x20)
-- Encoders: Interrupt-driven via ESP32Encoder library
+## File Naming Conventions
 
-**Partition Table**:
-- Custom 16MB layout in `par/default_16MB_2.csv`
-- Allows OTA updates and large LVGL assets
+- `*.hpp` - C++ class headers (Device, SpinboxPro, MonotoneCubicCalibrator)
+- `*.h` - C-style headers or simple function declarations
+- `*.cpp` - Implementation files
+- Snake_case for files: `input_handler.cpp`, `waveform_generator.cpp`
+- PascalCase for classes: `Device`, `DispObject`
+- camelCase for functions: `keyCheckLoop()`, `handleGraphPage()`
 
-## Version Management
+## Git Workflow
 
-- Git tags drive version numbering
-- `update_version.py` auto-updates `src/version.h` before each build
-- Use: `git tag vX.Y.Z` to set version
-- Check current: `git describe --tags`
+The project uses descriptive commit messages with this format:
+```
+Subject line describing the change
 
-## File Structure Highlights
+Detailed description of what was changed and why.
 
-**Must-read for understanding**:
-- `src/device.hpp` - Device class (central control)
-- `src/config.hpp` - Global configuration
-- `src/main.cpp` - Initialization flow
-- `platformio.ini` - Build configuration
+Progress tracking (if applicable):
+- Lines reduced/added
+- Performance improvements
+- Bug fixes
 
-**UI Implementation**:
-- `src/tabs.h/cpp` - Tabbed interface
-- `src/setting_menu.h/cpp` - Settings UI
-- `src/DispObject.h` - Display objects (charts, labels, histograms)
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
 
-**Hardware Abstraction**:
-- `src/LTC2655.h/cpp` - DAC driver
-- `lib/ADS1219/` - ADC library
-- `src/input_device.h/cpp` - Encoder and keypad handling
+All commits are pushed to the `main` branch on GitHub (ESP32PS3 repository).
 
-## Testing & Verification
+## Critical Notes
 
-After making changes:
-1. Compilation must succeed
-2. For hardware-affecting changes, user tests on actual power supply
-3. User confirms with "ok" if power supply works correctly
-4. If issues occur, be prepared to rollback via `git reset --hard`
-
-## Current Refactoring Status
-
-**Ongoing Work**: Extracting functions from `globalFunctions.h` to improve maintainability
-
-**Progress**:
-- ✅ `globals.h/cpp` - Global variables centralized
-- ✅ `functions.h` - Forward declarations for circular dependency resolution
-- ✅ `ui_helpers.h/cpp` - Chart/graph UI and data update functions (~420 lines extracted)
-- ✅ `tasks.h/cpp` - FreeRTOS task implementations (~200 lines extracted)
-- ✅ `input_handler.h/cpp` - Touch calibration and handlers (~100 lines extracted)
-- ✅ `intervals.h/cpp` - Schedule functions + 7 interval functions (~80 lines extracted)
-- ⏳ Future: Additional modularization of remaining ~3700 lines in `globalFunctions.h`
-
-**File size reduction**: 4,878 lines → 3,771 lines (22.7% reduction, 1,107 lines extracted)
-
-**Known Issues Being Fixed**:
-- Static function linkage errors when calling from new modules
-- Multiple definition errors for variables declared in headers
-- Missing forward declarations for callback functions
-- `CHART_POINTS` constant availability across modules
+1. **Always test on hardware** after UI changes - touchscreen calibration and input handling are hardware-dependent
+2. **FreeRTOS tasks** must be properly configured - wrong core assignments cause crashes
+3. **LVGL is not thread-safe** - only call from Core 1 or use lv_lock if absolutely necessary
+4. **Watchdog timer** is configured for 120 seconds - long operations must call `esp_task_wdt_reset()`
+5. **Global state** is intentional - the Device pattern centralizes hardware access for safety
+6. **Calibration data** is precious - backup before major changes to calibration system
+7. **Use full PlatformIO path** - `~/.platformio/penv/bin/pio` instead of just `pio`
+8. **Incremental changes** - Compile → Upload → Test → Commit after each logical change
+9. **User confirmation** - Wait for "ok" after hardware testing before continuing
