@@ -1,4 +1,5 @@
 #include "setting_menu.h"
+#include "calib_log_window.h"
 
 // heavy/private includes live ONLY in the .cpp
 #include "spinbox_pro.h"
@@ -43,21 +44,15 @@ static void dbg_printf(const char *fmt, ...)
     Serial.println(buf);
 #endif
     // Optional LVGL log
-    extern void log_step(const char *, ...);
-    log_step("%s", buf); // remove if you do not have log_step
+    log_step("%s", buf);
 }
 
 ///*****************************************************************************
 // ****************** Simple sequencer for auto-measure *************************
 // *****************************************************************************
 
-static char s_logbuf[2048];
-static size_t s_len = 0;
-static bool s_pending = false; // true after _begin(), cleared by _done()
-// ---------- Reuse your existing logger ----------
-void log_step_begin(const char *fmt, ...);
-void log_step_done();
-void log_step(const char *fmt, ...);
+// log_step_begin(), log_step_done(), log_step(), log_clear(), create_log_window() moved to calib_log_window.cpp
+
 namespace
 {
     static void auto_zero_event_cb(lv_event_t *e);
@@ -71,156 +66,6 @@ extern bool lvglIsBusy;
 // Global (or static) residual spline
 
 setting_GUI Calib_GUI{};
-
-static lv_obj_t *log_win;
-static lv_obj_t *log_label;
-
-static void close_log_cb(lv_timer_t *t)
-{
-    if (log_win)
-    {
-        lv_obj_del(log_win);
-        log_win = NULL;
-        log_label = NULL;
-    }
-    lv_timer_del(t);
-}
-
-// Replace your log_step() with this pair
-
-static inline void log_update_label()
-{
-    s_logbuf[s_len] = '\0';
-    lv_label_set_text(log_label, s_logbuf);
-    lv_obj_scroll_to_view(log_label, LV_ANIM_OFF);
-    myTone(NOTE_A3, 50, false);
-}
-
-// 1) Print: "1.  Setting volt to 0v ...\n"
-void log_step_begin(const char *fmt, ...)
-{
-    // auto-close any previous pending step
-    if (s_pending)
-    {
-        // replace the previous " ...\n" with " done!\n"
-        // (safe even if buffer tight; see _done code)
-        // You can call log_step_done(); but inline is faster.
-        const char tail[] = " ...\n";
-        const size_t tail_len = sizeof(tail) - 1;
-        if (s_len >= tail_len && std::memcmp(s_logbuf + s_len - tail_len, tail, tail_len) == 0)
-        {
-            s_len -= tail_len;
-            const char done[] = " done!\n";
-            size_t add = strlen(done);
-            if (s_len + add >= sizeof(s_logbuf))
-                add = sizeof(s_logbuf) - s_len - 1;
-            std::memcpy(s_logbuf + s_len, done, add);
-            s_len += add;
-        }
-        s_pending = false;
-    }
-
-    // format the new line head: "1.  Setting volt to 0v"
-    char line[256];
-    va_list args;
-    va_start(args, fmt);
-    const int n = vsnprintf(line, sizeof(line), fmt, args);
-    va_end(args);
-
-    // append to the big buffer + " ...\n"
-    const char ell[] = " ...\n";
-    const size_t need = (size_t)((n > 0 ? n : 0)) + sizeof(ell) - 1;
-
-    // truncate if needed
-    size_t avail = sizeof(s_logbuf) - s_len - 1;
-    size_t to_copy = avail > need ? (size_t)(n > 0 ? n : 0) : (avail > (sizeof(ell) - 1) ? avail - (sizeof(ell) - 1) : 0);
-
-    if (to_copy > 0)
-    {
-        std::memcpy(s_logbuf + s_len, line, to_copy);
-        s_len += to_copy;
-    }
-    // add " ...\n" if there is room
-    size_t add = sizeof(ell) - 1;
-    if (s_len + add >= sizeof(s_logbuf))
-        add = sizeof(s_logbuf) - s_len - 1;
-    std::memcpy(s_logbuf + s_len, ell, add);
-    s_len += add;
-
-    s_pending = true;
-    log_update_label();
-    myTone(NOTE_A5, 100, false);
-}
-
-// 2) Replace trailing " ...\n" with " done!\n" on the same line
-void log_step_done()
-{
-    if (!s_pending)
-        return;
-
-    const char tail[] = " ...\n";
-    const size_t tail_len = sizeof(tail) - 1;
-
-    if (s_len >= tail_len && std::memcmp(s_logbuf + s_len - tail_len, tail, tail_len) == 0)
-    {
-        // remove " ...\n"
-        s_len -= tail_len;
-
-        // append " done!\n"
-        const char done[] = " done!\n";
-        size_t add = sizeof(done) - 1;
-        if (s_len + add >= sizeof(s_logbuf))
-            add = sizeof(s_logbuf) - s_len - 1;
-        std::memcpy(s_logbuf + s_len, done, add);
-        s_len += add;
-
-        log_update_label();
-    }
-    s_pending = false;
-    myTone(NOTE_A3, 50, false);
-}
-
-void log_step(const char *fmt, ...)
-{
-    if (!lvglIsBusy)
-    {
-        char buf[256];
-        va_list args;
-        va_start(args, fmt);
-        vsnprintf(buf, sizeof(buf), fmt, args);
-        va_end(args);
-
-        const char *old = lv_label_get_text(log_label);
-        static char new_txt[1024];
-        snprintf(new_txt, sizeof(new_txt), "%s%s\n", old, buf);
-
-        lv_label_set_text(log_label, new_txt);
-        lv_obj_scroll_to_view(log_label, LV_ANIM_OFF);
-    }
-}
-
-void log_clear()
-{
-    if (log_label)
-    {
-        lv_label_set_text(log_label, "");              // wipe text
-        lv_obj_scroll_to_y(log_label, 0, LV_ANIM_OFF); // scroll back to top
-    }
-}
-
-static void create_log_window()
-{
-    log_win = lv_win_create(lv_scr_act(), 40);
-    lv_win_add_title(log_win, "Measuring total internal resistor");
-
-    lv_obj_t *cont = lv_win_get_content(log_win);
-    log_label = lv_label_create(cont);
-    lv_label_set_text(log_label, "");
-    lv_label_set_long_mode(log_label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(log_label, lv_pct(100));
-}
-
-// setting_GUI Calib_GUI.Current{};
 
 // ---------- internal state / helpers ----------
 namespace
@@ -853,7 +698,7 @@ void btn_calibration_ADC_current_event_cb(lv_event_t *)
     build_adc_calibration_window(&PowerSupply.gui.calibration.win_ADC_current_calibration, "ADC Current Calibration [A]", Calib_GUI.Current, pf);
 }
 
-static void close_log_cb(lv_timer_t *t);
+// close_log_cb() moved to calib_log_window.cpp
 
 // ---------- Your measurement context ----------
 struct measure_ctx_t
@@ -964,7 +809,7 @@ static void start_current_totalR()
 {
     auto *c = (CurrentCalCtx *)lv_mem_alloc(sizeof(CurrentCalCtx));
     *c = CurrentCalCtx{};
-     esp_task_wdt_reset();
+    esp_task_wdt_reset();
     static const SeqStep steps[] = {
         {"Setting voltage to 0V", 1500, 500,
          []()
@@ -1030,13 +875,14 @@ static void event_cb(lv_event_t *e)
         if (txt && strcmp(txt, "OK") == 0)
         {
             blockAll = true;
+                esp_task_wdt_reset();  // Reset watchdog immediately
+    vTaskDelay(pdMS_TO_TICKS(100));  // Small delay to stabilize
             create_log_window();
             // start_auto_measure();
             PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage = FLT_MAX;
-            s_len = 0;
-            s_logbuf[0] = '\0';
-            s_pending = false;
+            log_reset();
             log_clear();
+            esp_task_wdt_reset();  // Reset again before starting
             start_current_totalR();
             blockAll = false;
         }
@@ -1060,7 +906,7 @@ void Warning_msgbox(const char *title, lv_event_cb_t event_cb)
     // lv_label_set_recolor(lv_msgbox_get_text(mbox1), true);
     // lv_obj_center(mbox1);
     // esp_task_wdt_reset();
-      esp_task_wdt_reset();
+    esp_task_wdt_reset();
     static const char *btns[] = {"OK", "Cancel", ""};
     lv_obj_t *mbox1 = lv_msgbox_create(NULL, title, "Disconnect any load!", btns, true);
 
@@ -1120,7 +966,7 @@ void Warning_msgbox(const char *title, lv_event_cb_t event_cb)
 lv_obj_t *mbox;
 static void AutoMeasureTotalRes_cb(lv_event_t *)
 {
-      esp_task_wdt_reset();
+    esp_task_wdt_reset();
     // static const char *btns[] = {"OK", "Cancel", ""};
 
     // mbox = lv_msgbox_create(NULL, "Auto Measure", "Disconnect any load!", btns, true);
@@ -1582,7 +1428,29 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
         if (disabled)
             g_voltINL_ready = false;
         else
-            g_voltINL_ready = true;
+        {
+            // When re-enabling, ensure calibration data is properly loaded
+            PowerSupply.LoadCalibrationData();
+            //  g_voltINL_ready = true;
+            //  return;
+
+            // Rebuild the spline if we have valid data
+            // if (true /*PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_valid()*/)
+            // {
+                std::vector<double> X(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure,
+                                      PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure + NPTS);
+                std::vector<double> Y(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal,
+                                      PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal + NPTS);
+
+                g_voltINL.setPoints(X, Y);
+                g_voltINL.build();
+                g_voltINL_ready = true;
+            // }
+            // else
+            // {
+            //     g_voltINL_ready = false;
+            // }
+        }
     };
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -1808,7 +1676,7 @@ namespace
 
     static void auto_zero_event_cb(lv_event_t *e)
     {
-          esp_task_wdt_reset();
+        esp_task_wdt_reset();
         lv_obj_t *obj = lv_event_get_current_target(e);
         if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
         {
@@ -1817,9 +1685,7 @@ namespace
             if (txt && strcmp(txt, "OK") == 0)
             {
                 create_log_window();
-                s_len = 0;
-                s_logbuf[0] = '\0';
-                s_pending = false;
+                log_reset();
                 log_clear();
                 start_current_zeros(nullptr);
             }
