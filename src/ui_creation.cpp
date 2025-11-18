@@ -18,10 +18,6 @@ lv_obj_t *slider_x = nullptr;
 lv_obj_t *ta = nullptr;
 lv_obj_t *unit_label = nullptr;
 lv_obj_t *btnm = nullptr;
-// lv_obj_t *tabview_utility = nullptr;
-// lv_obj_t *util_Arbit_chart = nullptr;
-// lv_chart_series_t *util_Arbit_chart_series = nullptr;
-// lv_obj_t *btn_function_gen = nullptr;
 
 static lv_style_t style_font_unit;
 static lv_style_t style_font;
@@ -74,22 +70,8 @@ static void draw_event_util_Arbit_chart_cb(lv_event_t *e)
         /* Handle LV_CHART_AXIS_PRIMARY_X */
         if (dsc->id == LV_CHART_AXIS_PRIMARY_X)
         {
-            // for (int i = 0; i < NUM_LABELS; i++)
-            // {
-            //     if (i == NUM_LABELS - 1)
-            //     {
-            //         strcpy(tickLabels_x_II[i], "0 pts");
-            //     }
-            //     else
-            //     {
-            //         int value = CHART_SIZE * (NUM_LABELS - 1 - i) / (NUM_LABELS - 1);
-            //         sprintf(tickLabels_x_II[i], "%d", value);
-            //     }
-            // }
-
             static int index_x = 0;
             static char *tickLabels_x_II[] = {"40", "30", "20", "10", "0 pts"};
-            // Initialize tick labels based on CHART_SIZE and fractions
 
             if (index_x == 5)
                 index_x = 0;
@@ -105,8 +87,6 @@ static void draw_event_util_Arbit_chart_cb(lv_event_t *e)
             static int index_y = 0;
             static char *tickLabels_y[] = {"1.0", "0.5", "0.0"};
 
-            // if (strcmp(dsc->text, "32000") == 0)
-            //     index_y = 0;
             if (index_y == 3)
                 index_y = 0;
 
@@ -128,7 +108,6 @@ static void spinbox_change_event_cb(lv_event_t *e)
 
         int row = (int)Utility_objs.table_point_list->user_data;
         lv_table_set_cell_value_fmt(Utility_objs.table_point_list, row, 1, "%06.4f", value);
-        // Utility_objs.table_points[row] = value;
         PowerSupply.funGenMem.table_points[row][0] = value;
     }
 }
@@ -242,18 +221,11 @@ void textarea(lv_obj_t *parent)
 {
 
     lv_style_init(&style_font);
-    // lv_style_set_bg_opa(&style_font, LV_OPA_50);
     lv_style_set_bg_color(&style_font, lv_palette_lighten(LV_PALETTE_GREEN, 1));
 
     lv_style_set_text_font(&style_font, &graph_R_35);
-    lv_style_set_text_color(&style_font, lv_color_hex(0x010141)); // lv_palette_darken(LV_PALETTE_RED,4));
+    lv_style_set_text_color(&style_font, lv_color_hex(0x010141));
 
-    //             style.init();
-    // style.set_border_color(lv.palette_main(lv.PALETTE.BLUE));
-    // scr = lv.obj();
-    // ta = lv.textarea(scr);
-    // ta.add_style(style, lv.PART.CURSOR | lv.STATE.FOCUSED);
-    // lv.scr_load(scr);
     PowerSupply.gui.textarea_set_value = lv_obj_create(lv_scr_act());
     lv_obj_set_size(PowerSupply.gui.textarea_set_value, 320, 240);
     lv_style_init(&style_backgound);
@@ -273,15 +245,11 @@ void textarea(lv_obj_t *parent)
 
     lv_obj_t *unit_box = lv_obj_create(PowerSupply.gui.textarea_set_value);
     lv_obj_align(unit_box, LV_ALIGN_TOP_RIGHT, -15, 24);
-    // lv_obj_remove_style_all(unit_box);
-
-    // lv_obj_remove_style(unit_box, &style_font_unit, LV_STATE_DEFAULT);
     lv_obj_set_size(unit_box, 128, 26);
 
     lv_style_init(&style_font_unit);
-    // lv_style_set_bg_color(&style_font_unit, lv_palette_lighten(LV_PALETTE_GREEN, 1));
     lv_style_set_text_font(&style_font_unit, &graph_R_16);
-    lv_style_set_text_color(&style_font_unit, lv_color_hex(0x010101)); // lv_color_hex(0x010101)); // lv_palette_darken(LV_PALETTE_RED,4));
+    lv_style_set_text_color(&style_font_unit, lv_color_hex(0x010101));
     lv_style_set_bg_color(&style_font_unit, lv_palette_lighten(LV_PALETTE_GREEN, 1));
 
     lv_obj_remove_style(unit_box, &style_font_unit, LV_STATE_DEFAULT);
@@ -301,14 +269,10 @@ void textarea(lv_obj_t *parent)
                                      "0", ".", "E", LV_SYMBOL_NEW_LINE, "+", NULL};
 
     lv_style_init(&style_font_btnm);
-    // lv_style_set_bg_opa(&style_font, LV_OPA_50);
-    // lv_style_set_bg_color(&style_font_btnm, lv_palette_main(LV_PALETTE_LIGHT_GREEN));
-
-    lv_style_set_text_font(&style_font_btnm, &lv_font_montserrat_20); // graph_R_16
+    lv_style_set_text_font(&style_font_btnm, &lv_font_montserrat_20);
 
     btnm = lv_btnmatrix_create(PowerSupply.gui.textarea_set_value);
     lv_obj_remove_style_all(btnm);
-    // return;
     lv_obj_set_size(btnm, 290, 100);
     lv_obj_add_flag(btnm, LV_OBJ_FLAG_HIDDEN);
     lv_style_set_bg_color(&style_font_btnm, lv_palette_lighten(LV_PALETTE_GREY, 1));
@@ -340,37 +304,17 @@ void Utility_tabview(lv_obj_t *parent)
     lv_style_set_bg_color(&style_btn, lv_palette_darken(LV_PALETTE_INDIGO, 2));
     lv_style_set_text_color(&style_btn, lv_palette_main(LV_PALETTE_AMBER));
 
-    // lv_style_set_pad_top(&style_btn,0);
-
-    // /*Create a Tab view object*/
-    // lv_obj_t *tabview_utility;
-
     tabview_utility = lv_tabview_create(parent, LV_DIR_TOP, 25);
     lv_obj_add_event_cb(lv_tabview_get_content(tabview_utility), scroll_begin_event, LV_EVENT_SCROLL_BEGIN, NULL);
-    // lv_obj_set_style_bg_color(tabview_utility, lv_palette_darken(LV_PALETTE_DEEP_PURPLE, 3), 0);
     lv_obj_set_style_pad_all(tabview_utility, 0, LV_PART_MAIN);
 
     lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tabview_utility);
-    // lv_obj_set_style_bg_color(tab_btns, lv_palette_darken(LV_PALETTE_GREY, 3), 0);
-    // lv_obj_set_style_text_color(tab_btns, lv_palette_lighten(LV_PALETTE_GREY, 5), 0);
-    // lv_obj_set_style_border_side(tab_btns, LV_BORDER_SIDE_RIGHT, LV_PART_ITEMS | LV_STATE_CHECKED);
 
     /*Add 4 tabs (the tabs are page (lv_page) and can be scrolled*/
     lv_obj_t *tab1 = lv_tabview_add_tab(tabview_utility, "Memory");
     lv_obj_t *tab2 = lv_tabview_add_tab(tabview_utility, "F. Gen.");
     lv_obj_t *tab3 = lv_tabview_add_tab(tabview_utility, "Arbit");
     lv_obj_t *tab4 = lv_tabview_add_tab(tabview_utility, "Table");
-
-    // lv_obj_set_style_bg_color(tab1, lv_palette_darken(LV_PALETTE_BLUE, 3), 0);
-    // lv_obj_set_style_bg_opa(tab1, LV_OPA_COVER, 10);
-
-    // lv_obj_set_style_bg_color(tab2, lv_palette_lighten(LV_PALETTE_AMBER, 3), 0);
-    // lv_obj_set_style_bg_opa(tab2, LV_OPA_COVER, 0);
-
-    // lv_obj_set_style_bg_color(tab3, lv_palette_lighten(LV_PALETTE_GREEN, 3), 0);
-    // lv_obj_set_style_bg_opa(tab2, LV_OPA_COVER, 0);
-
-    // lv_label_set_text(label, "0: 0.000V\t\t0.000A\n1: 0.100V\t\t0.010A\n2: 2.048V\t\t0.050A\n3: 3.000V 0.050A\n4: 4.096V 0.050A\n5: 5.000V 0.050A\n6: 0.000V 0.000A\n7: 0.100V 0.010A\n8: 20.480V 0.050A\n9: 32.000V 0.050A");
 
     // Utility page Tab 1 ****************************************************************************************************************************
     /*Add content to the tabs*/
@@ -385,7 +329,6 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_set_style_pad_column(tab1, 13, LV_PART_MAIN); // 10px horizontal gap
     lv_obj_set_style_pad_row(tab1, 9, LV_PART_MAIN);     // 10px vertical gap
 
-    // lv_obj_set_flex_align(tab1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_flex_align(tab1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     int order[10] = {7, 8, 9, 4, 5, 6, 1, 2, 3, 0};
 
@@ -412,15 +355,11 @@ void Utility_tabview(lv_obj_t *parent)
         lv_label_set_text_fmt(labelI, "%+08.4fA", scaleCurrent(mem.memory[(int)btn->user_data].current));
         lv_obj_align(labelI, LV_ALIGN_BOTTOM_MID, 0, 15);
 
-        // lv_obj_set_parent(labelV, btn);
-
         label = lv_label_create(btn);
         lv_label_set_text_fmt(label, "%i", (int)btn->user_data);
         lv_obj_remove_style_all(label);
         lv_obj_add_style(label, &style_utility, LV_STATE_DEFAULT);
         lv_obj_set_style_text_font(label, &graph_R_8, 0);
-        // lv_obj_set_pos(label, -8 + xStart + verOff * (i >= 5), i * yOff * (i < 5) + (i - 5) * yOff * (i >= 5) + yStart);
-        // lv_obj_add_flag(label, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
         lv_obj_align(label, LV_ALIGN_OUT_TOP_LEFT, -8, 2);
     }
 
@@ -469,11 +408,6 @@ void Utility_tabview(lv_obj_t *parent)
     int verOffset = -58;
     int XOffset = -5;
 
-    // createSpinbox(tab3, "#FFFFF7 Amplitude:#", -10000, 400000, 6, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0);
-    // createSpinbox(tab3, "#FFFFFF Frequency:#", 0000, 100000, 7, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1);
-    // createSpinbox(tab3, "#FFFFF7 Offset:#", -10000, 400000, 6, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2);
-    // createSpinbox(tab3, "#FFFFF7 Code2:#", -10000, 8388608, 7, 0, LV_ALIGN_RIGHT_MID, XOffset , verOffset + verPad * 3);
-
     Utility_objs.fun.Amplitude = spinbox_pro(tab2, "#FFFFF7 Amplitude:#", 0, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0, 98, 0, &graph_R_16);
     Utility_objs.fun.Frequency = spinbox_pro(tab2, "#FFFFF7 Frequency [Hz]:#", 0, 10000, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1, 98, 1, &graph_R_16);
     Utility_objs.fun.Offset = spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -32000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2, &graph_R_16);
@@ -485,8 +419,6 @@ void Utility_tabview(lv_obj_t *parent)
     set_spinbox_data_by_id(tab2, 1, PowerSupply.funGenMem.frequency * 1000);
     set_spinbox_data_by_id(tab2, 2, PowerSupply.funGenMem.offset * 1000);
     set_spinbox_data_by_id(tab2, 3, PowerSupply.funGenMem.dutyCycle * 10000);
-
-    // PowerSupply.setupSwitch(tab2, 0, 0, 20, nullptr);
 
     btn_function_gen = lv_btn_create(tab2);
 
@@ -543,12 +475,8 @@ void Utility_tabview(lv_obj_t *parent)
     for (int i = 0; i < CHART_POINTS; i++)
     {
         lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, PowerSupply.funGenMem.arbitrary_points[i][0]);
-        // lv_chart_get_y_array
-        // lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, 0);
     }
 
-    // lv_chart_set_range(util_Arbit_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 140);
-    // Refresh to apply
     lv_obj_add_event_cb(util_Arbit_chart, draw_event_util_Arbit_chart_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
     /*Add ticks and label to every axis*/
@@ -556,26 +484,6 @@ void Utility_tabview(lv_obj_t *parent)
     lv_chart_set_axis_tick(util_Arbit_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 1, 3, 1, true, 50);
 
     lv_chart_refresh(util_Arbit_chart);
-
-    // lv_obj_clear_flag(util_Arbit_chart, LV_OBJ_FLAG_SCROLLABLE);
-    // lv_obj_clear_flag(util_Arbit_chart, LV_OBJ_FLAG_FLOATING);
-    // lv_obj_clear_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
-    // lv_obj_clear_flag(lv_obj_get_parent(util_Arbit_chart), LV_OBJ_FLAG_SCROLLABLE);
-    // lv_obj_add_flag(lv_obj_get_parent(util_Arbit_chart), LV_OBJ_FLAG_FLOATING);
-    // lv_obj_clear_flag(lv_obj_get_parent(lv_obj_get_parent(util_Arbit_chart)), LV_OBJ_FLAG_SCROLLABLE);
-    // lv_obj_clear_flag(lv_obj_get_parent(lv_obj_get_parent(lv_obj_get_parent(util_Arbit_chart))), LV_OBJ_FLAG_SCROLLABLE);
-    // static const char *opts = "Linear\n"
-    //                           "Smooth\n"
-    //                           "Stair";
-
-    // lv_obj_t *dd;
-    // dd = lv_dropdown_create(tab3);
-    // lv_dropdown_set_options_static(dd, opts);
-    // lv_dropdown_set_symbol(dd, NULL);
-    // lv_obj_align(dd, LV_ALIGN_BOTTOM_LEFT, -10, 0);
-    // lv_obj_set_style_text_font(dd, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT); // Set smaller font
-    // lv_obj_set_size(dd, 72, 25);                                                             // Reduce width
-    // lv_obj_set_style_pad_all(dd, 4, LV_PART_MAIN);
 
     // Lambda function for dropdown event callback
     auto dropdownEventCb = [](lv_event_t *e)
@@ -691,29 +599,8 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_add_event_cb(Utility_objs.table_point_list, table_touch_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(Utility_objs.table_point_list, table_draw_cell_event_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
-    // lv_obj_add_event_cb(Utility_objs.table_point_list, table_get_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-
     Utility_objs.table_spinbox_value = spinbox_pro(tab4, "#FFFFF7 Value:#", 0, 10000, 5, 1, LV_ALIGN_RIGHT_MID, -35, -50, 98, 4, &graph_R_16);
     lv_obj_add_event_cb(Utility_objs.table_spinbox_value, spinbox_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-
-    // // setup (same as before)
-    // SpinboxPro::Config cfg;
-    // cfg.spinboxFont = &graph_R_16;
-    // cfg.labelFont   = &lv_font_montserrat_12;
-    // cfg.clickBeep   = true;
-
-    // SpinboxPro::BeepFn clickBeep = [](){ myTone(NOTE_A4, 5); };
-    // SpinboxPro spx(cfg, clickBeep);
-    // // one‑liner builder
-    // auto spinOskol = SpinboxPro::Builder(spx)
-    //     .parent(tab4)
-    //     .label("#FFFFF7 Zero Voltage:#")
-    //     .range(0, 65535)
-    //     .digits(5, 0)
-    //     .align(LV_ALIGN_DEFAULT, 165, 160 )
-    //     .width(86)
-    //     .id(15)
-    //     .create();
 
     // Saving  ************************************************************
     lv_obj_t *saveButton = lv_btn_create(tab4);
@@ -804,44 +691,20 @@ void StatusBar()
 
     time(&now);
     localtime_r(&now, &timeinfo);
-    strftime(strftime_buf, sizeof(strftime_buf), "%H:%M:%S", &timeinfo); // W:week. j: days of year
-    // tft.drawString(strftime_buf, 249, 232);
-    // Serial.printf("time:%s \n", strftime_buf);
-    // lv_label_set_text(label, strftime_buf);
+    strftime(strftime_buf, sizeof(strftime_buf), "%H:%M:%S", &timeinfo);
     lv_label_set_text_fmt(statusLabel_time, "%s", strftime_buf);
 
     static char str[35];
 
-    sprintf(str, "SPS:%3i;Used memory:%04d;#Avgs ", PowerSupply.adc.realADCSpeed, heepMemory - ESP.getFreeHeap()); // memory - getFreeHeap getFreeSketchSpace getFreePsram
+    sprintf(str, "SPS:%3i;Used memory:%04d;#Avgs ", PowerSupply.adc.realADCSpeed, heepMemory - ESP.getFreeHeap());
 
-    // const char *str2 = "%i";
     strcat(str, "%i");
 
     lv_label_set_text_fmt(statusLabel_avg, str, PowerSupply.Voltage.measured.NofAvgs);
 
-    // auto StatsPosion = [&](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
-    // {
-    //     int space = 70;
-
-    //     lv_obj_set_parent(dObj.statLabels.label_value, parent);
-    //     lv_obj_align(dObj.statLabels.label_value, LV_ALIGN_DEFAULT, x, y);
-
-    //     lv_obj_set_parent(dObj.statLabels.label_mean, parent);
-    //     lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, x + space * 1, y);
-
-    //     lv_obj_set_parent(dObj.statLabels.label_max, parent);
-    //     lv_obj_align(dObj.statLabels.label_max, LV_ALIGN_DEFAULT, x + space * 2, y);
-
-    //     lv_obj_set_parent(dObj.statLabels.label_min, parent);
-    //     lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, x + space * 3, y);
-    // };
-
     auto StatsPositions = [&](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
     {
         int space = 61;
-
-        // lv_obj_set_parent(dObj.statLabels.label_mean, parent);
-        // lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, x, y);
 
         lv_obj_set_parent(dObj.statLabels.label_value, parent);
         lv_obj_align(dObj.statLabels.label_value, LV_ALIGN_DEFAULT, x, y);
@@ -858,11 +721,6 @@ void StatusBar()
         lv_obj_set_parent(dObj.statLabels.label_min, parent);
         lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, x + space * 4, y);
     };
-
-    // if (win_ADC_voltage_calibration != nullptr)
-    //     Serial.printf("\nwin_ADC_voltage_calibration:%i is vis:%i", win_ADC_voltage_calibration, lv_obj_is_visible(win_ADC_voltage_calibration));
-    // if (win_ADC_current_calibration != nullptr)
-    //     Serial.printf("\nwin_ADC_current_calibration:%i is vis:%i", win_ADC_current_calibration, lv_obj_is_visible(win_ADC_current_calibration));
 
     if (PowerSupply.gui.calibration.win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_voltage_calibration))
     {
@@ -894,17 +752,6 @@ void StatusBar()
         PowerSupply.Voltage.measured.ResetStats();
 
         PowerSupply.Voltage.hist.Reset();
-        // SaveCalibrationData();
-        // for (int i = 0; i < 35; i++)
-        // Serial.printf("\nMeasuere:%+09.5f Ideal:%+07.3f", CalBank[bankCalibId].adc_inl_measure[i], CalBank[bankCalibId].adc_inl_ideal[i]); // g_voltINL.printKnotTable();
-
-        // std::vector<double> X(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure, PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure + 35); // ideal volts (Mean)
-        // std::vector<double> Y(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal, PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal + 35);     // true volts (set)
-
-        // g_voltINL.setPoints(X, Y);
-
-        // g_voltINL.build();
-        // g_voltINL_ready = true;
     }
     if (PowerSupply.gui.calibration.win_ADC_current_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_current_calibration))
     {

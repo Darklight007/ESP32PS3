@@ -31,9 +31,6 @@ void start_leakage_resistance_measurement(lv_event_t *)
         {"Reset statistics", 1000, 1500,
          []()
          { PowerSupply.Current.Statistics.ResetStats(); }, nullptr},
-        // {"2nd Reset statistics", 1000, 1500,
-        //  []()
-        //  { PowerSupply.ResetStats(); }, nullptr},
         {"Measuring current at 0V", 60000, 1500,
          nullptr, [ctx]()
          { ctx->i_at_0v = PowerSupply.Current.Statistics.Mean(); }},
@@ -46,11 +43,6 @@ void start_leakage_resistance_measurement(lv_event_t *)
         {"Reset statistics", 1500, 1500,
          []()
          { PowerSupply.Current.Statistics.ResetStats(); }, nullptr},
-
-        // {"2nd Reset statistics", 1000, 1500,
-        //  []()
-        //  { PowerSupply.ResetStats(); }, nullptr},
-
         {"Measuring current at 32V", 60000, 1000,
          nullptr, [ctx]()
          { ctx->i_at_32v = PowerSupply.Current.Statistics.Mean(); }},
@@ -90,9 +82,6 @@ void start_current_zero_calibration(lv_event_t *e)
         {"Reset statistics", 1000, 1500,
          []()
          { PowerSupply.Current.rawValueStats.ResetStats(); }, nullptr},
-        // {"2nd Reset statistics", 1000, 1500,
-        //  []()
-        //  { PowerSupply.ResetStats(); }, nullptr},
         {"Measuring current at 0V", 10000, 1500,
          nullptr, [&]()
          {
@@ -117,11 +106,6 @@ void start_current_zero_calibration(lv_event_t *e)
              Serial.printf("\n Code 1 at zero current:%i", zero_current_code);
          },
          nullptr},
-
-        // {"2nd Reset statistics", 1000, 1500,
-        //  []()
-        //  { PowerSupply.ResetStats(); }, nullptr},
-
     };
 
     lv_timer_t *t = lv_timer_create(seq_cb, 50, nullptr);

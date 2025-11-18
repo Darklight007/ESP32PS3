@@ -110,12 +110,6 @@ void btn_close_hide_obj_cb(lv_event_t *e)
 namespace
 {
 
-    // static void trackPress(lv_event_t *e)
-    // {
-    //     auto *obj = lv_event_get_target(e);
-    //     lastButton = lv_obj_get_index(obj);
-    // }
-
     static void trackChild(lv_event_t *e)
     {
         auto *obj = lv_event_get_target(e);
@@ -161,28 +155,6 @@ namespace
             }
         }
     }
-
-    // // Switch handler for root/sidebar toggle (kept for reference)
-    // static void switch_handler(lv_event_t* e)
-    // {
-    //     if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
-    //     auto* m   = static_cast<lv_obj_t*>(lv_event_get_user_data(e));
-    //     auto* obj = lv_event_get_target(e);
-
-    //     if (lv_obj_has_state(obj, LV_STATE_CHECKED))
-    //     {
-    //         lv_menu_set_page(m, nullptr);
-    //         lv_menu_set_sidebar_page(m, root_page);
-    //         lv_event_send(lv_obj_get_child(lv_obj_get_child(lv_menu_get_cur_sidebar_page(m), 0), 0),
-    //                       LV_EVENT_CLICKED, nullptr);
-    //     }
-    //     else
-    //     {
-    //         lv_menu_set_sidebar_page(m, nullptr);
-    //         lv_menu_clear_history(m);
-    //         lv_menu_set_page(m, root_page);
-    //     }
-    // }
 
     // ------ UI builders ------
     static lv_obj_t *create_text(lv_obj_t *parent, const char *icon, const char *txt,
@@ -508,7 +480,6 @@ void SettingMenu(lv_obj_t *parent)
 
     itm = create_text(section, nullptr, "Display", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_display);
-    // lv_obj_add_event_cb(itm, trackPress, LV_EVENT_RELEASED, nullptr);
 
     itm = create_text(section, nullptr, "Sound", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_sound);
@@ -557,7 +528,6 @@ static void event_cb(lv_event_t *e)
             esp_task_wdt_reset();  // Reset watchdog immediately
             vTaskDelay(pdMS_TO_TICKS(100));  // Small delay to stabilize
             create_log_window();
-            // start_auto_measure();
             PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage = FLT_MAX;
             log_reset();
             log_clear();
@@ -568,24 +538,11 @@ static void event_cb(lv_event_t *e)
     }
 }
 
+// Create warning message box with red styling
 void Warning_msgbox(const char *title, lv_event_cb_t event_cb)
 {
-    // static const char *btns[] = {"OK", "Cancel", ""};
-    // lv_obj_t *mbox1 = lv_msgbox_create(NULL, title, "Disconnect any load!", btns, true);
-    // lv_obj_add_event_cb(mbox1, event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    // lv_obj_center(mbox1);
-
-    // static const char *btns[] = {"OK", "Cancel", ""};
-    // lv_obj_t *mbox1 = lv_msgbox_create(
-    //     NULL, title,        "#FF0000 Disconnect any load!#", // 🔴 red text
-    //     btns,     true);
-    // lv_obj_add_event_cb(mbox1, event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-
-    // // Enable recolor so LVGL applies the #RRGGBB tags
-    // lv_label_set_recolor(lv_msgbox_get_text(mbox1), true);
-    // lv_obj_center(mbox1);
-    // esp_task_wdt_reset();
     esp_task_wdt_reset();
+
     static const char *btns[] = {"OK", "Cancel", ""};
     lv_obj_t *mbox1 = lv_msgbox_create(NULL, title, "Disconnect any load!", btns, true);
 
@@ -607,50 +564,12 @@ void Warning_msgbox(const char *title, lv_event_cb_t event_cb)
 
     lv_obj_add_event_cb(mbox1, event_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_center(mbox1);
-
-    // static const char *btns[] = {"OK", "Cancel", ""};
-    // lv_obj_t *mbox1 = lv_msgbox_create(NULL, title, "Disconnect any load!", btns, true);
-
-    // // ── Style (red background, white text)
-    // static lv_style_t style_warn;
-    // static bool inited = false;
-    // if (!inited)
-    // {
-    //     lv_style_init(&style_warn);
-    //     lv_style_set_bg_color(&style_warn, lv_color_hex(0xFF0000)); // 🔴 red
-    //     lv_style_set_bg_opa(&style_warn, LV_OPA_COVER);
-    //     lv_style_set_text_color(&style_warn, lv_color_hex(0xFFFFFF)); // ⚪ white
-    //     inited = true;
-    // }
-
-    // // Apply to title bar
-    // lv_obj_t *title_obj = lv_msgbox_get_title(mbox1);
-    // if (title_obj)
-    //     lv_obj_add_style(title_obj, &style_warn, LV_PART_MAIN);
-
-    // // Apply to text body
-    // lv_obj_t *txt_obj = lv_msgbox_get_text(mbox1);
-    // if (txt_obj)
-    //     lv_obj_add_style(txt_obj, &style_warn, LV_PART_MAIN);
-
-    // // (Optional) Apply same style to buttons if you want red/white buttons too
-    // // lv_obj_t *btns_cont = lv_msgbox_get_btns(mbox1);
-    // // if (btns_cont)
-    // //     lv_obj_add_style(btns_cont, &style_warn, LV_PART_MAIN);
-
-    // lv_obj_add_event_cb(mbox1, event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    // lv_obj_center(mbox1);
 }
 
 lv_obj_t *mbox;
 static void AutoMeasureTotalRes_cb(lv_event_t *)
 {
     esp_task_wdt_reset();
-    // static const char *btns[] = {"OK", "Cancel", ""};
-
-    // mbox = lv_msgbox_create(NULL, "Auto Measure", "Disconnect any load!", btns, true);
-    // lv_obj_add_event_cb(mbox, mbox_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    // lv_obj_center(mbox);
     Warning_msgbox("Auto Measure", event_cb);
 }
 
@@ -679,7 +598,6 @@ void internal_leakage_calibration_cb(lv_event_t *)
     Calib_GUI.internalLeakage = spinbox_pro(cont, "#FFFFF7 Total Internal Resistor (kΩ):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 150, 21, &graph_R_16);
 
     PowerSupply.LoadCalibrationData();
-    // lv_spinbox_set_value(intRes, 40'000.123*1000.0);
     lv_spinbox_set_value(Calib_GUI.internalLeakage, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage);
 
     Serial.printf("\nInternal Current Calibration: %f", PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage);

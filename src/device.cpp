@@ -7,35 +7,25 @@ extern MonotoneCubicCalibrator g_voltINL;
 
 extern Calibration StoreData;
 extern bool lvglIsBusy, lvglChartIsBusy, blockAll;
-// FunGen funGen; // Definition
 
-// extern DAC_codes dac_data_g;
 extern lv_obj_t *btn_function_gen;
 
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
 
 void Device::setupADC(uint8_t pin, void func(void), TwoWire *_awire)
-
 {
-    // mem.begin("param", false);
     pinMode(pin, INPUT_PULLUP);
     attachInterrupt(pin, func, FALLING);
-    // calibrate();
     LoadCalibrationData();
 
-    // adc.ads1219->setDataRate(90);
     adc.ads1219->resetConfig();
 
     adc.ads1219->begin();
     adc.ads1219->setVoltageReference(REF_EXTERNAL);
     adc.ads1219->setGain(ONE);
-    adc.ads1219->setConversionMode(SINGLE_SHOT); // SINGLE_SHOT
-                                                 // adc.ads1219->readSingleEnded(VOLTAGE);
-                                                 // adc.busyChannel = VOLTAGE;
-                                                 // adc.ads1219->readDifferential_0_1();
-                                                 // adc.ads1219->_wire= _awire;
+    adc.ads1219->setConversionMode(SINGLE_SHOT);
 
-    adc.startConversion(VOLTAGE, REF_EXTERNAL); // REF_EXTERNAL
+    adc.startConversion(VOLTAGE, REF_EXTERNAL);
     adcDataReady = false;
     adc.dataReady = false;
 }
@@ -48,30 +38,11 @@ void Device::setupDAC(uint8_t addr)
 
 void Device::calibrate(void)
 {
-    // id = 1;
-    // bankCalibId = -1;
     bankCalibId = 0;
-    // for (int j = 0; j < CalBank.size(); j++)
-    // {
-    //     // Serial.print(WiFi.macAddress());
-    //     // Serial.print("  ");
-    //     // Serial.print(CalBank[j].macAdd);
-    //     // Serial.print("  ");
-    //     // Serial.println(WiFi.macAddress() == CalBank[j].macAdd);
-    //     if (WiFi.macAddress() == CalBank[j].macAdd)
-    //     {
-    //         bankCalibId = j;
-    //         // Serial.printf("Calibration bank index:%i\n", bankCalibId);
-    //         break;
-    //     }
-    // }
-
-    // calibrationUpdate();
 }
 
 void Device::calibrationUpdate(void)
 {
-
     Voltage.calib_m = (CalBank[bankCalibId].vCal.code_2 - CalBank[bankCalibId].vCal.code_1) /
                       (CalBank[bankCalibId].vCal.value_2 - CalBank[bankCalibId].vCal.value_1);
     Voltage.calib_b = CalBank[bankCalibId].vCal.code_1 - Voltage.calib_m * CalBank[bankCalibId].vCal.value_1;
@@ -83,39 +54,19 @@ void Device::calibrationUpdate(void)
     Current.calib_b = CalBank[bankCalibId].iCal[mA_Active].code_1 - Current.calib_m * CalBank[bankCalibId].iCal[mA_Active].value_1;
 
     Current.calib_1m = 1.0 / Current.calib_m;
-
-    // Power.measured.ResetStats();
-    // Voltage.measured.ResetStats();
-    // Current.measured.ResetStats();
-
-    // Current.hist.Reset();
-    // Voltage.hist.Reset();
-    // // SaveCalibrationData();
-    // // for (int i = 0; i < 35; i++)
-    // // Serial.printf("\nMeasuere:%+09.5f Ideal:%+07.3f", CalBank[bankCalibId].adc_inl_measure[i], CalBank[bankCalibId].adc_inl_ideal[i]); // g_voltINL.printKnotTable();
-
-    // std::vector<double> X(CalBank[bankCalibId].adc_inl_measure, CalBank[bankCalibId].adc_inl_measure + 35); // ideal volts (Mean)
-    // std::vector<double> Y(CalBank[bankCalibId].adc_inl_ideal, CalBank[bankCalibId].adc_inl_ideal + 35);     // true volts (set)
-
-    // g_voltINL.setPoints(X, Y);
-
-    // g_voltINL.build();
-    // g_voltINL_ready = true;
 }
 
 //  std::vector<Calibration> CalBank
 void Device::SaveSettingData(const String &key, const SettingParameters &data)
 {
-    // Serial.printf("\nSetVoltage: %f", data.SetVoltage);
-    // Serial.printf("\nSetCurrent: %f", data.SetCurrent);
     StoreMem.begin("my-app", false);
     StoreMem.putBytes(key.c_str(), &data, sizeof(SettingParameters));
     StoreMem.end();
 }
+
 SettingParameters Device::LoadSettingData(const String &key)
 {
     StoreMem.begin("my-app", false);
-    // Calibration data("", {0}, {0});
     ssize_t bytesRead = StoreMem.getBytes(key.c_str(), &settingParameters, sizeof(SettingParameters));
     StoreMem.end();
     return settingParameters;
@@ -131,7 +82,6 @@ void Device::SaveCalibData(const String &key, const Calibration &data)
 Calibration Device::LoadCalibData(const String &key)
 {
     StoreMem.begin("my-app", false);
-    // Calibration data("", {0}, {0});
     ssize_t bytesRead = StoreMem.getBytes(key.c_str(), &StoreData, sizeof(Calibration));
     StoreMem.end();
     return StoreData;
@@ -158,13 +108,6 @@ void Device::LoadCalibrationData()
     Calibration outputData = Device::LoadCalibData("cal");
     CalBank[bankCalibId] = {outputData};
 
-    // for (int i = 0; i < 33; i++)
-    // {
-    //     CalBank[bankCalibId].adc_inl_measure[i] = outputData.adc_inl_measure[i];
-    //     CalBank[bankCalibId].adc_inl_ideal[i] == outputData.adc_inl_ideal[i];
-    //     Serial.printf("\nMeasuere:%+09.5f Ideal:%+07.3f",outputData.adc_inl_measure[i], outputData.adc_inl_ideal[i]); // g_voltINL.printKnotTable();
-    // }
-
     calibrationUpdate();
 
     Serial.printf("\nCalibration data loaded:%s {%+08.4f %+08i %+08.4f %+08i}, {%+08.4f %+08i %+08.4f %+08i}, %4.4f",
@@ -173,44 +116,10 @@ void Device::LoadCalibrationData()
                   outputData.iCal[mA_Active].value_1, outputData.iCal[mA_Active].code_1, outputData.iCal[mA_Active].value_2, outputData.iCal[mA_Active].code_2,
                   outputData.internalLeakage);
 
-    // g_voltINL.build();
-
-    // CalBank[bankCalibId].vCal.value_1 = outputData.vCal.value_1;
-    // CalBank[bankCalibId].vCal.value_2 = outputData.vCal.value_2;
-    // CalBank[bankCalibId].vCal.code_1 = outputData.vCal.code_1;
-    // CalBank[bankCalibId].vCal.code_2 = outputData.vCal.code_2;
-
-    // Serial.printf("\nVoltage vCalvalue_1:%7.3f", vCalvalue_1);
-    // Serial.printf("\nVoltage vCalvalue_2:%7.3f", vCalvalue_2);
-    // Serial.printf("\nVoltage vCalcode_1:%i", vCalcode_1);
-    // Serial.printf("\nVoltage vCalcode_2:%i",vCalcode_2);
-
-    // EEPROMread(CalBank[bankCalibId].vCal.value1EEPROMAddress, CalBank[bankCalibId]);
-
-    // Voltage.calib_m = (vCalcode_2 - vCalcode_1) / (vCalvalue_2 - vCalvalue_1);
-    // Voltage.calib_b = vCalcode_1 - Voltage.calib_m * vCalvalue_1;
-
-    // Current.calib_m = (iCalcode_2 - iCalcode_1) / (iCalvalue_2 - iCalvalue_1);
-    // Current.calib_b = iCalcode_1 - Current.calib_m * iCalvalue_1;
-
     Serial.printf("\nVoltage Calibration m:%7.3f", Voltage.calib_m);
     Serial.printf("\nVoltage Calibration b:%7.3f", Voltage.calib_b);
     Serial.printf("\nCurrent Calibration m:%7.3f", Current.calib_m);
     Serial.printf("\nCurrent Calibration b:%7.3f", Current.calib_b);
-
-    // CalBank[bankCalibId].adc_inl_measure;
-    // CalBank[bankCalibId].adc_inl_ideal ;
-
-    // for (int i = 0; i < 33; i++)
-    //     Serial.printf("\nMeasuere:%+09.5f Ideal:%+07.3f",
-    //                   CalBank[bankCalibId].adc_inl_measure[i],
-    //                   CalBank[bankCalibId].adc_inl_ideal[i]); // g_voltINL.printKnotTable();
-
-    // g_voltINL.build();
-    // g_voltINL.setPoints(CalBank[bankCalibId].adc_inl_measure, CalBank[bankCalibId].adc_inl_ideal);
-    // g_voltINL.build();
-
-    // g_voltINL_ready = true;
 
     if (!isfinite(Voltage.calib_m) || !std::isfinite(Voltage.calib_b) || !std::isfinite(Current.calib_m) || !std::isfinite(Current.calib_b))
     {
@@ -237,20 +146,8 @@ void Device::LoadCalibrationData()
         Current.hist.Reset();
         Voltage.hist.Reset();
 
-        //  Voltage.SetUpdate(5.0);
-        //  Current.SetUpdate(.1);
         SaveCalibrationData();
     }
-
-    // CalBank[bankCalibId].vCal.value_1 = vCalvalue_1;
-    // CalBank[bankCalibId].vCal.value_2 = vCalvalue_2;
-    // CalBank[bankCalibId].vCal.code_1 = vCalcode_1;
-    // CalBank[bankCalibId].vCal.code_2 = vCalcode_2;
-
-    // CalBank[bankCalibId].iCal.value_1 = iCalvalue_1;
-    // CalBank[bankCalibId].iCal.value_2 = iCalvalue_2;
-    // CalBank[bankCalibId].iCal.code_1 = iCalcode_1;
-    // CalBank[bankCalibId].iCal.code_2 = iCalcode_2;
 }
 
 void Device::LoadSetting(void)
@@ -266,11 +163,9 @@ void Device::LoadSetting(void)
     settingParameters.adcNumberOfDigits = std::clamp((int)settingParameters.adcNumberOfDigits, 1, 4);
     Voltage.adjValue = settingParameters.SetVoltage;
     Current.adjValue = settingParameters.SetCurrent;
-    // Serial.printf("\n is PowerOn?:%i", settingParameters.isPowerSupplyOn);
 
     Preferences memory;
     memory.begin("param", false);
-    //  memory.putUShort("pi", 314);
     if (314 != memory.getUShort("pi", 0))
     {
         Serial.print("\n\n ** WRONG SETTING DATA ** \n");
@@ -286,11 +181,6 @@ void Device::LoadSetting(void)
 
         Device::SaveSettingData("setting_param", settingParameters);
 
-        // dac_data_g.zero_voltage = 11;
-        // dac_data_g.max_voltage = 65535;
-        // dac_data_g.zero_current = 10;
-        // dac_data_g.max_current = 65535;
-
         dac_data.zero_voltage = 11;
         dac_data.max_voltage = 65535;
         dac_data.zero_current = 10;
@@ -298,7 +188,6 @@ void Device::LoadSetting(void)
 
         SaveDACdata("dac_data_", dac_data);
     }
-    // memory.putUShort("pi", 0);
     memory.end();
 
     static std::map<int, const char *> ADC_SPS;
@@ -544,11 +433,11 @@ void Device::readCurrent()
         // *Current.Bar.curValuePtr = c * Current.Bar.scaleFactor;
         // lv_obj_invalidate(Current.Bar.bar);
 
-        Serial.printf("\n\r%9.6f %9.6f %5.2f %i",
-                      c,
-                      Current.Statistics.Mean(),
-                      Current.effectiveResolution.Mean(),
-                      Current.Statistics.windowSizeIndex_ % Current.Statistics.NofAvgs);
+        // Serial.printf("\n\r%9.6f %9.6f %5.2f %i",
+        //               c,
+        //               Current.Statistics.Mean(),
+        //               Current.effectiveResolution.Mean(),
+        //               Current.Statistics.windowSizeIndex_ % Current.Statistics.NofAvgs);
 
         static unsigned long loopCount = 0;
         static unsigned long startTime = millis();

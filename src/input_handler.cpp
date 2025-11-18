@@ -246,27 +246,20 @@ void handleCalibrationPage(int32_t /*unused1*/, int32_t /*unused2*/)
 
 void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 {
-
     // Handle horizontal scrolling and zooming with encoder 2
     if (encoder2_last_value != encoder2_value)
     {
-        // Serial.printf("\nencoder2_value %i", encoder2_value);
-        // Serial.printf("\nencoder2_last_value %i", encoder2_last_value);
-        // int32_t _posX = lv_slider_get_value(slider_x);
-        // static int32_t _posX = lv_slider_get_value(lv_obj_get_child(PowerSupply.page[1], 3));
         int32_t _posX = lv_slider_get_value(slider_x);
 
         if (encoder2_last_value < encoder2_value)
             _posX += 160;
         else if (encoder2_last_value > encoder2_value)
             _posX -= 160;
-        // encoder2_last_value = encoder2_value;
 
         if (keyChar == 'W' && msg == " HOLD.")
         {
             // Scroll the graph horizontally
             _posX = std::clamp(_posX, 0, 57 * (lv_chart_get_zoom_x(PowerSupply.graph.chart) - 256) / 16);
-            // _posY = std::clamp(_posY, 0, int(33.5 * (lv_chart_get_zoom_y(PowerSupply.graph.chart) - 256) / 64));
             if (!lvglChartIsBusy)
             {
                 lvglChartIsBusy = true;
@@ -332,9 +325,6 @@ void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 
 void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 {
-
-    // static int32_t encoder1_last_value = 0;
-    // static int32_t encoder2_last_value = 0;
     bool histogramUpdated = false; // Flag to indicate if histogram needs to be reset
 
     // **Handle Vertical Shift/Zoom with Encoder 1**
@@ -503,23 +493,15 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
 
 void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
 {
-    // static int32_t encoder1_last_value = 0;
-    // static int32_t encoder2_last_value = 0;
-    // int32_t  encoder2_last_value;
-
     // **Handle Vertical Shift/Zoom with Encoder 1**
     if (encoder1_last_value != encoder1_value)
     {
-
         static u8_t _posY = 0;
 
-        // // Determine the direction of encoder 1 rotation
+        // Determine the direction of encoder 1 rotation
         if (encoder1_last_value < encoder1_value)
-
             _posY++; // Rotated clockwise
-
         else if (encoder1_last_value > encoder1_value)
-
             _posY--; // Rotated counter-clockwise
 
         static lv_obj_t *table = lv_obj_get_child(PowerSupply.page[3], 0);
@@ -528,12 +510,10 @@ void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
 
     if (encoder2_last_value != encoder2_value)
     {
-
         static u8_t _posX = 0;
-        // // Determine the direction of encoder 1 rotation
+        // Determine the direction of encoder 2 rotation
         if (encoder2_last_value < encoder2_value)
         {
-
             if (lv_tabview_get_tab_act(lv_obj_get_child(PowerSupply.page[3], 0)) == 1)
                 select_previous_row(Utility_objs.table_fun_gen_list, 25);
             else
@@ -541,16 +521,11 @@ void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
         }
         else if (encoder2_last_value > encoder2_value)
         {
-
             if (lv_tabview_get_tab_act(lv_obj_get_child(PowerSupply.page[3], 0)) == 1)
                 select_next_row(Utility_objs.table_fun_gen_list, 25);
             else
                 select_next_row(Utility_objs.table_point_list, 2 * 7 + 2 * 5);
         }
-
-        // static lv_obj_t *table = lv_obj_get_child(PowerSupply.page[3], 0);
-
-        // lv_tabview_set_act(table, _posY % 4, LV_ANIM_ON);
     }
 }
 
@@ -592,114 +567,66 @@ void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_l
 
         encoder1_last_value = encoder1_value;
 
-        // Serial.printf("\n***********************************");
-        // print_obj_type(fgen_tabview); // Output: Object is************ a button
-        // Serial.printf("\nSpinbox_pro%i", get_spinbox_data_by_id(fgen_tabview, 2));
-
         PowerSupply.funGenMem.amplitude = lv_spinbox_get_value(Utility_objs.fun.Amplitude) / 1000.0;
         PowerSupply.funGenMem.frequency = lv_spinbox_get_value(Utility_objs.fun.Frequency) / 1000.0;
         PowerSupply.funGenMem.offset = lv_spinbox_get_value(Utility_objs.fun.Offset) / 1000.0;
         PowerSupply.funGenMem.dutyCycle = lv_spinbox_get_value(Utility_objs.fun.Duty) / 10000.0;
 
-        // PowerSupply.funGenMem.amplitude = double(get_spinbox_data_by_id(fgen_tabview, 0) / 1000.0);
-        // PowerSupply.funGenMem.frequency = double(get_spinbox_data_by_id(fgen_tabview, 1) / 1000.0);
-        // PowerSupply.funGenMem.offset = double(get_spinbox_data_by_id(fgen_tabview, 2) / 1000.0);
-        // PowerSupply.funGenMem.dutyCycle = double(get_spinbox_data_by_id(fgen_tabview, 3) / 10000.0);
-
         if (lv_tabview_get_tab_act(lv_obj_get_child(PowerSupply.page[3], 0)) == 1)
             PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
-
-        // Serial.printf("\n********************");
-        // Serial.printf("\namplitude %f", PowerSupply.funGenMem.amplitude);
-        // Serial.printf("\nfrequency %f", PowerSupply.funGenMem.frequency);
-        // Serial.printf("\noffset %f", PowerSupply.funGenMem.offset);
-        // Serial.printf("\ndutyCycle %f", PowerSupply.funGenMem.dutyCycle);
-        // Serial.printf("\n********************");
-        // print_obj_type(parent); // Output: Object is a button
-        // Serial.printf("\nSpinbox_pro%i", get_spinbox_data_by_id(parent, 2));
     }
 }
 
 void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
 {
-    if (encoder2Flag /*&& (Tabs::getCurrentPage() == 4)*/)
+    if (encoder2Flag)
     {
-        // encoder2Flag = 0;
-
-        int64_t count = PowerSupply.Current.encoder.getCount() >> 1; // / 2;
-        // PowerSupply.Current.encoder.pauseCount();
+        int64_t count = PowerSupply.Current.encoder.getCount() >> 1;
 
         static int64_t rotaryOldValue2 = 0;
 
-        // encoder2_value = count;
         if (count > rotaryOldValue2)
             encoder2_value++;
-        // PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue + PowerSupply.Current.rotaryEncoderStep);
-
         else if (count < rotaryOldValue2)
             encoder2_value--;
-        // PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue - PowerSupply.Current.rotaryEncoderStep);
 
         rotaryOldValue2 = count;
-        // encoder2_value = std::clamp(encoder2_value, -500, 500);
-        // encoder2Flag = (encoder2Flag > 300) ? 300 : encoder2Flag - 1;
         encoder2Flag = 0;
-        // if (encoder2Flag == 0)
-        //   PowerSupply.Current.encoder.setCount(0);
         switch (Tabs::getCurrentPage())
         {
-        // case 4:
-        //     break;
         case 2:
             PowerSupply.Current.SetEncoderUpdate();
-            // PowerSupply.FlushSettings();
-            // PowerSupply.Voltage.SetEncoderUpdate();
             break;
         }
-        // LV_LOG_USER("encoder2_value:%i encoder2Flag:%i count:%i", encoder2_value, encoder2Flag, count);
         encoderTimeStamp = millis();
     }
 
-    if (encoder1Flag /*&& (Tabs::getCurrentPage() == 4)*/)
+    if (encoder1Flag)
     {
-
-        int64_t count = PowerSupply.Voltage.encoder.getCount() >> 1; // / 2;
-        // // PowerSupply.Current.encoder.pauseCount();
+        int64_t count = PowerSupply.Voltage.encoder.getCount() >> 1;
 
         static int64_t rotaryOldValue = 0;
 
-        // encoder2_value = count;
         if (count > rotaryOldValue)
             encoder1_value++;
-
         else if (count < rotaryOldValue)
             encoder1_value--;
 
         rotaryOldValue = count;
-        // encoder1Flag = (encoder1Flag > 300) ? 300 : encoder1Flag - 1;
-        // encoder1_value = PowerSupply.Voltage.encoder.getCount() / 2;
         encoder1Flag = 0;
         switch (Tabs::getCurrentPage())
         {
-        // case 4:
-        //     break;
         case 2:
             PowerSupply.Voltage.SetEncoderUpdate();
-            // PowerSupply.FlushSettings();
-
-            // PowerSupply.Voltage.Flush();
             break;
         }
-        // PowerSupply.Current.encoder.resumeCount();
-
-        // LV_LOG_USER("encoder2_value:%i encoder1Flag:%i count:%i", 0, encoder1Flag,
         encoderTimeStamp = millis();
     }
 }
 
 void managePageEncoderInteraction()
 {
-    // // Variables to store the last encoder values
+    // Variables to store the last encoder values
     static int32_t encoder1_last_value = 0;
     static int32_t encoder2_last_value = 0;
 
@@ -712,7 +639,6 @@ void managePageEncoderInteraction()
 
     case 1: // Graph Page
         handleGraphPage(encoder1_last_value, encoder2_last_value);
-        // lv_slider_set_value(slider_x, encoder2_last_value,LV_ANIM_OFF);
         break;
 
     case 2: // main Page
@@ -722,12 +648,10 @@ void managePageEncoderInteraction()
         break;
 
     case 4: // Calibration Page
-
         handleCalibrationPage(encoder1_last_value, encoder2_last_value);
         break;
 
     default:
-
         break;
     }
 
@@ -742,29 +666,19 @@ void managePageEncoderInteraction()
 
 void keyCheckLoop()
 {
-    // unsigned long mi = micros();
     getKeys();
     if (msg == " IDLE.")
-    {
-        // vTaskDelay(1);
         return;
-    }
-    // Serial.printf(" time %i \n", micros() - mi);
-    // return;
-    //   Serial.printf("\nkeyCheckLoop() run on core: #%i \n\n", xPortGetCoreID());
+
     keyMenus('O', " RELEASED.", []
              {
                 blockAll = true;
-                //  vTaskDelay(10);
-                 PowerSupply.toggle();
-                 //  lv_event_send(PowerSupply.powerSwitch.btn,LV_EVENT_LONG_PRESSED, NULL);
-                  blockAll =false; });
+                PowerSupply.toggle();
+                blockAll = false;
+             });
 
     keyMenus('O', " HOLD.", [] // Output button
              {
-                 //  myTone(NOTE_A5, 200, true);
-                 //  myTone(NOTE_A3, 200, true);
-                 //  ESP.restart();
              });
 
     keyMenus('m', " HOLD.", [] // Output button
@@ -781,42 +695,26 @@ void keyCheckLoop()
                  if (!lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN))
                      return;
                  Tabs::previousPage();
-                 //  UpdateTabs();
-                 //  updateObjectParrents();
              });
 
-    // next page
+    // Next page
     keyMenus('k', " RELEASED.",
              [&]
              {
                  if (!lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN))
                      return;
                  Tabs::nextPage();
-                 //  UpdateTabs();
-                 //  updateObjectParrents();
              });
-
-    keyMenus('k', " RELEASED.", []
-             {
-                 //  if (lv_obj_is_visible(voltageCurrentCalibration))
-                 //  {
-                 //      lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
-                 //  }
-             }
-
-    );
 
     keyMenus('H', " RELEASED.", []
              {
                  Tabs::goToHomeTab();
-                //  lv_obj_add_flag(voltageCurrentCalibration,LV_OBJ_FLAG_HIDDEN);
-                 hide( PowerSupply.gui.calibration.win_ADC_voltage_calibration);
-                 hide( PowerSupply.gui.calibration.win_ADC_current_calibration);
-                 hide( PowerSupply.gui.calibration.win_int_current_calibration);
-                 hide( PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration);
-                 hide( PowerSupply.gui.calibration.win_DAC_calibration); }
-
-    );
+                 hide(PowerSupply.gui.calibration.win_ADC_voltage_calibration);
+                 hide(PowerSupply.gui.calibration.win_ADC_current_calibration);
+                 hide(PowerSupply.gui.calibration.win_int_current_calibration);
+                 hide(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration);
+                 hide(PowerSupply.gui.calibration.win_DAC_calibration);
+             });
 
     keyMenus('H', " HOLD.", [] // Home button
              {
@@ -831,9 +729,8 @@ void keyCheckLoop()
              {
                  if (!lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN))
                      return;
-                 Tabs::setCurrentPage(3); }
-
-    );
+                 Tabs::setCurrentPage(3);
+             });
 
     keyMenusPage('T', " RELEASED.", 2, [&]
                  {
@@ -875,11 +772,6 @@ void keyCheckLoop()
                      PowerSupply.Current.hist.Reset();
                      PowerSupply.Voltage.hist.Reset(); });
 
-    keyMenusPage('+', " RELEASED.", 1, [&]
-
-                 {
-
-                 });
 
     keyMenusPage('V', " RELEASED.", 0, []
                  {
@@ -958,33 +850,12 @@ void keyCheckLoop()
 
     keyMenusPage('j', " RELEASED.", 1, []
                  {
-                     //  Serial.printf("\nget_scroll_top:%i ", lv_obj_get_scroll_top(PowerSupply.graph.chart));
-                     // Reset statistics
-                     //  PowerSupply.ResetStats();
-
-                     // Set the desired zoom levels
-                     //  uint16_t desired_zoom_x = 512;  // Adjust as needed (default is 256)
-                     //  uint16_t desired_zoom_y = 5120; // Adjust as needed
-
-                     // Apply zoom to the chart
-                     //  lv_chart_set_zoom_x(PowerSupply.graph.chart, desired_zoom_x);
-                     //  lv_chart_set_zoom_y(PowerSupply.graph.chart, desired_zoom_y);
-
-                     // Refresh the chart to apply zoom changes
-                     //  lv_chart_refresh(PowerSupply.graph.chart);
-                     //  Serial.printf("\nget_scroll_top:%i ", lv_obj_get_scroll_top(PowerSupply.graph.chart));
-
                      if (!lvglChartIsBusy)
                      {
                          lvglChartIsBusy = true;
-
                          autoScrollY();
-
-                         //  lv_chart_refresh(PowerSupply.graph.chart);
                          lvglChartIsBusy = false;
                      }
-
-                     //   Serial.printf("\nget_scroll_top:%i " ,  lv_obj_get_scroll_top(PowerSupply.graph.chart));
                  });
 
     keyMenusPage('j', " RELEASED.", 2, []
@@ -1004,19 +875,6 @@ void keyCheckLoop()
                 lv_slider_set_value(lv_obj_get_child(PowerSupply.gui.slider_Avgs, -1), log2(w), LV_ANIM_OFF);
                 lv_event_send(lv_obj_get_child(PowerSupply.gui.slider_Avgs, -1), LV_EVENT_VALUE_CHANGED, NULL); });
 
-    keyMenusPage('+', " RELEASED.", 4, []
-                 {
-                     //  if (lv_obj_is_visible(voltageCurrentCalibration)) {
-                     //  lv_event_send(spinboxes.btn_plus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);}
-                 });
-
-    keyMenusPage('-', " RELEASED.", 4, []
-                 {
-                     //  if (lv_obj_is_visible(voltageCurrentCalibration))
-                     //  {
-                     //      lv_event_send(spinboxes.btn_minus[spinboxes.id_index], LV_EVENT_SHORT_CLICKED, NULL);
-                     //  }
-                 });
     if ((Tabs::getCurrentPage() == 3))
     {
         int a = -1;
@@ -1120,43 +978,6 @@ void keyCheckLoop()
 
         keyMenusPage('E', " RELEASED.", 4, []
                      {
-                         // if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
-                         // {
-                         //     // lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
-
-                         //     // lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
-                         //     // int32_t v = lv_spinbox_get_value(spinBox);
-
-                         //     // char str[12];
-
-                         //     // if (spinboxes.current_index % 2 != 0)
-                         //     // {
-                         //     //     sprintf(str, "%+08.0f",double( v ));
-                         //     //     key_event_handler_readBack_clb(str);
-                         //     // }
-
-                         //     // else
-                         //     // {
-                         //     //     sprintf(str, "%+08.4f", double (v/10000.0));
-                         //     //     key_event_handler_readBack_clb(str);
-                         //     //     // key_event_handler_readBack_clb(std::to_string(v).c_str());
-                         //     // }
-                         //     // ismyTextHiddenChange = true;
-                         // }
-                         // else
-                         // {
-                         //     // lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
-                         //     // myTone(NOTE_A5, 100);
-                         //     // const char *txt = lv_textarea_get_text(ta);
-                         //     // lv_obj_t *spinBox = lv_obj_get_child(voltageCurrentCalibration, spinboxes.current_index);
-                         //     // if (spinboxes.current_index % 2 != 0)
-                         //     //     lv_spinbox_set_value(spinBox, strtod(txt, NULL));
-                         //     // else
-                         //     //     lv_spinbox_set_value(spinBox, 10000.0 * strtod(txt, NULL));
-                         //     // lv_textarea_set_text(ta,"");
-                         //     // ismyTextHiddenChange = true;
-
-                         // }
                      });
     }
 
@@ -1164,10 +985,6 @@ void keyCheckLoop()
                  { PowerSupply.Voltage.setLock(!PowerSupply.Voltage.getLock()); });
     keyMenusPage('>', " RELEASED.", 2, []
                  { PowerSupply.Current.setLock(!PowerSupply.Current.getLock()); });
-    keyMenusPage('M', " RELEASED.", 4, []
-                 {
-                     // lv_obj_add_flag(voltageCurrentCalibration, LV_OBJ_FLAG_HIDDEN);
-                 });
 
     keyMenusPage('V', " RELEASED.", 2, []
                  {
@@ -1279,23 +1096,6 @@ void keyCheckLoop()
 
     if ((msg == " IDLE.") && (Tabs::getCurrentPage() == 2))
     {
-        // switch (keyChar)
-        // {
-
-        // case 'Z':
-        //     uint8_t w;
-        //     w = PowerSupply.Voltage.measured.NofAvgs;
-        //     w = (w == 128) ? 1 : w * 2;
-
-        //     lv_slider_set_value(lv_obj_get_child(slider_Avgs, -1), log2(w), LV_ANIM_OFF);
-        //     lv_event_send(lv_obj_get_child(slider_Avgs, -1), LV_EVENT_VALUE_CHANGED, NULL);
-
-        //     break;
-        // }
-
-        // msg = "";
         keyChar = ' ';
-        //   lv_obj_clear_flag(PowerSupply.Voltage.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
-        // lv_obj_clear_flag(PowerSupply.Current.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
     }
 }
