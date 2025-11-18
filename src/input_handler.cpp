@@ -30,7 +30,7 @@ struct TouchAttr_
     }
 } TouchAttr;
 
-// Helper function to enable/disable Duty spinbox based on selected waveform
+// Helper function to show/hide Duty spinbox based on selected waveform
 void updateDutySpinboxState()
 {
     if (!Utility_objs.table_fun_gen_list || !Utility_objs.fun.Duty)
@@ -45,13 +45,13 @@ void updateDutySpinboxState()
 
     if (isPWM)
     {
-        // Enable the Duty spinbox for PWM waveform
-        lv_obj_clear_state(Utility_objs.fun.Duty, LV_STATE_DISABLED);
+        // Show the Duty spinbox for PWM waveform
+        lv_obj_clear_flag(Utility_objs.fun.Duty, LV_OBJ_FLAG_HIDDEN);
     }
     else
     {
-        // Disable the Duty spinbox for non-PWM waveforms
-        lv_obj_add_state(Utility_objs.fun.Duty, LV_STATE_DISABLED);
+        // Hide the Duty spinbox for non-PWM waveforms
+        lv_obj_add_flag(Utility_objs.fun.Duty, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
