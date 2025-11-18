@@ -75,6 +75,13 @@ static void IRAM_ATTR ADCPinISR()
     // Device::readCurrent();
 }
 
+enum class StartupBehavior : uint8_t
+{
+    ALWAYS_OFF = 0,
+    ALWAYS_ON = 1,
+    LAST_STATUS = 2
+};
+
 struct SettingParameters
 {
     uint8_t adcRate;
@@ -84,6 +91,7 @@ struct SettingParameters
     uint16_t SetCurrent;
     bool buzzer = false;
     bool isPowerSupplyOn = true;
+    StartupBehavior startupBehavior = StartupBehavior::LAST_STATUS;
 };
 
 class LVLabel_class; // Forward declaration

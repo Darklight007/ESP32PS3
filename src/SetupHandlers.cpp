@@ -268,10 +268,6 @@ void setupPowerSupply()
 
     stat_measure(PowerSupply.page[0], 10, 167);
 
-    // Turn on power supply initially
-    // PowerSupply.turn(SWITCH::ON);
-    lv_obj_add_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
-
     // Setup tabs and pages
     Tabs::setDefaultPage(2);
     textarea(PowerSupply.page[2]);
@@ -280,6 +276,36 @@ void setupPowerSupply()
 
     // Load settings parameters for page 4
     PowerSupply.LoadSetting();
+
+    // Apply startup behavior setting
+    bool powerOnAtStartup = false;
+    switch (PowerSupply.settingParameters.startupBehavior)
+    {
+    case StartupBehavior::ALWAYS_OFF:
+        powerOnAtStartup = false;
+        Serial.println("Startup behavior: Always OFF");
+        break;
+    case StartupBehavior::ALWAYS_ON:
+        powerOnAtStartup = true;
+        Serial.println("Startup behavior: Always ON");
+        break;
+    case StartupBehavior::LAST_STATUS:
+    default:
+        powerOnAtStartup = PowerSupply.settingParameters.isPowerSupplyOn;
+        Serial.printf("Startup behavior: Last Status (%s)\n", powerOnAtStartup ? "ON" : "OFF");
+        break;
+    }
+
+    if (powerOnAtStartup)
+    {
+        lv_obj_add_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
+        PowerSupply.turn(SWITCH::ON);
+    }
+    else
+    {
+        lv_obj_clear_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
+        PowerSupply.turn(SWITCH::OFF);
+    }
 
     // Setup utility tab view on page 3
     Utility_tabview(PowerSupply.page[3]);

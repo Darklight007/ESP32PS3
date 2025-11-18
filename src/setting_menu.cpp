@@ -292,6 +292,16 @@ namespace
     }
 
     // General save/load callbacks used by settings menu and internal calibration window
+    static void startup_behavior_event_cb(lv_event_t *e)
+    {
+        auto *dd = lv_event_get_target(e);
+        uint16_t selected = lv_dropdown_get_selected(dd);
+        PowerSupply.settingParameters.startupBehavior = static_cast<StartupBehavior>(selected);
+        PowerSupply.SaveSetting();
+
+        Serial.printf("\nStartup behavior set to: %d", selected);
+    }
+
     static void save_cb(lv_event_t *)
     {
         PowerSupply.SaveCalibrationData();
@@ -386,6 +396,30 @@ namespace
         lv_obj_invalidate(Tabs::tabview);
     }
 
+    static lv_obj_t *create_dropdown(lv_obj_t *parent, const char *txt, const char *options,
+                                     uint16_t selected, lv_event_cb_t event_cb)
+    {
+        lv_obj_t *obj = lv_menu_cont_create(parent);
+        lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(obj, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+        auto *label = lv_label_create(obj);
+        lv_label_set_text(label, txt);
+        lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        lv_obj_set_flex_grow(label, 1);
+
+        auto *dropdown = lv_dropdown_create(obj);
+        lv_dropdown_set_options(dropdown, options);
+        lv_dropdown_set_selected(dropdown, selected);
+        lv_obj_set_width(dropdown, 120);
+        if (event_cb)
+            lv_obj_add_event_cb(dropdown, event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+        lv_obj_add_event_cb(dropdown, PRESSED_event_cb, LV_EVENT_PRESSED, nullptr);
+        lv_obj_add_event_cb(dropdown, RELEASED_event_cb, LV_EVENT_RELEASED, nullptr);
+
+        return dropdown;
+    }
+
     static lv_obj_t *create_button_item(lv_obj_t *parent, lv_event_cb_t cb, const char *buttonTxt)
     {
         lv_obj_t *obj = lv_menu_cont_create(parent);
@@ -457,6 +491,13 @@ void SettingMenu(lv_obj_t *parent)
     // Save/Load
     lv_obj_t *sub_save_load = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_save_load);
+
+    // Startup behavior dropdown
+    create_dropdown(section, "Power at Startup",
+                   "Always Off\nAlways On\nLast Status",
+                   static_cast<uint16_t>(PowerSupply.settingParameters.startupBehavior),
+                   startup_behavior_event_cb);
+
     create_button_item(section, load_cb, "Load");
     create_button_item(section, save_cb, "Save");
 
@@ -598,6 +639,7 @@ void internal_leakage_calibration_cb(lv_event_t *)
     Calib_GUI.internalLeakage = spinbox_pro(cont, "#FFFFF7 Total Internal Resistor (kΩ):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 150, 21, &graph_R_16);
 
     PowerSupply.LoadCalibrationData();
+    // lv_spinbox_set_value(intRes, 40'000.123*1000.0);
     lv_spinbox_set_value(Calib_GUI.internalLeakage, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage);
 
     Serial.printf("\nInternal Current Calibration: %f", PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage);

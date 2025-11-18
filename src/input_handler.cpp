@@ -974,7 +974,8 @@ void keyCheckLoop()
         }
     }
 
-    if ((Tabs::getCurrentPage() == 2) || (Tabs::getCurrentPage() == 4 /*&& lv_obj_is_visible(voltageCurrentCalibration)*/))
+    // Numerical keys only active on Main page (2), NOT on Settings page (4)
+    if (Tabs::getCurrentPage() == 2)
     {
         keyMenus('7', " RELEASED.", []
                  { key_event_handler(0); });
