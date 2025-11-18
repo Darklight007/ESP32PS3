@@ -16,3 +16,4 @@ void LvglFullUpdates(unsigned long interval);
 void VCCCInterval(unsigned long interval);
 void LvglUpdatesInterval(unsigned long interval);
 void FFTUpdateInterval(unsigned long interval);
+void PowerManagementInterval(unsigned long interval);  // New: Timer, Energy, Auto-save, Limits

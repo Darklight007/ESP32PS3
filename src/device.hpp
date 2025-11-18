@@ -92,6 +92,26 @@ struct SettingParameters
     bool buzzer = false;
     bool isPowerSupplyOn = true;
     StartupBehavior startupBehavior = StartupBehavior::LAST_STATUS;
+
+    // Timer Function (feature #4)
+    bool timerEnabled = false;
+    uint32_t timerDurationSeconds = 0;  // Timer duration in seconds
+
+    // Output Delay (feature #7)
+    uint16_t outputDelayMs = 0;  // Delay in milliseconds before output turns on
+
+    // Beeper Control (feature #11)
+    uint8_t beeperVolume = 100;  // 0-100%
+    bool beeperOnPowerChange = true;
+    bool beeperOnError = true;
+    bool beeperOnKeypress = false;
+
+    // Auto-save Interval (feature #13)
+    uint16_t autoSaveIntervalMinutes = 0;  // 0 = disabled
+
+    // Software Limits (OVP/OCP protection)
+    float voltageLimitMax = 32.0;  // Maximum voltage limit in volts
+    float currentLimitMax = 6.0;   // Maximum current limit in amps
 };
 
 class LVLabel_class; // Forward declaration
@@ -128,6 +148,11 @@ struct GUI
     lv_obj_t *textarea_set_value = nullptr;
 
     Calibration_gui calibration;
+
+    // Display labels for new features
+    lv_obj_t *label_power_on_time = nullptr;   // Power-On Duration display
+    lv_obj_t *label_energy_counter = nullptr;  // Energy Counter display
+    lv_obj_t *label_timer_remaining = nullptr; // Timer countdown display
 };
 
 struct Graph_
@@ -418,6 +443,13 @@ public:
 
     FunGen funGenMem;
     FunGen funGenArbitraryMem;
+
+    // Runtime tracking variables (features #5 and #6)
+    unsigned long powerOnStartTime = 0;      // millis() when output turned ON
+    double energyAccumulatedWh = 0.0;        // Total energy delivered in Wh
+    unsigned long lastEnergyUpdateTime = 0;  // For energy integration
+    unsigned long timerStartTime = 0;        // For timer function
+    unsigned long lastAutoSaveTime = 0;      // For auto-save feature
 
     /***************
      * @param pin MCU interrupt pin for ADC drdy

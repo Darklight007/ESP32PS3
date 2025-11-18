@@ -10,6 +10,7 @@
 #include "input_handler.h"
 #include "intervals.h"
 #include "memory.h"
+#include "power_management.h"
 #include <string>
 #include <math.h>
 
@@ -127,13 +128,25 @@ void btn_event_cb(lv_event_t *e)
     {
         if (lv_obj_get_state(btn) & LV_STATE_CHECKED)
         {
-            myTone(NOTE_A5, 200);
+            // Apply output delay if configured
+            if (PowerSupply.settingParameters.outputDelayMs > 0)
+            {
+                delay(PowerSupply.settingParameters.outputDelayMs);
+            }
+
+            if (PowerSupply.settingParameters.beeperOnPowerChange)
+                myTone(NOTE_A5, 200);
+
             PowerSupply.setStatus(DEVICE::ON);
+            initializePowerManagement();  // Start timer, energy tracking
         }
         else
         {
-            myTone(NOTE_A3, 200);
+            if (PowerSupply.settingParameters.beeperOnPowerChange)
+                myTone(NOTE_A3, 200);
+
             PowerSupply.setStatus(DEVICE::OFF);
+            resetPowerManagement();  // Reset timer, energy tracking
         }
     }
 }

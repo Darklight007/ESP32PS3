@@ -4,6 +4,7 @@
 #include "device.hpp"
 #include "globals.h"
 #include "FFTHandler.h"
+#include "power_management.h"
 
 // External references
 extern Device PowerSupply;
@@ -73,8 +74,7 @@ void EncoderRestartInterval(unsigned long interval)
 
                  temp = PowerSupply.Current.encoder.getCount();
                  PowerSupply.Current.encoder.clearCount();
-                 PowerSupply.Current.encoder.setCount(temp);
-             },
+                 PowerSupply.Current.encoder.setCount(temp); },
              interval, timer_);
 }
 
@@ -107,11 +107,12 @@ void LvglUpdatesInterval(unsigned long interval)
 {
     static unsigned long timer_ = {0};  // Interval in milliseconds
     static unsigned long timer_2 = {0}; // Interval in milliseconds
-    if (lvglChartIsBusy)
-    {
-        vTaskDelay(1);
-        // return;
-    }
+    static unsigned int lvglIsBlocked = {0};
+    // if (lvglChartIsBusy)
+    // {
+    //     vTaskDelay(1);
+    //     // return;
+    // }
     schedule([]
              {
                  if (!lvglChartIsBusy && !blockAll && adcDataReady) //&& adcDataReady
@@ -123,16 +124,25 @@ void LvglUpdatesInterval(unsigned long interval)
                      lv_timer_handler();
                      vTaskDelay(pdMS_TO_TICKS(1)); // ~5ms
                      lvglIsBusy = 0;
+                     lvglIsBlocked = 0;
                      //  PowerSupply.adc.ads1219->begin();
+                      return;
                  }
-                 //  else
-                 //  delay(10);
-             },
+                else
+                  {
+                    lvglIsBlocked++;
+                    return;
+                 } },
 
              interval, timer_);
 
-    schedule([]
-             { lv_obj_invalidate(lv_scr_act()); }, 60000, timer_2);
+    // schedule([]
+    //          { lv_obj_invalidate(lv_scr_act()); }, 60000, timer_2);
+    if (lvglIsBlocked > 0)
+    {
+        lvglIsBlocked = 0;
+        lv_obj_invalidate(lv_scr_act());
+    }
 }
 
 void FFTUpdateInterval(unsigned long interval)
@@ -152,4 +162,27 @@ void FFTUpdateInterval(unsigned long interval)
                  //   lv_label_set_text_fmt(label_statMenu_IFFT, "I-FFT_i:%5.1f Hz", I.peak);
              },
              interval, timer_);
+}
+
+// Power Management Interval (Timer, Energy, Duration, Limits, Auto-save)
+void PowerManagementInterval(unsigned long interval)
+{
+    static unsigned long timer_ = 0;
+    schedule(
+        []
+        {
+            // Update energy integration
+            integrateEnergy();
+
+            // Update displays
+            updateEnergyAndTimeDisplays();
+            updateTimerDisplay();
+
+            // Enforce software limits (OVP/OCP)
+            enforceSoftwareLimits();
+
+            // Auto-save check
+            autoSaveCheck();
+        },
+        interval, timer_);
 }

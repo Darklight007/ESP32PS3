@@ -302,6 +302,70 @@ namespace
         Serial.printf("\nStartup behavior set to: %d", selected);
     }
 
+    // Event callbacks for new sliders
+    static void slider_timer_duration_event_cb(lv_event_t *e)
+    {
+        auto *slider = lv_event_get_target(e);
+        int32_t v = lv_slider_get_value(slider);
+        char buf[8];
+        lv_snprintf(buf, sizeof(buf), "%d", v);
+        lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
+        PowerSupply.settingParameters.timerDurationSeconds = v * 60;  // Convert minutes to seconds
+    }
+
+    static void slider_voltage_limit_event_cb(lv_event_t *e)
+    {
+        auto *slider = lv_event_get_target(e);
+        int32_t v = lv_slider_get_value(slider);
+        char buf[8];
+        lv_snprintf(buf, sizeof(buf), "%dV", v);
+        lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
+        PowerSupply.settingParameters.voltageLimitMax = v;
+    }
+
+    static void slider_current_limit_event_cb(lv_event_t *e)
+    {
+        auto *slider = lv_event_get_target(e);
+        int32_t v = lv_slider_get_value(slider);
+        char buf[8];
+        lv_snprintf(buf, sizeof(buf), "%dA", v);
+        lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
+        PowerSupply.settingParameters.currentLimitMax = v;
+    }
+
+    static void slider_output_delay_event_cb(lv_event_t *e)
+    {
+        auto *slider = lv_event_get_target(e);
+        int32_t v = lv_slider_get_value(slider);
+        char buf[8];
+        lv_snprintf(buf, sizeof(buf), "%dms", v);
+        lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
+        PowerSupply.settingParameters.outputDelayMs = v;
+    }
+
+    static void slider_autosave_event_cb(lv_event_t *e)
+    {
+        auto *slider = lv_event_get_target(e);
+        int32_t v = lv_slider_get_value(slider);
+        char buf[12];
+        if (v == 0)
+            lv_snprintf(buf, sizeof(buf), "OFF");
+        else
+            lv_snprintf(buf, sizeof(buf), "%dmin", v);
+        lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
+        PowerSupply.settingParameters.autoSaveIntervalMinutes = v;
+    }
+
+    static void slider_beeper_volume_event_cb(lv_event_t *e)
+    {
+        auto *slider = lv_event_get_target(e);
+        int32_t v = lv_slider_get_value(slider);
+        char buf[8];
+        lv_snprintf(buf, sizeof(buf), "%d%%", v);
+        lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
+        PowerSupply.settingParameters.beeperVolume = v;
+    }
+
     static void save_cb(lv_event_t *)
     {
         PowerSupply.SaveCalibrationData();
@@ -400,18 +464,17 @@ namespace
                                      uint16_t selected, lv_event_cb_t event_cb)
     {
         lv_obj_t *obj = lv_menu_cont_create(parent);
-        lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(obj, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_all(obj, 3, LV_PART_MAIN);
 
         auto *label = lv_label_create(obj);
         lv_label_set_text(label, txt);
-        lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        lv_obj_set_flex_grow(label, 1);
+        lv_obj_set_width(label, LV_PCT(100));
 
         auto *dropdown = lv_dropdown_create(obj);
         lv_dropdown_set_options(dropdown, options);
         lv_dropdown_set_selected(dropdown, selected);
-        lv_obj_set_width(dropdown, 120);
+        lv_obj_set_width(dropdown, LV_PCT(100));
         if (event_cb)
             lv_obj_add_event_cb(dropdown, event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
         lv_obj_add_event_cb(dropdown, PRESSED_event_cb, LV_EVENT_PRESSED, nullptr);
@@ -492,14 +555,37 @@ void SettingMenu(lv_obj_t *parent)
     lv_obj_t *sub_save_load = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_save_load);
 
-    // Startup behavior dropdown
+    create_button_item(section, load_cb, "Load");
+    create_button_item(section, save_cb, "Save");
+
+    // Startup behavior dropdown (placed after Load/Save for better spacing)
     create_dropdown(section, "Power at Startup",
                    "Always Off\nAlways On\nLast Status",
                    static_cast<uint16_t>(PowerSupply.settingParameters.startupBehavior),
                    startup_behavior_event_cb);
 
-    create_button_item(section, load_cb, "Load");
-    create_button_item(section, save_cb, "Save");
+    // Timer Function (feature #4)
+    lv_obj_t *sub_timer = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
+    section = lv_menu_section_create(sub_timer);
+    create_switch_(section, nullptr, "Enable Timer", PowerSupply.settingParameters.timerEnabled, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
+    create_slider(section, nullptr, "Timer Duration (min)", 1, 480, PowerSupply.settingParameters.timerDurationSeconds / 60, slider_timer_duration_event_cb, LV_EVENT_VALUE_CHANGED);
+
+    // Power Management (features #5, #6, #7, #13 + voltage/current limits)
+    lv_obj_t *sub_power_mgmt = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
+    section = lv_menu_section_create(sub_power_mgmt);
+    create_slider(section, nullptr, "Voltage Limit Max (V)", 0, 32, (int32_t)PowerSupply.settingParameters.voltageLimitMax, slider_voltage_limit_event_cb, LV_EVENT_VALUE_CHANGED);
+    create_slider(section, nullptr, "Current Limit Max (A)", 0, 6, (int32_t)PowerSupply.settingParameters.currentLimitMax, slider_current_limit_event_cb, LV_EVENT_VALUE_CHANGED);
+    create_slider(section, nullptr, "Output Delay (ms)", 0, 5000, PowerSupply.settingParameters.outputDelayMs, slider_output_delay_event_cb, LV_EVENT_VALUE_CHANGED);
+    create_slider(section, nullptr, "Auto-save Interval (min)", 0, 60, PowerSupply.settingParameters.autoSaveIntervalMinutes, slider_autosave_event_cb, LV_EVENT_VALUE_CHANGED);
+    create_text(section, nullptr, "Energy Counter and Power-On\nDuration shown on main screen", 0, nullptr);
+
+    // Beeper Control (feature #11)
+    lv_obj_t *sub_beeper_detail = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
+    section = lv_menu_section_create(sub_beeper_detail);
+    create_slider(section, nullptr, "Volume (%)", 0, 100, PowerSupply.settingParameters.beeperVolume, slider_beeper_volume_event_cb, LV_EVENT_VALUE_CHANGED);
+    create_switch_(section, nullptr, "Beep on Power Change", PowerSupply.settingParameters.beeperOnPowerChange, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
+    create_switch_(section, nullptr, "Beep on Error", PowerSupply.settingParameters.beeperOnError, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
+    create_switch_(section, nullptr, "Beep on Keypress", PowerSupply.settingParameters.beeperOnKeypress, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
 
     // Version/About/Sidebar
     lv_obj_t *sub_software_info_page = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
@@ -525,11 +611,20 @@ void SettingMenu(lv_obj_t *parent)
     itm = create_text(section, nullptr, "Sound", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_sound);
 
+    itm = create_text(section, nullptr, "Beeper", 1, nullptr);
+    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_beeper_detail);
+
     itm = create_text(section, nullptr, "Measure", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_measure);
 
     itm = create_text(section, nullptr, "Calibration", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_cal);
+
+    itm = create_text(section, nullptr, "Timer", 1, nullptr);
+    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_timer);
+
+    itm = create_text(section, nullptr, "Power Management", 1, nullptr);
+    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_power_mgmt);
 
     itm = create_text(section, nullptr, "Save/Load", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_save_load);

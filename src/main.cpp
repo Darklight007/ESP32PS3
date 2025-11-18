@@ -106,6 +106,7 @@ void loop() {
 
   StatusBarUpdateInterval(443);
   LvglUpdatesInterval(0);
+  PowerManagementInterval(500);  // Timer, Energy, Auto-save, Limits
 
   // trackLoopExecution(__func__);
 
