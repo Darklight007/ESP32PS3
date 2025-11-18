@@ -277,7 +277,18 @@ void setupPowerSupply()
     // Load settings parameters for page 4
     PowerSupply.LoadSetting();
 
-    // Apply startup behavior setting
+    // Setup utility tab view on page 3
+    Utility_tabview(PowerSupply.page[3]);
+
+    // Setting menu on page 4
+    SettingMenu(PowerSupply.page[4]);
+
+    // myTone(NOTE_A4, 100);
+
+    PowerSupply.Voltage.SetUpdate(PowerSupply.Voltage.adjValue);
+    PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue);
+
+    // Apply startup behavior setting AFTER all UI is initialized
     bool powerOnAtStartup = false;
     switch (PowerSupply.settingParameters.startupBehavior)
     {
@@ -306,17 +317,6 @@ void setupPowerSupply()
         lv_obj_clear_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
         PowerSupply.turn(SWITCH::OFF);
     }
-
-    // Setup utility tab view on page 3
-    Utility_tabview(PowerSupply.page[3]);
-
-    // Setting menu on page 4
-    SettingMenu(PowerSupply.page[4]);
-
-    // myTone(NOTE_A4, 100);
-
-    PowerSupply.Voltage.SetUpdate(PowerSupply.Voltage.adjValue);
-    PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue);
 
     // MemArray mem;
     // for (int i = 0; i < 20; ++i)
