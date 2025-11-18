@@ -415,10 +415,15 @@ void Utility_tabview(lv_obj_t *parent)
 
     PowerSupply.funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
 
-    set_spinbox_data_by_id(tab2, 0, PowerSupply.funGenMem.amplitude * 1000);
-    set_spinbox_data_by_id(tab2, 1, PowerSupply.funGenMem.frequency * 1000);
-    set_spinbox_data_by_id(tab2, 2, PowerSupply.funGenMem.offset * 1000);
-    set_spinbox_data_by_id(tab2, 3, PowerSupply.funGenMem.dutyCycle * 10000);
+    Serial.printf("\nLoaded FunGen: Amp=%f, Freq=%f, Offset=%f, Duty=%f",
+                  PowerSupply.funGenMem.amplitude, PowerSupply.funGenMem.frequency,
+                  PowerSupply.funGenMem.offset, PowerSupply.funGenMem.dutyCycle);
+
+    // Set spinbox values directly using the object references (not by ID)
+    lv_spinbox_set_value(Utility_objs.fun.Amplitude, PowerSupply.funGenMem.amplitude * 1000);
+    lv_spinbox_set_value(Utility_objs.fun.Frequency, PowerSupply.funGenMem.frequency * 1000);
+    lv_spinbox_set_value(Utility_objs.fun.Offset, PowerSupply.funGenMem.offset * 1000);
+    lv_spinbox_set_value(Utility_objs.fun.Duty, PowerSupply.funGenMem.dutyCycle * 10000);
 
     btn_function_gen = lv_btn_create(tab2);
 
