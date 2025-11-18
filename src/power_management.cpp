@@ -203,6 +203,10 @@ void initializePowerManagement()
         PowerSupply.timerStartTime = millis();
         Serial.printf("Timer started: %lu seconds\n", PowerSupply.settingParameters.timerDurationSeconds);
     }
+    else
+    {
+        PowerSupply.timerStartTime = 0;
+    }
 }
 
 // Reset power management when output turns OFF

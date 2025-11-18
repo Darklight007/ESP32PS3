@@ -302,7 +302,15 @@ namespace
         Serial.printf("\nStartup behavior set to: %d", selected);
     }
 
-    // Event callbacks for new sliders
+    // Event callbacks for new sliders and switches
+    static void switch_timer_enable_event_cb(lv_event_t *e)
+    {
+        auto *sw = lv_event_get_target(e);
+        bool enabled = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        PowerSupply.settingParameters.timerEnabled = enabled;
+        Serial.printf("\nTimer enabled: %d", enabled);
+    }
+
     static void slider_timer_duration_event_cb(lv_event_t *e)
     {
         auto *slider = lv_event_get_target(e);
@@ -311,6 +319,7 @@ namespace
         lv_snprintf(buf, sizeof(buf), "%d", v);
         lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
         PowerSupply.settingParameters.timerDurationSeconds = v * 60;  // Convert minutes to seconds
+        Serial.printf("\nTimer duration set to: %d seconds", PowerSupply.settingParameters.timerDurationSeconds);
     }
 
     static void slider_voltage_limit_event_cb(lv_event_t *e)
@@ -567,7 +576,7 @@ void SettingMenu(lv_obj_t *parent)
     // Timer Function (feature #4)
     lv_obj_t *sub_timer = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_timer);
-    create_switch_(section, nullptr, "Enable Timer", PowerSupply.settingParameters.timerEnabled, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
+    create_switch_(section, nullptr, "Enable Timer", PowerSupply.settingParameters.timerEnabled, switch_timer_enable_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
     create_slider(section, nullptr, "Timer Duration (min)", 1, 480, PowerSupply.settingParameters.timerDurationSeconds / 60, slider_timer_duration_event_cb, LV_EVENT_VALUE_CHANGED);
 
     // Power Management (features #5, #6, #7, #13 + voltage/current limits)
