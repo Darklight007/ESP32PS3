@@ -187,6 +187,13 @@ void Device::LoadSetting(void)
         dac_data.max_current = 65535;
 
         SaveDACdata("dac_data_", dac_data);
+
+        // Initialize default function generator parameters
+        funGenMem.amplitude = 5.0;
+        funGenMem.frequency = 1.0;
+        funGenMem.offset = 0.0;
+        funGenMem.dutyCycle = 0.5;
+        SaveMemoryFgen("FunGen", funGenMem);
     }
     memory.end();
 
@@ -296,8 +303,20 @@ FunGen Device::LoadMemoryFgen(const String &key)
 {
     FunGen data;
     StoreMem.begin("my-app", false);
-    StoreMem.getBytes(key.c_str(), &data, sizeof(FunGen));
+    size_t bytesRead = StoreMem.getBytes(key.c_str(), &data, sizeof(FunGen));
     StoreMem.end();
+
+    // Validate loaded data - if invalid, return defaults
+    if (bytesRead == 0 || !std::isfinite(data.amplitude) || !std::isfinite(data.frequency) ||
+        !std::isfinite(data.offset) || !std::isfinite(data.dutyCycle))
+    {
+        Serial.printf("\nFunction generator data invalid or not found, using defaults");
+        data.amplitude = 5.0;
+        data.frequency = 1.0;
+        data.offset = 0.0;
+        data.dutyCycle = 0.5;
+    }
+
     return data;
 }
 
