@@ -425,6 +425,10 @@ void Utility_tabview(lv_obj_t *parent)
     lv_spinbox_set_value(Utility_objs.fun.Offset, PowerSupply.funGenMem.offset * 1000);
     lv_spinbox_set_value(Utility_objs.fun.Duty, PowerSupply.funGenMem.dutyCycle * 10000);
 
+    // Set initial waveform selection to Sine (row 0) and update duty spinbox state
+    table_set_selected_row(Utility_objs.table_fun_gen_list, 0);
+    updateDutySpinboxState();
+
     btn_function_gen = lv_btn_create(tab2);
 
     lv_obj_align(btn_function_gen, LV_ALIGN_DEFAULT, 10, 140);

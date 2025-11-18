@@ -9,11 +9,14 @@
 #include "functions.h"
 #include <algorithm>
 #include "globalFunctions.h"
+#include "waveform_generator.h"
 
 // External references
 extern TFT_eSPI tft;
 extern Device PowerSupply;
 extern lv_obj_t *slider_x;
+extern Waveform waveforms[];
+extern int numWaveforms;
 
 // Touch attribute structure
 struct TouchAttr_
@@ -26,6 +29,31 @@ struct TouchAttr_
         return (t.getTouch(&x, &y));
     }
 } TouchAttr;
+
+// Helper function to enable/disable Duty spinbox based on selected waveform
+void updateDutySpinboxState()
+{
+    if (!Utility_objs.table_fun_gen_list || !Utility_objs.fun.Duty)
+        return;
+
+    // Get the selected row from the waveform table
+    uint16_t selected_row = (uint16_t)(uintptr_t)lv_obj_get_user_data(Utility_objs.table_fun_gen_list);
+
+    // Check if the selected waveform is PWM (index 4 in waveforms array)
+    // Waveform list: 0=Sine, 1=Sawtooth, 2=Square, 3=Triangular, 4=PWM, ...
+    bool isPWM = (selected_row == 4);
+
+    if (isPWM)
+    {
+        // Enable the Duty spinbox for PWM waveform
+        lv_obj_clear_state(Utility_objs.fun.Duty, LV_STATE_DISABLED);
+    }
+    else
+    {
+        // Disable the Duty spinbox for non-PWM waveforms
+        lv_obj_add_state(Utility_objs.fun.Duty, LV_STATE_DISABLED);
+    }
+}
 
 void touch_calibrate()
 {
@@ -515,14 +543,20 @@ void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
         if (encoder2_last_value < encoder2_value)
         {
             if (lv_tabview_get_tab_act(lv_obj_get_child(PowerSupply.page[3], 0)) == 1)
+            {
                 select_previous_row(Utility_objs.table_fun_gen_list, 25);
+                updateDutySpinboxState(); // Update duty state when selection changes
+            }
             else
                 select_previous_row(Utility_objs.table_point_list, 2 * 7 + 2 * 5);
         }
         else if (encoder2_last_value > encoder2_value)
         {
             if (lv_tabview_get_tab_act(lv_obj_get_child(PowerSupply.page[3], 0)) == 1)
+            {
                 select_next_row(Utility_objs.table_fun_gen_list, 25);
+                updateDutySpinboxState(); // Update duty state when selection changes
+            }
             else
                 select_next_row(Utility_objs.table_point_list, 2 * 7 + 2 * 5);
         }
@@ -714,6 +748,7 @@ void keyCheckLoop()
                  hide(PowerSupply.gui.calibration.win_int_current_calibration);
                  hide(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration);
                  hide(PowerSupply.gui.calibration.win_DAC_calibration);
+                 lv_obj_invalidate(lv_scr_act());
              });
 
     keyMenus('H', " HOLD.", [] // Home button

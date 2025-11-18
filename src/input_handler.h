@@ -24,3 +24,6 @@ void managePageEncoderInteraction();
 
 // Keyboard input handler
 void keyCheckLoop();
+
+// Waveform selection helper
+void updateDutySpinboxState();

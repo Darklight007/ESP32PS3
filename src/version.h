@@ -1,6 +1,6 @@
 #ifndef VERSION_H
 #define VERSION_H
 
-#define SOFTWARE_VERSION "v0.0.2-93-fungen-fix"
+#define SOFTWARE_VERSION "v0.0.2-94-duty-pwm-only"
 
 #endif // VERSION_H
