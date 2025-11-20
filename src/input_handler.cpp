@@ -183,18 +183,23 @@ static void handle_menu_mode()
     if (!list)
         return;
 
-    // Handle encoder2 (current encoder) for sidebar scrolling
+    // Handle encoder2 (current encoder) for sidebar navigation with auto-scroll
     if (encoder2_value != g_last_enc2_menu)
     {
-        // Get the sidebar page to scroll it
-        lv_obj_t *sidebar_page = lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu);
-        if (sidebar_page)
-        {
-            const int dir = (encoder2_value > g_last_enc2_menu) ? -1 : +1;  // Inverted for natural scroll
-            lv_coord_t scroll_amount = dir * 30;  // Scroll 30 pixels per encoder step
+        // Map wheel direction to list movement
+        const int dir = (encoder2_value > g_last_enc2_menu) ? +1 : -1;
+        const int count = lv_obj_get_child_cnt(list);
+        g_menu_index = std::clamp(g_menu_index + dir, 0, std::max(0, count - 1));
 
-            // Scroll the sidebar page vertically with smooth animation (matches hand scrolling)
-            lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_ON);
+        // "Activate" the target row (this selects the menu item)
+        lv_obj_t *selected_item = lv_obj_get_child(list, g_menu_index);
+        lv_event_send(selected_item, LV_EVENT_CLICKED, nullptr);
+
+        // Auto-scroll if the selected item is outside the visible area
+        lv_obj_t *sidebar_page = lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu);
+        if (sidebar_page && selected_item)
+        {
+            lv_obj_scroll_to_view(selected_item, LV_ANIM_ON);
         }
 
         g_last_enc2_menu = encoder2_value;
