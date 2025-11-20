@@ -262,24 +262,25 @@ void setupPowerSupply()
     lv_obj_align(PowerSupply.Power.label_measureValue, LV_ALIGN_DEFAULT, -10, 161);
     lv_obj_align(PowerSupply.Power.label_unit, LV_ALIGN_DEFAULT, 130, 159);
 
-    // Create display labels for Energy Counter and Power-On Duration (features #5 and #6)
-    // Position: bottom-left of ON/OFF button, moved up by height of both labels (24px total)
+    // Create display labels for Timer, Energy Counter and Power-On Duration
+    // Position: bottom-left of ON/OFF button
     // Button is at x=240, y=160, size=54x30
+    // Timer at top (y=171), then Energy (y=183), then Time (y=195)
+    PowerSupply.gui.label_timer_remaining = lv_label_create(PowerSupply.page[2]);
+    lv_label_set_text(PowerSupply.gui.label_timer_remaining, "");
+    lv_obj_align(PowerSupply.gui.label_timer_remaining, LV_ALIGN_DEFAULT, 165, 171);
+    lv_obj_set_style_text_font(PowerSupply.gui.label_timer_remaining, &lv_font_montserrat_10, 0);
+    lv_obj_add_flag(PowerSupply.gui.label_timer_remaining, LV_OBJ_FLAG_HIDDEN);  // Hidden by default
+
     PowerSupply.gui.label_energy_counter = lv_label_create(PowerSupply.page[2]);
     lv_label_set_text(PowerSupply.gui.label_energy_counter, "0.000Wh");
-    lv_obj_align(PowerSupply.gui.label_energy_counter, LV_ALIGN_DEFAULT, 165, 171);  // 195-24
+    lv_obj_align(PowerSupply.gui.label_energy_counter, LV_ALIGN_DEFAULT, 165, 183);
     lv_obj_set_style_text_font(PowerSupply.gui.label_energy_counter, &lv_font_montserrat_10, 0);
 
     PowerSupply.gui.label_power_on_time = lv_label_create(PowerSupply.page[2]);
     lv_label_set_text(PowerSupply.gui.label_power_on_time, "00:00:00");
-    lv_obj_align(PowerSupply.gui.label_power_on_time, LV_ALIGN_DEFAULT, 165, 183);  // 207-24
+    lv_obj_align(PowerSupply.gui.label_power_on_time, LV_ALIGN_DEFAULT, 165, 195);
     lv_obj_set_style_text_font(PowerSupply.gui.label_power_on_time, &lv_font_montserrat_10, 0);
-
-    PowerSupply.gui.label_timer_remaining = lv_label_create(PowerSupply.page[2]);
-    lv_label_set_text(PowerSupply.gui.label_timer_remaining, "");
-    lv_obj_align(PowerSupply.gui.label_timer_remaining, LV_ALIGN_DEFAULT, 165, 195);  // 219-24
-    lv_obj_set_style_text_font(PowerSupply.gui.label_timer_remaining, &lv_font_montserrat_10, 0);
-    lv_obj_add_flag(PowerSupply.gui.label_timer_remaining, LV_OBJ_FLAG_HIDDEN);  // Hidden by default
 
     // Create charts on pages
     GraphChart(PowerSupply.page[1], 22, -6); // Page 2: Graph chart

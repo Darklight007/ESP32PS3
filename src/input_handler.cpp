@@ -183,16 +183,19 @@ static void handle_menu_mode()
     if (!list)
         return;
 
-    // Handle encoder2 (current encoder) for sidebar menu navigation
+    // Handle encoder2 (current encoder) for sidebar scrolling
     if (encoder2_value != g_last_enc2_menu)
     {
-        // Map wheel direction to list movement (flip if your hardware feels backwards)
-        const int dir = (encoder2_value > g_last_enc2_menu) ? +1 : -1;
-        const int count = lv_obj_get_child_cnt(list);
-        g_menu_index = std::clamp(g_menu_index + dir, 0, std::max(0, count - 1));
+        // Get the sidebar page to scroll it
+        lv_obj_t *sidebar_page = lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu);
+        if (sidebar_page)
+        {
+            const int dir = (encoder2_value > g_last_enc2_menu) ? -1 : +1;  // Inverted for natural scroll
+            lv_coord_t scroll_amount = dir * 30;  // Scroll 30 pixels per encoder step
 
-        // "Activate" the target row
-        lv_event_send(lv_obj_get_child(list, g_menu_index), LV_EVENT_CLICKED, nullptr);
+            // Scroll the sidebar page vertically
+            lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_OFF);
+        }
 
         g_last_enc2_menu = encoder2_value;
     }
