@@ -193,8 +193,8 @@ static void handle_menu_mode()
             const int dir = (encoder2_value > g_last_enc2_menu) ? -1 : +1;  // Inverted for natural scroll
             lv_coord_t scroll_amount = dir * 30;  // Scroll 30 pixels per encoder step
 
-            // Scroll the sidebar page vertically
-            lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_OFF);
+            // Scroll the sidebar page vertically with smooth animation (matches hand scrolling)
+            lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_ON);
         }
 
         g_last_enc2_menu = encoder2_value;
@@ -209,8 +209,8 @@ static void handle_menu_mode()
             const int dir = (encoder1_value > g_last_enc1_menu) ? -1 : +1;  // Inverted for natural scroll direction
             lv_coord_t scroll_amount = dir * 30;  // Scroll 30 pixels per encoder step
 
-            // Scroll the content page vertically
-            lv_obj_scroll_by(main_page, 0, scroll_amount, LV_ANIM_OFF);
+            // Scroll the content page vertically with smooth animation (matches hand scrolling)
+            lv_obj_scroll_by(main_page, 0, scroll_amount, LV_ANIM_ON);
         }
 
         g_last_enc1_menu = encoder1_value;
