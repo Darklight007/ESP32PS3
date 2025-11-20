@@ -128,8 +128,9 @@ void integrateEnergy()
 // Check and enforce voltage/current software limits
 void enforceSoftwareLimits()
 {
-    // Check voltage limit
-    if (PowerSupply.Voltage.measured.value > PowerSupply.settingParameters.voltageLimitMax)
+    // Check voltage limit (OVP)
+    if (PowerSupply.settingParameters.ovpEnabled &&
+        PowerSupply.Voltage.measured.value > PowerSupply.settingParameters.voltageLimitMax)
     {
         if (PowerSupply.getStatus() == DEVICE::ON)
         {
@@ -147,8 +148,9 @@ void enforceSoftwareLimits()
         }
     }
 
-    // Check current limit
-    if (PowerSupply.Current.measured.value > PowerSupply.settingParameters.currentLimitMax)
+    // Check current limit (OCP)
+    if (PowerSupply.settingParameters.ocpEnabled &&
+        PowerSupply.Current.measured.value > PowerSupply.settingParameters.currentLimitMax)
     {
         if (PowerSupply.getStatus() == DEVICE::ON)
         {

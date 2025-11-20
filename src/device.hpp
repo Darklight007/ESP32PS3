@@ -110,7 +110,9 @@ struct SettingParameters
     uint16_t autoSaveIntervalMinutes = 0;  // 0 = disabled
 
     // Software Limits (OVP/OCP protection)
+    bool ovpEnabled = false;  // Over-voltage protection enable
     float voltageLimitMax = 32.0;  // Maximum voltage limit in volts
+    bool ocpEnabled = false;  // Over-current protection enable
     float currentLimitMax = 6.0;   // Maximum current limit in amps
 
     // Graph X-axis Display Mode

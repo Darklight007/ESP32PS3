@@ -531,6 +531,11 @@ namespace
 
         auto *btn = lv_btn_create(obj);
         lv_obj_set_size(btn, 120, 30);
+
+        // Add blue background for focused/pressed state
+        lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_BLUE), LV_STATE_FOCUSED);
+        lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_BLUE), LV_STATE_PRESSED);
+
         auto *label = lv_label_create(btn);
         lv_label_set_text(label, buttonTxt);
         lv_obj_center(label);
@@ -565,10 +570,6 @@ void SettingMenu(lv_obj_t *parent)
     auto *section = lv_menu_section_create(sub_display);
     create_slider(section, nullptr, "Backlight", 0, 255, 255, slider_backlight_event_cb, LV_EVENT_VALUE_CHANGED);
 
-    // Sound (empty now - buzzer moved to Beeper menu, can be used for other audio settings later)
-    lv_obj_t *sub_sound = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
-    section = lv_menu_section_create(sub_sound);
-    create_text(section, nullptr, "Audio settings\n(Reserved for future use)", 0, nullptr);
 
     // Measure
     lv_obj_t *sub_measure = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
@@ -612,7 +613,9 @@ void SettingMenu(lv_obj_t *parent)
     // Power Management (features #5, #6, #7, #13 + voltage/current limits)
     lv_obj_t *sub_power_mgmt = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_power_mgmt);
+    create_switch_(section, nullptr, "OVP Enable", PowerSupply.settingParameters.ovpEnabled, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
     create_slider(section, nullptr, "Voltage Limit Max (V)", 0, 32, (int32_t)PowerSupply.settingParameters.voltageLimitMax, slider_voltage_limit_event_cb, LV_EVENT_VALUE_CHANGED);
+    create_switch_(section, nullptr, "OCP Enable", PowerSupply.settingParameters.ocpEnabled, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
     create_slider(section, nullptr, "Current Limit Max (A)", 0, 6, (int32_t)PowerSupply.settingParameters.currentLimitMax, slider_current_limit_event_cb, LV_EVENT_VALUE_CHANGED);
     create_slider(section, nullptr, "Output Delay (ms)", 0, 5000, PowerSupply.settingParameters.outputDelayMs, slider_output_delay_event_cb, LV_EVENT_VALUE_CHANGED);
     create_slider(section, nullptr, "Auto-save Interval (min)", 0, 60, PowerSupply.settingParameters.autoSaveIntervalMinutes, slider_autosave_event_cb, LV_EVENT_VALUE_CHANGED);
@@ -637,11 +640,10 @@ void SettingMenu(lv_obj_t *parent)
     create_slider(section, nullptr, "Time Span", 0, 11, initialSliderPos, slider_graph_timespan_event_cb, LV_EVENT_VALUE_CHANGED);
     create_text(section, nullptr, "Time span: 5s to 12h\nOnly used when Time Mode enabled", 0, nullptr);
 
-    // Beeper Control (feature #11) - Moved buzzer enable/disable to top
+    // Beeper Control (feature #11) - Buzzer enable at top, volume removed
     lv_obj_t *sub_beeper_detail = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_beeper_detail);
     create_switch_(section, nullptr, "Buzzer Enable", buzzerSound, switch_buzzer_event_cb, LV_EVENT_SHORT_CLICKED, nullptr);
-    create_slider(section, nullptr, "Volume (%)", 0, 100, PowerSupply.settingParameters.beeperVolume, slider_beeper_volume_event_cb, LV_EVENT_VALUE_CHANGED);
     create_switch_(section, nullptr, "Beep on Power Change", PowerSupply.settingParameters.beeperOnPowerChange, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
     create_switch_(section, nullptr, "Beep on Error", PowerSupply.settingParameters.beeperOnError, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
     create_switch_(section, nullptr, "Beep on Keypress", PowerSupply.settingParameters.beeperOnKeypress, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
@@ -670,9 +672,6 @@ void SettingMenu(lv_obj_t *parent)
     itm = create_text(section, nullptr, "Graph", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_graph);
 
-    itm = create_text(section, nullptr, "Sound", 1, nullptr);
-    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_sound);
-
     itm = create_text(section, nullptr, "Beeper", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_beeper_detail);
 
@@ -685,10 +684,10 @@ void SettingMenu(lv_obj_t *parent)
     itm = create_text(section, nullptr, "Timer", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_timer);
 
-    itm = create_text(section, nullptr, "Power Management", 1, nullptr);
+    itm = create_text(section, nullptr, "Power M.", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_power_mgmt);
 
-    itm = create_text(section, nullptr, "Save/Load", 1, nullptr);
+    itm = create_text(section, nullptr, "Load/Save", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_save_load);
 
     itm = create_text(section, nullptr, "About", 1, nullptr);

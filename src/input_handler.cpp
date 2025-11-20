@@ -143,7 +143,7 @@ void init_touch()
 // Encoder baselines and private menu index
 static int32_t g_last_enc1_dac = 0, g_last_enc2_dac = 0;
 static int32_t g_last_enc1_adc = 0, g_last_enc2_adc = 0;
-static int32_t g_last_enc2_menu = 0;
+static int32_t g_last_enc1_menu = 0, g_last_enc2_menu = 0;
 static int g_menu_index = 0;             // replaces old global lastButton
 static lv_obj_t *g_last_focus = nullptr; // to avoid "jump back" when focus changes
 
@@ -183,6 +183,7 @@ static void handle_menu_mode()
     if (!list)
         return;
 
+    // Handle encoder2 (current encoder) for menu scrolling
     if (encoder2_value != g_last_enc2_menu)
     {
         // Map wheel direction to list movement (flip if your hardware feels backwards)
@@ -194,6 +195,19 @@ static void handle_menu_mode()
         lv_event_send(lv_obj_get_child(list, g_menu_index), LV_EVENT_CLICKED, nullptr);
 
         g_last_enc2_menu = encoder2_value;
+    }
+
+    // Also handle encoder1 (voltage encoder) for menu scrolling
+    if (encoder1_value != g_last_enc1_menu)
+    {
+        const int dir = (encoder1_value > g_last_enc1_menu) ? +1 : -1;
+        const int count = lv_obj_get_child_cnt(list);
+        g_menu_index = std::clamp(g_menu_index + dir, 0, std::max(0, count - 1));
+
+        // "Activate" the target row
+        lv_event_send(lv_obj_get_child(list, g_menu_index), LV_EVENT_CLICKED, nullptr);
+
+        g_last_enc1_menu = encoder1_value;
     }
 }
 
