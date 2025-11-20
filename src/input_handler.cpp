@@ -183,7 +183,7 @@ static void handle_menu_mode()
     if (!list)
         return;
 
-    // Handle encoder2 (current encoder) for menu scrolling
+    // Handle encoder2 (current encoder) for sidebar menu navigation
     if (encoder2_value != g_last_enc2_menu)
     {
         // Map wheel direction to list movement (flip if your hardware feels backwards)
@@ -197,15 +197,18 @@ static void handle_menu_mode()
         g_last_enc2_menu = encoder2_value;
     }
 
-    // Also handle encoder1 (voltage encoder) for menu scrolling
+    // Handle encoder1 (voltage encoder) for content page scrolling
     if (encoder1_value != g_last_enc1_menu)
     {
-        const int dir = (encoder1_value > g_last_enc1_menu) ? +1 : -1;
-        const int count = lv_obj_get_child_cnt(list);
-        g_menu_index = std::clamp(g_menu_index + dir, 0, std::max(0, count - 1));
+        lv_obj_t *main_page = lv_menu_get_cur_main_page(PowerSupply.gui.setting_menu);
+        if (main_page)
+        {
+            const int dir = (encoder1_value > g_last_enc1_menu) ? -1 : +1;  // Inverted for natural scroll direction
+            lv_coord_t scroll_amount = dir * 30;  // Scroll 30 pixels per encoder step
 
-        // "Activate" the target row
-        lv_event_send(lv_obj_get_child(list, g_menu_index), LV_EVENT_CLICKED, nullptr);
+            // Scroll the content page vertically
+            lv_obj_scroll_by(main_page, 0, scroll_amount, LV_ANIM_OFF);
+        }
 
         g_last_enc1_menu = encoder1_value;
     }

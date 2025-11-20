@@ -224,6 +224,26 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 
 void GraphPush()
 {
+    static unsigned long lastPushTime = 0;
+
+    // In time mode, only push data when enough time has elapsed
+    if (PowerSupply.settingParameters.graphXaxisTimeMode)
+    {
+        unsigned long currentTime = millis();
+
+        // Calculate milliseconds per point based on selected time span
+        // timeSpan is in seconds, CHART_SIZE is number of points
+        unsigned long msPerPoint = (PowerSupply.settingParameters.graphTimeSpanSeconds * 1000UL) / CHART_SIZE;
+
+        // Only push if enough time has elapsed
+        if (lastPushTime > 0 && (currentTime - lastPushTime) < msPerPoint)
+        {
+            return;  // Not enough time elapsed, skip this push
+        }
+
+        lastPushTime = currentTime;
+    }
+
     // First shift everything left by one position
     memcpy(&graph_data_V[0], &graph_data_V[1], (CHART_SIZE - 1) * sizeof(graph_data_V[0]));
     memcpy(&graph_data_I[0], &graph_data_I[1], (CHART_SIZE - 1) * sizeof(graph_data_I[0]));
