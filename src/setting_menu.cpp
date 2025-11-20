@@ -375,6 +375,36 @@ namespace
         PowerSupply.settingParameters.beeperVolume = v;
     }
 
+    // Graph X-axis mode toggle callback
+    static void switch_graph_xaxis_mode_event_cb(lv_event_t *e)
+    {
+        auto *sw = lv_event_get_target(e);
+        bool timeMode = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        PowerSupply.settingParameters.graphXaxisTimeMode = timeMode;
+        Serial.printf("\nGraph X-axis mode: %s", timeMode ? "Time" : "Points");
+    }
+
+    // Graph time span slider callback
+    static void slider_graph_timespan_event_cb(lv_event_t *e)
+    {
+        auto *slider = lv_event_get_target(e);
+        int32_t v = lv_slider_get_value(slider);
+        char buf[16];
+
+        // Convert slider value (0-11) to time spans
+        // 0=5s, 1=10s, 2=30s, 3=60s(1m), 4=5m, 5=10m, 6=30m, 7=1h, 8=2h, 9=4h, 10=8h, 11=12h
+        const uint16_t timeSpans[] = {5, 10, 30, 60, 300, 600, 1800, 3600, 7200, 14400, 28800, 43200};
+        const char* labels[] = {"5s", "10s", "30s", "1m", "5m", "10m", "30m", "1h", "2h", "4h", "8h", "12h"};
+
+        if (v >= 0 && v < 12)
+        {
+            PowerSupply.settingParameters.graphTimeSpanSeconds = timeSpans[v];
+            lv_snprintf(buf, sizeof(buf), "%s", labels[v]);
+            lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
+            Serial.printf("\nGraph time span set to: %s (%d seconds)", labels[v], timeSpans[v]);
+        }
+    }
+
     static void save_cb(lv_event_t *)
     {
         PowerSupply.SaveCalibrationData();
@@ -535,10 +565,10 @@ void SettingMenu(lv_obj_t *parent)
     auto *section = lv_menu_section_create(sub_display);
     create_slider(section, nullptr, "Backlight", 0, 255, 255, slider_backlight_event_cb, LV_EVENT_VALUE_CHANGED);
 
-    // Sound
+    // Sound (empty now - buzzer moved to Beeper menu, can be used for other audio settings later)
     lv_obj_t *sub_sound = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_sound);
-    create_switch_(section, nullptr, "Buzzer", buzzerSound, switch_buzzer_event_cb, LV_EVENT_SHORT_CLICKED, nullptr);
+    create_text(section, nullptr, "Audio settings\n(Reserved for future use)", 0, nullptr);
 
     // Measure
     lv_obj_t *sub_measure = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
@@ -588,9 +618,29 @@ void SettingMenu(lv_obj_t *parent)
     create_slider(section, nullptr, "Auto-save Interval (min)", 0, 60, PowerSupply.settingParameters.autoSaveIntervalMinutes, slider_autosave_event_cb, LV_EVENT_VALUE_CHANGED);
     create_text(section, nullptr, "Energy Counter and Power-On\nDuration shown on main screen", 0, nullptr);
 
-    // Beeper Control (feature #11)
+    // Graph Settings
+    lv_obj_t *sub_graph = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
+    section = lv_menu_section_create(sub_graph);
+    create_switch_(section, nullptr, "X-axis Time Mode", PowerSupply.settingParameters.graphXaxisTimeMode, switch_graph_xaxis_mode_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    // Find initial slider position from graphTimeSpanSeconds
+    int initialSliderPos = 3;  // Default to 60s (1m)
+    const uint16_t timeSpans[] = {5, 10, 30, 60, 300, 600, 1800, 3600, 7200, 14400, 28800, 43200};
+    for (int i = 0; i < 12; i++)
+    {
+        if (PowerSupply.settingParameters.graphTimeSpanSeconds == timeSpans[i])
+        {
+            initialSliderPos = i;
+            break;
+        }
+    }
+    create_slider(section, nullptr, "Time Span", 0, 11, initialSliderPos, slider_graph_timespan_event_cb, LV_EVENT_VALUE_CHANGED);
+    create_text(section, nullptr, "Time span: 5s to 12h\nOnly used when Time Mode enabled", 0, nullptr);
+
+    // Beeper Control (feature #11) - Moved buzzer enable/disable to top
     lv_obj_t *sub_beeper_detail = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_beeper_detail);
+    create_switch_(section, nullptr, "Buzzer Enable", buzzerSound, switch_buzzer_event_cb, LV_EVENT_SHORT_CLICKED, nullptr);
     create_slider(section, nullptr, "Volume (%)", 0, 100, PowerSupply.settingParameters.beeperVolume, slider_beeper_volume_event_cb, LV_EVENT_VALUE_CHANGED);
     create_switch_(section, nullptr, "Beep on Power Change", PowerSupply.settingParameters.beeperOnPowerChange, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
     create_switch_(section, nullptr, "Beep on Error", PowerSupply.settingParameters.beeperOnError, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
@@ -616,6 +666,9 @@ void SettingMenu(lv_obj_t *parent)
 
     itm = create_text(section, nullptr, "Display", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_display);
+
+    itm = create_text(section, nullptr, "Graph", 1, nullptr);
+    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_graph);
 
     itm = create_text(section, nullptr, "Sound", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_sound);

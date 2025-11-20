@@ -112,6 +112,10 @@ struct SettingParameters
     // Software Limits (OVP/OCP protection)
     float voltageLimitMax = 32.0;  // Maximum voltage limit in volts
     float currentLimitMax = 6.0;   // Maximum current limit in amps
+
+    // Graph X-axis Display Mode
+    bool graphXaxisTimeMode = false;  // false = points mode, true = time mode
+    uint16_t graphTimeSpanSeconds = 60;  // Time span for X-axis in seconds (1 min to several hours)
 };
 
 class LVLabel_class; // Forward declaration

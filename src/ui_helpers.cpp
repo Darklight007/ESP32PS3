@@ -499,22 +499,59 @@ void draw_event_cb2(lv_event_t *e)
         /* Handle LV_CHART_AXIS_PRIMARY_X */
         if (dsc->id == LV_CHART_AXIS_PRIMARY_X)
         {
-            for (int i = 0; i < NUM_LABELS; i++)
+            if (PowerSupply.settingParameters.graphXaxisTimeMode)
             {
-                if (i == NUM_LABELS - 1)
+                // Time mode: Show time in seconds, minutes, or hours
+                uint16_t timeSpan = PowerSupply.settingParameters.graphTimeSpanSeconds;
+
+                for (int i = 0; i < NUM_LABELS; i++)
                 {
-                    strcpy(tickLabels_x[i], "0 pts");
+                    if (i == NUM_LABELS - 1)
+                    {
+                        strcpy(tickLabels_x[i], "0");
+                    }
+                    else
+                    {
+                        int timeValue = timeSpan * (NUM_LABELS - 1 - i) / (NUM_LABELS - 1);
+
+                        if (timeSpan < 120)  // Less than 2 minutes, show in seconds
+                        {
+                            sprintf(tickLabels_x[i], "%ds", timeValue);
+                        }
+                        else if (timeSpan < 3600)  // Less than 1 hour, show in minutes
+                        {
+                            sprintf(tickLabels_x[i], "%dm", timeValue / 60);
+                        }
+                        else  // 1 hour or more, show in hours:minutes
+                        {
+                            int hours = timeValue / 3600;
+                            int mins = (timeValue % 3600) / 60;
+                            if (mins == 0)
+                                sprintf(tickLabels_x[i], "%dh", hours);
+                            else
+                                sprintf(tickLabels_x[i], "%d:%02d", hours, mins);
+                        }
+                    }
                 }
-                else
+            }
+            else
+            {
+                // Points mode: Show point numbers
+                for (int i = 0; i < NUM_LABELS; i++)
                 {
-                    int value = CHART_SIZE * (NUM_LABELS - 1 - i) / (NUM_LABELS - 1);
-                    sprintf(tickLabels_x[i], "%d", value);
+                    if (i == NUM_LABELS - 1)
+                    {
+                        strcpy(tickLabels_x[i], "0 pts");
+                    }
+                    else
+                    {
+                        int value = CHART_SIZE * (NUM_LABELS - 1 - i) / (NUM_LABELS - 1);
+                        sprintf(tickLabels_x[i], "%d", value);
+                    }
                 }
             }
 
             static int index_x = 0;
-            // static char *tickLabels_x[] = {"300", "250", "200", "150", "100", "50", "0 pts"};
-            // Initialize tick labels based on CHART_SIZE and fractions
 
             if (index_x == 7)
                 index_x = 0;
