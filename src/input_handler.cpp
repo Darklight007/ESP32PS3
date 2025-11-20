@@ -199,7 +199,27 @@ static void handle_menu_mode()
         lv_obj_t *sidebar_page = lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu);
         if (sidebar_page && selected_item)
         {
-            lv_obj_scroll_to_view(selected_item, LV_ANIM_ON);
+            // Get the coordinates and dimensions
+            lv_area_t item_area;
+            lv_obj_get_coords(selected_item, &item_area);
+
+            lv_area_t page_area;
+            lv_obj_get_coords(sidebar_page, &page_area);
+
+            // Check if item is below visible area
+            if (item_area.y2 > page_area.y2)
+            {
+                // Scroll down to show the item
+                lv_coord_t scroll_amount = item_area.y2 - page_area.y2;
+                lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_ON);
+            }
+            // Check if item is above visible area
+            else if (item_area.y1 < page_area.y1)
+            {
+                // Scroll up to show the item
+                lv_coord_t scroll_amount = item_area.y1 - page_area.y1;
+                lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_ON);
+            }
         }
 
         g_last_enc2_menu = encoder2_value;
