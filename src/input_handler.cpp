@@ -209,15 +209,15 @@ static void handle_menu_mode()
             // Check if item is below visible area
             if (item_area.y2 > page_area.y2)
             {
-                // Scroll down to show the item
-                lv_coord_t scroll_amount = item_area.y2 - page_area.y2;
+                // Scroll down (negative Y in scroll_by moves content up, showing items below)
+                lv_coord_t scroll_amount = -(item_area.y2 - page_area.y2 + 5);  // +5 for padding
                 lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_ON);
             }
             // Check if item is above visible area
             else if (item_area.y1 < page_area.y1)
             {
-                // Scroll up to show the item
-                lv_coord_t scroll_amount = item_area.y1 - page_area.y1;
+                // Scroll up (positive Y in scroll_by moves content down, showing items above)
+                lv_coord_t scroll_amount = page_area.y1 - item_area.y1 + 5;  // +5 for padding
                 lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_ON);
             }
         }

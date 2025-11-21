@@ -102,6 +102,15 @@ The codebase was recently refactored (91.7% reduction) from a 4,015-line monolit
 - `LTC2655.h/.cpp` - DAC driver
 - `FFTHandler.h/.cpp` - FFT processing for waveform analysis
 - `buzzer.h/.cpp` - Tone generation
+- `power_management.h/.cpp` - OVP/OCP protection, timer, energy counter, power-on duration tracking
+
+**Calibration System (Modular):**
+- `calib_adc.h/.cpp` - ADC voltage/current calibration windows and procedures
+- `calib_dac.h/.cpp` - DAC calibration windows and procedures
+- `calib_inl.h/.cpp` - INL (Integral Non-Linearity) calibration for enhanced accuracy
+- `calib_internal_leakage.h/.cpp` - Internal leakage current calibration
+- `calib_sequencer.h/.cpp` - Automated calibration sequence controller
+- `calib_log_window.h/.cpp` - Calibration logging and status display
 
 **Navigation:**
 - `tabs.h/.cpp` - Static tab/page management class with `Tabs::getCurrentPage()`, `Tabs::nextPage()`, etc.
@@ -148,6 +157,31 @@ Uses `MonotoneCubicCalibrator` for non-linear ADC/DAC calibration:
 - Separate calibration for voltage/current, ADC/DAC
 - Data stored in Preferences (NVS flash)
 - INL (Integral Non-Linearity) calibration for enhanced accuracy
+
+### Settings System
+
+User-configurable settings are stored in `PowerSupply.settingParameters` (defined in `device.hpp`):
+
+```cpp
+struct SettingParameters {
+    // Graph settings
+    bool graphXaxisTimeMode = false;     // false = points mode, true = time mode
+    uint16_t graphTimeSpanSeconds = 60;  // X-axis time span (5s to 12h)
+
+    // Protection settings
+    bool ovpEnabled = false;             // Over-voltage protection enable
+    float voltageLimitMax = 32.0;        // OVP threshold
+    bool ocpEnabled = false;             // Over-current protection enable
+    float currentLimitMax = 6.0;         // OCP threshold
+
+    // Timer and energy tracking
+    bool timerEnabled = false;
+    uint32_t timerDurationSeconds = 0;
+    // ... beeper settings, display preferences, etc.
+};
+```
+
+Settings are persisted via `PowerSupply.SaveSetting()` / `LoadSetting()` using NVS.
 
 ### Important Globals
 
