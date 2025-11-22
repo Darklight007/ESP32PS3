@@ -11,6 +11,7 @@
 #include "intervals.h"
 #include "memory.h"
 #include "power_management.h"
+#include <WiFi.h>
 #include <string>
 #include <math.h>
 
@@ -667,6 +668,7 @@ void Utility_tabview(lv_obj_t *parent)
 void StatusBar()
 {
     static lv_obj_t *statusLabel_time;
+    static lv_obj_t *statusLabel_wifi;
     static lv_obj_t *statusLabel_avg;
     static bool statusCreationFlag = false;
 
@@ -695,18 +697,36 @@ void StatusBar()
 
         lv_style_set_text_letter_space(&style_font, -1);
         statusLabel_time = lv_label_create(status);
+        statusLabel_wifi = lv_label_create(status);
         statusLabel_avg = lv_label_create(status);
 
         lv_obj_remove_style_all(statusLabel_time);
+        lv_obj_remove_style_all(statusLabel_wifi);
         lv_obj_remove_style_all(statusLabel_avg);
 
         lv_obj_add_style(statusLabel_time, &style_font, LV_STATE_DEFAULT);
         lv_obj_add_style(statusLabel_avg, &style_font, LV_STATE_DEFAULT);
 
         lv_obj_align(statusLabel_time, LV_ALIGN_LEFT_MID, -12, 0);
+        lv_obj_align(statusLabel_wifi, LV_ALIGN_CENTER, -55, 0);
         lv_obj_align(statusLabel_avg, LV_ALIGN_RIGHT_MID, 0, 0);
         statusCreationFlag = true;
     }
+
+    // Update WiFi status indicator
+    extern bool g_wifiConnection;
+    if (g_wifiConnection && WiFi.status() == WL_CONNECTED)
+    {
+        lv_label_set_text(statusLabel_wifi, "WiFi:ON");
+        lv_obj_set_style_text_color(statusLabel_wifi, lv_palette_main(LV_PALETTE_GREEN), LV_STATE_DEFAULT);
+    }
+    else
+    {
+        lv_label_set_text(statusLabel_wifi, "WiFi:--");
+        lv_obj_set_style_text_color(statusLabel_wifi, lv_palette_main(LV_PALETTE_RED), LV_STATE_DEFAULT);
+    }
+    lv_obj_set_style_text_font(statusLabel_wifi, &graph_R_8, LV_STATE_DEFAULT);
+
     static time_t now;
     char strftime_buf[16];
     struct tm timeinfo;
