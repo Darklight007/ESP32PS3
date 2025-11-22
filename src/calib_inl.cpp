@@ -273,7 +273,7 @@ static void INL_start(lv_event_t *e)
         }
 
         // Now safe to close the msgbox
-        lv_msgbox_close(obj);
+        lv_msgbox_close_async(obj);
         INL_dbg("[INL] Msgbox closed");
 
         // Check the COPIED string (not the freed pointer!)

@@ -717,7 +717,7 @@ static void event_cb(lv_event_t *e)
         bool is_ok = (txt && strcmp(txt, "OK") == 0);
 
         // Now safe to close the msgbox
-        lv_msgbox_close(obj);
+        lv_msgbox_close_async(obj);
 
         if (is_ok)
         {

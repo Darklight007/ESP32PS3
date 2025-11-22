@@ -37,30 +37,102 @@ namespace
         Warning_msgbox("Auto Zero", auto_zero_event_cb);
     }
 
-    static void auto_zero_event_cb(lv_event_t *e)
-    {
-        esp_task_wdt_reset();
+    // Dummy callback for error message boxes
+    static void error_msgbox_dummy_cb(lv_event_t *e) {
+        // Do nothing - just close the message box
         lv_obj_t *obj = lv_event_get_current_target(e);
-        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
-        {
-            // Get button text BEFORE closing msgbox (to avoid use-after-free)
-            const char *txt = lv_msgbox_get_active_btn_text(obj);
-            bool is_ok = (txt && strcmp(txt, "OK") == 0);
+        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED) {
+            lv_msgbox_close_async(obj);
+        }
+    }
 
-            // Now safe to close the msgbox
-            lv_msgbox_close(obj);
+    static void safe_calibration_task(void *parameter) {
+        Serial.println("Starting safe calibration task...");
+        
+        // Remove this task from watchdog monitoring
+        esp_task_wdt_delete(NULL);
+        
+        // Check memory before starting
+        size_t free_heap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+        size_t free_stack = uxTaskGetStackHighWaterMark(NULL);
+        Serial.printf("Calibration task - Free heap: %d, Free stack: %d\n", free_heap, free_stack);
+        
+        if (free_heap < 20000 || free_stack < 2048) {
+            Serial.println("ERROR: Insufficient resources for calibration");
+            vTaskDelete(NULL);
+            return;
+        }
+        
+        try {
+            // Perform calibration with frequent yields
+            start_current_zero_calibration(nullptr);
+        } catch (...) {
+            Serial.println("Exception during calibration!");
+        }
+        
+        Serial.println("Calibration task completed");
+        vTaskDelete(NULL);
+    }
+
+static void auto_zero_event_cb(lv_event_t *e)
+{
+    lv_obj_t *obj = lv_event_get_current_target(e);
+    
+    if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+    {
+        const char *txt = lv_msgbox_get_active_btn_text(obj);
+        
+        // Do NOT use lv_msgbox_close(obj); here.
+        // It deletes the object immediately, causing the crash when this function returns.
+        
+        // Use this instead:
+        lv_msgbox_close_async(obj); 
+        // OR if your LVGL version is older and doesn't have close_async:
+        // lv_obj_del_async(obj);
+
+        bool is_ok = (txt && strcmp(txt, "OK") == 0);
 
             if (is_ok)
             {
+                // Check system resources first
+                size_t free_heap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+                size_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+                
+                Serial.printf("System check - Free heap: %d, Largest block: %d\n", 
+                             free_heap, largest_block);
+                
+                if (free_heap < 30000 || largest_block < 10000) {
+                    Serial.println("ERROR: System resources too low for calibration");
+                    Warning_msgbox("Error: Low Resources", error_msgbox_dummy_cb);
+                    return;
+                }
+                
                 create_log_window();
                 log_reset();
                 log_clear();
-                start_current_zero_calibration(nullptr);
+                
+                // Run calibration in separate task with ample stack
+                BaseType_t result = xTaskCreate(
+                    safe_calibration_task,
+                    "calibration_task",
+                    12288,  // 12KB stack - INCREASED from 8KB
+                    NULL,
+                    tskIDLE_PRIORITY + 1,  // Low priority
+                    NULL
+                );
+                
+                if (result != pdPASS) {
+                    Serial.println("ERROR: Failed to create calibration task");
+                    Warning_msgbox("Error: Task Failed", error_msgbox_dummy_cb);
+                } else {
+                    Serial.println("Calibration task created successfully");
+                }
             }
         }
     }
 }
 
+// Remove the duplicate declaration - use the one from calib_adc.h
 void build_adc_calibration_window(lv_obj_t **win_holder,
                                    const char *title,
                                    AdcCalibrationControls &gui,
