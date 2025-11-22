@@ -708,7 +708,7 @@ void StatusBar()
         lv_obj_add_style(statusLabel_avg, &style_font, LV_STATE_DEFAULT);
 
         lv_obj_align(statusLabel_time, LV_ALIGN_LEFT_MID, -12, 0);
-        lv_obj_align(statusLabel_wifi, LV_ALIGN_CENTER, -55, 0);
+        lv_obj_align(statusLabel_wifi, LV_ALIGN_CENTER, -75, 0);
         lv_obj_align(statusLabel_avg, LV_ALIGN_RIGHT_MID, 0, 0);
         statusCreationFlag = true;
     }
@@ -738,7 +738,7 @@ void StatusBar()
 
     static char str[35];
 
-    sprintf(str, "SPS:%3i;Used memory:%04d;#Avgs ", PowerSupply.adc.realADCSpeed, heepMemory - ESP.getFreeHeap());
+    sprintf(str, "SPS:%3i;#Avgs ", PowerSupply.adc.realADCSpeed);
 
     strcat(str, "%i");
 
