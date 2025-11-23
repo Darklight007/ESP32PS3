@@ -46,10 +46,10 @@ public:
     // https://www.analog.com/media/en/technical-documentation/data-sheets/2655f.pdf
     LTC2655(uint8_t addr = 0x41);
 
-    // Methods
+    // Methods - return 0 on success, non-zero on I2C error
     void write(dacChannel_t channel, uint16_t data);
     void update(dacChannel_t channel, uint16_t data);
-    void writeAndPowerAll(dacChannel_t channel, uint16_t data);
+    uint8_t writeAndPowerAll(dacChannel_t channel, uint16_t data);
     void writeUpdate(dacChannel_t channel, uint16_t data);
     void writeUpdate(int channel, uint16_t data);
     void powerDown(dacChannel_t channel);
@@ -57,7 +57,7 @@ public:
     void setVoltageReference(dacRef_t voltageReferencSource);
 
 private:
-    void sendCommand(int command, dacChannel_t channel, uint16_t data);
+    uint8_t sendCommand(int command, dacChannel_t channel, uint16_t data);
 };
 
 #endif
