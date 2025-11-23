@@ -114,6 +114,8 @@ struct SettingParameters
     float voltageLimitMax = 32.0;  // Maximum voltage limit in volts
     bool ocpEnabled = false;  // Over-current protection enable
     float currentLimitMax = 6.0;   // Maximum current limit in amps
+    bool ovpTriggered = false;  // OVP was triggered (for UI display)
+    bool ocpTriggered = false;  // OCP was triggered (for UI display)
 
     // Graph X-axis Display Mode
     bool graphXaxisTimeMode = false;  // false = points mode, true = time mode
@@ -159,6 +161,7 @@ struct GUI
     lv_obj_t *label_power_on_time = nullptr;   // Power-On Duration display
     lv_obj_t *label_energy_counter = nullptr;  // Energy Counter display
     lv_obj_t *label_timer_remaining = nullptr; // Timer countdown display
+    lv_obj_t *label_current_rel = nullptr;     // REL indicator for current
 };
 
 struct Graph_
@@ -309,10 +312,10 @@ class Calibration {
 public:
     String macAdd;
     calibPoints vCal;
-    std::array<calibPoints, 2> iCal;  
+    std::array<calibPoints, 2> iCal;
     // calibPoints iCal[2];
     // calibPoints mACal;             // ← renamed from miCal
-    double internalLeakage;       // 1/40kΩ / V
+    std::array<double, 2> internalLeakage;  // [0]=Amp range, [1]=mA range
     double adc_inl_measure[36];
     double adc_inl_ideal[36];
 
@@ -324,7 +327,7 @@ public:
     : macAdd(t_macAdd),
       vCal(t_vcalib),
       iCal{ t_icalib, t_mAcalib },     // ✅ valid init
-      internalLeakage(icpv),
+      internalLeakage{ icpv, icpv },   // Both ranges start with same default
       adc_inl_measure{ -0.001,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,32.75 },
       adc_inl_ideal  { -0.001,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,32.75 }
     {}
@@ -441,6 +444,12 @@ public:
     const byte AmA_Pin = 13;
     bool mA_Active = false;
 
+    // REL (relative) mode - like Keithley 2010 REL button
+    double currentRelOffset_A = 0.0;   // REL offset for A range
+    double currentRelOffset_mA = 0.0;  // REL offset for mA range
+    bool currentRelActive_A = false;   // REL active for A range
+    bool currentRelActive_mA = false;  // REL active for mA range
+
     SettingParameters settingParameters;
     GUI gui;
     mem memory[10];
@@ -456,6 +465,7 @@ public:
     unsigned long lastEnergyUpdateTime = 0;  // For energy integration
     unsigned long timerStartTime = 0;        // For timer function
     unsigned long lastAutoSaveTime = 0;      // For auto-save feature
+    int lastCCCVStatus = -1;                 // -1 = invalid, forces re-check on power on
 
     /***************
      * @param pin MCU interrupt pin for ADC drdy
