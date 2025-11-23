@@ -54,9 +54,17 @@ void statisticUpdateInterval(unsigned long interval)
     static unsigned long timer_ = {0};
     schedule([]
              {
-                PowerSupply.settingParameters.SetVoltage = PowerSupply.Voltage.adjValue;
-                PowerSupply.settingParameters.SetCurrent = PowerSupply.Current.adjValue;
-                PowerSupply.SaveSetting();
+                // Only save settings if values actually changed
+                static uint16_t lastVoltage = 0;
+                static uint16_t lastCurrent = 0;
+                if (PowerSupply.Voltage.adjValue != lastVoltage ||
+                    PowerSupply.Current.adjValue != lastCurrent) {
+                    PowerSupply.settingParameters.SetVoltage = PowerSupply.Voltage.adjValue;
+                    PowerSupply.settingParameters.SetCurrent = PowerSupply.Current.adjValue;
+                    PowerSupply.SaveSetting();
+                    lastVoltage = PowerSupply.Voltage.adjValue;
+                    lastCurrent = PowerSupply.Current.adjValue;
+                }
 
                 PowerSupply.Voltage.statUpdate();
                 PowerSupply.Current.statUpdate(); },
@@ -103,46 +111,41 @@ void VCCCInterval(unsigned long interval)
              interval, timer_);
 }
 
-void LvglUpdatesInterval(unsigned long interval)
+// Internal state for LvglUpdatesInterval - shared between overloads
+static unsigned long lvgl_timer_ = {0};
+static unsigned int lvglIsBlocked = {0};
+
+void LvglUpdatesInterval(unsigned long interval, bool forceUpdate)
 {
-    static unsigned long timer_ = {0};  // Interval in milliseconds
-    static unsigned long timer_2 = {0}; // Interval in milliseconds
-    static unsigned int lvglIsBlocked = {0};
-    // if (lvglChartIsBusy)
-    // {
-    //     vTaskDelay(1);
-    //     // return;
-    // }
-    schedule([]
+    schedule([forceUpdate]
              {
-                 if (!lvglChartIsBusy && !blockAll && adcDataReady) //&& adcDataReady
-                                                                    //  when adcDataReady is set, it means the data is ready and conversion has stoped.
-                                                                   /// Best time to run SPI to not generate noise on ADC
+                 // When forceUpdate is true (encoder active), bypass adcDataReady check
+                 // for immediate UI responsiveness
+                 if (!lvglChartIsBusy && !blockAll && (forceUpdate || adcDataReady))
                  {
-                     // PowerSupply.adc.ads1219->pause();
                      lvglIsBusy = 1;
                      lv_timer_handler();
-                     vTaskDelay(pdMS_TO_TICKS(1)); // ~5ms
                      lvglIsBusy = 0;
                      lvglIsBlocked = 0;
-                     //  PowerSupply.adc.ads1219->begin();
-                      return;
+                     return;
                  }
-                else
-                  {
-                    lvglIsBlocked++;
-                    return;
+                 else
+                 {
+                     lvglIsBlocked++;
+                     return;
                  } },
+             interval, lvgl_timer_);
 
-             interval, timer_);
-
-    // schedule([]
-    //          { lv_obj_invalidate(lv_scr_act()); }, 60000, timer_2);
     if (lvglIsBlocked > 0)
     {
         lvglIsBlocked = 0;
         lv_obj_invalidate(lv_scr_act());
     }
+}
+
+void LvglUpdatesInterval(unsigned long interval)
+{
+    LvglUpdatesInterval(interval, false);
 }
 
 void FFTUpdateInterval(unsigned long interval)
