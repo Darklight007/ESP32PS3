@@ -104,16 +104,26 @@ void loop() {
   // pixels.setPixelColor(0, pixels.Color(0, 0, 0)); // Red
   // neopixelWrite(RGB_BUILTIN,0,0,0); // Green
 
+  // Adaptive encoder response: fast when active, slower when idle
+  // This makes encoder feel more responsive while saving CPU when idle
+  bool encoderActive = (millis() - encoderTimeStamp) < 500;  // 500ms idle threshold
+
   StatusBarUpdateInterval(443);
-  LvglUpdatesInterval(0);
+  LvglUpdatesInterval(0, encoderActive);  // Force update when encoder active for immediate response
   PowerManagementInterval(500);  // Timer, Energy, Auto-save, Limits
 
   // trackLoopExecution(__func__);
 
-  if ((millis() - encoderTimeStamp) > 33)
-    FlushMeasuresInterval(75 + 60 * PowerSupply.Voltage.measured.NofAvgs); // PowerSupply.Voltage.measured.NofAvgs
+  // Only flush measures when encoder is idle (reduces CPU load during encoder use)
+  if (!encoderActive)
+    FlushMeasuresInterval(75 + 60 * PowerSupply.Voltage.measured.NofAvgs);
 
-  statisticUpdateInterval(333);
+  // Adaptive statistics update: faster when encoder active for responsive display
+  if (encoderActive)
+    statisticUpdateInterval(100);  // Fast update during encoder activity
+  else
+    statisticUpdateInterval(333);  // Normal update when idle
+
   // FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?
   managePageEncoderInteraction();
@@ -123,7 +133,12 @@ void loop() {
 
   //   KeyCheckInterval(400);
   // DACInterval(100);
-  VCCCInterval(33);
+
+  // Adaptive VCCC update: faster when encoder active
+  if (encoderActive)
+    VCCCInterval(10);   // Fast update during encoder activity
+  else
+    VCCCInterval(33);   // Normal update when idle
   // KeyCheckInterval(45);
   // Serial.printf("\nVoltage.encoder.getCount %l",PowerSupply.Voltage.encoder.getCount());
   // KeyCheckInterval(0); // moved to adc taskse
