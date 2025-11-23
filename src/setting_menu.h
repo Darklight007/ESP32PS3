@@ -45,7 +45,8 @@ struct CalibrationGui
     AdcCalibrationControls Voltage;
     AdcCalibrationControls Current;
 
-    lv_obj_t *internalLeakage{};
+    lv_obj_t *internalLeakage_A{};   // Internal resistor for Amp range
+    lv_obj_t *internalLeakage_mA{};  // Internal resistor for mA range
 };
 
     // shared ADC window builder

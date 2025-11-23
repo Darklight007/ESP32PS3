@@ -342,6 +342,22 @@ namespace
         PowerSupply.settingParameters.currentLimitMax = v;
     }
 
+    static void switch_ovp_enable_event_cb(lv_event_t *e)
+    {
+        auto *sw = lv_event_get_target(e);
+        bool enabled = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        PowerSupply.settingParameters.ovpEnabled = enabled;
+        Serial.printf("\nOVP enabled: %d", enabled);
+    }
+
+    static void switch_ocp_enable_event_cb(lv_event_t *e)
+    {
+        auto *sw = lv_event_get_target(e);
+        bool enabled = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        PowerSupply.settingParameters.ocpEnabled = enabled;
+        Serial.printf("\nOCP enabled: %d", enabled);
+    }
+
     static void slider_output_delay_event_cb(lv_event_t *e)
     {
         auto *slider = lv_event_get_target(e);
@@ -434,8 +450,11 @@ namespace
         }
         if (PowerSupply.gui.calibration.win_int_current_calibration && !lv_obj_has_flag(PowerSupply.gui.calibration.win_int_current_calibration, LV_OBJ_FLAG_HIDDEN))
         {
-            // Update internal resistor value in the spinbox
-            lv_spinbox_set_value(Calib_GUI.internalLeakage, PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage * 1000.0); // Convert to mOhms
+            // Update both internal resistor spinboxes
+            if (Calib_GUI.internalLeakage_A)
+                lv_spinbox_set_value(Calib_GUI.internalLeakage_A, PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[0] * 1000.0);
+            if (Calib_GUI.internalLeakage_mA)
+                lv_spinbox_set_value(Calib_GUI.internalLeakage_mA, PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1] * 1000.0);
         }
     }
 
@@ -470,13 +489,21 @@ namespace
 
     // build_adc_calibration_window() moved to calib_adc.cpp
 
-    // DAC handlers
-    static void ADC_iinternalRes_calib_change_event_cb(lv_event_t *e)
+    // DAC handlers - separate callbacks for A and mA ranges
+    static void ADC_internalRes_A_change_cb(lv_event_t *e)
     {
         if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED)
             return;
-        double internalLeakage = lv_spinbox_get_value(Calib_GUI.internalLeakage) / 1000.0; // Convert from mOhms to Ohms
-        PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage = internalLeakage;
+        double val = lv_spinbox_get_value(Calib_GUI.internalLeakage_A) / 1000.0;
+        PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[0] = val;  // [0] = A range
+    }
+
+    static void ADC_internalRes_mA_change_cb(lv_event_t *e)
+    {
+        if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED)
+            return;
+        double val = lv_spinbox_get_value(Calib_GUI.internalLeakage_mA) / 1000.0;
+        PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1] = val;  // [1] = mA range
     }
 
     // DAC handlers moved to calib_dac.cpp
@@ -613,9 +640,9 @@ void SettingMenu(lv_obj_t *parent)
     // Power Management (features #5, #6, #7, #13 + voltage/current limits)
     lv_obj_t *sub_power_mgmt = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_power_mgmt);
-    create_switch_(section, nullptr, "OVP Enable", PowerSupply.settingParameters.ovpEnabled, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
+    create_switch_(section, nullptr, "OVP Enable", PowerSupply.settingParameters.ovpEnabled, switch_ovp_enable_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
     create_slider(section, nullptr, "Voltage Limit Max (V)", 0, 32, (int32_t)PowerSupply.settingParameters.voltageLimitMax, slider_voltage_limit_event_cb, LV_EVENT_VALUE_CHANGED);
-    create_switch_(section, nullptr, "OCP Enable", PowerSupply.settingParameters.ocpEnabled, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
+    create_switch_(section, nullptr, "OCP Enable", PowerSupply.settingParameters.ocpEnabled, switch_ocp_enable_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
     create_slider(section, nullptr, "Current Limit Max (A)", 0, 6, (int32_t)PowerSupply.settingParameters.currentLimitMax, slider_current_limit_event_cb, LV_EVENT_VALUE_CHANGED);
     create_slider(section, nullptr, "Output Delay (ms)", 0, 5000, PowerSupply.settingParameters.outputDelayMs, slider_output_delay_event_cb, LV_EVENT_VALUE_CHANGED);
     create_slider(section, nullptr, "Auto-save Interval (min)", 0, 60, PowerSupply.settingParameters.autoSaveIntervalMinutes, slider_autosave_event_cb, LV_EVENT_VALUE_CHANGED);
@@ -725,7 +752,7 @@ static void event_cb(lv_event_t *e)
             esp_task_wdt_reset();  // Reset watchdog immediately
             vTaskDelay(pdMS_TO_TICKS(100));  // Small delay to stabilize
             create_log_window();
-            PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage = FLT_MAX;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[PowerSupply.mA_Active] = FLT_MAX;
             log_reset();
             log_clear();
             esp_task_wdt_reset();  // Reset again before starting
@@ -770,11 +797,14 @@ static void AutoMeasureTotalRes_cb(lv_event_t *)
     Warning_msgbox("Auto Measure", event_cb);
 }
 
-// Open/create the DAC calibration window
+// Open/create the Internal Current Calibration window (shows both A and mA ranges)
 void internal_leakage_calibration_cb(lv_event_t *)
 {
     if (PowerSupply.gui.calibration.win_int_current_calibration)
     {
+        // Update spinbox values when reopening
+        lv_spinbox_set_value(Calib_GUI.internalLeakage_A, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[0]);
+        lv_spinbox_set_value(Calib_GUI.internalLeakage_mA, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1]);
         lv_obj_clear_flag(PowerSupply.gui.calibration.win_int_current_calibration, LV_OBJ_FLAG_HIDDEN);
         return;
     }
@@ -789,26 +819,26 @@ void internal_leakage_calibration_cb(lv_event_t *)
     lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
     lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
 
-    int xPos = 10, xOffset = 10, yPos = 25, yOffset = 25;
+    int xPos = 10, yPos = 20, yOffset = 48;
 
-    // int_total_res
-    Calib_GUI.internalLeakage = spinbox_pro(cont, "#FFFFF7 Total Internal Resistor (kΩ):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset * 0, 150, 21, &graph_R_16);
+    // Resistor for A range
+    Calib_GUI.internalLeakage_A = spinbox_pro(cont, "#FFFFF7 Internal Resistor [A] (kOhm):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos, 150, 21, &graph_R_16);
+    lv_spinbox_set_value(Calib_GUI.internalLeakage_A, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[0]);
+    lv_obj_add_event_cb(Calib_GUI.internalLeakage_A, ADC_internalRes_A_change_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    PowerSupply.LoadCalibrationData();
-    // lv_spinbox_set_value(intRes, 40'000.123*1000.0);
-    lv_spinbox_set_value(Calib_GUI.internalLeakage, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage);
+    // Resistor for mA range
+    Calib_GUI.internalLeakage_mA = spinbox_pro(cont, "#FFFFF7 Internal Resistor [mA] (kOhm):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset, 150, 22, &graph_R_16);
+    lv_spinbox_set_value(Calib_GUI.internalLeakage_mA, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1]);
+    lv_obj_add_event_cb(Calib_GUI.internalLeakage_mA, ADC_internalRes_mA_change_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    Serial.printf("\nInternal Current Calibration: %f", PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage);
+    Serial.printf("\nInternal Resistor [A]: %f kOhm", PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[0]);
+    Serial.printf("\nInternal Resistor [mA]: %f kOhm", PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1]);
 
-    PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage = lv_spinbox_get_value(Calib_GUI.internalLeakage) / 1000.0;
+    LVButton btnAutoMeasureTotalRes(cont, "Auto Measure", 10, yPos + yOffset * 2 - 10, 120, 30, nullptr, AutoMeasureTotalRes_cb);
 
-    lv_obj_add_event_cb(Calib_GUI.internalLeakage, ADC_iinternalRes_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
-
-    LVButton btnAutoMeasureTotalRes(cont, "Auto Measure", 10, xOffset + 50, 120, 35, nullptr, AutoMeasureTotalRes_cb);
-
-    lv_point_t btn_pos{80, 120};
-    LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 75, 35, nullptr, load_cb);
-    LVButton btnSave(cont, "Save", btn_pos.x + 75 + xOffset, btn_pos.y, 75, 35, nullptr, save_cb);
+    lv_point_t btn_pos{80, 155};
+    LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 75, 30, nullptr, load_cb);
+    LVButton btnSave(cont, "Save", btn_pos.x + 85, btn_pos.y, 75, 30, nullptr, save_cb);
 }
 
 // INL calibration (globals, FSM, GUI) moved to calib_inl.cpp
