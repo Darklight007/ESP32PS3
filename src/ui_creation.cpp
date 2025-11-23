@@ -708,23 +708,22 @@ void StatusBar()
         lv_obj_add_style(statusLabel_avg, &style_font, LV_STATE_DEFAULT);
 
         lv_obj_align(statusLabel_time, LV_ALIGN_LEFT_MID, -12, 0);
-        lv_obj_align(statusLabel_wifi, LV_ALIGN_CENTER, -75, 0);
+        lv_obj_align(statusLabel_wifi, LV_ALIGN_CENTER, -30, 0);
         lv_obj_align(statusLabel_avg, LV_ALIGN_RIGHT_MID, 0, 0);
         statusCreationFlag = true;
     }
 
-    // Update WiFi status indicator
-    extern bool g_wifiConnection;
-    if (g_wifiConnection && WiFi.status() == WL_CONNECTED)
-    {
-        lv_label_set_text(statusLabel_wifi, "WiFi:ON");
-        lv_obj_set_style_text_color(statusLabel_wifi, lv_palette_main(LV_PALETTE_GREEN), LV_STATE_DEFAULT);
-    }
-    else
-    {
-        lv_label_set_text(statusLabel_wifi, "WiFi:--");
-        lv_obj_set_style_text_color(statusLabel_wifi, lv_palette_main(LV_PALETTE_RED), LV_STATE_DEFAULT);
-    }
+    // Update OVP/OCP status indicator with recolor markup and values
+    char protStatus[80];
+    const char *ovpColor = PowerSupply.settingParameters.ovpTriggered ? "#FF0000 " :
+                           (PowerSupply.settingParameters.ovpEnabled ? "#00FF00 " : "#808080 ");
+    const char *ocpColor = PowerSupply.settingParameters.ocpTriggered ? "#FF0000 " :
+                           (PowerSupply.settingParameters.ocpEnabled ? "#00FF00 " : "#808080 ");
+    snprintf(protStatus, sizeof(protStatus), "%sOVP%s:%.1fV# %sOCP%s:%.2fA#",
+             ovpColor, PowerSupply.settingParameters.ovpTriggered ? "!" : "", PowerSupply.settingParameters.voltageLimitMax,
+             ocpColor, PowerSupply.settingParameters.ocpTriggered ? "!" : "", PowerSupply.settingParameters.currentLimitMax);
+    lv_label_set_recolor(statusLabel_wifi, true);
+    lv_label_set_text(statusLabel_wifi, protStatus);
     lv_obj_set_style_text_font(statusLabel_wifi, &graph_R_8, LV_STATE_DEFAULT);
 
     static time_t now;
