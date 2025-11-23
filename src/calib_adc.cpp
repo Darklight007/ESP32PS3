@@ -46,91 +46,66 @@ namespace
         }
     }
 
-    static void safe_calibration_task(void *parameter) {
-        Serial.println("Starting safe calibration task...");
-        
-        // Remove this task from watchdog monitoring
-        esp_task_wdt_delete(NULL);
-        
-        // Check memory before starting
-        size_t free_heap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
-        size_t free_stack = uxTaskGetStackHighWaterMark(NULL);
-        Serial.printf("Calibration task - Free heap: %d, Free stack: %d\n", free_heap, free_stack);
-        
-        if (free_heap < 20000 || free_stack < 2048) {
-            Serial.println("ERROR: Insufficient resources for calibration");
-            vTaskDelete(NULL);
+    static void auto_zero_event_cb(lv_event_t *e)
+    {
+        if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED)
+            return;
+
+        lv_obj_t *obj = lv_event_get_current_target(e);
+        if (!obj) return;
+
+        // Prevent multiple triggers with static guard
+        static bool in_progress = false;
+        if (in_progress) return;
+
+        // Get button text to check which button was pressed
+        const char *btn_txt = lv_msgbox_get_active_btn_text(obj);
+
+        Serial.printf("Auto-zero: button pressed = '%s'\n", btn_txt ? btn_txt : "NULL");
+
+        // Check if OK button was pressed (compare text, not index)
+        bool is_ok = (btn_txt && strcmp(btn_txt, "OK") == 0);
+
+        // Close message box asynchronously
+        lv_msgbox_close_async(obj);
+
+        // Only proceed if OK was pressed
+        if (!is_ok) {
+            Serial.println("Auto-zero: Not OK, returning");
             return;
         }
-        
-        try {
-            // Perform calibration with frequent yields
-            start_current_zero_calibration(nullptr);
-        } catch (...) {
-            Serial.println("Exception during calibration!");
+
+        in_progress = true;
+        Serial.println("Auto-zero OK pressed - starting calibration");
+
+        // Check system resources first
+        size_t free_heap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+        size_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+
+        Serial.printf("Auto-zero: Free heap: %d, Largest block: %d\n",
+                     free_heap, largest_block);
+
+        if (free_heap < 30000 || largest_block < 10000) {
+            Serial.println("ERROR: System resources too low for calibration");
+            in_progress = false;
+            Warning_msgbox("Error: Low Resources", error_msgbox_dummy_cb);
+            return;
         }
-        
-        Serial.println("Calibration task completed");
-        vTaskDelete(NULL);
+
+        // Reset watchdog before long operation
+        esp_task_wdt_reset();
+
+        create_log_window();
+        log_reset();
+        log_clear();
+
+        // Run calibration directly on main thread (LVGL is NOT thread-safe)
+        start_current_zero_calibration(nullptr);
+
+        Serial.println("Auto-zero calibration started");
+        in_progress = false;
     }
-
-static void auto_zero_event_cb(lv_event_t *e)
-{
-    lv_obj_t *obj = lv_event_get_current_target(e);
-    
-    if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
-    {
-        const char *txt = lv_msgbox_get_active_btn_text(obj);
-        
-        // Do NOT use lv_msgbox_close(obj); here.
-        // It deletes the object immediately, causing the crash when this function returns.
-        
-        // Use this instead:
-        lv_msgbox_close_async(obj); 
-        // OR if your LVGL version is older and doesn't have close_async:
-        // lv_obj_del_async(obj);
-
-        bool is_ok = (txt && strcmp(txt, "OK") == 0);
-
-            if (is_ok)
-            {
-                // Check system resources first
-                size_t free_heap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
-                size_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-                
-                Serial.printf("System check - Free heap: %d, Largest block: %d\n", 
-                             free_heap, largest_block);
-                
-                if (free_heap < 30000 || largest_block < 10000) {
-                    Serial.println("ERROR: System resources too low for calibration");
-                    Warning_msgbox("Error: Low Resources", error_msgbox_dummy_cb);
-                    return;
-                }
-                
-                create_log_window();
-                log_reset();
-                log_clear();
-                
-                // Run calibration in separate task with ample stack
-                BaseType_t result = xTaskCreate(
-                    safe_calibration_task,
-                    "calibration_task",
-                    12288,  // 12KB stack - INCREASED from 8KB
-                    NULL,
-                    tskIDLE_PRIORITY + 1,  // Low priority
-                    NULL
-                );
-                
-                if (result != pdPASS) {
-                    Serial.println("ERROR: Failed to create calibration task");
-                    Warning_msgbox("Error: Task Failed", error_msgbox_dummy_cb);
-                } else {
-                    Serial.println("Calibration task created successfully");
-                }
-            }
-        }
-    }
-}
+} // end anonymous namespace
 
 // Remove the duplicate declaration - use the one from calib_adc.h
 void build_adc_calibration_window(lv_obj_t **win_holder,
