@@ -12,20 +12,18 @@ void myTone(int &&frequency, int &&duration)
         ledcWrite(SOUND_PWM_CHANNEL, SOUND_OFF);
         return;
     }
-    // if (toneIsOn && toneTime[1]>10)
-    //     // toneTime[1] = duration;
-    //     ;
-    // else
-        toneTime[1] = duration;
 
-
+    toneTime[1] = duration;
     toneIsOn = true;
-    ledcSetup(SOUND_PWM_CHANNEL, frequency, SOUND_RESOLUTION); // Set up PWM channel
-    // ledcAttachPin(BUZZER_PIN, SOUND_PWM_CHANNEL);              // Attach channel to pin
+
+    // Only reconfigure if frequency changed (avoid slow ledcSetup on every call)
+    static int lastFreq = 0;
+    if (frequency != lastFreq) {
+        ledcSetup(SOUND_PWM_CHANNEL, frequency, SOUND_RESOLUTION);
+        lastFreq = frequency;
+    }
     ledcWrite(SOUND_PWM_CHANNEL, SOUND_ON);
-    //  delay(duration);
     toneTime[0] = millis();
-    
 }
 
 void myTone(int frequency, int duration, bool blockingDelay)
