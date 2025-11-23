@@ -24,26 +24,21 @@ bool functionGenerator();
 
 void Task_BarGraph(void *pvParameters)
 {
-
     for (;;)
     {
-
         if (Tabs::getCurrentPage() != 2)
         {
-            vTaskDelay(1);
+            vTaskDelay(10);  // Longer delay when not on main page
             continue;
         }
 
         if (!lvglIsBusy && !blockAll)
         {
-
-            // lv_obj_invalidate(PowerSupply.Voltage.Bar.bar);
-            // lv_obj_invalidate(PowerSupply.Current.Bar.bar);
             PowerSupply.Voltage.barUpdate();
             PowerSupply.Current.barUpdate();
         }
 
-        // trackLoopExecution(__func__);
+        vTaskDelay(1);  // Yield to other tasks, prevents CPU hogging
     }
 }
 
