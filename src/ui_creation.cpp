@@ -713,18 +713,19 @@ void StatusBar()
         statusCreationFlag = true;
     }
 
-    // Update OVP/OCP status indicator with recolor markup and values
-    char protStatus[80];
+    // Update OVP/OCP status indicator - compact format like mWh display
+    char protStatus[64];
     const char *ovpColor = PowerSupply.settingParameters.ovpTriggered ? "#FF0000 " :
-                           (PowerSupply.settingParameters.ovpEnabled ? "#00FF00 " : "#808080 ");
+                           (PowerSupply.settingParameters.ovpEnabled ? "#00FF00 " : "#888888 ");
     const char *ocpColor = PowerSupply.settingParameters.ocpTriggered ? "#FF0000 " :
-                           (PowerSupply.settingParameters.ocpEnabled ? "#00FF00 " : "#808080 ");
-    snprintf(protStatus, sizeof(protStatus), "%sOVP%s:%.1fV# %sOCP%s:%.2fA#",
-             ovpColor, PowerSupply.settingParameters.ovpTriggered ? "!" : "", PowerSupply.settingParameters.voltageLimitMax,
-             ocpColor, PowerSupply.settingParameters.ocpTriggered ? "!" : "", PowerSupply.settingParameters.currentLimitMax);
+                           (PowerSupply.settingParameters.ocpEnabled ? "#00FF00 " : "#888888 ");
+    // Format: "OVP:XX.XXV OCP:XX.XXA"
+    snprintf(protStatus, sizeof(protStatus), "%sOVP:%.2fV# %sOCP:%.2fA#",
+             ovpColor, PowerSupply.settingParameters.voltageLimitMax,
+             ocpColor, PowerSupply.settingParameters.currentLimitMax);
     lv_label_set_recolor(statusLabel_wifi, true);
     lv_label_set_text(statusLabel_wifi, protStatus);
-    lv_obj_set_style_text_font(statusLabel_wifi, &graph_R_8, LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(statusLabel_wifi, &lv_font_montserrat_10, LV_STATE_DEFAULT);
 
     static time_t now;
     char strftime_buf[16];

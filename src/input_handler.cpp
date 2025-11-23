@@ -7,6 +7,7 @@
 #include "table_pro.h"
 #include "input_device.h"
 #include "functions.h"
+#include "power_management.h"
 #include <algorithm>
 #include "globalFunctions.h"
 #include "waveform_generator.h"
@@ -952,6 +953,13 @@ void keyCheckLoop()
 
                      else
                          lv_obj_add_flag(label_legend2, LV_OBJ_FLAG_HIDDEN); });
+
+    // Long press 'j' (AVG button) - Reset energy counter (mWh)
+    keyMenus('j', " HOLD.", [&]
+             {
+                 myTone(NOTE_C5, 100);
+                 resetEnergyCounter();
+             });
 
     // Statistics Reset and auto ajdust histogram window
     keyMenusPage('j', " RELEASED.", 0, []

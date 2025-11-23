@@ -40,6 +40,7 @@
 #include "setting_menu.h"
 // #include "setting_menu2.h"
 #include "SetupHandlers.h"
+#include "power_management.h"
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -81,6 +82,7 @@ void setup()
   setupCalibPage();
   createTasks();
   initialMemory();
+  loadEnergyFromStorage();  // Load persistent energy counter
 
   Serial.printf("\nSetup() run on core: #%i \n\n", xPortGetCoreID());
 

@@ -177,6 +177,9 @@ void PowerManagementInterval(unsigned long interval)
             // Update energy integration
             integrateEnergy();
 
+            // Save energy to flash periodically (only writes if changed)
+            saveEnergyToStorage();
+
             // Update displays
             updateEnergyAndTimeDisplays();
             updateTimerDisplay();

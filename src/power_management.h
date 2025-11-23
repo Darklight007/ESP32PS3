@@ -15,5 +15,10 @@ void integrateEnergy();
 void enforceSoftwareLimits();
 void autoSaveCheck();
 
+// Energy persistence (mWh counter)
+void loadEnergyFromStorage();
+void saveEnergyToStorage();
+void resetEnergyCounter();
+
 // Utility
 void formatTime(unsigned long seconds, char *buffer, size_t bufSize);

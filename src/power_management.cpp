@@ -6,8 +6,12 @@
 #include "globals.h"
 #include "buzzer.h"
 #include <Arduino.h>
+#include <Preferences.h>
 
 extern Device PowerSupply;
+
+// Preferences for persistent energy storage
+static Preferences energyPrefs;
 
 // Format time as HH:MM:SS
 void formatTime(unsigned long seconds, char *buffer, size_t bufSize)
@@ -97,9 +101,9 @@ void updateTimerDisplay()
 // Integrate energy (Power * Time)
 void integrateEnergy()
 {
-    // Check if output is active (ON, CC, or VC modes)
+    // Check if output is active (ON, CC, VC, or FUN modes - all deliver power)
     DEVICE status = PowerSupply.getStatus();
-    if (status == DEVICE::OFF || status == DEVICE::FUN)
+    if (status == DEVICE::OFF)
     {
         PowerSupply.lastEnergyUpdateTime = 0;
         return;
@@ -243,7 +247,40 @@ void initializePowerManagement()
 void resetPowerManagement()
 {
     PowerSupply.powerOnStartTime = 0;
-    // Don't reset energyAccumulatedWh - keep accumulating until device restart
+    // Don't reset energyAccumulatedWh - keep accumulating
     PowerSupply.lastEnergyUpdateTime = 0;
     PowerSupply.timerStartTime = 0;
+}
+
+// Load energy from persistent storage (call at startup)
+void loadEnergyFromStorage()
+{
+    energyPrefs.begin("energy", true);  // Read-only
+    PowerSupply.energyAccumulatedWh = energyPrefs.getDouble("wh", 0.0);
+    energyPrefs.end();
+    Serial.printf("Loaded energy: %.6f Wh\n", PowerSupply.energyAccumulatedWh);
+}
+
+// Save energy to persistent storage (call periodically or on significant change)
+void saveEnergyToStorage()
+{
+    static double lastSavedEnergy = -1.0;
+    // Only save if changed by more than 0.001 Wh (1mWh) to reduce flash wear
+    if (abs(PowerSupply.energyAccumulatedWh - lastSavedEnergy) > 0.001)
+    {
+        energyPrefs.begin("energy", false);  // Read-write
+        energyPrefs.putDouble("wh", PowerSupply.energyAccumulatedWh);
+        energyPrefs.end();
+        lastSavedEnergy = PowerSupply.energyAccumulatedWh;
+    }
+}
+
+// Reset energy counter (call when user holds AVG button)
+void resetEnergyCounter()
+{
+    PowerSupply.energyAccumulatedWh = 0.0;
+    energyPrefs.begin("energy", false);
+    energyPrefs.putDouble("wh", 0.0);
+    energyPrefs.end();
+    Serial.println("Energy counter reset");
 }
