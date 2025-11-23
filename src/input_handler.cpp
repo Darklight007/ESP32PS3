@@ -177,67 +177,72 @@ static inline UIMode detect_mode()
 }
 
 // ----- handlers (no binding, pure polling) -----
-static void handle_menu_mode()
+
+// Helper: Navigate sidebar menu and auto-scroll sidebar
+static void navigate_sidebar_menu(int dir)
 {
     lv_obj_t *list = current_sidebar_list();
     if (!list)
         return;
 
+    const int count = lv_obj_get_child_cnt(list);
+    g_menu_index = std::clamp(g_menu_index + dir, 0, std::max(0, count - 1));
+
+    // "Activate" the target row (this selects the menu item)
+    lv_obj_t *selected_item = lv_obj_get_child(list, g_menu_index);
+    lv_event_send(selected_item, LV_EVENT_CLICKED, nullptr);
+
+    // Auto-scroll sidebar if the selected item is outside the visible area
+    lv_obj_t *sidebar_page = lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu);
+    if (sidebar_page && selected_item)
+    {
+        lv_area_t item_area;
+        lv_obj_get_coords(selected_item, &item_area);
+
+        lv_area_t page_area;
+        lv_obj_get_coords(sidebar_page, &page_area);
+
+        // Check if item is below visible area
+        if (item_area.y2 > page_area.y2)
+        {
+            lv_coord_t scroll_amount = -(item_area.y2 - page_area.y2 + 5);
+            lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_ON);
+        }
+        // Check if item is above visible area
+        else if (item_area.y1 < page_area.y1)
+        {
+            lv_coord_t scroll_amount = page_area.y1 - item_area.y1 + 5;
+            lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_ON);
+        }
+    }
+}
+
+// Helper: Scroll content page
+static void scroll_content_page(int dir)
+{
+    lv_obj_t *main_page = lv_menu_get_cur_main_page(PowerSupply.gui.setting_menu);
+    if (main_page)
+    {
+        lv_coord_t scroll_amount = dir * 30;  // Scroll 30 pixels per encoder step
+        lv_obj_scroll_by(main_page, 0, scroll_amount, LV_ANIM_ON);
+    }
+}
+
+static void handle_menu_mode()
+{
     // Handle encoder2 (current encoder) for sidebar navigation with auto-scroll
     if (encoder2_value != g_last_enc2_menu)
     {
-        // Map wheel direction to list movement
         const int dir = (encoder2_value > g_last_enc2_menu) ? +1 : -1;
-        const int count = lv_obj_get_child_cnt(list);
-        g_menu_index = std::clamp(g_menu_index + dir, 0, std::max(0, count - 1));
-
-        // "Activate" the target row (this selects the menu item)
-        lv_obj_t *selected_item = lv_obj_get_child(list, g_menu_index);
-        lv_event_send(selected_item, LV_EVENT_CLICKED, nullptr);
-
-        // Auto-scroll if the selected item is outside the visible area
-        lv_obj_t *sidebar_page = lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu);
-        if (sidebar_page && selected_item)
-        {
-            // Get the coordinates and dimensions
-            lv_area_t item_area;
-            lv_obj_get_coords(selected_item, &item_area);
-
-            lv_area_t page_area;
-            lv_obj_get_coords(sidebar_page, &page_area);
-
-            // Check if item is below visible area
-            if (item_area.y2 > page_area.y2)
-            {
-                // Scroll down (negative Y in scroll_by moves content up, showing items below)
-                lv_coord_t scroll_amount = -(item_area.y2 - page_area.y2 + 5);  // +5 for padding
-                lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_ON);
-            }
-            // Check if item is above visible area
-            else if (item_area.y1 < page_area.y1)
-            {
-                // Scroll up (positive Y in scroll_by moves content down, showing items above)
-                lv_coord_t scroll_amount = page_area.y1 - item_area.y1 + 5;  // +5 for padding
-                lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_ON);
-            }
-        }
-
+        navigate_sidebar_menu(dir);  // Navigates AND auto-scrolls sidebar when item goes off-screen
         g_last_enc2_menu = encoder2_value;
     }
 
-    // Handle encoder1 (voltage encoder) for content page scrolling
+    // Handle encoder1 (voltage encoder) for content page scrolling only
     if (encoder1_value != g_last_enc1_menu)
     {
-        lv_obj_t *main_page = lv_menu_get_cur_main_page(PowerSupply.gui.setting_menu);
-        if (main_page)
-        {
-            const int dir = (encoder1_value > g_last_enc1_menu) ? -1 : +1;  // Inverted for natural scroll direction
-            lv_coord_t scroll_amount = dir * 30;  // Scroll 30 pixels per encoder step
-
-            // Scroll the content page vertically with smooth animation (matches hand scrolling)
-            lv_obj_scroll_by(main_page, 0, scroll_amount, LV_ANIM_ON);
-        }
-
+        const int dir = (encoder1_value > g_last_enc1_menu) ? -1 : +1;  // Inverted for natural scroll
+        scroll_content_page(dir);  // Scrolls the right side content
         g_last_enc1_menu = encoder1_value;
     }
 }
@@ -812,8 +817,45 @@ void keyCheckLoop()
                  Tabs::setCurrentPage(3);
              });
 
+    // Long press T - REL mode: zero current display (like Keithley 2010 REL)
+    // Must be before RELEASED handlers to set the flag
+    static bool T_hold_triggered = false;
+    keyMenus('T', " HOLD.", [&]
+             {
+                 T_hold_triggered = true;
+                 myTone(NOTE_A4, 50);
+                 if (PowerSupply.mA_Active) {
+                     // Toggle REL for mA range
+                     if (PowerSupply.currentRelActive_mA) {
+                         PowerSupply.currentRelActive_mA = false;
+                         PowerSupply.currentRelOffset_mA = 0.0;
+                     } else {
+                         PowerSupply.currentRelOffset_mA = PowerSupply.Current.measured.value;
+                         PowerSupply.currentRelActive_mA = true;
+                     }
+                 } else {
+                     // Toggle REL for A range
+                     if (PowerSupply.currentRelActive_A) {
+                         PowerSupply.currentRelActive_A = false;
+                         PowerSupply.currentRelOffset_A = 0.0;
+                     } else {
+                         PowerSupply.currentRelOffset_A = PowerSupply.Current.measured.value;
+                         PowerSupply.currentRelActive_A = true;
+                     }
+                 }
+                 // Update REL label visibility
+                 bool relActive = PowerSupply.mA_Active ? PowerSupply.currentRelActive_mA : PowerSupply.currentRelActive_A;
+                 if (PowerSupply.gui.label_current_rel) {
+                     if (relActive)
+                         lv_obj_clear_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
+                     else
+                         lv_obj_add_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
+                 }
+             });
+
     keyMenusPage('T', " RELEASED.", 2, [&]
                  {
+                     if (T_hold_triggered) { T_hold_triggered = false; return; }
                      myTone(NOTE_A4, 10);
                      PowerSupply.toggle_measure_unit();
 
@@ -822,10 +864,17 @@ void keyCheckLoop()
                      lv_obj_add_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
                      PowerSupply.calibrationUpdate();
                      PowerSupply.Current.displayUpdate(true);
+                     // Update REL label for new range
+                     bool relActive = PowerSupply.mA_Active ? PowerSupply.currentRelActive_mA : PowerSupply.currentRelActive_A;
+                     if (PowerSupply.gui.label_current_rel) {
+                         if (relActive) lv_obj_clear_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
+                         else lv_obj_add_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
+                     }
                      blockAll = false; });
 
     keyMenusPage('T', " RELEASED.", 4, [&]
                  {
+                     if (T_hold_triggered) { T_hold_triggered = false; return; }
                      myTone(NOTE_A4, 10, false);
                      PowerSupply.toggle_measure_unit();
 
