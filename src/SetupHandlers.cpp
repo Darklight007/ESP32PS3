@@ -241,6 +241,14 @@ void setupPowerSupply()
     PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", PowerSupply.Current.maxValue, PowerSupply.Current.minValue,
                               1.0, PowerSupply.dac_data.zero_current, 10000,"m");
 
+    // REL indicator label (hidden by default) - same level as "m" prefix
+    PowerSupply.gui.label_current_rel = lv_label_create(PowerSupply.page[2]);
+    lv_label_set_text(PowerSupply.gui.label_current_rel, "R");
+    lv_obj_set_style_text_color(PowerSupply.gui.label_current_rel, lv_color_hex(0xFFFF00), 0);
+    lv_obj_set_style_text_font(PowerSupply.gui.label_current_rel, &lv_font_montserrat_12, 0);
+    lv_obj_align(PowerSupply.gui.label_current_rel, LV_ALIGN_TOP_RIGHT, -2, 74);
+    lv_obj_add_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
+
     // Setup power display parameters
     PowerSupply.Power.setup(PowerSupply.page[2], "", -14, 144, "W", 0, 0, 0, 0, 0,"", &dseg_b_24, &Tauri_R_28);
 
