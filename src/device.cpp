@@ -1,6 +1,7 @@
 #include "esp_task_wdt.h"
 #include "device.hpp"
 #include "MonotoneCubicCalibrator.h"
+#include "setting_menu.h"
 
 extern bool g_voltINL_ready;
 extern MonotoneCubicCalibrator g_voltINL;
@@ -9,6 +10,7 @@ extern Calibration StoreData;
 extern bool lvglIsBusy, lvglChartIsBusy, blockAll;
 
 extern lv_obj_t *btn_function_gen;
+extern CalibrationGui Calib_GUI;
 
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
 
@@ -100,7 +102,7 @@ void Device::SaveCalibrationData()
                   outputData.macAdd,
                   outputData.vCal.value_1, outputData.vCal.code_1, outputData.vCal.value_2, outputData.vCal.code_2,
                   outputData.iCal[mA_Active].value_1, outputData.iCal[mA_Active].code_1, outputData.iCal[mA_Active].value_2, outputData.iCal[mA_Active].code_2,
-                  outputData.internalLeakage);
+                  outputData.internalLeakage[mA_Active]);
 }
 
 void Device::LoadCalibrationData()
@@ -114,7 +116,7 @@ void Device::LoadCalibrationData()
                   outputData.macAdd,
                   outputData.vCal.value_1, outputData.vCal.code_1, outputData.vCal.value_2, outputData.vCal.code_2,
                   outputData.iCal[mA_Active].value_1, outputData.iCal[mA_Active].code_1, outputData.iCal[mA_Active].value_2, outputData.iCal[mA_Active].code_2,
-                  outputData.internalLeakage);
+                  outputData.internalLeakage[mA_Active]);
 
     Serial.printf("\nVoltage Calibration m:%7.3f", Voltage.calib_m);
     Serial.printf("\nVoltage Calibration b:%7.3f", Voltage.calib_b);
@@ -428,13 +430,20 @@ void Device::readCurrent()
 
         // Current used by R11&R12 and arrR2
         // static double diff_A = (0.000461 - 0.000021) / (32.0 - 0.0); // (0.000594 - 0.000143)
-        double internalLeakage = CalBank[bankCalibId].internalLeakage; // 1.0 / 40'000.0; // 1/40kOhm /volt
+        double internalLeakage = CalBank[bankCalibId].internalLeakage[mA_Active]; // 1.0 / 40'000.0; // 1/40kOhm /volt
 
         double currentOfInternalRes =(mA_Active ? 1000.0 : 1.0) *  (Voltage.measured.Mean() / (internalLeakage * 1000.0)) +
                                       0.0 * 0.000180 * !digitalRead(CCCVPin); // Why?; (mA_Active ? .001 : 1.0) * 
 
         c = (((Current.rawValue - Current.calib_b) * Current.calib_1m) - currentOfInternalRes); // old value: .0009
         // c=c+c*0.00009901;
+
+        // Apply REL offset if active (like Keithley 2010 REL button)
+        if (mA_Active && currentRelActive_mA) {
+            c -= currentRelOffset_mA;
+        } else if (!mA_Active && currentRelActive_A) {
+            c -= currentRelOffset_A;
+        }
 
         // Current.hist[c];
 
@@ -523,26 +532,37 @@ void Device::toggle_measure_unit()
 {
     mA_Active = digitalRead(AmA_Pin) ^ 1;
 
-            
     digitalWrite(AmA_Pin, mA_Active); // Toggle the pin state
 
-    lv_obj_t *hdr = lv_win_get_header(gui.calibration.win_ADC_current_calibration);
-    lv_obj_t *title_lbl = lv_obj_get_child(hdr, 0);
+    // Update ADC Current Calibration window title (only if window exists)
+    if (gui.calibration.win_ADC_current_calibration) {
+        lv_obj_t *hdr = lv_win_get_header(gui.calibration.win_ADC_current_calibration);
+        if (hdr) {
+            lv_obj_t *title_lbl = lv_obj_get_child(hdr, 0);
+            if (title_lbl) {
+                lv_label_set_text(title_lbl, mA_Active ? "ADC Current Calibration [mA]" : "ADC Current Calibration [A]");
+            }
+        }
+    }
 
+    // Update Internal Current Calibration window title (only if window exists)
+    if (gui.calibration.win_int_current_calibration) {
+        lv_obj_t *hdr_int = lv_win_get_header(gui.calibration.win_int_current_calibration);
+        if (hdr_int) {
+            lv_obj_t *title_lbl_int = lv_obj_get_child(hdr_int, 0);
+            if (title_lbl_int) {
+                lv_label_set_text(title_lbl_int, mA_Active ? "Internal Current Calibration [mA]" : "Internal Current Calibration [A]");
+            }
+        }
+    }
+
+    // Update mA prefix visibility
     if (mA_Active)
-    {
         lv_obj_clear_flag(Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_text(title_lbl, "ADC Current Calibration [mA]");
-        // Current.adc_maxValue = 3.964;
-
-    }
     else
-    {
         lv_obj_add_flag(Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_text(title_lbl, "ADC Current Calibration [A]");
-        // Current.adc_maxValue = 6.5536;
-    }
-    // lv_obj_invalidate(title_lbl);
+
+    // Note: Internal resistor spinboxes are now separate for A and mA, no need to update on toggle
 }
 
 void Device::writeDAC_Voltage(uint16_t value)
@@ -557,17 +577,25 @@ void Device::writeDAC_Current(uint16_t value)
 
 void Device::VCCCStatusUpdate(void)
 {
+    // Skip if output is off or in function generator mode
+    if (getStatus() == DEVICE::OFF || getStatus() == DEVICE::FUN)
+    {
+        lastCCCVStatus = -1;  // Reset so we re-check when turning on
+        return;
+    }
 
-    static int last_status = false;
-    if (last_status == digitalRead(CCCVPin) || getStatus() == DEVICE::OFF || getStatus() == DEVICE::FUN)
+    int currentStatus = digitalRead(CCCVPin);
+
+    // Skip if status hasn't changed (but -1 means first check after power on)
+    if (lastCCCVStatus == currentStatus)
         return;
 
-    if (digitalRead(CCCVPin) == false)
+    if (currentStatus == false)
         setStatus(DEVICE::CC);
-    else if (getStatus() != DEVICE::OFF && digitalRead(CCCVPin) == true)
+    else
         setStatus(DEVICE::VC);
 
-    last_status = digitalRead(CCCVPin);
+    lastCCCVStatus = currentStatus;
 }
 
 void Device::DACUpdate(void)
@@ -590,21 +618,9 @@ void Device::DACUpdate(void)
 
     if (getStatus() != DEVICE::OFF)
     {
-        static double dac_last_Voltage = -1, dac_last_Current = -1;
-
-        uint16_t v = Voltage.adjValue; //  +0* Voltage.adjOffset;
-        // if (dac_last_Voltage != v)
-        {
-            DAC.writeAndPowerAll(DAC_VOLTAGE, v);
-            dac_last_Voltage = v;
-        }
-
-        uint16_t c = Current.adjValue;
-        // if (dac_last_Current != c)
-        {
-            DAC.writeAndPowerAll(DAC_CURRENT, uint16_t(c));
-            dac_last_Current = c;
-        }
+        // Always write to DAC - no change detection, it was causing missed updates
+        DAC.writeAndPowerAll(DAC_VOLTAGE, Voltage.adjValue);
+        DAC.writeAndPowerAll(DAC_CURRENT, Current.adjValue);
         // Serial.printf("\n v_uint16_t: %i v:%f ", Voltage.adjValue, double((Voltage.adjValue - Voltage.adjOffset) / 2000.0));
         // Serial.printf(" c_uint16_t: %i c:%f ", Current.adjValue, double((Current.adjValue - Current.adjOffset) / 10000.0));
     }
@@ -621,8 +637,12 @@ void Device::turn(SWITCH onOff)
     // powerSwitch = onOff;
     powerSwitch.turn(onOff);
     if (onOff == SWITCH::ON)
+    {
         status = DEVICE::ON;
-
+        // Clear OVP/OCP triggered flags when turning on
+        settingParameters.ovpTriggered = false;
+        settingParameters.ocpTriggered = false;
+    }
     else if (onOff == SWITCH::OFF)
         status = DEVICE::OFF;
 }
@@ -739,6 +759,10 @@ void Device::setStatus(DEVICE status_)
     Voltage.setMeasureColor(stateColor[status_].measured);
     Current.setMeasureColor(stateColor[status_].measured);
     Power.setMeasureColor(stateColor[status_].measured);
+
+    // Update REL label color to match current measurement color
+    if (gui.label_current_rel)
+        lv_obj_set_style_text_color(gui.label_current_rel, stateColor[status_].measured, 0);
 
     Voltage.setStatsColor(stateColor[status_].plotColor1);
     Current.setStatsColor(stateColor[status_].plotColor2);
@@ -865,6 +889,27 @@ void Device::FlushMeasures(void)
         Voltage.displayUpdate();
         Current.displayUpdate();
         Power.displayUpdate();
+
+        // Over-range indicator for mA mode (>= 3.900 mA) - blink like multimeter OL
+        if (mA_Active && Current.measured.Mean() >= 3.900)
+        {
+            static bool blinkState = false;
+            static unsigned long lastBlink = 0;
+            if (millis() - lastBlink >= 250)  // 4Hz blink
+            {
+                blinkState = !blinkState;
+                lastBlink = millis();
+            }
+            if (blinkState)
+                lv_obj_add_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
+            else
+                lv_obj_clear_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
+        }
+        else
+        {
+            // Ensure visible when not over-range
+            lv_obj_clear_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
+        }
 
         Voltage.changed = false;
         Current.changed = false;
