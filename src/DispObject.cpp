@@ -94,30 +94,38 @@ void DispObjects::statUpdate(void)
 
 void DispObjects::barUpdate(void)
 {
+    if (!Bar.changed) return;
 
-    if (Bar.changed)
-    {
-        lv_bar_set_value(Bar.bar, measured.value / (maxValue / adjFactor) * lv_bar_get_max_value(Bar.bar), LV_ANIM_OFF);
-        lv_obj_invalidate(Bar.bar);
-        static double oldMaxValue{0};
-        if (measured.absMax != oldMaxValue)
-        {
-            lv_obj_set_x(Bar.bar_maxMarker, lv_obj_get_x(Bar.bar) + int(measured.absMax * lv_obj_get_width(Bar.bar) / (maxValue / adjFactor)) - 3);
-            oldMaxValue = measured.absMax;
-        }
+    // Pre-compute scale factors (cached - only recalc if bar size changes)
+    static lv_coord_t cachedBarMax = 0;
+    static lv_coord_t cachedBarWidth = 0;
+    static lv_coord_t cachedBarX = 0;
+    static double cachedScaleFactor = 0;
 
-        static double oldMinValue{0};
-        if (measured.absMin != oldMinValue)
-        {
-            lv_obj_set_x(Bar.bar_minMarker, lv_obj_get_x(Bar.bar) + int(measured.absMin * lv_obj_get_width(Bar.bar) / (maxValue / adjFactor)) - 3);
-            oldMinValue = measured.absMin;
-        }
-        // lv_obj_set_width(Bar.bar_adjValue, ((adjValue-adjOffset) ) / maxValue * lv_bar_get_max_value(Bar.bar));
-        // LV_LOG_USER("Voltage max bar:%f",Statistics.value);
-        Bar.changed = false;
-        // oldMaxValue=-INFINITY;
-        // oldMinValue = INFINITY;
+    lv_coord_t barMax = lv_bar_get_max_value(Bar.bar);
+    if (barMax != cachedBarMax || cachedScaleFactor == 0) {
+        cachedBarMax = barMax;
+        cachedBarWidth = lv_obj_get_width(Bar.bar);
+        cachedBarX = lv_obj_get_x(Bar.bar);
+        cachedScaleFactor = adjFactor / maxValue;
     }
+
+    lv_bar_set_value(Bar.bar, measured.value * cachedScaleFactor * cachedBarMax, LV_ANIM_OFF);
+    lv_obj_invalidate(Bar.bar);
+
+    static double oldMaxValue{0};
+    if (measured.absMax != oldMaxValue) {
+        lv_obj_set_x(Bar.bar_maxMarker, cachedBarX + int(measured.absMax * cachedScaleFactor * cachedBarWidth) - 3);
+        oldMaxValue = measured.absMax;
+    }
+
+    static double oldMinValue{0};
+    if (measured.absMin != oldMinValue) {
+        lv_obj_set_x(Bar.bar_minMarker, cachedBarX + int(measured.absMin * cachedScaleFactor * cachedBarWidth) - 3);
+        oldMinValue = measured.absMin;
+    }
+
+    Bar.changed = false;
 }
 
 void DispObjects::enableSetting(bool onOff)
