@@ -614,7 +614,6 @@ void draw_event_cb2(lv_event_t *e)
 
 void btn_function_gen_event_cb(lv_event_t *e)
 {
-
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t *btn = lv_event_get_target(e);
     lv_obj_t *label = lv_obj_get_child(btn, 0);
@@ -624,11 +623,19 @@ void btn_function_gen_event_cb(lv_event_t *e)
         lv_label_set_text(label, "ON");
         if (PowerSupply.getStatus() != DEVICE::FUN)
             PowerSupply.setStatus(DEVICE::FUN);
+
+        // Save current ADC rate and set to 1000 SPS for function generator
+        PowerSupply.settingParameters.adcRateSavedForFUN = PowerSupply.settingParameters.adcRate;
+        PowerSupply.settingParameters.adcRate = 3;  // 3 = 1000 SPS
+        PowerSupply.adc.ads1219->setDataRate(1000);
     }
     else
     {
         lv_label_set_text(label, "OFF");
         PowerSupply.setStatus(DEVICE::ON);
+
+        // Restore previous ADC rate
+        PowerSupply.restoreAdcRateFromFUN();
     }
 
     remove_selected_spinbox();

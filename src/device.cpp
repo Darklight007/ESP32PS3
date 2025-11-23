@@ -565,6 +565,17 @@ void Device::toggle_measure_unit()
     // Note: Internal resistor spinboxes are now separate for A and mA, no need to update on toggle
 }
 
+void Device::restoreAdcRateFromFUN()
+{
+    // Restore ADC rate from saved value when exiting FUN mode or turning OFF
+    if (settingParameters.adcRateSavedForFUN <= 3)
+    {
+        settingParameters.adcRate = settingParameters.adcRateSavedForFUN;
+        const int rates[] = {20, 90, 330, 1000};
+        adc.ads1219->setDataRate(rates[settingParameters.adcRateSavedForFUN]);
+    }
+}
+
 void Device::writeDAC_Voltage(uint16_t value)
 {
     DAC.writeUpdate(DAC_VOLTAGE, value);
@@ -821,10 +832,11 @@ void Device::setStatus(DEVICE status_)
     if (status_ == DEVICE::OFF)
     {
         myTone(NOTE_A3, 200);
-        // Make sure function generator is also off
+        // Make sure function generator is also off and restore ADC rate
         lv_obj_clear_state(btn_function_gen, LV_STATE_CHECKED);
         lv_obj_add_state(btn_function_gen, LV_STATE_DISABLED);
         lv_label_set_text(lv_obj_get_child(btn_function_gen, 0), "OFF");
+        restoreAdcRateFromFUN();  // Restore ADC rate if it was changed by FUN mode
 
         lv_label_set_text(controlMode, "OFF");
         lv_label_set_text(lv_obj_get_child(powerSwitch.btn, 0), "OFF");

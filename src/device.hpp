@@ -85,6 +85,7 @@ enum class StartupBehavior : uint8_t
 struct SettingParameters
 {
     uint8_t adcRate;
+    uint8_t adcRateSavedForFUN = 0;  // Saved ADC rate when FUN mode activated
     uint16_t adcNumberOfAvgs;
     uint8_t adcNumberOfDigits;
     uint16_t SetVoltage;
@@ -499,7 +500,7 @@ public:
     void SaveSetting(void);
 
     void toggle_measure_unit(void);
-
+    void restoreAdcRateFromFUN(void);  // Restore ADC rate after FUN mode
 
     void SaveCalibData(const String &key, const Calibration &data);
     Calibration LoadCalibData(const String &key);
