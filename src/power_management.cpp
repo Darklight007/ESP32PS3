@@ -97,7 +97,9 @@ void updateTimerDisplay()
 // Integrate energy (Power * Time)
 void integrateEnergy()
 {
-    if (PowerSupply.getStatus() != DEVICE::ON)
+    // Check if output is active (ON, CC, or VC modes)
+    DEVICE status = PowerSupply.getStatus();
+    if (status == DEVICE::OFF || status == DEVICE::FUN)
     {
         PowerSupply.lastEnergyUpdateTime = 0;
         return;
@@ -117,6 +119,9 @@ void integrateEnergy()
     // Get current power in watts
     double voltage = PowerSupply.Voltage.measured.value;
     double current = PowerSupply.Current.measured.value;
+    if (PowerSupply.mA_Active) {
+        current /= 1000.0;  // Convert mA to A for power calculation
+    }
     double power = voltage * current;
 
     // Integrate: Energy += Power * Time
@@ -128,19 +133,30 @@ void integrateEnergy()
 // Check and enforce voltage/current software limits
 void enforceSoftwareLimits()
 {
+    // Skip if already triggered (prevents re-triggering loop)
+    static unsigned long lastTriggerTime = 0;
+    if (millis() - lastTriggerTime < 1000) return;
+
+    // Check if output is active (ON, CC, or VC modes)
+    DEVICE status = PowerSupply.getStatus();
+    bool outputActive = (status != DEVICE::OFF && status != DEVICE::FUN);
+
     // Check voltage limit (OVP)
     if (PowerSupply.settingParameters.ovpEnabled &&
         PowerSupply.Voltage.measured.value > PowerSupply.settingParameters.voltageLimitMax)
     {
-        if (PowerSupply.getStatus() == DEVICE::ON)
+        if (outputActive)
         {
+            lastTriggerTime = millis();
             PowerSupply.turn(SWITCH::OFF);
-            lv_obj_clear_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
+            PowerSupply.settingParameters.ovpTriggered = true;
+            if (PowerSupply.powerSwitch.btn)
+                lv_obj_clear_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
             if (PowerSupply.settingParameters.beeperOnError)
             {
-                myTone(NOTE_C8, 200);
+                myTone(NOTE_C5, 200);
                 delay(100);
-                myTone(NOTE_C8, 200);
+                myTone(NOTE_C5, 200);
             }
             Serial.printf("OVP triggered! Voltage %.3fV exceeded limit %.3fV\n",
                          PowerSupply.Voltage.measured.value,
@@ -149,22 +165,34 @@ void enforceSoftwareLimits()
     }
 
     // Check current limit (OCP)
-    if (PowerSupply.settingParameters.ocpEnabled &&
-        PowerSupply.Current.measured.value > PowerSupply.settingParameters.currentLimitMax)
+    // Note: currentLimitMax is always in Amps, but Current.measured.value
+    // is in mA when mA_Active is true, so we need to convert for comparison
+    if (PowerSupply.settingParameters.ocpEnabled)
     {
-        if (PowerSupply.getStatus() == DEVICE::ON)
+        float measuredCurrent_A = PowerSupply.Current.measured.value;
+        if (PowerSupply.mA_Active) {
+            measuredCurrent_A /= 1000.0f;  // Convert mA to A
+        }
+
+        if (measuredCurrent_A > PowerSupply.settingParameters.currentLimitMax)
         {
-            PowerSupply.turn(SWITCH::OFF);
-            lv_obj_clear_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
-            if (PowerSupply.settingParameters.beeperOnError)
+            if (outputActive)
             {
-                myTone(NOTE_C8, 200);
-                delay(100);
-                myTone(NOTE_C8, 200);
+                lastTriggerTime = millis();
+                PowerSupply.turn(SWITCH::OFF);
+                PowerSupply.settingParameters.ocpTriggered = true;
+                if (PowerSupply.powerSwitch.btn)
+                    lv_obj_clear_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
+                if (PowerSupply.settingParameters.beeperOnError)
+                {
+                    myTone(NOTE_C5, 200);
+                    delay(100);
+                    myTone(NOTE_C5, 200);
+                }
+                Serial.printf("OCP triggered! Current %.3fA exceeded limit %.3fA\n",
+                             measuredCurrent_A,
+                             PowerSupply.settingParameters.currentLimitMax);
             }
-            Serial.printf("OCP triggered! Current %.3fA exceeded limit %.3fA\n",
-                         PowerSupply.Current.measured.value,
-                         PowerSupply.settingParameters.currentLimitMax);
         }
     }
 }
@@ -197,7 +225,7 @@ void autoSaveCheck()
 void initializePowerManagement()
 {
     PowerSupply.powerOnStartTime = millis();
-    PowerSupply.energyAccumulatedWh = 0.0;
+    // Don't reset energyAccumulatedWh - keep accumulating until device restart
     PowerSupply.lastEnergyUpdateTime = millis();
 
     if (PowerSupply.settingParameters.timerEnabled)
@@ -215,7 +243,7 @@ void initializePowerManagement()
 void resetPowerManagement()
 {
     PowerSupply.powerOnStartTime = 0;
-    PowerSupply.energyAccumulatedWh = 0.0;
+    // Don't reset energyAccumulatedWh - keep accumulating until device restart
     PowerSupply.lastEnergyUpdateTime = 0;
     PowerSupply.timerStartTime = 0;
 }
