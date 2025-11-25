@@ -45,87 +45,56 @@ void Task_BarGraph(void *pvParameters)
 double t = 0;
 void Task_ADC(void *pvParameters)
 {
+    // ADC task using interrupt-driven approach with task notifications
+    // This is more efficient than polling - the task sleeps until the ISR wakes it up
 
-    // ************************ Temperature DS18B20 Sensor ********************************************************
+    static unsigned long timer_ = {0};
+    static unsigned long lastActivityTime = 0;
+
     for (;;)
     {
-
-        // if (lvglIsBusy)
-        // {
-
-        //  toneOff();
-        // vTaskDelay(1);
-
-        // }
-        // Serial.printf("\nMeasured adcDataReady :%i Channel:%i", adcDataReady, PowerSupply.adc.busyChannel);
-
         toneOff();
-        static unsigned long timer_ = {0};
-        static bool trigger = false;
-        if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
 
+        // Handle DAC updates based on function generator state
+        if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+        {
             schedule([&]
                      {
                             functionGenerator();
                             PowerSupply.DACUpdate(); },
                      5, timer_);
-
+        }
         else
+        {
             schedule([]
                      { PowerSupply.DACUpdate(); },
                      100, timer_);
+        }
 
+        // Handle keyboard and encoder input when ADC is idle
+        // This happens while waiting for the next ADC interrupt
         if (!adcDataReady)
         {
             if (wireConnected)
             {
-                // isPowerSupply.gui.textarea_set_valueHidden = lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
                 if (!lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN))
                     KeyCheckInterval(10);
-
-                else if (!lv_obj_has_state(Utility_objs.switch_keys_scan, LV_STATE_CHECKED))
-                {
-                    // if (trigger)
-                    // {
-                    //     KeyCheckInterval(105);
-                    //     Serial.printf("\n Triggered *******************!");
-                    // }
-                    // else
-                    // KeyCheckInterval(105);
-                }
-                else
+                else if (lv_obj_has_state(Utility_objs.switch_keys_scan, LV_STATE_CHECKED))
                     KeyCheckInterval(105);
             }
             getSettingEncoder(NULL, NULL);
 
-            // DACInterval(49);
-
-            // trackLoopExecution(__func__);
-
-            // if (Tabs::getCurrentPage() == 2)
-            //     vTaskDelay(1);
-            // else if (Tabs::getCurrentPage() == 1)
-            //     vTaskDelay(5);
-            //  vTaskDelay(1);
+            // Wait for ADC interrupt notification with 100ms timeout
+            // This blocks the task efficiently instead of busy-waiting
+            // Timeout ensures we still process inputs even if no ADC data arrives
+            ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
             continue;
         }
-        // if (xSemaphoreTake(timerSemaphore, portMAX_DELAY) != pdTRUE)
-        // {
-        //     vTaskDelay(1);
-        //     continue;
-        // }
 
-        // New ADC sample is ready
-        // if (Tabs::getCurrentPage() == 1)
-        // {
-        //     if (adcDataReady && PowerSupply.adc.busyChannel == VOLTAGE)
-        //         V.shift(); // Shift for new sample
-        //
-        //     if (adcDataReady && PowerSupply.adc.busyChannel == CURRENT)
-        //         I.shift(); // Shift for new sample
-        // }
-        // ulTaskNotifyTake(pdTRUE, portMAX_DELAY);   // wait until ready
-        if (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0) // avid conversion when spi is working!
+        // ADC data is ready - process it
+        lastActivityTime = millis();
+
+        if (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0)
         {
             PowerSupply.readVoltage();
             PowerSupply.readCurrent();

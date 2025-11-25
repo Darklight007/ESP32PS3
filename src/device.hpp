@@ -67,12 +67,21 @@ extern volatile bool adcDataReady;
 extern bool blockAll;
 // extern volatile bool dataReady;
 
+// Task handle for ADC task (needed for notifications)
+extern TaskHandle_t Task_adc;
+
 static void IRAM_ATTR ADCPinISR()
 {
     adcDataReady = true;
-    // dataReady = true;
-    // Device::readVoltage();
-    // Device::readCurrent();
+
+    // Notify ADC task that new data is ready
+    // Use task notification for efficient interrupt-to-task communication
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    if (Task_adc != NULL)
+    {
+        vTaskNotifyGiveFromISR(Task_adc, &xHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
 }
 
 enum class StartupBehavior : uint8_t
