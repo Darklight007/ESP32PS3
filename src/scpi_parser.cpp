@@ -330,6 +330,19 @@ void SCPIParser::cmd_TST_Q()
         }
     }
 
+    // Test 3: DAC Communication Test
+    // Test DAC write operation (non-destructive - write to input register only)
+    Wire.beginTransmission(PowerSupply.DAC.address);
+    Wire.write(((WRITE_REGISTER & 0b00001111) << 4) | DAC_A);
+    Wire.write(0x80);  // MSB of test value
+    Wire.write(0x00);  // LSB of test value
+    uint8_t dacError = Wire.endTransmission();
+    if (dacError != 0)
+    {
+        allTestsPassed = false;
+        failureDetails += "DAC_COMM_FAIL;";
+    }
+
     // Generate response
     if (allTestsPassed)
     {
