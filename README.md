@@ -38,7 +38,7 @@ This project implements a precision programmable power supply using the ESP32-S3
 
 - **24-bit ADC** precision voltage/current measurement (ADS1219)
 - **16-bit DAC** control (LTC2655)
-- **3.2" TFT touchscreen** with LVGL graphics (320x240 ILI9341)
+- **3.5" TFT touchscreen** with LVGL graphics (320x240 ILI9341)
 - **Dual rotary encoders** for precise control
 - **Matrix keypad** for direct value entry
 - **SCPI over USB Serial** for remote control
@@ -52,7 +52,7 @@ Voltage Range:    0 - 32.768V
 Current Range:    0 - 5.000A (switchable to mA mode for precision)
 Measurement:      24-bit resolution
 Control:          16-bit DAC resolution
-Update Rate:      Up to 1000 SPS ADC sampling
+Update Rate:      Up to 600 SPS ADC sampling
 Interface:        Touchscreen + Encoders + Keypad + SCPI
 ```
 
@@ -83,7 +83,7 @@ Interface:        Touchscreen + Encoders + Keypad + SCPI
 
 - **Function Generator**: 18 waveform types (sine, triangle, square, pulse, etc.)
 - **INL Calibration**: Integral Non-Linearity correction with cubic interpolation
-- **Multi-Bank Memory**: Save/load 20 preset configurations
+- **Multi-Bank Memory**: Save/load 10 preset configurations
 - **OVP/OCP**: Software over-voltage/over-current protection with beeper alert
 - **Energy Counter**: Cumulative Wh tracking with persistent storage
 - **Timer**: Auto-shutdown after configurable duration
@@ -623,6 +623,14 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ---
 
+## 👨‍💻 Author
+
+**Darklight007**
+- GitHub: [@Darklight007](https://github.com/Darklight007)
+- Repository: [ESP32PS3](https://github.com/Darklight007/ESP32PS3)
+
+---
+
 ## 🙏 Acknowledgments
 
 ### Libraries Used
@@ -641,7 +649,6 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ### Special Thanks
 
-- **Anthropic Claude Code** - AI-assisted development and code optimization
 - **ESP32 Community** - Invaluable forums and resources
 - **Open Source Contributors** - All library authors and maintainers
 
@@ -649,9 +656,8 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/S3_PS_lvgl_8.4/issues)
-- **Documentation**: [Wiki](https://github.com/yourusername/S3_PS_lvgl_8.4/wiki)
-- **Email**: your.email@example.com
+- **Issues**: [GitHub Issues](https://github.com/Darklight007/ESP32PS3/issues)
+- **Repository**: [ESP32PS3](https://github.com/Darklight007/ESP32PS3)
 
 ---
 
