@@ -42,6 +42,7 @@
 #include "SetupHandlers.h"
 #include "power_management.h"
 #include "memory_monitor.h"
+#include "scpi_parser.h"
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -85,6 +86,7 @@ void setup()
   initialMemory();
   loadEnergyFromStorage();  // Load persistent energy counter
   MemoryMonitor::init();    // Initialize memory monitoring
+  scpiParser.init();        // Initialize SCPI command parser
 
   Serial.printf("\nSetup() run on core: #%i \n\n", xPortGetCoreID());
 
@@ -112,6 +114,7 @@ void loop() {
   // This makes encoder feel more responsive while saving CPU when idle
   bool encoderActive = (millis() - encoderTimeStamp) < 500;  // 500ms idle threshold
 
+  scpiParser.process();          // Process SCPI commands from Serial
   StatusBarUpdateInterval(443);
   LvglUpdatesInterval(0, encoderActive);  // Force update when encoder active for immediate response
   PowerManagementInterval(500);  // Timer, Energy, Auto-save, Limits

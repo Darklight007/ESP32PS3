@@ -158,9 +158,6 @@ static void INL_timer_cb(lv_timer_t *)
     {
         double v_cmd = TRUE_IDEAL[inl.i]; // TRUE (setpoint) volts
 
-        if (v_cmd > 32.0)                                 // Set the max
-            v_cmd = PowerSupply.Voltage.maxValue * .0005; // Maxvolate
-
         INL_dbg("[INL] SET     i=%d  v_cmd=%.3f", inl.i, v_cmd);
         inl_gui_set(v_cmd);
 
