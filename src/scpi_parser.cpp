@@ -3,6 +3,7 @@
 #include "globals.h"
 #include "buzzer.h"
 #include "version.h"
+#include <Wire.h>
 #include <cstring>
 
 extern Device PowerSupply;
