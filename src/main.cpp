@@ -119,9 +119,11 @@ void loop() {
 
   // trackLoopExecution(__func__);
 
-  // Only flush measures when encoder is idle (reduces CPU load during encoder use)
-  if (!encoderActive)
-    FlushMeasuresInterval(75 + 60 * PowerSupply.Voltage.measured.NofAvgs);
+  // Flush measures - faster when encoder active for immediate visual feedback
+  if (encoderActive)
+    FlushMeasuresInterval(10);  // Very fast update during encoder activity
+  else
+    FlushMeasuresInterval(50);  // Fast update even when idle for responsive display
 
   // Adaptive statistics update: faster when encoder active for responsive display
   if (encoderActive)
