@@ -3,6 +3,7 @@
 #include "globals.h"
 #include "buzzer.h"
 #include "version.h"
+#include "error_handler.h"
 #include <Wire.h>
 #include <cstring>
 
@@ -473,11 +474,16 @@ void SCPIParser::cmd_SOUR_VOLT(const String& param)
         else
         {
             addError(ERR_DATA_OUT_OF_RANGE);
+            // Enhanced error reporting
+            char range[64];
+            snprintf(range, sizeof(range), "0 to %.3fV", maxVolt);
+            ERROR_VALID("SOUR:VOLT", param.c_str(), range);
         }
     }
     else
     {
         addError(ERR_DATA_TYPE_ERROR);
+        ERROR_VALID("SOUR:VOLT", param.c_str(), "numeric value");
     }
 }
 
@@ -520,11 +526,16 @@ void SCPIParser::cmd_SOUR_CURR(const String& param)
         else
         {
             addError(ERR_DATA_OUT_OF_RANGE);
+            // Enhanced error reporting
+            char range[64];
+            snprintf(range, sizeof(range), "0 to %.3fA", maxCurr);
+            ERROR_VALID("SOUR:CURR", param.c_str(), range);
         }
     }
     else
     {
         addError(ERR_DATA_TYPE_ERROR);
+        ERROR_VALID("SOUR:CURR", param.c_str(), "numeric value");
     }
 }
 

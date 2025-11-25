@@ -129,6 +129,9 @@ void Device::LoadCalibrationData()
         Serial.print("\n\n ** WRONG CALIBRATION DATA ** \n");
         Serial.print("\nLoading factory calibration data ...");
 
+        // Report calibration error
+        ERROR_CALIB("Load", "Invalid calibration coefficients - reverting to factory defaults");
+
         CalBank[bankCalibId] = Calibration(CalBank[bankCalibId].macAdd,
                                            {+00.0000, -259, +32.0000, +8164608},
                                            {+00.0000, +104080, +3.0000, +2926000},
@@ -173,6 +176,10 @@ void Device::LoadSetting(void)
     {
         Serial.print("\n\n ** WRONG SETTING DATA ** \n");
         Serial.print("\nLoad default setting ...");
+
+        // Report settings validation error
+        ERROR_REPORT(WARNING, MEMORY, "Settings validation failed - loading defaults");
+
         settingParameters.adcRate = 0;
         settingParameters.adcNumberOfAvgs = 1;
         settingParameters.adcNumberOfDigits = 4;
