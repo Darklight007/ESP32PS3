@@ -122,6 +122,11 @@ void Task_ADC(void *pvParameters)
         if (!adcDataReady)
         {
             ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(TaskTiming::ADC_NOTIFY_TIMEOUT_MS));
+        }
+
+        // Always re-check after wait - might have been woken by timeout instead of notification
+        if (!adcDataReady)
+        {
             continue;
         }
 

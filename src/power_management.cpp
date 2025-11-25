@@ -266,7 +266,7 @@ void saveEnergyToStorage()
 {
     static double lastSavedEnergy = -1.0;
     // Only save if changed by more than 0.001 Wh (1mWh) to reduce flash wear
-    if (abs(PowerSupply.energyAccumulatedWh - lastSavedEnergy) > 0.001)
+    if (fabs(PowerSupply.energyAccumulatedWh - lastSavedEnergy) > 0.001)
     {
         energyPrefs.begin("energy", false);  // Read-write
         energyPrefs.putDouble("wh", PowerSupply.energyAccumulatedWh);

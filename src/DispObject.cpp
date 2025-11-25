@@ -3,7 +3,8 @@
 extern bool lvglIsBusy, blockAll;
 void DispObjects::SetEncoderPins(int aPintNumber, int bPinNumber, enc_isr_cb_t enc_isr_cb = nullptr)
 {
-    encoder = new ESP32Encoder;
+    // NOTE: encoder is a member variable (not a pointer), so no memory leak
+    // It's constructed once with the DispObjects instance
     encoder.always_interrupt = true;
     encoder._enc_isr_cb = enc_isr_cb;
     encoder.attachHalfQuad(aPintNumber, bPinNumber); // attachFullQuad attachHalfQuad attachSingleEdge
@@ -94,7 +95,7 @@ void DispObjects::statUpdate(void)
 
 void DispObjects::barUpdate(void)
 {
-    if (!Bar.changed) return;
+    if (!Bar.changed || !Bar.bar) return;  // Add null check for Power measurement
 
     // Pre-compute scale factors (cached - only recalc if bar size changes)
     static lv_coord_t cachedBarMax = 0;
