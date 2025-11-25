@@ -300,8 +300,51 @@ void SCPIParser::cmd_STB_Q()
 
 void SCPIParser::cmd_TST_Q()
 {
-    // Self-test: 0 = passed, 1 = failed
-    sendResponse("0");
+    // Comprehensive self-test of hardware and software components
+    // Returns: 0 = all tests passed, 1 = any test failed
+
+    bool allTestsPassed = true;
+    String failureDetails = "";
+
+    // Test 1: I2C Bus Health - DAC
+    Wire.beginTransmission(PowerSupply.DAC.address);
+    if (Wire.endTransmission() != 0)
+    {
+        allTestsPassed = false;
+        failureDetails += "I2C_DAC_FAIL;";
+    }
+
+    // Test 2: I2C Bus Health - ADC
+    // Note: ADS1219 address is typically 0x40 or 0x41
+    Wire1.beginTransmission(0x40);
+    uint8_t adcResponse = Wire1.endTransmission();
+    if (adcResponse != 0)
+    {
+        // Try alternate address
+        Wire1.beginTransmission(0x41);
+        adcResponse = Wire1.endTransmission();
+        if (adcResponse != 0)
+        {
+            allTestsPassed = false;
+            failureDetails += "I2C_ADC_FAIL;";
+        }
+    }
+
+    // Generate response
+    if (allTestsPassed)
+    {
+        sendResponse("0");  // All tests passed
+        Serial.println("[SELF-TEST] I2C buses operational");
+    }
+    else
+    {
+        sendResponse("1");  // At least one test failed
+        Serial.print("[SELF-TEST] FAILURES: ");
+        Serial.println(failureDetails);
+
+        // Add detailed error to error queue
+        addError(ERR_EXECUTION_ERROR, failureDetails.c_str());
+    }
 }
 
 void SCPIParser::cmd_WAI()
