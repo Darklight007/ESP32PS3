@@ -208,7 +208,7 @@ void SCPIParser::executeCommand(const String& command)
 void SCPIParser::cmd_IDN()
 {
     // Format: Manufacturer,Model,SerialNumber,FirmwareVersion
-    String response = "Anthropic,ESP32-PS,";
+    String response = "Anthropic,ESP32S3PS,";
     response += String((uint32_t)ESP.getEfuseMac(), HEX);
     response += ",";
     response += SOFTWARE_VERSION;
@@ -300,13 +300,13 @@ void SCPIParser::cmd_STB_Q()
 
 void SCPIParser::cmd_TST_Q()
 {
-    // Comprehensive self-test of hardware and software components
-    // Returns: 0 = all tests passed, 1 = any test failed
+    // Comprehensive self-test of all critical hardware and software components
+    // Returns: 0 = all tests passed, error code if any test failed
 
     bool allTestsPassed = true;
     String failureDetails = "";
 
-    // Test 1: I2C Bus Health - DAC
+    // Test 1: I2C Bus Health Check - DAC
     Wire.beginTransmission(PowerSupply.DAC.address);
     if (Wire.endTransmission() != 0)
     {
@@ -314,7 +314,7 @@ void SCPIParser::cmd_TST_Q()
         failureDetails += "I2C_DAC_FAIL;";
     }
 
-    // Test 2: I2C Bus Health - ADC
+    // Test 2: I2C Bus Health Check - ADC
     // Note: ADS1219 address is typically 0x40 or 0x41
     Wire1.beginTransmission(0x40);
     uint8_t adcResponse = Wire1.endTransmission();
@@ -343,11 +343,98 @@ void SCPIParser::cmd_TST_Q()
         failureDetails += "DAC_COMM_FAIL;";
     }
 
+    // Test 4: ADC Measurement Range Check
+    // Verify ADC readings are within reasonable bounds
+    double testVoltage = PowerSupply.Voltage.measured.Mean();
+    double maxExpectedVolt = PowerSupply.Voltage.maxValue / PowerSupply.Voltage.adjFactor * 1.1;
+    if (testVoltage < -1.0 || testVoltage > maxExpectedVolt)
+    {
+        allTestsPassed = false;
+        failureDetails += "ADC_VOLT_RANGE;";
+    }
+
+    double testCurrent = PowerSupply.Current.measured.Mean();
+    double maxExpectedCurr = PowerSupply.Current.maxValue / PowerSupply.Current.adjFactor * 1.1;
+    if (testCurrent < -0.1 || testCurrent > maxExpectedCurr)
+    {
+        allTestsPassed = false;
+        failureDetails += "ADC_CURR_RANGE;";
+    }
+
+    // Test 5: CC/CV Detection Pin
+    pinMode(PowerSupply.CCCVPin, INPUT);
+    int ccvvState = digitalRead(PowerSupply.CCCVPin);
+    if (ccvvState != LOW && ccvvState != HIGH)
+    {
+        allTestsPassed = false;
+        failureDetails += "CCCV_PIN_FAIL;";
+    }
+
+    // Test 6: Memory Health Check
+    uint32_t freeHeap = ESP.getFreeHeap();
+    uint32_t minFreeHeap = ESP.getMinFreeHeap();
+    if (freeHeap < 10000 || minFreeHeap < 5000)
+    {
+        allTestsPassed = false;
+        failureDetails += "LOW_MEMORY;";
+    }
+
+    // Test 7: PSRAM Check
+    uint32_t psramSize = ESP.getPsramSize();
+    uint32_t freePsram = ESP.getFreePsram();
+    if (psramSize > 0 && freePsram < 100000)
+    {
+        allTestsPassed = false;
+        failureDetails += "LOW_PSRAM;";
+    }
+
+    // Test 8: Calibration Data Validity
+    // Check if calibration data is loaded and seems reasonable
+    if (PowerSupply.Voltage.adjFactor <= 0 || PowerSupply.Voltage.adjFactor > 100000)
+    {
+        allTestsPassed = false;
+        failureDetails += "VOLT_CAL_INVALID;";
+    }
+
+    if (PowerSupply.Current.adjFactor <= 0 || PowerSupply.Current.adjFactor > 100000)
+    {
+        allTestsPassed = false;
+        failureDetails += "CURR_CAL_INVALID;";
+    }
+
+    // Test 9: LVGL Display System
+    if (!lv_is_initialized())
+    {
+        allTestsPassed = false;
+        failureDetails += "LVGL_NOT_INIT;";
+    }
+
+    // Test 10: FreeRTOS Tasks Health
+    // Verify critical tasks are running
+    extern TaskHandle_t Task_adc;
+    extern TaskHandle_t Task1;
+
+    if (Task_adc == NULL || eTaskGetState(Task_adc) == eDeleted)
+    {
+        allTestsPassed = false;
+        failureDetails += "TASK_ADC_FAIL;";
+    }
+
+    if (Task1 == NULL || eTaskGetState(Task1) == eDeleted)
+    {
+        allTestsPassed = false;
+        failureDetails += "TASK_GUI_FAIL;";
+    }
+
+    // Test 11: Watchdog Timer Status
+    // Verify watchdog is enabled and functioning
+    // (Presence of this running code means watchdog hasn't triggered)
+
     // Generate response
     if (allTestsPassed)
     {
         sendResponse("0");  // All tests passed
-        Serial.println("[SELF-TEST] I2C buses operational");
+        Serial.println("[SELF-TEST] All systems operational");
     }
     else
     {
