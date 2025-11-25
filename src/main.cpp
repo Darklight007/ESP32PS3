@@ -41,6 +41,7 @@
 // #include "setting_menu2.h"
 #include "SetupHandlers.h"
 #include "power_management.h"
+#include "memory_monitor.h"
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -83,6 +84,7 @@ void setup()
   createTasks();
   initialMemory();
   loadEnergyFromStorage();  // Load persistent energy counter
+  MemoryMonitor::init();    // Initialize memory monitoring
 
   Serial.printf("\nSetup() run on core: #%i \n\n", xPortGetCoreID());
 
@@ -113,6 +115,7 @@ void loop() {
   StatusBarUpdateInterval(443);
   LvglUpdatesInterval(0, encoderActive);  // Force update when encoder active for immediate response
   PowerManagementInterval(500);  // Timer, Energy, Auto-save, Limits
+  MemoryMonitorInterval(5000);   // Memory monitoring every 5 seconds
 
   // trackLoopExecution(__func__);
 

@@ -18,3 +18,4 @@ void LvglUpdatesInterval(unsigned long interval);
 void LvglUpdatesInterval(unsigned long interval, bool forceUpdate);
 void FFTUpdateInterval(unsigned long interval);
 void PowerManagementInterval(unsigned long interval);  // New: Timer, Energy, Auto-save, Limits
+void MemoryMonitorInterval(unsigned long interval);    // New: Heap and stack monitoring

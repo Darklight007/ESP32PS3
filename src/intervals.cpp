@@ -5,6 +5,7 @@
 #include "globals.h"
 #include "FFTHandler.h"
 #include "power_management.h"
+#include "memory_monitor.h"
 
 // External references
 extern Device PowerSupply;
@@ -189,6 +190,18 @@ void PowerManagementInterval(unsigned long interval)
 
             // Auto-save check
             autoSaveCheck();
+        },
+        interval, timer_);
+}
+
+// Memory Monitoring Interval
+void MemoryMonitorInterval(unsigned long interval)
+{
+    static unsigned long timer_ = 0;
+    schedule(
+        []
+        {
+            MemoryMonitor::update();
         },
         interval, timer_);
 }
