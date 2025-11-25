@@ -1,4 +1,5 @@
 #include "SetupHandlers.h" // Include the setup handlers header
+#include "i2c_recovery.h"  // Include I2C bus recovery module
 
 // **Pin Definitions**
 #define SDA_1_ADC 17 // SDA pin for I2C bus 1 (ADC)
@@ -74,6 +75,11 @@ void initializeI2C()
     // Initialize I2C buses with appropriate clock rates
     Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_1_7M); // For ADS1219 (supports up to 1 Mbps)
     Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_1_7M);  // For other devices (supports up to 1.7 Mbps)
+
+    // Initialize I2C recovery system for both buses
+    I2CRecovery::init(&Wire, SDA_2_KEY, SCL_2_KEY);    // Wire: DAC bus
+    // Note: Wire1 is ADC bus, but ADS1219 uses internal error handling
+
     // delay(100);                                          // Wait for I2C buses to stabilize
     // Scan the default I2C bus (Wire)
     wireConnected = scanI2CBus(Wire, 0x20);

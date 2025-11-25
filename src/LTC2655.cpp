@@ -1,6 +1,7 @@
 
 #include "Arduino.h"
 #include "LTC2655.h"
+#include "i2c_recovery.h"
 #include <Wire.h>
 
 LTC2655::LTC2655(uint8_t addr)
@@ -14,7 +15,7 @@ LTC2655::LTC2655(uint8_t addr)
 
 uint8_t LTC2655::sendCommand(int command, dacChannel_t channel, uint16_t data)
 {
-  // Start I2C transmission to device at the address specified in the datasheet.
+    // Start I2C transmission to device at the address specified in the datasheet.
     // Reference: Slave Address Map, Table 2, page 20 of the datasheet.
     Wire.beginTransmission(address);
 
@@ -26,14 +27,15 @@ uint8_t LTC2655::sendCommand(int command, dacChannel_t channel, uint16_t data)
     Wire.write(data & 0x00ff);
 
     // End I2C transmission. Returns: 0=success, 1=data too long, 2=NACK on addr, 3=NACK on data, 4=other
-    return Wire.endTransmission();
-    
-    // NOPs may be unnecessary unless specifically required by the timing of the I2C hardware.
-    // __asm__("nop\n\t");
-    // __asm__("nop\n\t");
-    
-    // Delay can be uncommented if required by the device after sending commands (see datasheet specifications).
-    // delay(1);
+    uint8_t error = Wire.endTransmission();
+
+    // Handle I2C errors with automatic recovery
+    if (error != 0)
+    {
+        I2CRecovery::handleError(error);
+    }
+
+    return error;
 }
 
 void LTC2655::write(dacChannel_t channel, uint16_t data)
