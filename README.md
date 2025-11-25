@@ -154,7 +154,7 @@ Wire1 (Bus 1): 0x40 - ADS1219 (ADC)
 │  ├── Graph data recording                               │
 │  ├── DAC output updates (100Hz normal, 200Hz fgen)      │
 │  └── Keyboard/Encoder input polling                     │
-│                                                          │
+│                                                         │
 │  Task_BarGraph (Priority 0)                             │
 │  └── Bar graph rendering (main page only)               │
 └─────────────────────────────────────────────────────────┘
@@ -274,20 +274,20 @@ graph LR
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  [Stats] [Graph] [Main] [Utility] [Settings]       │ ← Tabs
+│  [Stats] [Graph] [Main] [Utility] [Settings]        │ ← Tabs
 ├─────────────────────────────────────────────────────┤
 │                                                     │
-│  ╔═══════════════════════════════════════════════╗ │
-│  ║                                               ║ │
-│  ║            Active Page Content                ║ │
-│  ║                                               ║ │
-│  ║         (Dynamically rendered based           ║ │
-│  ║             on selected tab)                  ║ │
-│  ║                                               ║ │
-│  ╚═══════════════════════════════════════════════╝ │
+│  ╔═══════════════════════════════════════════════╗  │
+│  ║                                               ║  │
+│  ║            Active Page Content                ║  │
+│  ║                                               ║  │
+│  ║         (Dynamically rendered based           ║  │
+│  ║             on selected tab)                  ║  │
+│  ║                                               ║  │
+│  ╚═══════════════════════════════════════════════╝  │
 │                                                     │
 ├─────────────────────────────────────────────────────┤
-│  Status: VC  │  12.500V │ 1.523A │  19.04W        │ ← Status Bar
+│  Status: VC  │  12.500V │ 1.523A │  19.04W          │ ← Status Bar
 └─────────────────────────────────────────────────────┘
 ```
 

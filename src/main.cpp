@@ -43,6 +43,7 @@
 #include "power_management.h"
 #include "memory_monitor.h"
 #include "scpi_parser.h"
+#include "error_handler.h"
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -62,6 +63,7 @@ void setup()
   // esp_task_wdt_deinit(); // Deinitializes the task watchdog timer
 
   initializeSerial();
+  ErrorHandler::init(true, true);  // Enable serial and UI error reporting
   initialMemory();
   initializeI2C();
   initializeDisplay();

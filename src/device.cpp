@@ -2,6 +2,7 @@
 #include "device.hpp"
 #include "MonotoneCubicCalibrator.h"
 #include "setting_menu.h"
+#include "error_handler.h"
 
 extern bool g_voltINL_ready;
 extern MonotoneCubicCalibrator g_voltINL;
