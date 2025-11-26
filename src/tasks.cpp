@@ -11,6 +11,7 @@ namespace TaskTiming {
     constexpr unsigned long BARGRAPH_DELAY_ACTIVE_MS = 1;
     constexpr unsigned long DAC_UPDATE_INTERVAL_NORMAL_MS = 100;
     constexpr unsigned long DAC_UPDATE_INTERVAL_FUNGEN_MS = 5;
+    constexpr unsigned long KEY_CHECK_INTERVAL_ULTRAFAST_MS = 2;  // Ultra-fast when actively typing
     constexpr unsigned long KEY_CHECK_INTERVAL_FAST_MS = 10;
     constexpr unsigned long KEY_CHECK_INTERVAL_SLOW_MS = 105;
     constexpr unsigned long ADC_NOTIFY_TIMEOUT_MS = 1;
@@ -106,14 +107,28 @@ void Task_ADC(void *pvParameters)
         // Handle keyboard and encoder input for responsive UI
         if (wireConnected)
         {
-            const unsigned long keyInterval = !lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN)
-                ? TaskTiming::KEY_CHECK_INTERVAL_FAST_MS
-                : TaskTiming::KEY_CHECK_INTERVAL_SLOW_MS;
+            bool textareaVisible = !lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
 
-            if (!lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN) ||
-                lv_obj_has_state(Utility_objs.switch_keys_scan, LV_STATE_CHECKED))
+            // Three-tier scanning speed:
+            // - ULTRAFAST (2ms): When actively typing numbers
+            // - FAST (10ms): When textarea is visible but waiting for first key
+            // - SLOW (105ms): When textarea is hidden
+            unsigned long keyInterval;
+            if (textareaVisible && keyboardInputActive)
+                keyInterval = TaskTiming::KEY_CHECK_INTERVAL_ULTRAFAST_MS;
+            else if (textareaVisible)
+                keyInterval = TaskTiming::KEY_CHECK_INTERVAL_FAST_MS;
+            else
+                keyInterval = TaskTiming::KEY_CHECK_INTERVAL_SLOW_MS;
+
+            if (textareaVisible || lv_obj_has_state(Utility_objs.switch_keys_scan, LV_STATE_CHECKED))
             {
                 KeyCheckInterval(keyInterval);
+            }
+            else
+            {
+                // Disable scanning when textarea closed and manual scan switch is OFF
+                keyboardInputActive = false;
             }
         }
         getSettingEncoder(NULL, NULL);

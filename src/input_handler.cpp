@@ -1080,32 +1080,32 @@ void keyCheckLoop()
     if (Tabs::getCurrentPage() == 2)
     {
         keyMenus('7', " RELEASED.", []
-                 { key_event_handler(0); });
+                 { keyboardInputActive = true; key_event_handler(0); });
         keyMenus('8', " RELEASED.", []
-                 { key_event_handler(1); });
+                 { keyboardInputActive = true; key_event_handler(1); });
         keyMenus('9', " RELEASED.", []
-                 { key_event_handler(2); });
+                 { keyboardInputActive = true; key_event_handler(2); });
         keyMenus('<', " RELEASED.", []
-                 { key_event_handler(3); });
+                 { keyboardInputActive = true; key_event_handler(3); });
 
         keyMenus('4', " RELEASED.", []
-                 { key_event_handler(5); });
+                 { keyboardInputActive = true; key_event_handler(5); });
         keyMenus('5', " RELEASED.", []
-                 { key_event_handler(6); });
+                 { keyboardInputActive = true; key_event_handler(6); });
         keyMenus('6', " RELEASED.", []
-                 { key_event_handler(7); });
+                 { keyboardInputActive = true; key_event_handler(7); });
 
         keyMenus('1', " RELEASED.", []
-                 { key_event_handler(10); });
+                 { keyboardInputActive = true; key_event_handler(10); });
         keyMenus('2', " RELEASED.", []
-                 { key_event_handler(11); });
+                 { keyboardInputActive = true; key_event_handler(11); });
         keyMenus('3', " RELEASED.", []
-                 { key_event_handler(12); });
+                 { keyboardInputActive = true; key_event_handler(12); });
 
         keyMenus('0', " RELEASED.", []
-                 { key_event_handler(15); });
+                 { keyboardInputActive = true; key_event_handler(15); });
         keyMenus('.', " RELEASED.", []
-                 { key_event_handler(16); });
+                 { keyboardInputActive = true; key_event_handler(16); });
 
         keyMenusPage('E', " RELEASED.", 2, []
                      {  if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
@@ -1131,12 +1131,15 @@ void keyCheckLoop()
                          lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
                          key_event_handler_readBack(PowerSupply.Voltage);
                          ismyTextHiddenChange = true;
+                         keyboardInputActive = false;  // Reset - waiting for first number
                          delay(100);
                      }
                      else if (strcmp(lv_label_get_text(unit_label), "V") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-
+                     {
                          key_event_handler(8);
-                        lv_obj_invalidate(lv_scr_act()); });
+                         keyboardInputActive = false;  // Disable after confirmation
+                     }
+                     lv_obj_invalidate(lv_scr_act()); });
 
     keyMenusPage('v', " RELEASED.", 2, []
                  {
@@ -1145,10 +1148,15 @@ void keyCheckLoop()
                          lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
                          key_event_handler_readBack_k(PowerSupply.Voltage);
                          ismyTextHiddenChange = true;
+                         keyboardInputActive = false;  // Reset - waiting for first number
                          delay(100);
                      }
                      else if (strcmp(lv_label_get_text(unit_label), "mV") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-                         key_event_handler(9);lv_obj_invalidate(lv_scr_act());  });
+                     {
+                         key_event_handler(9);
+                         keyboardInputActive = false;  // Disable after confirmation
+                     }
+                     lv_obj_invalidate(lv_scr_act());  });
 
     keyMenusPage('A', " RELEASED.", 2, []
                  {
@@ -1157,10 +1165,15 @@ void keyCheckLoop()
                          lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
                          key_event_handler_readBack(PowerSupply.Current);
                          ismyTextHiddenChange = true;
-                           delay(100);
+                         keyboardInputActive = false;  // Reset - waiting for first number
+                         delay(100);
                      }
                      else if (strcmp(lv_label_get_text(unit_label), "A") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-                         key_event_handler(13); lv_obj_invalidate(lv_scr_act()); });
+                     {
+                         key_event_handler(13);
+                         keyboardInputActive = false;  // Disable after confirmation
+                     }
+                     lv_obj_invalidate(lv_scr_act()); });
 
     keyMenusPage('a', " RELEASED.", 2, []
                  {
@@ -1169,10 +1182,15 @@ void keyCheckLoop()
                 lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
                 key_event_handler_readBack_k(PowerSupply.Current);
                 ismyTextHiddenChange = true;
-                  delay(100);
+                keyboardInputActive = false;  // Reset - waiting for first number
+                delay(100);
             }
             else if (strcmp(lv_label_get_text(unit_label), "mA") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-                key_event_handler(14);lv_obj_invalidate(lv_scr_act());  });
+            {
+                key_event_handler(14);
+                keyboardInputActive = false;  // Disable after confirmation
+            }
+            lv_obj_invalidate(lv_scr_act());  });
 
     keyMenusPage('W', " RELEASED.", 2, []
                  {

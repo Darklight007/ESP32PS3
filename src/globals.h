@@ -28,6 +28,7 @@ extern bool blockAll;
 
 // Input state
 extern bool dropdown_active;
+extern bool keyboardInputActive;  // Tracks if user is actively typing numbers
 
 // Utility charts
 extern lv_obj_t *util_Arbit_chart;
