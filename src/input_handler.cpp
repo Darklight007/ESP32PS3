@@ -11,6 +11,7 @@
 #include <algorithm>
 #include "globalFunctions.h"
 #include "waveform_generator.h"
+#include "Key.h"  // For LIST_MAX, PRESSED, HOLD key states
 
 // External references
 extern TFT_eSPI tft;
@@ -18,6 +19,7 @@ extern Device PowerSupply;
 extern lv_obj_t *slider_x;
 extern Waveform waveforms[];
 extern int numWaveforms;
+extern Keypad_MC17 kpd;
 
 // Touch attribute structure
 struct TouchAttr_
@@ -752,6 +754,41 @@ void managePageEncoderInteraction()
 void keyCheckLoop()
 {
     getKeys();
+
+    // Custom fast repeat for delete key '<'
+    // Check all keys to see if '<' is currently being held (not just state changed)
+    static unsigned long lastDeleteRepeat = 0;
+    static bool deleteKeyWasPressed = false;
+    const unsigned long DELETE_REPEAT_INTERVAL_MS = 50;  // Repeat every 50ms when held
+
+    bool deleteKeyCurrentlyPressed = false;
+    for (int i = 0; i < LIST_MAX; i++) {
+        if (kpd.key[i].kchar == '<' &&
+            (kpd.key[i].kstate == PRESSED || kpd.key[i].kstate == HOLD)) {
+            deleteKeyCurrentlyPressed = true;
+            break;
+        }
+    }
+
+    if (deleteKeyCurrentlyPressed && deleteKeyWasPressed) {
+        // Key is being held - check if it's time to repeat
+        unsigned long now = millis();
+        if (now - lastDeleteRepeat >= DELETE_REPEAT_INTERVAL_MS) {
+            // Trigger delete action
+            if (Tabs::getCurrentPage() == 2 && !lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN)) {
+                key_event_handler(3);  // Delete
+                keyboardInputActive = true;
+            }
+            lastDeleteRepeat = now;
+        }
+    }
+
+    if (deleteKeyCurrentlyPressed) {
+        lastDeleteRepeat = millis();  // Reset timer when first pressed
+    }
+
+    deleteKeyWasPressed = deleteKeyCurrentlyPressed;
+
     if (msg == " IDLE.")
         return;
 
