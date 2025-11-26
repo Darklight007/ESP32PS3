@@ -1087,6 +1087,8 @@ void keyCheckLoop()
                  { keyboardInputActive = true; key_event_handler(2); });
         keyMenus('<', " RELEASED.", []
                  { keyboardInputActive = true; key_event_handler(3); });
+        keyMenus('<', " HOLD.", []
+                 { keyboardInputActive = true; key_event_handler(3); });  // Fast delete when held
 
         keyMenus('4', " RELEASED.", []
                  { keyboardInputActive = true; key_event_handler(5); });
