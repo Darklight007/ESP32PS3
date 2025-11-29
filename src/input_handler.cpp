@@ -195,28 +195,10 @@ static void navigate_sidebar_menu(int dir)
     lv_obj_t *selected_item = lv_obj_get_child(list, g_menu_index);
     lv_event_send(selected_item, LV_EVENT_CLICKED, nullptr);
 
-    // Auto-scroll sidebar if the selected item is outside the visible area
-    lv_obj_t *sidebar_page = lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu);
-    if (sidebar_page && selected_item)
+    // Auto-scroll sidebar to make selected item visible
+    if (selected_item)
     {
-        lv_area_t item_area;
-        lv_obj_get_coords(selected_item, &item_area);
-
-        lv_area_t page_area;
-        lv_obj_get_coords(sidebar_page, &page_area);
-
-        // Check if item is below visible area
-        if (item_area.y2 > page_area.y2)
-        {
-            lv_coord_t scroll_amount = -(item_area.y2 - page_area.y2 + 5);
-            lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_ON);
-        }
-        // Check if item is above visible area
-        else if (item_area.y1 < page_area.y1)
-        {
-            lv_coord_t scroll_amount = page_area.y1 - item_area.y1 + 5;
-            lv_obj_scroll_by(sidebar_page, 0, scroll_amount, LV_ANIM_ON);
-        }
+        lv_obj_scroll_to_view(selected_item, LV_ANIM_ON);
     }
 }
 
@@ -1162,6 +1144,34 @@ void keyCheckLoop()
                  { PowerSupply.Voltage.setLock(!PowerSupply.Voltage.getLock()); });
     keyMenusPage('>', " RELEASED.", 2, []
                  { PowerSupply.Current.setLock(!PowerSupply.Current.getLock()); });
+
+    // '+' button: Increase voltage/current by 0.1V/0.1A on page 2
+    keyMenusPage('+', " RELEASED.", 2, []
+                 {
+                     if (!PowerSupply.Voltage.getLock())
+                     {
+                         // Voltage is unlocked: increment by 0.1V (0.1 * 2000 = 200)
+                         PowerSupply.Voltage.SetUpdate(PowerSupply.Voltage.adjValue + 200);
+                     }
+                     else if (!PowerSupply.Current.getLock())
+                     {
+                         // Current is unlocked: increment by 0.1A (0.1 * 10000 = 1000)
+                         PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue + 1000);
+                     } });
+
+    // '-' button: Decrease voltage/current by 0.1V/0.1A on page 2
+    keyMenusPage('-', " RELEASED.", 2, []
+                 {
+                     if (!PowerSupply.Voltage.getLock())
+                     {
+                         // Voltage is unlocked: decrement by 0.1V (0.1 * 2000 = 200)
+                         PowerSupply.Voltage.SetUpdate(PowerSupply.Voltage.adjValue - 200);
+                     }
+                     else if (!PowerSupply.Current.getLock())
+                     {
+                         // Current is unlocked: decrement by 0.1A (0.1 * 10000 = 1000)
+                         PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue - 1000);
+                     } });
 
     keyMenusPage('V', " RELEASED.", 2, []
                  {

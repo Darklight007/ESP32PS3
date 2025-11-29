@@ -31,14 +31,24 @@ Calibration StoreData("", {0}, {0},{0},0);
 // TFT & keypad
 TFT_eSPI tft;  // default construct
 
-// Keypad matrix & pins are TU-local; only kpd is exported
+// ===== Keypad Matrix Layout =====
+// Physical keypad button mappings (6 rows x 6 columns)
+//
+// Function Key Legend (non-numeric keys):
+// Row 0: H=Home/Restart, M=Settings, j=Stats-reset, k/l=Page nav, T=Unit/REL toggle
+// Row 1: <=Backspace/Delete, -=Decrease 0.1V/A (Page2)/Zoom out (Page0), ^=Lock voltage
+// Row 2: V/v=Voltage show/input, >=Lock current
+// Row 3: A/a=Current show/input, p=(reserved)
+// Row 4: m=Utility/Save, E=Textarea toggle, +=Increase 0.1V/A (Page2)/Zoom in (Page0), q=(reserved)
+// Row 5: W/X/Y=Step size (fine/med/coarse), Z=Cycle averaging, O=Output on/off, r=(reserved)
+//
 static const char keys[ROWS][COLS] = {
-    {'H','M','j','k','l','T'},
-    {'7','8','9','<','-','^'},
-    {'4','5','6','V','v','>'},
-    {'1','2','3','A','a','p'},
-    {'0','.','m','E','+','q'},
-    {'W','X','Y','Z','O','r'}
+    {'H','M','j','k','l','T'},  // Row 0: Home, Settings, Reset stats, Page prev/next, Toggle unit/REL
+    {'7','8','9','<','-','^'},  // Row 1: Numbers 7-9, Delete, Zoom out, Lock voltage
+    {'4','5','6','V','v','>'},  // Row 2: Numbers 4-6, Voltage display/input, Lock current
+    {'1','2','3','A','a','p'},  // Row 3: Numbers 1-3, Current display/input, (reserved)
+    {'0','.','m','E','+','q'},  // Row 4: Zero, Decimal, Utility/Save, Textarea, Zoom in, (reserved)
+    {'W','X','Y','Z','O','r'}   // Row 5: Step fine/med/coarse, Avg cycle, Output, (reserved)
 };
 static const uint8_t rowPins[ROWS] = {0,1,2,3,4,5};
 static const uint8_t colPins[COLS] = {8,9,10,11,12,13};

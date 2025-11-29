@@ -220,6 +220,7 @@ namespace
         PowerSupply.adc.ads1219->setDataRate(atoi(ADC_SPS.at(v)));
         PowerSupply.settingParameters.adcRate = v;
         PowerSupply.ResetStats();
+        PowerSupply.SaveSetting();
     }
 
     static void slider_adcAVG_event_cb(lv_event_t *e)
@@ -234,6 +235,7 @@ namespace
         PowerSupply.Current.measured.SetWindowSize(std::pow(2, v));
         PowerSupply.Power.measured.SetWindowSize(std::pow(2, v));
         PowerSupply.settingParameters.adcNumberOfAvgs = v;
+        PowerSupply.SaveSetting();
     }
 
     static void slider_decimalPoints_event_cb(lv_event_t *e)
