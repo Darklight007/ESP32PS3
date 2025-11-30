@@ -121,6 +121,7 @@ void loop() {
   LvglUpdatesInterval(0, encoderActive);  // Force update when encoder active for immediate response
   PowerManagementInterval(500);  // Timer, Energy, Auto-save, Limits
   MemoryMonitorInterval(5000);   // Memory monitoring every 5 seconds
+  RecordingPlaybackInterval();   // Voltage recording and playback
 
   // trackLoopExecution(__func__);
 

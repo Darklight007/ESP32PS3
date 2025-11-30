@@ -205,3 +205,103 @@ void MemoryMonitorInterval(unsigned long interval)
         },
         interval, timer_);
 }
+
+// Recording and Playback Interval
+void RecordingPlaybackInterval()
+{
+    static unsigned long timer_ = 0;
+    static unsigned long lastSampleTime = 0;
+
+    // Recording logic
+    if (PowerSupply.recordingMem.is_recording)
+    {
+        if (millis() - lastSampleTime >= PowerSupply.recordingMem.sample_rate_ms)
+        {
+            lastSampleTime = millis();
+
+            // Record current voltage reading
+            if (PowerSupply.recordingMem.sample_count < PowerSupply.recordingMem.max_samples)
+            {
+                PowerSupply.recordingMem.samples[PowerSupply.recordingMem.sample_count] =
+                    PowerSupply.Voltage.measured.Mean();
+
+                // Update chart
+                if (PowerSupply.recordingMem.sample_count < 100 && Utility_objs.record_chart)
+                {
+                    lv_chart_set_next_value(Utility_objs.record_chart, Utility_objs.record_chart_series,
+                                           (int32_t)(PowerSupply.Voltage.measured.Mean() * 100));
+                }
+
+                PowerSupply.recordingMem.sample_count++;
+            }
+            else
+            {
+                // Max samples reached, stop recording
+                PowerSupply.recordingMem.is_recording = false;
+                if (Utility_objs.record_status_label)
+                {
+                    lv_label_set_text_fmt(Utility_objs.record_status_label, "Done: %d samples (%d s)",
+                                         PowerSupply.recordingMem.sample_count,
+                                         PowerSupply.recordingMem.duration_seconds);
+                }
+            }
+        }
+    }
+
+    // Playback logic
+    if (PowerSupply.recordingMem.is_playing)
+    {
+        if (millis() - lastSampleTime >= PowerSupply.recordingMem.sample_rate_ms)
+        {
+            lastSampleTime = millis();
+
+            if (PowerSupply.recordingMem.play_index < PowerSupply.recordingMem.sample_count)
+            {
+                // Set voltage to recorded value
+                double voltage = PowerSupply.recordingMem.samples[PowerSupply.recordingMem.play_index];
+                PowerSupply.Voltage.SetUpdate(voltage * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+
+                // Turn on output if not already on
+                if (PowerSupply.status != DEVICE::ON && PowerSupply.status != DEVICE::VC && PowerSupply.status != DEVICE::CC)
+                {
+                    PowerSupply.setStatus(DEVICE::ON);
+                }
+
+                PowerSupply.recordingMem.play_index++;
+
+                // Update status
+                if (Utility_objs.record_status_label)
+                {
+                    lv_label_set_text_fmt(Utility_objs.record_status_label, "Playing: %d/%d",
+                                         PowerSupply.recordingMem.play_index,
+                                         PowerSupply.recordingMem.sample_count);
+                }
+            }
+            else
+            {
+                // Playback complete
+                if (PowerSupply.recordingMem.infinite_loop)
+                {
+                    // Loop back to start
+                    PowerSupply.recordingMem.play_index = 0;
+                    if (Utility_objs.record_status_label)
+                    {
+                        lv_label_set_text(Utility_objs.record_status_label, "Playing (Loop)...");
+                    }
+                }
+                else
+                {
+                    // Stop playback
+                    PowerSupply.recordingMem.is_playing = false;
+                    PowerSupply.recordingMem.play_index = 0;
+                    if (Utility_objs.record_status_label)
+                    {
+                        lv_label_set_text(Utility_objs.record_status_label, "Playback complete");
+                    }
+                    // Turn off output
+                    PowerSupply.setStatus(DEVICE::OFF);
+                }
+            }
+        }
+    }
+}

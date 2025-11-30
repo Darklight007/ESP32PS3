@@ -40,6 +40,19 @@ struct MemArray
     mem memory[10];
 };
 
+struct Recording
+{
+    double samples[2000];     // Recorded voltage samples (up to 2000 points)
+    uint16_t sample_count;    // Number of samples recorded
+    uint16_t sample_rate_ms;  // Sample rate in milliseconds
+    uint16_t duration_seconds; // Recording duration in seconds
+    uint16_t max_samples;     // Maximum samples to record (calculated from duration and rate)
+    bool is_recording;        // Recording state
+    bool is_playing;          // Playback state
+    bool infinite_loop;       // Infinite playback loop enabled
+    uint16_t play_index;      // Current playback position
+};
+
 struct FunGen
 {
     double frequency;
@@ -468,6 +481,7 @@ public:
 
     FunGen funGenMem;
     FunGen funGenArbitraryMem;
+    Recording recordingMem;
 
     // Runtime tracking variables (features #5 and #6)
     unsigned long powerOnStartTime = 0;      // millis() when output turned ON
@@ -525,6 +539,8 @@ public:
 
     void SaveMemoryFgen(const String &key, const FunGen &data);
     FunGen LoadMemoryFgen(const String &key);
+    void SaveMemoryRecording(const String &key, const Recording &data);
+    Recording LoadMemoryRecording(const String &key);
 
     void SaveDACdata(const String &key, const DAC_codes &data);
     DAC_codes LoadDACdata(const String &key);

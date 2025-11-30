@@ -193,13 +193,15 @@ static void navigate_sidebar_menu(int dir)
 
     // "Activate" the target row (this selects the menu item)
     lv_obj_t *selected_item = lv_obj_get_child(list, g_menu_index);
-    lv_event_send(selected_item, LV_EVENT_CLICKED, nullptr);
 
-    // Auto-scroll sidebar to make selected item visible
+    // Scroll FIRST, then click (so the item is visible when it activates)
     if (selected_item)
     {
-        lv_obj_scroll_to_view(selected_item, LV_ANIM_ON);
+        // Use recursive version that searches up the parent tree
+        lv_obj_scroll_to_view_recursive(selected_item, LV_ANIM_ON);
     }
+
+    lv_event_send(selected_item, LV_EVENT_CLICKED, nullptr);
 }
 
 // Helper: Scroll content page
@@ -557,7 +559,8 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
 void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
 {
     // **Handle Vertical Shift/Zoom with Encoder 1**
-    if (encoder1_last_value != encoder1_value)
+    // Only navigate tabs with encoder if user hasn't manually selected a tab
+    if (encoder1_last_value != encoder1_value && !manualTabSelection)
     {
         static u8_t _posY = 0;
 
@@ -568,7 +571,7 @@ void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
             _posY--; // Rotated counter-clockwise
 
         static lv_obj_t *table = lv_obj_get_child(PowerSupply.page[3], 0);
-        lv_tabview_set_act(table, _posY % 4, LV_ANIM_ON);
+        lv_tabview_set_act(table, _posY % 5, LV_ANIM_ON);
     }
 
     if (encoder2_last_value != encoder2_value)
@@ -602,11 +605,13 @@ void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_l
 {
     if (!get_selected_spinbox())
     {
-
         handleUtilityPage(encoder1_last_value, encoder2_last_value);
     }
     else
     {
+        // Spinbox is selected - re-enable encoder navigation for when spinbox is deselected
+        manualTabSelection = false;
+
         static int32_t cursor_pos = 0;
 
         // Check if encoder values have changed

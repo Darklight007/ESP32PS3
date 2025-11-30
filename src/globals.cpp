@@ -18,6 +18,7 @@ struct objs_list Utility_objs;
 // Input state
 bool dropdown_active = false;
 bool keyboardInputActive = false;
+bool manualTabSelection = false;
 
 // Utility charts
 lv_obj_t *util_Arbit_chart;

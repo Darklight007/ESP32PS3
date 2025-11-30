@@ -330,6 +330,34 @@ FunGen Device::LoadMemoryFgen(const String &key)
     return data;
 }
 
+void Device::SaveMemoryRecording(const String &key, const Recording &data)
+{
+    StoreMem.begin("my-app", false);
+    StoreMem.putBytes(key.c_str(), &data, sizeof(Recording));
+    StoreMem.end();
+}
+
+Recording Device::LoadMemoryRecording(const String &key)
+{
+    Recording data;
+    StoreMem.begin("my-app", false);
+    size_t bytesRead = StoreMem.getBytes(key.c_str(), &data, sizeof(Recording));
+    StoreMem.end();
+
+    // Validate loaded data - if invalid, return defaults
+    if (bytesRead == 0 || data.sample_count > 500)
+    {
+        Serial.printf("\nRecording data invalid or not found, using defaults");
+        data.sample_count = 0;
+        data.sample_rate_ms = 100;
+        data.is_recording = false;
+        data.is_playing = false;
+        data.play_index = 0;
+    }
+
+    return data;
+}
+
 void Device::SaveDACdata(const String &key, const DAC_codes &data)
 {
     StoreMem.begin("my-app", false);

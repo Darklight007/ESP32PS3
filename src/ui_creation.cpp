@@ -324,11 +324,23 @@ void Utility_tabview(lv_obj_t *parent)
 
     lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tabview_utility);
 
-    /*Add 4 tabs (the tabs are page (lv_page) and can be scrolled*/
-    lv_obj_t *tab1 = lv_tabview_add_tab(tabview_utility, "Memory");
-    lv_obj_t *tab2 = lv_tabview_add_tab(tabview_utility, "F. Gen.");
-    lv_obj_t *tab3 = lv_tabview_add_tab(tabview_utility, "Arbit");
-    lv_obj_t *tab4 = lv_tabview_add_tab(tabview_utility, "Table");
+    // Add event handler for manual tab selection
+    extern bool manualTabSelection;
+    auto tab_btn_clicked_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        {
+            manualTabSelection = true;  // Disable encoder tab navigation
+        }
+    };
+    lv_obj_add_event_cb(tab_btns, tab_btn_clicked_cb, LV_EVENT_CLICKED, NULL);
+
+    /*Add 5 tabs (the tabs are page (lv_page) and can be scrolled*/
+    lv_obj_t *tab1 = lv_tabview_add_tab(tabview_utility, "Mem");
+    lv_obj_t *tab2 = lv_tabview_add_tab(tabview_utility, "FGen");
+    lv_obj_t *tab3 = lv_tabview_add_tab(tabview_utility, "Arbt");
+    lv_obj_t *tab4 = lv_tabview_add_tab(tabview_utility, "Tabl");
+    lv_obj_t *tab5 = lv_tabview_add_tab(tabview_utility, "Rec");
 
     // Utility page Tab 1 ****************************************************************************************************************************
     /*Add content to the tabs*/
@@ -662,6 +674,225 @@ void Utility_tabview(lv_obj_t *parent)
     };
 
     lv_obj_add_event_cb(loadButton, load_table_data_cb, LV_EVENT_CLICKED, NULL);
+
+    // Utility page Tab 5 - Record ********************************************************************************************************************
+    lv_obj_clear_flag(tab5, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_all(tab5, 3, LV_PART_MAIN);
+
+    // Chart for displaying recorded waveform
+    Utility_objs.record_chart = lv_chart_create(tab5);
+    lv_obj_set_size(Utility_objs.record_chart, 200, 120);
+    lv_obj_align(Utility_objs.record_chart, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_chart_set_type(Utility_objs.record_chart, LV_CHART_TYPE_LINE);
+    lv_chart_set_range(Utility_objs.record_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 3300); // 0-33V range (x100)
+    lv_chart_set_point_count(Utility_objs.record_chart, 100);
+    lv_chart_set_div_line_count(Utility_objs.record_chart, 5, 10);
+    lv_obj_set_style_size(Utility_objs.record_chart, 0, LV_PART_INDICATOR);
+    Utility_objs.record_chart_series = lv_chart_add_series(Utility_objs.record_chart, lv_palette_main(LV_PALETTE_RED), LV_CHART_AXIS_PRIMARY_Y);
+
+    // Status label
+    Utility_objs.record_status_label = lv_label_create(tab5);
+    lv_label_set_text(Utility_objs.record_status_label, "Status: Ready");
+    lv_obj_align(Utility_objs.record_status_label, LV_ALIGN_TOP_LEFT, 3, 125);
+
+    // Sample rate spinbox (in seconds): 0.0001s to 1s with 4 decimal places
+    Utility_objs.record_sample_rate_spinbox = spinbox_pro(tab5, "Rate[s]:", 1, 10000, 5, 4, LV_ALIGN_TOP_LEFT, 10, 155, 70, 4, &graph_R_16);
+    lv_spinbox_set_value(Utility_objs.record_sample_rate_spinbox, 1000);  // Default: 0.1000s (100ms)
+
+    // On-the-fly update for sample rate
+    auto rate_change_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+        {
+            PowerSupply.recordingMem.sample_rate_ms = lv_spinbox_get_value(Utility_objs.record_sample_rate_spinbox) / 10;
+            // Recalculate max_samples if duration is set
+            if (PowerSupply.recordingMem.duration_seconds > 0)
+            {
+                uint32_t calculated_samples = (PowerSupply.recordingMem.duration_seconds * 1000) / PowerSupply.recordingMem.sample_rate_ms;
+                PowerSupply.recordingMem.max_samples = (calculated_samples > 2000) ? 2000 : calculated_samples;
+            }
+        }
+    };
+    lv_obj_add_event_cb(Utility_objs.record_sample_rate_spinbox, rate_change_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    // Duration spinbox (in seconds): 0.1s to 50s with 1 decimal place
+    Utility_objs.record_duration_spinbox = spinbox_pro(tab5, "Time[s]:", 1, 500, 3, 1, LV_ALIGN_TOP_LEFT, 155, 155, 70, 4, &graph_R_16);
+    lv_spinbox_set_value(Utility_objs.record_duration_spinbox, 100);  // Default: 10.0s
+
+    // On-the-fly update for duration
+    auto duration_change_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+        {
+            PowerSupply.recordingMem.duration_seconds = lv_spinbox_get_value(Utility_objs.record_duration_spinbox) / 10;
+            // Recalculate max_samples if sample rate is set
+            if (PowerSupply.recordingMem.sample_rate_ms > 0)
+            {
+                uint32_t calculated_samples = (PowerSupply.recordingMem.duration_seconds * 1000) / PowerSupply.recordingMem.sample_rate_ms;
+                PowerSupply.recordingMem.max_samples = (calculated_samples > 2000) ? 2000 : calculated_samples;
+            }
+        }
+    };
+    lv_obj_add_event_cb(Utility_objs.record_duration_spinbox, duration_change_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    // Right side button column - Save/Load/REC/PLAY/STOP
+    // Save button
+    lv_obj_t *saveRecButton = lv_btn_create(tab5);
+    label = lv_label_create(saveRecButton);
+    lv_label_set_text(label, "Save");
+    lv_obj_set_size(saveRecButton, 75, 24);
+    lv_obj_align(saveRecButton, LV_ALIGN_TOP_RIGHT, -3, 0);
+
+    auto save_recording_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        {
+            PowerSupply.SaveMemoryRecording("Recording", PowerSupply.recordingMem);
+            if (Utility_objs.record_status_label)
+                lv_label_set_text(Utility_objs.record_status_label, "Saved!");
+        }
+    };
+    lv_obj_add_event_cb(saveRecButton, save_recording_cb, LV_EVENT_CLICKED, NULL);
+
+    // Load button
+    lv_obj_t *loadRecButton = lv_btn_create(tab5);
+    label = lv_label_create(loadRecButton);
+    lv_label_set_text(label, "Load");
+    lv_obj_set_size(loadRecButton, 75, 24);
+    lv_obj_align(loadRecButton, LV_ALIGN_TOP_RIGHT, -3, 27);
+
+    auto load_recording_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        {
+            PowerSupply.recordingMem = PowerSupply.LoadMemoryRecording("Recording");
+
+            // Update spinboxes with loaded values
+            // Rate: convert ms to seconds with 4 decimal places (ms * 10)
+            lv_spinbox_set_value(Utility_objs.record_sample_rate_spinbox, PowerSupply.recordingMem.sample_rate_ms * 10);
+            // Duration: multiply by 10 for 1 decimal place
+            lv_spinbox_set_value(Utility_objs.record_duration_spinbox, PowerSupply.recordingMem.duration_seconds * 10);
+
+            // Update chart
+            for (uint16_t i = 0; i < PowerSupply.recordingMem.sample_count && i < 100; i++)
+            {
+                lv_chart_set_next_value(Utility_objs.record_chart, Utility_objs.record_chart_series,
+                                        (int32_t)(PowerSupply.recordingMem.samples[i] * 100));
+            }
+            if (Utility_objs.record_status_label)
+                lv_label_set_text_fmt(Utility_objs.record_status_label, "Loaded %d samples (%d s)",
+                                     PowerSupply.recordingMem.sample_count,
+                                     PowerSupply.recordingMem.duration_seconds);
+        }
+    };
+    lv_obj_add_event_cb(loadRecButton, load_recording_cb, LV_EVENT_CLICKED, NULL);
+
+    // Record button
+    Utility_objs.record_btn = lv_btn_create(tab5);
+    label = lv_label_create(Utility_objs.record_btn);
+    lv_label_set_text(label, "REC");
+    lv_obj_set_size(Utility_objs.record_btn, 75, 24);
+    lv_obj_align(Utility_objs.record_btn, LV_ALIGN_TOP_RIGHT, -3, 54);
+    lv_obj_add_state(Utility_objs.record_btn, LV_STATE_CHECKED);
+
+    auto record_btn_event_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        {
+            if (!PowerSupply.recordingMem.is_recording && !PowerSupply.recordingMem.is_playing)
+            {
+                // Start recording
+                PowerSupply.recordingMem.is_recording = true;
+                PowerSupply.recordingMem.sample_count = 0;
+                PowerSupply.recordingMem.play_index = 0;
+
+                // Read spinbox values
+                // Rate: stored with 4 decimal places (seconds), convert to ms: value/10
+                PowerSupply.recordingMem.sample_rate_ms = lv_spinbox_get_value(Utility_objs.record_sample_rate_spinbox) / 10;
+                // Duration: stored with 1 decimal place (seconds), convert: value/10
+                PowerSupply.recordingMem.duration_seconds = lv_spinbox_get_value(Utility_objs.record_duration_spinbox) / 10;
+
+                // Calculate max samples: (duration_seconds * 1000) / sample_rate_ms
+                // Limit to array size of 2000
+                uint32_t calculated_samples = (PowerSupply.recordingMem.duration_seconds * 1000) / PowerSupply.recordingMem.sample_rate_ms;
+                PowerSupply.recordingMem.max_samples = (calculated_samples > 2000) ? 2000 : calculated_samples;
+
+                lv_label_set_text(Utility_objs.record_status_label, "Recording...");
+                lv_chart_set_all_value(Utility_objs.record_chart, Utility_objs.record_chart_series, 0);
+            }
+        }
+    };
+    lv_obj_add_event_cb(Utility_objs.record_btn, record_btn_event_cb, LV_EVENT_CLICKED, NULL);
+
+    // Play button
+    Utility_objs.record_play_btn = lv_btn_create(tab5);
+    label = lv_label_create(Utility_objs.record_play_btn);
+    lv_label_set_text(label, "PLAY");
+    lv_obj_set_size(Utility_objs.record_play_btn, 75, 24);
+    lv_obj_align(Utility_objs.record_play_btn, LV_ALIGN_TOP_RIGHT, -3, 81);
+
+    auto play_btn_event_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        {
+            if (PowerSupply.recordingMem.sample_count > 0 && !PowerSupply.recordingMem.is_recording)
+            {
+                // Start playback
+                PowerSupply.recordingMem.is_playing = true;
+                PowerSupply.recordingMem.play_index = 0;
+                lv_label_set_text(Utility_objs.record_status_label, "Playing...");
+            }
+        }
+    };
+    lv_obj_add_event_cb(Utility_objs.record_play_btn, play_btn_event_cb, LV_EVENT_CLICKED, NULL);
+
+    // Stop button
+    Utility_objs.record_stop_btn = lv_btn_create(tab5);
+    label = lv_label_create(Utility_objs.record_stop_btn);
+    lv_label_set_text(label, "STOP");
+    lv_obj_set_size(Utility_objs.record_stop_btn, 75, 24);
+    lv_obj_align(Utility_objs.record_stop_btn, LV_ALIGN_TOP_RIGHT, -3, 108);
+
+    auto stop_btn_event_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        {
+            // Stop recording or playback
+            if (PowerSupply.recordingMem.is_recording)
+            {
+                PowerSupply.recordingMem.is_recording = false;
+                lv_label_set_text_fmt(Utility_objs.record_status_label, "Recorded %d samples", PowerSupply.recordingMem.sample_count);
+            }
+            else if (PowerSupply.recordingMem.is_playing)
+            {
+                PowerSupply.recordingMem.is_playing = false;
+                PowerSupply.recordingMem.play_index = 0;
+                lv_label_set_text(Utility_objs.record_status_label, "Stopped");
+                // Turn off output
+                PowerSupply.setStatus(DEVICE::OFF);
+            }
+        }
+    };
+    lv_obj_add_event_cb(Utility_objs.record_stop_btn, stop_btn_event_cb, LV_EVENT_CLICKED, NULL);
+
+    // Loop toggle switch
+    Utility_objs.record_loop_switch = lv_switch_create(tab5);
+    lv_obj_align(Utility_objs.record_loop_switch, LV_ALIGN_TOP_RIGHT, -10, 138);
+    lv_obj_set_size(Utility_objs.record_loop_switch, 45, 22);
+
+    lv_obj_t *loop_label = lv_label_create(tab5);
+    lv_label_set_text(loop_label, "Loop");
+    lv_obj_align(loop_label, LV_ALIGN_TOP_RIGHT, -70, 142);
+
+    auto loop_switch_event_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+        {
+            lv_obj_t *sw = lv_event_get_target(e);
+            PowerSupply.recordingMem.infinite_loop = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        }
+    };
+    lv_obj_add_event_cb(Utility_objs.record_loop_switch, loop_switch_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 }
 
 

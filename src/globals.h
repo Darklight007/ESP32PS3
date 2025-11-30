@@ -29,6 +29,7 @@ extern bool blockAll;
 // Input state
 extern bool dropdown_active;
 extern bool keyboardInputActive;  // Tracks if user is actively typing numbers
+extern bool manualTabSelection;   // Tracks if user manually clicked a tab (disables encoder tab navigation)
 
 // Utility charts
 extern lv_obj_t *util_Arbit_chart;
@@ -57,6 +58,17 @@ struct objs_list
     lv_obj_t *switch_keys_scan;
     lv_obj_t *switch_keys_label;
     lv_coord_t arbitrary_points[20][2];
+
+    // Record tab elements
+    lv_obj_t *record_btn;
+    lv_obj_t *record_play_btn;
+    lv_obj_t *record_stop_btn;
+    lv_obj_t *record_loop_switch;
+    lv_obj_t *record_status_label;
+    lv_obj_t *record_chart;
+    lv_chart_series_t *record_chart_series;
+    lv_obj_t *record_sample_rate_spinbox;
+    lv_obj_t *record_duration_spinbox;
 };
 
 extern struct objs_list Utility_objs;
