@@ -678,42 +678,45 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_clear_flag(tab4, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_pad_all(tab4, 3, LV_PART_MAIN);
 
-    // Chart for displaying recorded waveform
-    Utility_objs.record_chart = lv_chart_create(tab4);
-    lv_obj_set_size(Utility_objs.record_chart, 200, 120);
-    lv_obj_align(Utility_objs.record_chart, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_chart_set_type(Utility_objs.record_chart, LV_CHART_TYPE_LINE);
-    lv_chart_set_range(Utility_objs.record_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 3300); // 0-33V range (x100)
-    lv_chart_set_point_count(Utility_objs.record_chart, 100);
-    lv_chart_set_div_line_count(Utility_objs.record_chart, 5, 10);
-    lv_obj_set_style_size(Utility_objs.record_chart, 0, LV_PART_INDICATOR);
-    Utility_objs.record_chart_series = lv_chart_add_series(Utility_objs.record_chart, lv_palette_main(LV_PALETTE_RED), LV_CHART_AXIS_PRIMARY_Y);
+    // Row 1: Load and Save buttons
+    lv_obj_t *loadRecButton = lv_btn_create(tab4);
+    label = lv_label_create(loadRecButton);
+    lv_label_set_text(label, "Load");
+    lv_obj_set_size(loadRecButton, 70, 26);
+    lv_obj_align(loadRecButton, LV_ALIGN_TOP_LEFT, 170, 5);
 
-    // Status label
-    Utility_objs.record_status_label = lv_label_create(tab4);
-    lv_label_set_text(Utility_objs.record_status_label, "Status: Ready");
-    lv_obj_align(Utility_objs.record_status_label, LV_ALIGN_TOP_LEFT, 3, 125);
-
-    // Sample Per Second spinbox: 0.0001s to 1s with 4 decimal places (rate between samples)
-    Utility_objs.record_sample_rate_spinbox = spinbox_pro(tab4, "SPS:", 1, 10000, 5, 4, LV_ALIGN_TOP_LEFT, 10, 155, 70, 4, &graph_R_16);
-    lv_spinbox_set_value(Utility_objs.record_sample_rate_spinbox, 1000);  // Default: 0.1000s (10 SPS)
-
-    // On-the-fly update for sample rate
-    auto rate_change_cb = [](lv_event_t *e)
+    auto load_recording_cb = [](lv_event_t *e)
     {
-        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+        if (lv_event_get_code(e) == LV_EVENT_CLICKED)
         {
-            PowerSupply.recordingMem.sample_rate_ms = lv_spinbox_get_value(Utility_objs.record_sample_rate_spinbox) / 10;
+            PowerSupply.recordingMem = PowerSupply.LoadMemoryRecording("Recording");
+            // Update spinbox with loaded value
+            lv_spinbox_set_value(Utility_objs.record_sample_rate_spinbox, PowerSupply.recordingMem.sample_rate_ms * 10);
         }
     };
-    lv_obj_add_event_cb(Utility_objs.record_sample_rate_spinbox, rate_change_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(loadRecButton, load_recording_cb, LV_EVENT_CLICKED, NULL);
 
-    // Record button
+    lv_obj_t *saveRecButton = lv_btn_create(tab4);
+    label = lv_label_create(saveRecButton);
+    lv_label_set_text(label, "Save");
+    lv_obj_set_size(saveRecButton, 70, 26);
+    lv_obj_align(saveRecButton, LV_ALIGN_TOP_LEFT, 245, 5);
+
+    auto save_recording_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        {
+            PowerSupply.SaveMemoryRecording("Recording", PowerSupply.recordingMem);
+        }
+    };
+    lv_obj_add_event_cb(saveRecButton, save_recording_cb, LV_EVENT_CLICKED, NULL);
+
+    // Row 2: Record and Stop buttons
     Utility_objs.record_btn = lv_btn_create(tab4);
     label = lv_label_create(Utility_objs.record_btn);
     lv_label_set_text(label, "REC");
-    lv_obj_set_size(Utility_objs.record_btn, 60, 24);
-    lv_obj_align(Utility_objs.record_btn, LV_ALIGN_TOP_LEFT, 90, 155);
+    lv_obj_set_size(Utility_objs.record_btn, 70, 26);
+    lv_obj_align(Utility_objs.record_btn, LV_ALIGN_TOP_LEFT, 170, 36);
     lv_obj_add_state(Utility_objs.record_btn, LV_STATE_CHECKED);
 
     auto record_btn_event_cb = [](lv_event_t *e)
@@ -733,20 +736,16 @@ void Utility_tabview(lv_obj_t *parent)
 
                 // Use maximum buffer size
                 PowerSupply.recordingMem.max_samples = 2000;
-
-                lv_label_set_text(Utility_objs.record_status_label, "Recording...");
-                lv_chart_set_all_value(Utility_objs.record_chart, Utility_objs.record_chart_series, 0);
             }
         }
     };
     lv_obj_add_event_cb(Utility_objs.record_btn, record_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
-    // Stop button
     Utility_objs.record_stop_btn = lv_btn_create(tab4);
     label = lv_label_create(Utility_objs.record_stop_btn);
     lv_label_set_text(label, "STOP");
-    lv_obj_set_size(Utility_objs.record_stop_btn, 60, 24);
-    lv_obj_align(Utility_objs.record_stop_btn, LV_ALIGN_TOP_LEFT, 155, 155);
+    lv_obj_set_size(Utility_objs.record_stop_btn, 70, 26);
+    lv_obj_align(Utility_objs.record_stop_btn, LV_ALIGN_TOP_LEFT, 245, 36);
 
     auto stop_btn_event_cb = [](lv_event_t *e)
     {
@@ -769,6 +768,20 @@ void Utility_tabview(lv_obj_t *parent)
         }
     };
     lv_obj_add_event_cb(Utility_objs.record_stop_btn, stop_btn_event_cb, LV_EVENT_CLICKED, NULL);
+
+    // Row 3: Sample Per Second spinbox
+    Utility_objs.record_sample_rate_spinbox = spinbox_pro(tab4, "SPS:", 1, 10000, 5, 4, LV_ALIGN_TOP_LEFT, 170, 67, 70, 4, &graph_R_16);
+    lv_spinbox_set_value(Utility_objs.record_sample_rate_spinbox, 1000);  // Default: 0.1000s (10 SPS)
+
+    // On-the-fly update for sample rate
+    auto rate_change_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+        {
+            PowerSupply.recordingMem.sample_rate_ms = lv_spinbox_get_value(Utility_objs.record_sample_rate_spinbox) / 10;
+        }
+    };
+    lv_obj_add_event_cb(Utility_objs.record_sample_rate_spinbox, rate_change_cb, LV_EVENT_VALUE_CHANGED, NULL);
 }
 
 
