@@ -28,6 +28,7 @@ void close_log_cb(lv_timer_t *t)
 
 static inline void log_update_label()
 {
+    if (!log_label) return;  // Safety check
     s_logbuf[s_len] = '\0';
     lv_label_set_text(log_label, s_logbuf);
     lv_obj_scroll_to_view(log_label, LV_ANIM_OFF);
@@ -120,7 +121,7 @@ void log_step_done()
 
 void log_step(const char *fmt, ...)
 {
-    if (!lvglIsBusy)
+    if (!lvglIsBusy && log_label)  // Add NULL check
     {
         char buf[256];
         va_list args;
