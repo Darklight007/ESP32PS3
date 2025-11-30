@@ -1,5 +1,6 @@
 #include "calib_sequencer.h"
 #include "calib_log_window.h"
+#include "esp_task_wdt.h"
 #include <Arduino.h>
 
 // Create and start the sequencer runner
@@ -29,6 +30,9 @@ SeqRunner *seq_start(lv_timer_t *t, const SeqStep *steps, size_t count, measure_
 // The LVGL timer callback drives the sequence
 void seq_cb(lv_timer_t *t)
 {
+    // Reset watchdog every 50ms to prevent timeout during long calibration steps
+    esp_task_wdt_reset();
+
     auto *r = static_cast<SeqRunner *>(t->user_data);
     if (!r || r->index >= r->count)
     {
