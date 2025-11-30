@@ -50,24 +50,39 @@ void start_leakage_resistance_measurement(lv_event_t *)
          {
              esp_task_wdt_reset();
              blockAll = true;
+
+             esp_task_wdt_reset();
              log_step("           i0 = %+1.6f", g_leakage_i_at_0v);
              log_step("           i1 = %+1.6f", g_leakage_i_at_32v);
              double Rtot = (PowerSupply.mA_Active ? 1000.0 : 1.0) * 32.0f / (g_leakage_i_at_32v - g_leakage_i_at_0v) / 1000.0f;
              log_step("Measured Res: %4.3fk", Rtot);
 
+             esp_task_wdt_reset();
              // Update the correct spinbox based on current mode (with null checks)
+             Serial.printf("\nUpdating spinbox: mA_Active=%d", PowerSupply.mA_Active);
              if (PowerSupply.mA_Active) {
-                 if (Calib_GUI.internalLeakage_mA)
+                 if (Calib_GUI.internalLeakage_mA) {
+                     Serial.printf("\nSetting mA spinbox to %f", 1000.0f * Rtot);
                      lv_spinbox_set_value(Calib_GUI.internalLeakage_mA, 1000.0f * Rtot);
+                     Serial.printf("\nmA spinbox updated");
+                 }
              } else {
-                 if (Calib_GUI.internalLeakage_A)
+                 if (Calib_GUI.internalLeakage_A) {
+                     Serial.printf("\nSetting A spinbox to %f", 1000.0f * Rtot);
                      lv_spinbox_set_value(Calib_GUI.internalLeakage_A, 1000.0f * Rtot);
+                     Serial.printf("\nA spinbox updated");
+                 }
              }
+
+             esp_task_wdt_reset();
              PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[PowerSupply.mA_Active] = Rtot;
              PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
-             lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
+
              esp_task_wdt_reset();
+             lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
              lv_timer_set_repeat_count(close_t, 1);
+
+             esp_task_wdt_reset();
              blockAll = false;
          }},
     };
@@ -105,15 +120,23 @@ void start_current_zero_calibration(lv_event_t *e)
          nullptr},
         {"Finalize", 1500, 1500, []()
          {
+             esp_task_wdt_reset();
+
              lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
              lv_timer_set_repeat_count(close_t, 1);
 
-             if (Calib_GUI.Current.code_1)
+             esp_task_wdt_reset();
+             Serial.printf("\nSetting code_1 spinbox to %i", g_zero_current_code);
+             if (Calib_GUI.Current.code_1) {
                  lv_spinbox_set_value(Calib_GUI.Current.code_1, g_zero_current_code);
+                 Serial.printf("\ncode_1 spinbox updated");
+             }
 
+             esp_task_wdt_reset();
              auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
              cal[PowerSupply.mA_Active].code_1 = g_zero_current_code;
 
+             esp_task_wdt_reset();
              Serial.printf("\n Code 1 at zero current:%i", g_zero_current_code);
          },
          nullptr},
