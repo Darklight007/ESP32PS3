@@ -335,12 +335,11 @@ void Utility_tabview(lv_obj_t *parent)
     };
     lv_obj_add_event_cb(tab_btns, tab_btn_clicked_cb, LV_EVENT_CLICKED, NULL);
 
-    /*Add 5 tabs (the tabs are page (lv_page) and can be scrolled*/
+    /*Add 4 tabs (the tabs are page (lv_page) and can be scrolled*/
     lv_obj_t *tab1 = lv_tabview_add_tab(tabview_utility, "Mem");
     lv_obj_t *tab2 = lv_tabview_add_tab(tabview_utility, "FGen");
     lv_obj_t *tab3 = lv_tabview_add_tab(tabview_utility, "Arbt");
     lv_obj_t *tab4 = lv_tabview_add_tab(tabview_utility, "Tabl");
-    lv_obj_t *tab5 = lv_tabview_add_tab(tabview_utility, "Rec");
 
     // Utility page Tab 1 ****************************************************************************************************************************
     /*Add content to the tabs*/
@@ -676,11 +675,11 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_add_event_cb(loadButton, load_table_data_cb, LV_EVENT_CLICKED, NULL);
 
     // Utility page Tab 5 - Record ********************************************************************************************************************
-    lv_obj_clear_flag(tab5, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_pad_all(tab5, 3, LV_PART_MAIN);
+    lv_obj_clear_flag(tab4, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_all(tab4, 3, LV_PART_MAIN);
 
     // Chart for displaying recorded waveform
-    Utility_objs.record_chart = lv_chart_create(tab5);
+    Utility_objs.record_chart = lv_chart_create(tab4);
     lv_obj_set_size(Utility_objs.record_chart, 200, 120);
     lv_obj_align(Utility_objs.record_chart, LV_ALIGN_TOP_LEFT, 0, 0);
     lv_chart_set_type(Utility_objs.record_chart, LV_CHART_TYPE_LINE);
@@ -691,12 +690,12 @@ void Utility_tabview(lv_obj_t *parent)
     Utility_objs.record_chart_series = lv_chart_add_series(Utility_objs.record_chart, lv_palette_main(LV_PALETTE_RED), LV_CHART_AXIS_PRIMARY_Y);
 
     // Status label
-    Utility_objs.record_status_label = lv_label_create(tab5);
+    Utility_objs.record_status_label = lv_label_create(tab4);
     lv_label_set_text(Utility_objs.record_status_label, "Status: Ready");
     lv_obj_align(Utility_objs.record_status_label, LV_ALIGN_TOP_LEFT, 3, 125);
 
     // Sample rate spinbox (in seconds): 0.0001s to 1s with 4 decimal places
-    Utility_objs.record_sample_rate_spinbox = spinbox_pro(tab5, "Rate[s]:", 1, 10000, 5, 4, LV_ALIGN_TOP_LEFT, 10, 155, 70, 4, &graph_R_16);
+    Utility_objs.record_sample_rate_spinbox = spinbox_pro(tab4, "Rate[s]:", 1, 10000, 5, 4, LV_ALIGN_TOP_LEFT, 10, 155, 70, 4, &graph_R_16);
     lv_spinbox_set_value(Utility_objs.record_sample_rate_spinbox, 1000);  // Default: 0.1000s (100ms)
 
     // On-the-fly update for sample rate
@@ -716,7 +715,7 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_add_event_cb(Utility_objs.record_sample_rate_spinbox, rate_change_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     // Duration spinbox (in seconds): 0.1s to 50s with 1 decimal place
-    Utility_objs.record_duration_spinbox = spinbox_pro(tab5, "Time[s]:", 1, 500, 3, 1, LV_ALIGN_TOP_LEFT, 155, 155, 70, 4, &graph_R_16);
+    Utility_objs.record_duration_spinbox = spinbox_pro(tab4, "Time[s]:", 1, 500, 3, 1, LV_ALIGN_TOP_LEFT, 155, 155, 70, 4, &graph_R_16);
     lv_spinbox_set_value(Utility_objs.record_duration_spinbox, 100);  // Default: 10.0s
 
     // On-the-fly update for duration
@@ -737,7 +736,7 @@ void Utility_tabview(lv_obj_t *parent)
 
     // Right side button column - Save/Load/REC/PLAY/STOP
     // Save button
-    lv_obj_t *saveRecButton = lv_btn_create(tab5);
+    lv_obj_t *saveRecButton = lv_btn_create(tab4);
     label = lv_label_create(saveRecButton);
     lv_label_set_text(label, "Save");
     lv_obj_set_size(saveRecButton, 75, 24);
@@ -755,7 +754,7 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_add_event_cb(saveRecButton, save_recording_cb, LV_EVENT_CLICKED, NULL);
 
     // Load button
-    lv_obj_t *loadRecButton = lv_btn_create(tab5);
+    lv_obj_t *loadRecButton = lv_btn_create(tab4);
     label = lv_label_create(loadRecButton);
     lv_label_set_text(label, "Load");
     lv_obj_set_size(loadRecButton, 75, 24);
@@ -788,7 +787,7 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_add_event_cb(loadRecButton, load_recording_cb, LV_EVENT_CLICKED, NULL);
 
     // Record button
-    Utility_objs.record_btn = lv_btn_create(tab5);
+    Utility_objs.record_btn = lv_btn_create(tab4);
     label = lv_label_create(Utility_objs.record_btn);
     lv_label_set_text(label, "REC");
     lv_obj_set_size(Utility_objs.record_btn, 75, 24);
@@ -825,7 +824,7 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_add_event_cb(Utility_objs.record_btn, record_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
     // Play button
-    Utility_objs.record_play_btn = lv_btn_create(tab5);
+    Utility_objs.record_play_btn = lv_btn_create(tab4);
     label = lv_label_create(Utility_objs.record_play_btn);
     lv_label_set_text(label, "PLAY");
     lv_obj_set_size(Utility_objs.record_play_btn, 75, 24);
@@ -847,7 +846,7 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_add_event_cb(Utility_objs.record_play_btn, play_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
     // Stop button
-    Utility_objs.record_stop_btn = lv_btn_create(tab5);
+    Utility_objs.record_stop_btn = lv_btn_create(tab4);
     label = lv_label_create(Utility_objs.record_stop_btn);
     lv_label_set_text(label, "STOP");
     lv_obj_set_size(Utility_objs.record_stop_btn, 75, 24);
@@ -876,11 +875,11 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_add_event_cb(Utility_objs.record_stop_btn, stop_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
     // Loop toggle switch
-    Utility_objs.record_loop_switch = lv_switch_create(tab5);
+    Utility_objs.record_loop_switch = lv_switch_create(tab4);
     lv_obj_align(Utility_objs.record_loop_switch, LV_ALIGN_TOP_RIGHT, -10, 138);
     lv_obj_set_size(Utility_objs.record_loop_switch, 45, 22);
 
-    lv_obj_t *loop_label = lv_label_create(tab5);
+    lv_obj_t *loop_label = lv_label_create(tab4);
     lv_label_set_text(loop_label, "Loop");
     lv_obj_align(loop_label, LV_ALIGN_TOP_RIGHT, -70, 142);
 
