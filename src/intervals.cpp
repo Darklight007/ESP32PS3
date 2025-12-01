@@ -222,15 +222,25 @@ void RecordingPlaybackInterval()
             // Record current voltage reading into table
             if (PowerSupply.recordingMem.sample_count < 100)
             {
+                double voltage = PowerSupply.Voltage.measured.Mean();
+
                 // Store voltage reading in table_points array
-                PowerSupply.funGenMem.table_points[PowerSupply.recordingMem.sample_count][0] =
-                    PowerSupply.Voltage.measured.Mean();
+                PowerSupply.funGenMem.table_points[PowerSupply.recordingMem.sample_count][0] = voltage;
 
                 // Update table display
                 lv_table_set_cell_value_fmt(Utility_objs.table_point_list,
                                            PowerSupply.recordingMem.sample_count, 1,
                                            "%06.4f",
-                                           PowerSupply.Voltage.measured.Mean());
+                                           voltage);
+
+                // Update chart
+                if (Utility_objs.record_chart && Utility_objs.record_chart_series)
+                {
+                    lv_chart_set_value_by_id(Utility_objs.record_chart, Utility_objs.record_chart_series,
+                                            PowerSupply.recordingMem.sample_count,
+                                            (int32_t)(voltage * 100));
+                    lv_chart_refresh(Utility_objs.record_chart);
+                }
 
                 PowerSupply.recordingMem.sample_count++;
             }

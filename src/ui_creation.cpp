@@ -618,7 +618,7 @@ void Utility_tabview(lv_obj_t *parent)
     static lv_style_t style_stats;
     lv_style_init(&style_stats);
 
-    Utility_objs.table_point_list = table_pro(tab4, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 3, 160, 180, 0, 5);
+    Utility_objs.table_point_list = table_pro(tab4, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 3, 160, 120, 0, 5);
 
     for (int i = 0; i < 100; i++)
     {
@@ -632,6 +632,15 @@ void Utility_tabview(lv_obj_t *parent)
 
     lv_obj_add_event_cb(Utility_objs.table_point_list, table_touch_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(Utility_objs.table_point_list, table_draw_cell_event_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
+
+    // Create chart below table for visualization
+    Utility_objs.record_chart = lv_chart_create(tab4);
+    lv_obj_set_size(Utility_objs.record_chart, 160, 55);
+    lv_obj_align_to(Utility_objs.record_chart, Utility_objs.table_point_list, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 5);
+    lv_chart_set_type(Utility_objs.record_chart, LV_CHART_TYPE_LINE);
+    lv_chart_set_range(Utility_objs.record_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 3300);
+    lv_chart_set_point_count(Utility_objs.record_chart, 100);
+    Utility_objs.record_chart_series = lv_chart_add_series(Utility_objs.record_chart, lv_palette_main(LV_PALETTE_RED), LV_CHART_AXIS_PRIMARY_Y);
 
     Utility_objs.table_spinbox_value = spinbox_pro(tab4, "#FFFFF7 Value:#", 0, 10000, 5, 1, LV_ALIGN_RIGHT_MID, -50, -62, 98, 4, &graph_R_16);
     lv_obj_add_event_cb(Utility_objs.table_spinbox_value, spinbox_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -682,8 +691,8 @@ void Utility_tabview(lv_obj_t *parent)
     // lv_obj_set_style_pad_all(tab4, 3, LV_PART_MAIN);
 
      // Sample Per Second spinbox (bottom)
-    Utility_objs.record_sample_rate_spinbox = spinbox_pro(tab4, "SPS:", 1, 500, 3, 3, LV_ALIGN_BOTTOM_LEFT, 170, -66, 70, 4, &graph_R_16);
-    lv_spinbox_set_value(Utility_objs.record_sample_rate_spinbox, 1000);  // Default: 0.1000s (10 SPS)
+    Utility_objs.record_sample_rate_spinbox = spinbox_pro(tab4, "SPS:", 10, 10000, 5, 2, LV_ALIGN_BOTTOM_LEFT, 170, -66, 70, 10, &graph_R_16);
+    lv_spinbox_set_value(Utility_objs.record_sample_rate_spinbox, 100);  // Default: 1.00 SPS
 
     // On-the-fly update for sample rate
     auto rate_change_cb = [](lv_event_t *e)
@@ -692,7 +701,7 @@ void Utility_tabview(lv_obj_t *parent)
         {
             // Calculate sample rate: 1000ms / SPS
             int32_t sps = lv_spinbox_get_value(Utility_objs.record_sample_rate_spinbox);
-            PowerSupply.recordingMem.sample_rate_ms = 1000000 / sps;  // Use value with 3 decimals: 1000000 / sps_value
+            PowerSupply.recordingMem.sample_rate_ms = 100000 / sps;  // Use value with 2 decimals: 100000 / sps_value
         }
     };
     lv_obj_add_event_cb(Utility_objs.record_sample_rate_spinbox, rate_change_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -725,7 +734,7 @@ lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_
 
                 // Calculate sample rate: 1000ms / SPS
                 int32_t sps = lv_spinbox_get_value(Utility_objs.record_sample_rate_spinbox);
-                PowerSupply.recordingMem.sample_rate_ms = 1000000 / sps;  // Use value with 3 decimals: 1000000 / sps_value
+                PowerSupply.recordingMem.sample_rate_ms = 100000 / sps;  // Use value with 2 decimals: 100000 / sps_value
 
                 // Max samples is table size (100 rows)
                 PowerSupply.recordingMem.max_samples = 100;
