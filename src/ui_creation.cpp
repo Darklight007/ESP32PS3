@@ -633,7 +633,7 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_add_event_cb(Utility_objs.table_point_list, table_touch_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(Utility_objs.table_point_list, table_draw_cell_event_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
-    Utility_objs.table_spinbox_value = spinbox_pro(tab4, "#FFFFF7 Value:#", 0, 10000, 5, 1, LV_ALIGN_RIGHT_MID, -45, -66, 98, 4, &graph_R_16);
+    Utility_objs.table_spinbox_value = spinbox_pro(tab4, "#FFFFF7 Value:#", 0, 10000, 5, 1, LV_ALIGN_RIGHT_MID, -50, -62, 98, 4, &graph_R_16);
     lv_obj_add_event_cb(Utility_objs.table_spinbox_value, spinbox_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     // Saving  ************************************************************
@@ -642,7 +642,7 @@ void Utility_tabview(lv_obj_t *parent)
     lv_label_set_text(label, "Save");
     lv_obj_set_size(saveButton, 58, 32);
     lv_obj_align(saveButton, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_align_to(saveButton, Utility_objs.table_spinbox_value, LV_ALIGN_OUT_BOTTOM_MID, -34, 10);
+    lv_obj_align_to(saveButton, Utility_objs.table_spinbox_value, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 10);
 
     auto save_table_data_cb = [](lv_event_t *e)
     {
@@ -658,7 +658,7 @@ void Utility_tabview(lv_obj_t *parent)
     lv_label_set_text(label, "Load");
     lv_obj_set_size(loadButton, 58, 32);
     lv_obj_align(loadButton, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_align_to(loadButton, Utility_objs.table_spinbox_value, LV_ALIGN_OUT_BOTTOM_MID, +34, 10);
+    lv_obj_align_to(loadButton, saveButton, LV_ALIGN_OUT_RIGHT_MID, 10, 0);
 
     auto load_table_data_cb = [](lv_event_t *e)
     {
@@ -676,16 +676,35 @@ void Utility_tabview(lv_obj_t *parent)
 
     lv_obj_add_event_cb(loadButton, load_table_data_cb, LV_EVENT_CLICKED, NULL);
 
-    // Utility page Tab 5 - Record ********************************************************************************************************************
-    lv_obj_clear_flag(tab4, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_pad_all(tab4, 3, LV_PART_MAIN);
+
+    // Utility page Tab 4 - Record ********************************************************************************************************************
+    // lv_obj_clear_flag(tab4, LV_OBJ_FLAG_SCROLLABLE);
+    // lv_obj_set_style_pad_all(tab4, 3, LV_PART_MAIN);
+
+     // Sample Per Second spinbox (bottom)
+    Utility_objs.record_sample_rate_spinbox = spinbox_pro(tab4, "SPS:", 1, 500, 3, 3, LV_ALIGN_BOTTOM_LEFT, 170, -66, 70, 4, &graph_R_16);
+    lv_spinbox_set_value(Utility_objs.record_sample_rate_spinbox, 1000);  // Default: 0.1000s (10 SPS)
+
+    // On-the-fly update for sample rate
+    auto rate_change_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+        {
+            PowerSupply.recordingMem.sample_rate_ms = lv_spinbox_get_value(Utility_objs.record_sample_rate_spinbox) / 10;
+        }
+    };
+    lv_obj_add_event_cb(Utility_objs.record_sample_rate_spinbox, rate_change_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 20);
+
 
     // Bottom row: Record and Stop buttons
     Utility_objs.record_btn = lv_btn_create(tab4);
     label = lv_label_create(Utility_objs.record_btn);
     lv_label_set_text(label, "REC");
     lv_obj_set_size(Utility_objs.record_btn, 58, 32);
-    lv_obj_align(Utility_objs.record_btn, LV_ALIGN_BOTTOM_LEFT, 170, -30);
+    lv_obj_align_to( Utility_objs.record_btn, Utility_objs.record_sample_rate_spinbox, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 10);
+    
     lv_obj_add_state(Utility_objs.record_btn, LV_STATE_CHECKED);
 
     auto record_btn_event_cb = [](lv_event_t *e)
@@ -714,7 +733,7 @@ void Utility_tabview(lv_obj_t *parent)
     label = lv_label_create(Utility_objs.record_stop_btn);
     lv_label_set_text(label, "STOP");
     lv_obj_set_size(Utility_objs.record_stop_btn, 58, 32);
-    lv_obj_align(Utility_objs.record_stop_btn, LV_ALIGN_BOTTOM_LEFT, 245, -30);
+    lv_obj_align_to(Utility_objs.record_stop_btn,  Utility_objs.record_btn, LV_ALIGN_OUT_RIGHT_MID, 10, 0);
 
     auto stop_btn_event_cb = [](lv_event_t *e)
     {
@@ -738,19 +757,7 @@ void Utility_tabview(lv_obj_t *parent)
     };
     lv_obj_add_event_cb(Utility_objs.record_stop_btn, stop_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
-    // Sample Per Second spinbox (bottom)
-    Utility_objs.record_sample_rate_spinbox = spinbox_pro(tab4, "SPS:", 1, 500, 3, 3, LV_ALIGN_BOTTOM_LEFT, 170, -66, 70, 4, &graph_R_16);
-    lv_spinbox_set_value(Utility_objs.record_sample_rate_spinbox, 1000);  // Default: 0.1000s (10 SPS)
-
-    // On-the-fly update for sample rate
-    auto rate_change_cb = [](lv_event_t *e)
-    {
-        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
-        {
-            PowerSupply.recordingMem.sample_rate_ms = lv_spinbox_get_value(Utility_objs.record_sample_rate_spinbox) / 10;
-        }
-    };
-    lv_obj_add_event_cb(Utility_objs.record_sample_rate_spinbox, rate_change_cb, LV_EVENT_VALUE_CHANGED, NULL);
+   
 }
 
 

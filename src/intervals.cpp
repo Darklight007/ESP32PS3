@@ -190,8 +190,6 @@ void PowerManagementInterval(unsigned long interval)
 
             // Auto-save check
             autoSaveCheck();
-
-                Serial.printf("\nHieght of  STOP button:%i",lv_obj_get_width(Utility_objs.record_stop_btn));
         },
         interval, timer_);
 }
@@ -222,7 +220,7 @@ void RecordingPlaybackInterval()
             lastSampleTime = millis();
 
             // Record current voltage reading
-            if (PowerSupply.recordingMem.sample_count < PowerSupply.recordingMem.max_samples)
+            if (PowerSupply.recordingMem.sample_count < 500)
             {
                 PowerSupply.recordingMem.samples[PowerSupply.recordingMem.sample_count] =
                     PowerSupply.Voltage.measured.Mean();
@@ -242,9 +240,8 @@ void RecordingPlaybackInterval()
                 PowerSupply.recordingMem.is_recording = false;
                 if (Utility_objs.record_status_label)
                 {
-                    lv_label_set_text_fmt(Utility_objs.record_status_label, "Done: %d samples (%d s)",
-                                         PowerSupply.recordingMem.sample_count,
-                                         PowerSupply.recordingMem.duration_seconds);
+                    lv_label_set_text_fmt(Utility_objs.record_status_label, "Full: %d samples",
+                                         PowerSupply.recordingMem.sample_count);
                 }
             }
         }
@@ -281,28 +278,15 @@ void RecordingPlaybackInterval()
             }
             else
             {
-                // Playback complete
-                if (PowerSupply.recordingMem.infinite_loop)
+                // Playback complete, stop
+                PowerSupply.recordingMem.is_playing = false;
+                PowerSupply.recordingMem.play_index = 0;
+                if (Utility_objs.record_status_label)
                 {
-                    // Loop back to start
-                    PowerSupply.recordingMem.play_index = 0;
-                    if (Utility_objs.record_status_label)
-                    {
-                        lv_label_set_text(Utility_objs.record_status_label, "Playing (Loop)...");
-                    }
+                    lv_label_set_text(Utility_objs.record_status_label, "Playback complete");
                 }
-                else
-                {
-                    // Stop playback
-                    PowerSupply.recordingMem.is_playing = false;
-                    PowerSupply.recordingMem.play_index = 0;
-                    if (Utility_objs.record_status_label)
-                    {
-                        lv_label_set_text(Utility_objs.record_status_label, "Playback complete");
-                    }
-                    // Turn off output
-                    PowerSupply.setStatus(DEVICE::OFF);
-                }
+                // Turn off output
+                PowerSupply.setStatus(DEVICE::OFF);
             }
         }
     }
