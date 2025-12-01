@@ -190,6 +190,8 @@ void PowerManagementInterval(unsigned long interval)
 
             // Auto-save check
             autoSaveCheck();
+
+                Serial.printf("\nHieght of  STOP button:%i",lv_obj_get_width(Utility_objs.record_stop_btn));
         },
         interval, timer_);
 }
