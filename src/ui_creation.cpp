@@ -690,7 +690,9 @@ void Utility_tabview(lv_obj_t *parent)
     {
         if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
         {
-            PowerSupply.recordingMem.sample_rate_ms = lv_spinbox_get_value(Utility_objs.record_sample_rate_spinbox) / 10;
+            // Calculate sample rate: 1000ms / SPS
+            int32_t sps = lv_spinbox_get_value(Utility_objs.record_sample_rate_spinbox);
+            PowerSupply.recordingMem.sample_rate_ms = 1000000 / sps;  // Use value with 3 decimals: 1000000 / sps_value
         }
     };
     lv_obj_add_event_cb(Utility_objs.record_sample_rate_spinbox, rate_change_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -713,17 +715,20 @@ lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_
         {
             if (!PowerSupply.recordingMem.is_recording && !PowerSupply.recordingMem.is_playing)
             {
-                // Start recording
+                // Start recording from currently selected table row
                 PowerSupply.recordingMem.is_recording = true;
-                PowerSupply.recordingMem.sample_count = 0;
-                PowerSupply.recordingMem.play_index = 0;
 
-                // Read spinbox value
-                // Rate: stored with 4 decimal places (seconds), convert to ms: value/10
-                PowerSupply.recordingMem.sample_rate_ms = lv_spinbox_get_value(Utility_objs.record_sample_rate_spinbox) / 10;
+                // Get currently selected row from table
+                uint16_t selected_row = (uint16_t)(uintptr_t)Utility_objs.table_point_list->user_data;
+                PowerSupply.recordingMem.play_index = selected_row;  // Starting row
+                PowerSupply.recordingMem.sample_count = selected_row;  // Current recording row
 
-                // Use maximum buffer size
-                PowerSupply.recordingMem.max_samples = 2000;
+                // Calculate sample rate: 1000ms / SPS
+                int32_t sps = lv_spinbox_get_value(Utility_objs.record_sample_rate_spinbox);
+                PowerSupply.recordingMem.sample_rate_ms = 1000000 / sps;  // Use value with 3 decimals: 1000000 / sps_value
+
+                // Max samples is table size (100 rows)
+                PowerSupply.recordingMem.max_samples = 100;
             }
         }
     };
@@ -743,13 +748,11 @@ lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_
             if (PowerSupply.recordingMem.is_recording)
             {
                 PowerSupply.recordingMem.is_recording = false;
-                lv_label_set_text_fmt(Utility_objs.record_status_label, "Recorded %d samples", PowerSupply.recordingMem.sample_count);
             }
             else if (PowerSupply.recordingMem.is_playing)
             {
                 PowerSupply.recordingMem.is_playing = false;
                 PowerSupply.recordingMem.play_index = 0;
-                lv_label_set_text(Utility_objs.record_status_label, "Stopped");
                 // Turn off output
                 PowerSupply.setStatus(DEVICE::OFF);
             }

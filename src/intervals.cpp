@@ -219,30 +219,25 @@ void RecordingPlaybackInterval()
         {
             lastSampleTime = millis();
 
-            // Record current voltage reading
-            if (PowerSupply.recordingMem.sample_count < 500)
+            // Record current voltage reading into table
+            if (PowerSupply.recordingMem.sample_count < 100)
             {
-                PowerSupply.recordingMem.samples[PowerSupply.recordingMem.sample_count] =
+                // Store voltage reading in table_points array
+                PowerSupply.funGenMem.table_points[PowerSupply.recordingMem.sample_count][0] =
                     PowerSupply.Voltage.measured.Mean();
 
-                // Update chart
-                if (PowerSupply.recordingMem.sample_count < 100 && Utility_objs.record_chart)
-                {
-                    lv_chart_set_next_value(Utility_objs.record_chart, Utility_objs.record_chart_series,
-                                           (int32_t)(PowerSupply.Voltage.measured.Mean() * 100));
-                }
+                // Update table display
+                lv_table_set_cell_value_fmt(Utility_objs.table_point_list,
+                                           PowerSupply.recordingMem.sample_count, 1,
+                                           "%06.4f",
+                                           PowerSupply.Voltage.measured.Mean());
 
                 PowerSupply.recordingMem.sample_count++;
             }
             else
             {
-                // Max samples reached, stop recording
+                // Max samples reached (table full), stop recording
                 PowerSupply.recordingMem.is_recording = false;
-                if (Utility_objs.record_status_label)
-                {
-                    lv_label_set_text_fmt(Utility_objs.record_status_label, "Full: %d samples",
-                                         PowerSupply.recordingMem.sample_count);
-                }
             }
         }
     }
