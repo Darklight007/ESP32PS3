@@ -645,7 +645,14 @@ void Utility_tabview(lv_obj_t *parent)
     static lv_style_t style_stats;
     lv_style_init(&style_stats);
 
-    Utility_objs.table_point_list = table_pro(tab4, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 3, 160, 120, 0, 5);
+    // Label to indicate normalized values
+    lv_obj_t *norm_label = lv_label_create(tab4);
+    lv_label_set_text(norm_label, "#FFFF00 Row | Norm (0-1)#");
+    lv_label_set_recolor(norm_label, true);
+    lv_obj_set_style_text_font(norm_label, &lv_font_montserrat_10, 0);
+    lv_obj_align(norm_label, LV_ALIGN_TOP_LEFT, 3, 1);
+
+    Utility_objs.table_point_list = table_pro(tab4, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 15, 160, 120, 0, 5);
 
     for (int i = 0; i < RECORDING_TABLE_SIZE; i++)
     {
@@ -654,7 +661,7 @@ void Utility_tabview(lv_obj_t *parent)
         lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%1.4f", PowerSupply.funGenMem.table_points[i][0]);
     }
 
-    lv_table_set_col_width(Utility_objs.table_point_list, 0, 40);
+    lv_table_set_col_width(Utility_objs.table_point_list, 0, 50);  // Wider for 3-digit row numbers (100-249)
     lv_table_set_col_width(Utility_objs.table_point_list, 1, 100);
 
     lv_obj_add_event_cb(Utility_objs.table_point_list, table_touch_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -665,8 +672,8 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_set_size(Utility_objs.record_chart, 160, 55);
     lv_obj_align_to(Utility_objs.record_chart, Utility_objs.table_point_list, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 5);
     lv_chart_set_type(Utility_objs.record_chart, LV_CHART_TYPE_LINE);
-    lv_chart_set_range(Utility_objs.record_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 3300);
-    lv_chart_set_point_count(Utility_objs.record_chart, 100);
+    lv_chart_set_range(Utility_objs.record_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 100);  // 0-100 for normalized values (0-1 * 100)
+    lv_chart_set_point_count(Utility_objs.record_chart, RECORDING_TABLE_SIZE);
     lv_obj_set_style_size(Utility_objs.record_chart, 0, LV_PART_INDICATOR);  // Hide point indicators
     lv_obj_set_style_line_width(Utility_objs.record_chart, 2, LV_PART_ITEMS);  // Thin line (2px)
     Utility_objs.record_chart_series = lv_chart_add_series(Utility_objs.record_chart, lv_palette_main(LV_PALETTE_RED), LV_CHART_AXIS_PRIMARY_Y);
@@ -769,8 +776,8 @@ lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_
                     PowerSupply.recordingMem.sample_rate_ms = 1000 / sps;  // period in ms = 1000 / samples_per_second
                 }
 
-                // Max samples is table size (100 rows)
-                PowerSupply.recordingMem.max_samples = 100;
+                // Max samples is table size
+                PowerSupply.recordingMem.max_samples = RECORDING_TABLE_SIZE;
 
                 // Update status
                 if (Utility_objs.record_status_label) {
