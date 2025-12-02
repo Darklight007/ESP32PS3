@@ -691,7 +691,7 @@ void Utility_tabview(lv_obj_t *parent)
     // lv_obj_set_style_pad_all(tab4, 3, LV_PART_MAIN);
 
      // Sample Per Second spinbox (bottom)
-    Utility_objs.record_sample_rate_spinbox = spinbox_pro(tab4, "SPS:", 1, 500, 3, 0, LV_ALIGN_BOTTOM_LEFT, 170, -66, 70, 1, &graph_R_16);
+    Utility_objs.record_sample_rate_spinbox = spinbox_pro(tab4, "SPS:", 1, 250, 3, 0, LV_ALIGN_BOTTOM_LEFT, 170, -66, 70, 1, &graph_R_16);
     lv_spinbox_set_value(Utility_objs.record_sample_rate_spinbox, 10);  // Default: 10 SPS
 
     // On-the-fly update for sample rate
