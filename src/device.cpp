@@ -305,16 +305,21 @@ MemArray Device::LoadMemory(const String &key)
 void Device::SaveMemoryFgen(const String &key, const FunGen &data)
 {
     StoreMem.begin("my-app", false);
-    
+
     FunGenSettings settings = {data.frequency, data.amplitude, data.offset, data.dutyCycle};
     StoreMem.putBytes("fgen", &settings, sizeof(settings));
 
-    const size_t table_chunk_size = sizeof(data.table_points) / 2;
+    // Split table_points into 4 chunks to stay under NVS 1984 byte limit per blob
+    // Total size: 250 rows * 2 cols * 8 bytes = 4000 bytes
+    // Each chunk: 1000 bytes (safe under 1984 byte limit)
+    const size_t table_chunk_size = sizeof(data.table_points) / 4;
     StoreMem.putBytes("fgen_t1", &data.table_points[0], table_chunk_size);
     StoreMem.putBytes("fgen_t2", (uint8_t*)&data.table_points[0] + table_chunk_size, table_chunk_size);
+    StoreMem.putBytes("fgen_t3", (uint8_t*)&data.table_points[0] + table_chunk_size * 2, table_chunk_size);
+    StoreMem.putBytes("fgen_t4", (uint8_t*)&data.table_points[0] + table_chunk_size * 3, table_chunk_size);
 
     StoreMem.putBytes("fgen_arb", &data.arbitrary_points, sizeof(data.arbitrary_points));
-    
+
     StoreMem.end();
 }
 
@@ -332,9 +337,12 @@ FunGen Device::LoadMemoryFgen(const String &key)
         data.dutyCycle = settings.dutyCycle;
     }
 
-    const size_t table_chunk_size = sizeof(data.table_points) / 2;
+    // Load table_points from 4 chunks (matches SaveMemoryFgen)
+    const size_t table_chunk_size = sizeof(data.table_points) / 4;
     StoreMem.getBytes("fgen_t1", &data.table_points[0], table_chunk_size);
     StoreMem.getBytes("fgen_t2", (uint8_t*)&data.table_points[0] + table_chunk_size, table_chunk_size);
+    StoreMem.getBytes("fgen_t3", (uint8_t*)&data.table_points[0] + table_chunk_size * 2, table_chunk_size);
+    StoreMem.getBytes("fgen_t4", (uint8_t*)&data.table_points[0] + table_chunk_size * 3, table_chunk_size);
 
     StoreMem.getBytes("fgen_arb", &data.arbitrary_points, sizeof(data.arbitrary_points));
 
