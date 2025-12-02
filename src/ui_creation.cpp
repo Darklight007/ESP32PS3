@@ -596,8 +596,8 @@ void Utility_tabview(lv_obj_t *parent)
         "Exit";
 
     const char *loadOptions =
-        "Load to Bank 0\n"
-        "Load to Bank 1\n"
+        "Load from Bank 0\n"
+        "Load from Bank 1\n"
         "Exit";
 
     // Create save and load dropdowns
