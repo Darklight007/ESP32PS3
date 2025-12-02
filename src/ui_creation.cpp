@@ -528,10 +528,10 @@ void Utility_tabview(lv_obj_t *parent)
         LV_LOG_USER("'%s' is selected", buf);
 
         if (strncmp(buf, "Save to Bank", 12) == 0) {
-            int bank = atoi(buf + 13);
+            int bank = atoi(buf + 13);  // "Save to Bank 0" → position 13 = '0'
             saveToBank(bank);
-        } else if (strncmp(buf, "Load from Bank", 12) == 0) {
-            int bank = atoi(buf + 13);
+        } else if (strncmp(buf, "Load from Bank", 14) == 0) {
+            int bank = atoi(buf + 15);  // "Load from Bank 0" → position 15 = '0'
             loadFromBank(bank);
         } else if (strcmp(buf, "Clear") == 0) {
             for (int i = 0; i < CHART_POINTS; i++) {
