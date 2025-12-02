@@ -220,7 +220,7 @@ void RecordingPlaybackInterval()
             lastSampleTime = millis();
 
             // Record current voltage reading into table
-            if (PowerSupply.recordingMem.sample_count < 250)
+            if (PowerSupply.recordingMem.sample_count < 100)
             {
                 double voltage = PowerSupply.Voltage.measured.Mean();
 
@@ -249,7 +249,7 @@ void RecordingPlaybackInterval()
                 {
                     lv_label_set_text_fmt(Utility_objs.record_status_label, "Recording: %d/%d",
                                          PowerSupply.recordingMem.sample_count - PowerSupply.recordingMem.play_index,
-                                         250);
+                                         100);
                 }
             }
             else

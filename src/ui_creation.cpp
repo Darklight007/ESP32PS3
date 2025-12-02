@@ -620,7 +620,7 @@ void Utility_tabview(lv_obj_t *parent)
 
     Utility_objs.table_point_list = table_pro(tab4, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 3, 160, 120, 0, 5);
 
-    for (int i = 0; i < 250; i++)
+    for (int i = 0; i < 100; i++)
     {
         // Utility_objs.table_points[i] = PowerSupply.funGenMem.table_points[i];
         lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 0, "%0i", i);
@@ -639,7 +639,7 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_align_to(Utility_objs.record_chart, Utility_objs.table_point_list, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 5);
     lv_chart_set_type(Utility_objs.record_chart, LV_CHART_TYPE_LINE);
     lv_chart_set_range(Utility_objs.record_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 3300);
-    lv_chart_set_point_count(Utility_objs.record_chart, 250);
+    lv_chart_set_point_count(Utility_objs.record_chart, 100);
     lv_obj_set_style_line_width(Utility_objs.record_chart, 1, LV_PART_ITEMS);  // Very thin line
     Utility_objs.record_chart_series = lv_chart_add_series(Utility_objs.record_chart, lv_palette_main(LV_PALETTE_RED), LV_CHART_AXIS_PRIMARY_Y);
 
@@ -741,8 +741,8 @@ lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_
                     PowerSupply.recordingMem.sample_rate_ms = 1000 / sps;  // period in ms = 1000 / samples_per_second
                 }
 
-                // Max samples is table size (250 rows)
-                PowerSupply.recordingMem.max_samples = 250;
+                // Max samples is table size (100 rows)
+                PowerSupply.recordingMem.max_samples = 100;
 
                 // Update status
                 if (Utility_objs.record_status_label) {
