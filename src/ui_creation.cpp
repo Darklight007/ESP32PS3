@@ -793,6 +793,8 @@ lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_
     Utility_objs.record_status_label = lv_label_create(tab4);
     lv_label_set_text(Utility_objs.record_status_label, "Ready");
     lv_obj_set_style_text_font(Utility_objs.record_status_label, &lv_font_montserrat_12, 0);
+    lv_label_set_long_mode(Utility_objs.record_status_label, LV_LABEL_LONG_SCROLL_CIRCULAR);  // Scroll long text
+    lv_obj_set_width(Utility_objs.record_status_label, 140);  // Set max width for scrolling
     lv_obj_align_to(Utility_objs.record_status_label, Utility_objs.record_btn, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 2);
 
 }
