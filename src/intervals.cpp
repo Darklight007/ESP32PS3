@@ -220,7 +220,7 @@ void RecordingPlaybackInterval()
             lastSampleTime = millis();
 
             // Record current voltage reading into table
-            if (PowerSupply.recordingMem.sample_count < 100)
+            if (PowerSupply.recordingMem.sample_count < 250)
             {
                 double voltage = PowerSupply.Voltage.measured.Mean();
 
@@ -243,11 +243,24 @@ void RecordingPlaybackInterval()
                 }
 
                 PowerSupply.recordingMem.sample_count++;
+
+                // Update status with progress every 10 samples
+                if (Utility_objs.record_status_label && (PowerSupply.recordingMem.sample_count % 10 == 0))
+                {
+                    lv_label_set_text_fmt(Utility_objs.record_status_label, "Recording: %d/%d",
+                                         PowerSupply.recordingMem.sample_count - PowerSupply.recordingMem.play_index,
+                                         250);
+                }
             }
             else
             {
                 // Max samples reached (table full), stop recording
                 PowerSupply.recordingMem.is_recording = false;
+                if (Utility_objs.record_status_label)
+                {
+                    lv_label_set_text_fmt(Utility_objs.record_status_label, "Complete: %d samples",
+                                         PowerSupply.recordingMem.sample_count - PowerSupply.recordingMem.play_index);
+                }
             }
         }
     }
