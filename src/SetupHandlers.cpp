@@ -30,7 +30,7 @@
 extern bool wireConnected;  // Flag indicating if device is connected on Wire
 extern bool wire1Connected; // Flag indicating if device is connected on Wire1
 // size_t memory;               // Global variable to hold free heap memory size
-extern int32_t *barGraph_V;
+extern int32_t barGraph_V[1];
 // extern DAC_codes dac_data_g;
 
 // **Initialization Functions**

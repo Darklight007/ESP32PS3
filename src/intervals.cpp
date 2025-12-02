@@ -206,67 +206,95 @@ void MemoryMonitorInterval(unsigned long interval)
         interval, timer_);
 }
 
-// Recording and Playback Interval
-void RecordingPlaybackInterval()
+// Update table and chart after recording completes or incrementally during slow recording
+void UpdateRecordingUI()
 {
-    static unsigned long timer_ = 0;
-    static unsigned long lastSampleTime = 0;
+    if (!PowerSupply.recordingMem.needs_ui_update)
+        return;
 
-    // Recording logic
-    if (PowerSupply.recordingMem.is_recording)
+    PowerSupply.recordingMem.needs_ui_update = false;
+
+    // Determine update mode: incremental (slow SPS) or full batch (fast SPS or completed)
+    bool slowSampling = (PowerSupply.recordingMem.sample_rate_ms >= 50);
+    bool isRecording = PowerSupply.recordingMem.is_recording;
+
+    static uint16_t lastUpdatedIndex = 0;
+
+    if (isRecording && slowSampling)
     {
-        if (millis() - lastSampleTime >= PowerSupply.recordingMem.sample_rate_ms)
+        // Incremental update: Only update new samples since last update
+        for (uint16_t i = lastUpdatedIndex; i < PowerSupply.recordingMem.sample_count; i++)
         {
-            lastSampleTime = millis();
-
-            // Record current voltage reading into table
-            if (PowerSupply.recordingMem.sample_count < 100)
+            if (Utility_objs.table_point_list)
             {
-                double voltage = PowerSupply.Voltage.measured.Mean();
-
-                // Store voltage reading in table_points array
-                PowerSupply.funGenMem.table_points[PowerSupply.recordingMem.sample_count][0] = voltage;
-
-                // Update table display
-                lv_table_set_cell_value_fmt(Utility_objs.table_point_list,
-                                           PowerSupply.recordingMem.sample_count, 1,
+                lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1,
                                            "%06.4f",
-                                           voltage);
-
-                // Update chart
-                if (Utility_objs.record_chart && Utility_objs.record_chart_series)
-                {
-                    lv_chart_set_value_by_id(Utility_objs.record_chart, Utility_objs.record_chart_series,
-                                            PowerSupply.recordingMem.sample_count,
-                                            (int32_t)(voltage * 100));
-                    lv_chart_refresh(Utility_objs.record_chart);
-                }
-
-                PowerSupply.recordingMem.sample_count++;
-
-                // Update status with progress every 10 samples
-                if (Utility_objs.record_status_label && (PowerSupply.recordingMem.sample_count % 10 == 0))
-                {
-                    lv_label_set_text_fmt(Utility_objs.record_status_label, "Recording: %d/%d",
-                                         PowerSupply.recordingMem.sample_count - PowerSupply.recordingMem.play_index,
-                                         100);
-                }
+                                           PowerSupply.funGenMem.table_points[i][0]);
             }
-            else
+
+            // Update chart
+            if (Utility_objs.record_chart && Utility_objs.record_chart_series)
             {
-                // Max samples reached (table full), stop recording
-                PowerSupply.recordingMem.is_recording = false;
-                if (Utility_objs.record_status_label)
-                {
-                    lv_label_set_text_fmt(Utility_objs.record_status_label, "Complete: %d samples",
-                                         PowerSupply.recordingMem.sample_count - PowerSupply.recordingMem.play_index);
-                    lv_obj_set_style_text_color(Utility_objs.record_status_label, lv_palette_main(LV_PALETTE_GREEN), 0);
-                }
+                lv_chart_set_value_by_id(Utility_objs.record_chart, Utility_objs.record_chart_series,
+                                        i, (int32_t)(PowerSupply.funGenMem.table_points[i][0] * 100));
             }
+        }
+        lastUpdatedIndex = PowerSupply.recordingMem.sample_count;
+
+        // Update status
+        if (Utility_objs.record_status_label)
+        {
+            lv_label_set_text_fmt(Utility_objs.record_status_label, "Recording: %d/%d",
+                                 PowerSupply.recordingMem.sample_count, RECORDING_TABLE_SIZE);
+            lv_obj_set_style_text_color(Utility_objs.record_status_label, lv_palette_main(LV_PALETTE_RED), 0);
+        }
+    }
+    else
+    {
+        // Full batch update: Update all samples at once (fast SPS or recording completed)
+        for (uint16_t i = 0; i < PowerSupply.recordingMem.sample_count; i++)
+        {
+            if (Utility_objs.table_point_list)
+            {
+                lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1,
+                                           "%06.4f",
+                                           PowerSupply.funGenMem.table_points[i][0]);
+            }
+
+            // Update chart
+            if (Utility_objs.record_chart && Utility_objs.record_chart_series)
+            {
+                lv_chart_set_value_by_id(Utility_objs.record_chart, Utility_objs.record_chart_series,
+                                        i, (int32_t)(PowerSupply.funGenMem.table_points[i][0] * 100));
+            }
+        }
+        lastUpdatedIndex = 0;  // Reset for next recording
+
+        // Update status label - recording completed
+        if (Utility_objs.record_status_label)
+        {
+            lv_label_set_text_fmt(Utility_objs.record_status_label, "Complete: %d samples",
+                                 PowerSupply.recordingMem.sample_count);
+            lv_obj_set_style_text_color(Utility_objs.record_status_label, lv_palette_main(LV_PALETTE_GREEN), 0);
         }
     }
 
-    // Playback logic
+    // Refresh chart
+    if (Utility_objs.record_chart)
+    {
+        lv_chart_refresh(Utility_objs.record_chart);
+    }
+}
+
+// Playback Interval (Recording moved to Task_ADC for faster sampling)
+void RecordingPlaybackInterval()
+{
+    static unsigned long lastSampleTime = 0;
+
+    // Check if recording UI needs update
+    UpdateRecordingUI();
+
+    // Playback logic (kept in main loop, doesn't need high speed)
     if (PowerSupply.recordingMem.is_playing)
     {
         if (millis() - lastSampleTime >= PowerSupply.recordingMem.sample_rate_ms)

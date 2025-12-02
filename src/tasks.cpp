@@ -152,6 +152,68 @@ void Task_ADC(void *pvParameters)
             PowerSupply.readCurrent();
         }
 
+        // Fast recording logic (runs at ADC speed, up to ~300 SPS)
+        // UI update strategy: on-the-fly for slow SPS (<=50ms period), batch for fast SPS
+        static unsigned long lastRecordTime = 0;
+        if (PowerSupply.recordingMem.is_recording)
+        {
+            if (millis() - lastRecordTime >= PowerSupply.recordingMem.sample_rate_ms)
+            {
+                lastRecordTime = millis();
+
+                if (PowerSupply.recordingMem.sample_count < RECORDING_TABLE_SIZE)
+                {
+                    double voltage = PowerSupply.Voltage.measured.Mean();
+
+                    // Normalize voltage to 0-1 range using ADC max voltage from setup
+                    double normalized = voltage / PowerSupply.Voltage.adc_maxValue;  // 32.768V
+                    // Clamp to valid range
+                    if (normalized < 0.0) normalized = 0.0;
+                    if (normalized > 1.0) normalized = 1.0;
+
+                    // Store normalized value in table_points array
+                    PowerSupply.funGenMem.table_points[PowerSupply.recordingMem.sample_count][0] = normalized;
+
+                    // Update UI on-the-fly if SPS is slow enough (period >= 50ms = 20 SPS or slower)
+                    bool slowSampling = (PowerSupply.recordingMem.sample_rate_ms >= 50);
+                    if (slowSampling && !lvglIsBusy)
+                    {
+                        // Update table row
+                        if (Utility_objs.table_point_list)
+                        {
+                            lv_table_set_cell_value_fmt(Utility_objs.table_point_list,
+                                                       PowerSupply.recordingMem.sample_count, 1,
+                                                       "%06.4f", normalized);
+                        }
+
+                        // Update chart point
+                        if (Utility_objs.record_chart && Utility_objs.record_chart_series)
+                        {
+                            lv_chart_set_value_by_id(Utility_objs.record_chart, Utility_objs.record_chart_series,
+                                                    PowerSupply.recordingMem.sample_count,
+                                                    (int32_t)(normalized * 100));
+                            lv_chart_refresh(Utility_objs.record_chart);
+                        }
+
+                        // Update status every 5 samples
+                        if (Utility_objs.record_status_label && (PowerSupply.recordingMem.sample_count % 5 == 0))
+                        {
+                            lv_label_set_text_fmt(Utility_objs.record_status_label, "Recording: %d/%d",
+                                                 PowerSupply.recordingMem.sample_count + 1, RECORDING_TABLE_SIZE);
+                        }
+                    }
+
+                    PowerSupply.recordingMem.sample_count++;
+                }
+                else
+                {
+                    // Max samples reached, stop recording and trigger UI update
+                    PowerSupply.recordingMem.is_recording = false;
+                    PowerSupply.recordingMem.needs_ui_update = true;  // Flag for batch update at end
+                }
+            }
+        }
+
         // Update power calculation (convert mA to A if needed)
         const double currentInAmps = PowerSupply.Current.measured.Mean() * (PowerSupply.mA_Active ? 0.001 : 1.0);
         PowerSupply.Power.measureUpdate(currentInAmps * PowerSupply.Voltage.measured.Mean());

@@ -305,7 +305,16 @@ MemArray Device::LoadMemory(const String &key)
 void Device::SaveMemoryFgen(const String &key, const FunGen &data)
 {
     StoreMem.begin("my-app", false);
-    StoreMem.putBytes(key.c_str(), &data, sizeof(FunGen));
+    
+    FunGenSettings settings = {data.frequency, data.amplitude, data.offset, data.dutyCycle};
+    StoreMem.putBytes("fgen", &settings, sizeof(settings));
+
+    const size_t table_chunk_size = sizeof(data.table_points) / 2;
+    StoreMem.putBytes("fgen_t1", &data.table_points[0], table_chunk_size);
+    StoreMem.putBytes("fgen_t2", (uint8_t*)&data.table_points[0] + table_chunk_size, table_chunk_size);
+
+    StoreMem.putBytes("fgen_arb", &data.arbitrary_points, sizeof(data.arbitrary_points));
+    
     StoreMem.end();
 }
 
@@ -313,20 +322,23 @@ FunGen Device::LoadMemoryFgen(const String &key)
 {
     FunGen data;
     StoreMem.begin("my-app", false);
-    size_t bytesRead = StoreMem.getBytes(key.c_str(), &data, sizeof(FunGen));
-    StoreMem.end();
 
-    // Validate loaded data - if invalid, return defaults
-    if (bytesRead == 0 || !std::isfinite(data.amplitude) || !std::isfinite(data.frequency) ||
-        !std::isfinite(data.offset) || !std::isfinite(data.dutyCycle))
-    {
-        Serial.printf("\nFunction generator data invalid or not found, using defaults");
-        data.amplitude = 5.0;
-        data.frequency = 1.0;
-        data.offset = 0.0;
-        data.dutyCycle = 0.5;
+    FunGenSettings settings;
+    size_t bytesRead = StoreMem.getBytes("fgen", &settings, sizeof(settings));
+    if (bytesRead > 0) {
+        data.frequency = settings.frequency;
+        data.amplitude = settings.amplitude;
+        data.offset = settings.offset;
+        data.dutyCycle = settings.dutyCycle;
     }
 
+    const size_t table_chunk_size = sizeof(data.table_points) / 2;
+    StoreMem.getBytes("fgen_t1", &data.table_points[0], table_chunk_size);
+    StoreMem.getBytes("fgen_t2", (uint8_t*)&data.table_points[0] + table_chunk_size, table_chunk_size);
+
+    StoreMem.getBytes("fgen_arb", &data.arbitrary_points, sizeof(data.arbitrary_points));
+
+    StoreMem.end();
     return data;
 }
 

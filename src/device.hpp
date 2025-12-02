@@ -1,5 +1,6 @@
 #pragma once
 
+#include "globals.h"
 // #include "gLobalVariables.h"
 #include <vector>
 #include <lvgl.h>
@@ -51,6 +52,15 @@ struct Recording
     bool is_playing;          // Playback state
     bool infinite_loop;       // Infinite playback loop enabled
     uint16_t play_index;      // Current playback position
+    bool needs_ui_update;     // Flag to trigger UI update after recording completes
+};
+
+struct FunGenSettings
+{
+    double frequency;
+    double amplitude;
+    double offset;
+    double dutyCycle;
 };
 
 struct FunGen
@@ -59,7 +69,7 @@ struct FunGen
     double amplitude;
     double offset;
     double dutyCycle;
-    double table_points[100][2];
+    double table_points[RECORDING_TABLE_SIZE][2];
     double arbitrary_points[40][2];
 };
 struct DAC_codes

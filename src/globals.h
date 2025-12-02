@@ -7,6 +7,7 @@
 #define CHART_SIZE 240 * 5
 #define BUCKET_COUNT 100
 #define NUM_LABELS 7
+#define RECORDING_TABLE_SIZE 250  // Number of data points in recording table
 
 // Global variables for chart data
 extern lv_coord_t graph_data_V[CHART_SIZE];
@@ -19,7 +20,7 @@ extern int32_t barGraph_I[1];
 extern lv_obj_t *tabview_utility;
 extern lv_obj_t *btn_function_gen;
 
-// Encoder values
+// Encoder values u
 extern int globalSliderXValue;
 extern int32_t encoder1_value, encoder2_value;
 

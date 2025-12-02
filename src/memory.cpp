@@ -44,11 +44,7 @@ void saveMemory(lv_obj_t *btn)
 
 void saveToBank(int bank)
 {
-    LV_LOG_USER("Saved settings to Bank %d", bank);
-
-    // Construct memory bank name dynamically
-    char bankName[32];
-    snprintf(bankName, sizeof(bankName), "Arbitrary_Bank_%d", bank);
+    LV_LOG_USER("Saving to Bank %d", bank);
 
     // Get the y-array from the chart
     lv_coord_t *y_array = lv_chart_get_y_array(util_Arbit_chart, util_Arbit_chart_series);
@@ -58,26 +54,27 @@ void saveToBank(int bank)
         return;
     }
 
-    // Save data points from chart to memory
+    // Save data points from chart to the FunGen memory structure
     for (int i = 0; i < CHART_POINTS; i++)
     {
-        PowerSupply.funGenArbitraryMem.arbitrary_points[i][bank] = y_array[i]; // Store y-values in PowerSupply.funGenMem
+        PowerSupply.funGenMem.arbitrary_points[i][bank] = y_array[i];
     }
 
-    // Save function generator memory
-    PowerSupply.SaveMemoryFgen("Arbit", PowerSupply.funGenArbitraryMem);
+    // Save the entire FunGen memory structure
+    PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
 }
 
 void loadFromBank(int bank)
 {
-    LV_LOG_USER("Loaded settings from Bank %d", bank);
-    // Implement loading logic here
-    PowerSupply.funGenArbitraryMem = PowerSupply.LoadMemoryFgen("Arbit");
-    // Fill with zero data initially
+    LV_LOG_USER("Loading from Bank %d", bank);
+
+    // Load the entire FunGen memory structure
+    PowerSupply.funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
+
+    // Update the chart with data from the specified bank
     for (int i = 0; i < CHART_POINTS; i++)
     {
-        lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, PowerSupply.funGenArbitraryMem.arbitrary_points[i][bank]);
-
-        // lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, 0);
+        lv_chart_set_value_by_id(util_Arbit_chart, util_Arbit_chart_series, i, PowerSupply.funGenMem.arbitrary_points[i][bank]);
     }
+    lv_chart_refresh(util_Arbit_chart);
 }

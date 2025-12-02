@@ -28,18 +28,34 @@ void initBuckets(TFT_eSPI &tft)
 // Update a single X with a new Y
 void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *series)
 {
-    if (!chart || !series || lv_obj_is_visible(chart) == false || Tabs::getCurrentPage() != 3) // || lv_tabview_get_tab_act(tabview_utility) !=3)
+    if (!chart || !series || !lv_obj_is_visible(chart) || Tabs::getCurrentPage() != 3)
         return;
 
-    if (y > 30 && y < 190 && x > 5)
+    lv_obj_t *tabview = lv_obj_get_parent(lv_obj_get_parent(chart));
+    if (lv_tabview_get_tab_act(tabview) != 2) // 2 is the index for "Arbt" tab
+        return;
+
+    lv_area_t chart_area;
+    lv_obj_get_content_coords(chart, &chart_area);
+
+    // Check if the touch point is within the chart's content area
+    if (x >= chart_area.x1 && x <= chart_area.x2 && y >= chart_area.y1 && y <= chart_area.y2)
     {
-        y = CHART_Y_MAX - y; // Flip Y-axis so 0 is at the bottom
+        // Map touch coordinates to chart coordinates
+        // Map X coordinate to point index
+        int32_t point_x = lv_map(x, chart_area.x1, chart_area.x2, 0, lv_chart_get_point_count(chart) - 1);
 
-        // Plot the point at the correct position
-        lv_chart_set_value_by_id(chart, series, (x - 20) / (100 / CHART_POINTS * 2.9), y + 80);
+        // Map Y coordinate to value
+        int32_t y_min = 0;
+        int32_t y_max = 140;
+        int32_t point_y = lv_map(y, chart_area.y1, chart_area.y2, y_max, y_min);
 
-        // Refresh the chart
-        lv_chart_refresh(chart);
+        if (point_x >= 0 && point_x < lv_chart_get_point_count(chart))
+        {
+            lv_chart_set_value_by_id(chart, series, point_x, point_y);
+            PowerSupply.funGenMem.arbitrary_points[point_x][0] = point_y;
+            lv_chart_refresh(chart);
+        }
     }
 }
 

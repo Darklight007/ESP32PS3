@@ -527,8 +527,35 @@ void Utility_tabview(lv_obj_t *parent)
         lv_dropdown_get_selected_str(dropdown, buf, sizeof(buf));
         LV_LOG_USER("'%s' is selected", buf);
 
-        dropdown_active = false;  // Reset flag when selection is made
+        if (strncmp(buf, "Save to Bank", 12) == 0) {
+            int bank = atoi(buf + 13);
+            saveToBank(bank);
+        } else if (strncmp(buf, "Load from Bank", 12) == 0) {
+            int bank = atoi(buf + 13);
+            loadFromBank(bank);
+        } else if (strcmp(buf, "Clear") == 0) {
+            for (int i = 0; i < CHART_POINTS; i++) {
+                PowerSupply.funGenMem.arbitrary_points[i][0] = 0;
+                lv_chart_set_value_by_id(util_Arbit_chart, util_Arbit_chart_series, i, 0);
+            }
+            lv_chart_refresh(util_Arbit_chart);
+        } else if (strcmp(buf, "Exit") != 0) {
+            // It's a waveform name
+            for (int i = 0; i < numWaveforms; ++i) {
+                if (strcmp(buf, waveforms[i].name) == 0) {
+                    for (int j = 0; j < CHART_POINTS; ++j) {
+                        double value = waveforms[i].function((double)j / CHART_POINTS);
+                        int chart_val = (int)(value * 140.0); // Scale from [0, 1] to [0, 140]
+                        PowerSupply.funGenMem.arbitrary_points[j][0] = chart_val;
+                        lv_chart_set_value_by_id(util_Arbit_chart, util_Arbit_chart_series, j, chart_val);
+                    }
+                    lv_chart_refresh(util_Arbit_chart);
+                    break;
+                }
+            }
+        }
 
+        dropdown_active = false;  // Reset flag when selection is made
     };
 
     auto dropdownOpenCb = [](lv_event_t *e)
@@ -620,7 +647,7 @@ void Utility_tabview(lv_obj_t *parent)
 
     Utility_objs.table_point_list = table_pro(tab4, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 3, 160, 120, 0, 5);
 
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < RECORDING_TABLE_SIZE; i++)
     {
         // Utility_objs.table_points[i] = PowerSupply.funGenMem.table_points[i];
         lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 0, "%0i", i);
@@ -693,7 +720,7 @@ void Utility_tabview(lv_obj_t *parent)
     // lv_obj_set_style_pad_all(tab4, 3, LV_PART_MAIN);
 
      // Sample Per Second spinbox (bottom)
-    Utility_objs.record_sample_rate_spinbox = spinbox_pro(tab4, "SPS:", 1, 250, 3, 0, LV_ALIGN_BOTTOM_LEFT, 170, -66, 70, 1, &graph_R_16);
+    Utility_objs.record_sample_rate_spinbox = spinbox_pro(tab4, "SPS:", 1, 250, 3, 0, LV_ALIGN_BOTTOM_LEFT, 170, -66, 50, 1, &graph_R_16);
     lv_spinbox_set_value(Utility_objs.record_sample_rate_spinbox, 10);  // Default: 10 SPS
 
     // On-the-fly update for sample rate
