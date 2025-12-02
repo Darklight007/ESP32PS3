@@ -28,12 +28,34 @@ void initBuckets(TFT_eSPI &tft)
 // Update a single X with a new Y
 void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *series)
 {
-    if (!chart || !series || !lv_obj_is_visible(chart) || Tabs::getCurrentPage() != 3)
+    // Debug: Print when function is called
+    Serial.printf("plotToBucket called: x=%d, y=%d\n", x, y);
+
+    if (!chart) {
+        Serial.println("plotToBucket: chart is NULL");
         return;
+    }
+    if (!series) {
+        Serial.println("plotToBucket: series is NULL");
+        return;
+    }
+    if (!lv_obj_is_visible(chart)) {
+        Serial.println("plotToBucket: chart not visible");
+        return;
+    }
+    if (Tabs::getCurrentPage() != 3) {
+        Serial.printf("plotToBucket: wrong page %d (need 3)\n", Tabs::getCurrentPage());
+        return;
+    }
 
     lv_obj_t *tabview = lv_obj_get_parent(lv_obj_get_parent(chart));
-    if (lv_tabview_get_tab_act(tabview) != 2) // 2 is the index for "Arbt" tab
+    int active_tab = lv_tabview_get_tab_act(tabview);
+    if (active_tab != 2) { // 2 is the index for "Arbt" tab
+        Serial.printf("plotToBucket: wrong tab %d (need 2)\n", active_tab);
         return;
+    }
+
+    Serial.println("plotToBucket: passed all checks, updating chart");
 
     lv_area_t chart_area;
     lv_obj_get_content_coords(chart, &chart_area);
