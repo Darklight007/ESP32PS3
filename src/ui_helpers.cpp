@@ -48,8 +48,9 @@ void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *se
         return;
     }
 
-    lv_obj_t *tabview = lv_obj_get_parent(lv_obj_get_parent(chart));
-    int active_tab = lv_tabview_get_tab_act(tabview);
+    // Use global tabview_utility instead of navigating parents
+    extern lv_obj_t *tabview_utility;
+    int active_tab = lv_tabview_get_tab_act(tabview_utility);
     if (active_tab != 2) { // 2 is the index for "Arbt" tab
         Serial.printf("plotToBucket: wrong tab %d (need 2)\n", active_tab);
         return;
