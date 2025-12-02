@@ -46,6 +46,9 @@ void saveToBank(int bank)
 {
     LV_LOG_USER("Saving to Bank %d", bank);
 
+    // IMPORTANT: Load existing data first to preserve other banks!
+    PowerSupply.funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
+
     // Get the y-array from the chart
     lv_coord_t *y_array = lv_chart_get_y_array(util_Arbit_chart, util_Arbit_chart_series);
     if (!y_array)
@@ -54,14 +57,16 @@ void saveToBank(int bank)
         return;
     }
 
-    // Save data points from chart to the FunGen memory structure
+    // Update only the specified bank (preserves other banks)
     for (int i = 0; i < CHART_POINTS; i++)
     {
         PowerSupply.funGenMem.arbitrary_points[i][bank] = y_array[i];
     }
 
-    // Save the entire FunGen memory structure
+    // Save the entire FunGen memory structure back to flash
     PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
+
+    Serial.printf("Bank %d saved successfully!\n", bank);
 }
 
 void loadFromBank(int bank)
