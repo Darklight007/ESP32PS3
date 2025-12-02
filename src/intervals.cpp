@@ -228,7 +228,7 @@ void UpdateRecordingUI()
             if (Utility_objs.table_point_list)
             {
                 lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1,
-                                           "%06.4f",
+                                           "%+06.4f",
                                            PowerSupply.funGenMem.table_points[i][0]);
             }
 
@@ -257,7 +257,7 @@ void UpdateRecordingUI()
             if (Utility_objs.table_point_list)
             {
                 lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1,
-                                           "%06.4f",
+                                           "%+06.4f",
                                            PowerSupply.funGenMem.table_points[i][0]);
             }
 

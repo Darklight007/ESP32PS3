@@ -109,7 +109,7 @@ static void spinbox_change_event_cb(lv_event_t *e)
         double value = lv_spinbox_get_value(spinbox) / 10000.0;
 
         int row = (int)Utility_objs.table_point_list->user_data;
-        lv_table_set_cell_value_fmt(Utility_objs.table_point_list, row, 1, "%06.4f", value);
+        lv_table_set_cell_value_fmt(Utility_objs.table_point_list, row, 1, "%+06.4f", value);
         PowerSupply.funGenMem.table_points[row][0] = value;
     }
 }
@@ -650,7 +650,8 @@ void Utility_tabview(lv_obj_t *parent)
     lv_label_set_text(norm_label, "#FFFF00 Row | Norm (0-1)#");
     lv_label_set_recolor(norm_label, true);
     lv_obj_set_style_text_font(norm_label, &lv_font_montserrat_10, 0);
-    lv_obj_align(norm_label, LV_ALIGN_TOP_LEFT, 3, 1);
+    lv_obj_set_style_text_align(norm_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(norm_label, LV_ALIGN_TOP_MID, 0, 1);
 
     Utility_objs.table_point_list = table_pro(tab4, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 15, 160, 120, 0, 5);
 
@@ -658,7 +659,7 @@ void Utility_tabview(lv_obj_t *parent)
     {
         // Utility_objs.table_points[i] = PowerSupply.funGenMem.table_points[i];
         lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 0, "%0i", i);
-        lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%1.4f", PowerSupply.funGenMem.table_points[i][0]);
+        lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%+1.4f", PowerSupply.funGenMem.table_points[i][0]);
     }
 
     lv_table_set_col_width(Utility_objs.table_point_list, 0, 50);  // Wider for 3-digit row numbers (100-249)
@@ -713,7 +714,7 @@ void Utility_tabview(lv_obj_t *parent)
             PowerSupply.funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
             for (int i = 0; i < RECORDING_TABLE_SIZE; i++)
             {
-                lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%06.4f", PowerSupply.funGenMem.table_points[i][0]);
+                lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%+06.4f", PowerSupply.funGenMem.table_points[i][0]);
             }
             lv_obj_invalidate(Utility_objs.table_point_list);
         }

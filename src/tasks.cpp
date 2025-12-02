@@ -183,7 +183,7 @@ void Task_ADC(void *pvParameters)
                         {
                             lv_table_set_cell_value_fmt(Utility_objs.table_point_list,
                                                        PowerSupply.recordingMem.sample_count, 1,
-                                                       "%06.4f", normalized);
+                                                       "%+06.4f", normalized);
                         }
 
                         // Update chart point
