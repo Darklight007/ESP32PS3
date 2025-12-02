@@ -640,7 +640,8 @@ void Utility_tabview(lv_obj_t *parent)
     lv_chart_set_type(Utility_objs.record_chart, LV_CHART_TYPE_LINE);
     lv_chart_set_range(Utility_objs.record_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 3300);
     lv_chart_set_point_count(Utility_objs.record_chart, 100);
-    lv_obj_set_style_line_width(Utility_objs.record_chart, 1, LV_PART_ITEMS);  // Very thin line
+    lv_obj_set_style_size(Utility_objs.record_chart, 0, LV_PART_INDICATOR);  // Hide point indicators
+    lv_obj_set_style_line_width(Utility_objs.record_chart, 2, LV_PART_ITEMS);  // Thin line (2px)
     Utility_objs.record_chart_series = lv_chart_add_series(Utility_objs.record_chart, lv_palette_main(LV_PALETTE_RED), LV_CHART_AXIS_PRIMARY_Y);
 
     Utility_objs.table_spinbox_value = spinbox_pro(tab4, "#FFFFF7 Value:#", 0, 10000, 5, 1, LV_ALIGN_RIGHT_MID, -50, -62, 98, 4, &graph_R_16);
@@ -747,6 +748,7 @@ lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_
                 // Update status
                 if (Utility_objs.record_status_label) {
                     lv_label_set_text_fmt(Utility_objs.record_status_label, "Recording from row %d...", selected_row);
+                    lv_obj_set_style_text_color(Utility_objs.record_status_label, lv_palette_main(LV_PALETTE_RED), 0);
                 }
             }
         }
@@ -770,6 +772,7 @@ lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_
                 if (Utility_objs.record_status_label) {
                     lv_label_set_text_fmt(Utility_objs.record_status_label, "Stopped: %d samples recorded",
                                          PowerSupply.recordingMem.sample_count - PowerSupply.recordingMem.play_index);
+                    lv_obj_set_style_text_color(Utility_objs.record_status_label, lv_palette_main(LV_PALETTE_GREY), 0);
                 }
             }
             else if (PowerSupply.recordingMem.is_playing)
@@ -789,8 +792,8 @@ lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_
     // Status label below REC button
     Utility_objs.record_status_label = lv_label_create(tab4);
     lv_label_set_text(Utility_objs.record_status_label, "Ready");
-    lv_obj_set_style_text_font(Utility_objs.record_status_label, &graph_R_16, 0);
-    lv_obj_align_to(Utility_objs.record_status_label, Utility_objs.record_btn, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 5);
+    lv_obj_set_style_text_font(Utility_objs.record_status_label, &lv_font_montserrat_12, 0);
+    lv_obj_align_to(Utility_objs.record_status_label, Utility_objs.record_btn, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 2);
 
 }
 

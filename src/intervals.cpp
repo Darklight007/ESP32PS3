@@ -260,6 +260,7 @@ void RecordingPlaybackInterval()
                 {
                     lv_label_set_text_fmt(Utility_objs.record_status_label, "Complete: %d samples",
                                          PowerSupply.recordingMem.sample_count - PowerSupply.recordingMem.play_index);
+                    lv_obj_set_style_text_color(Utility_objs.record_status_label, lv_palette_main(LV_PALETTE_GREEN), 0);
                 }
             }
         }
