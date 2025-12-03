@@ -803,6 +803,7 @@ lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_
             if (PowerSupply.recordingMem.is_recording)
             {
                 PowerSupply.recordingMem.is_recording = false;
+                PowerSupply.recordingMem.needs_ui_update = true;  // Trigger final UI update
                 if (Utility_objs.record_status_label) {
                     lv_label_set_text_fmt(Utility_objs.record_status_label, "Stopped: %d samples recorded",
                                          PowerSupply.recordingMem.sample_count - PowerSupply.recordingMem.play_index);
