@@ -319,18 +319,20 @@ void Device::SaveMemoryFgen(const String &key, const FunGen &data)
         return;
     }
 
-    // Save table_points (4000 bytes)
-    File file = SPIFFS.open("/fgen_table.dat", "w");
-    if (file) {
-        file.write((uint8_t*)&data.table_points, sizeof(data.table_points));
-        file.close();
+    // Save table_points (4000 bytes) - completely separate from Arbt
+    fs::File tableFile = SPIFFS.open("/fgen_table.dat", "w");
+    if (tableFile) {
+        tableFile.write((uint8_t*)&data.table_points, sizeof(data.table_points));
+        tableFile.close();
+        Serial.println("Table data saved to SPIFFS");
     }
 
-    // Save arbitrary_points (640 bytes)
-    file = SPIFFS.open("/fgen_arb.dat", "w");
-    if (file) {
-        file.write((uint8_t*)&data.arbitrary_points, sizeof(data.arbitrary_points));
-        file.close();
+    // Save arbitrary_points (640 bytes) - completely separate from Table
+    fs::File arbFile = SPIFFS.open("/fgen_arb.dat", "w");
+    if (arbFile) {
+        arbFile.write((uint8_t*)&data.arbitrary_points, sizeof(data.arbitrary_points));
+        arbFile.close();
+        Serial.println("Arbt bank data saved to SPIFFS");
     }
 
     SPIFFS.end();
@@ -358,18 +360,24 @@ FunGen Device::LoadMemoryFgen(const String &key)
         return data;
     }
 
-    // Load table_points (4000 bytes)
-    File file = SPIFFS.open("/fgen_table.dat", "r");
-    if (file) {
-        file.read((uint8_t*)&data.table_points, sizeof(data.table_points));
-        file.close();
+    // Load table_points (4000 bytes) - independent from Arbt
+    fs::File tableFile = SPIFFS.open("/fgen_table.dat", "r");
+    if (tableFile) {
+        size_t bytesRead = tableFile.read((uint8_t*)&data.table_points, sizeof(data.table_points));
+        tableFile.close();
+        Serial.printf("Table data loaded from SPIFFS: %d bytes\n", bytesRead);
+    } else {
+        Serial.println("Table data file not found - using defaults");
     }
 
-    // Load arbitrary_points (640 bytes)
-    file = SPIFFS.open("/fgen_arb.dat", "r");
-    if (file) {
-        file.read((uint8_t*)&data.arbitrary_points, sizeof(data.arbitrary_points));
-        file.close();
+    // Load arbitrary_points (640 bytes) - independent from Table
+    fs::File arbFile = SPIFFS.open("/fgen_arb.dat", "r");
+    if (arbFile) {
+        size_t bytesRead = arbFile.read((uint8_t*)&data.arbitrary_points, sizeof(data.arbitrary_points));
+        arbFile.close();
+        Serial.printf("Arbt bank data loaded from SPIFFS: %d bytes\n", bytesRead);
+    } else {
+        Serial.println("Arbt bank data file not found - using defaults");
     }
 
     SPIFFS.end();
