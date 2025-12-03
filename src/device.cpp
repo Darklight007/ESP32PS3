@@ -3,6 +3,8 @@
 #include "MonotoneCubicCalibrator.h"
 #include "setting_menu.h"
 #include "error_handler.h"
+#include <SPIFFS.h>
+#include <FS.h>
 
 extern bool g_voltINL_ready;
 extern MonotoneCubicCalibrator g_voltINL;
@@ -304,37 +306,42 @@ MemArray Device::LoadMemory(const String &key)
 
 void Device::SaveMemoryFgen(const String &key, const FunGen &data)
 {
+    // Save small settings to NVS (fast, no size limit issues)
     StoreMem.begin("my-app", false);
-
-    // Clear only table-related keys for clean migration from old 2-chunk to 4-chunk format
-    // DON'T clear fgen_arb - it stores Arbt bank data which should persist!
-    StoreMem.remove("fgen_t1");
-    StoreMem.remove("fgen_t2");
-    StoreMem.remove("fgen_t3");
-    StoreMem.remove("fgen_t4");
-
     FunGenSettings settings = {data.frequency, data.amplitude, data.offset, data.dutyCycle};
     StoreMem.putBytes("fgen", &settings, sizeof(settings));
-
-    // Split table_points into 4 chunks to stay under NVS 1984 byte limit per blob
-    // Total size: 250 rows * 2 cols * 8 bytes = 4000 bytes
-    // Each chunk: 1000 bytes (safe under 1984 byte limit)
-    const size_t table_chunk_size = sizeof(data.table_points) / 4;
-    StoreMem.putBytes("fgen_t1", &data.table_points[0], table_chunk_size);
-    StoreMem.putBytes("fgen_t2", (uint8_t*)&data.table_points[0] + table_chunk_size, table_chunk_size);
-    StoreMem.putBytes("fgen_t3", (uint8_t*)&data.table_points[0] + table_chunk_size * 2, table_chunk_size);
-    StoreMem.putBytes("fgen_t4", (uint8_t*)&data.table_points[0] + table_chunk_size * 3, table_chunk_size);
-
-    StoreMem.putBytes("fgen_arb", &data.arbitrary_points, sizeof(data.arbitrary_points));
-
     StoreMem.end();
+
+    // Save large arrays to SPIFFS (3.375MB available!)
+    // No more 1984-byte NVS blob limits or chunking needed!
+    if (!SPIFFS.begin(true)) {
+        Serial.println("SPIFFS Mount Failed");
+        return;
+    }
+
+    // Save table_points (4000 bytes)
+    File file = SPIFFS.open("/fgen_table.dat", "w");
+    if (file) {
+        file.write((uint8_t*)&data.table_points, sizeof(data.table_points));
+        file.close();
+    }
+
+    // Save arbitrary_points (640 bytes)
+    file = SPIFFS.open("/fgen_arb.dat", "w");
+    if (file) {
+        file.write((uint8_t*)&data.arbitrary_points, sizeof(data.arbitrary_points));
+        file.close();
+    }
+
+    SPIFFS.end();
 }
 
 FunGen Device::LoadMemoryFgen(const String &key)
 {
     FunGen data;
-    StoreMem.begin("my-app", false);
 
+    // Load small settings from NVS
+    StoreMem.begin("my-app", false);
     FunGenSettings settings;
     size_t bytesRead = StoreMem.getBytes("fgen", &settings, sizeof(settings));
     if (bytesRead > 0) {
@@ -343,17 +350,29 @@ FunGen Device::LoadMemoryFgen(const String &key)
         data.offset = settings.offset;
         data.dutyCycle = settings.dutyCycle;
     }
-
-    // Load table_points from 4 chunks (matches SaveMemoryFgen)
-    const size_t table_chunk_size = sizeof(data.table_points) / 4;
-    StoreMem.getBytes("fgen_t1", &data.table_points[0], table_chunk_size);
-    StoreMem.getBytes("fgen_t2", (uint8_t*)&data.table_points[0] + table_chunk_size, table_chunk_size);
-    StoreMem.getBytes("fgen_t3", (uint8_t*)&data.table_points[0] + table_chunk_size * 2, table_chunk_size);
-    StoreMem.getBytes("fgen_t4", (uint8_t*)&data.table_points[0] + table_chunk_size * 3, table_chunk_size);
-
-    StoreMem.getBytes("fgen_arb", &data.arbitrary_points, sizeof(data.arbitrary_points));
-
     StoreMem.end();
+
+    // Load large arrays from SPIFFS
+    if (!SPIFFS.begin(true)) {
+        Serial.println("SPIFFS Mount Failed");
+        return data;
+    }
+
+    // Load table_points (4000 bytes)
+    File file = SPIFFS.open("/fgen_table.dat", "r");
+    if (file) {
+        file.read((uint8_t*)&data.table_points, sizeof(data.table_points));
+        file.close();
+    }
+
+    // Load arbitrary_points (640 bytes)
+    file = SPIFFS.open("/fgen_arb.dat", "r");
+    if (file) {
+        file.read((uint8_t*)&data.arbitrary_points, sizeof(data.arbitrary_points));
+        file.close();
+    }
+
+    SPIFFS.end();
     return data;
 }
 
