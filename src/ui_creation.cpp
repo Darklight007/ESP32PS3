@@ -647,11 +647,10 @@ void Utility_tabview(lv_obj_t *parent)
 
     // Label to indicate normalized values
     lv_obj_t *norm_label = lv_label_create(tab4);
-    lv_label_set_text(norm_label, "#FFFF00 Row | Norm (0-1)#");
+    lv_label_set_text(norm_label, "#FFFF00 Row      Norm (0-1)#");  // Spaces to align with table columns
     lv_label_set_recolor(norm_label, true);
     lv_obj_set_style_text_font(norm_label, &lv_font_montserrat_10, 0);
-    lv_obj_set_style_text_align(norm_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(norm_label, LV_ALIGN_TOP_MID, 0, 1);
+    lv_obj_align(norm_label, LV_ALIGN_TOP_LEFT, 10, 1);
 
     Utility_objs.table_point_list = table_pro(tab4, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 15, 160, 120, 0, 5);
 
