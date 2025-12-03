@@ -306,6 +306,14 @@ void Device::SaveMemoryFgen(const String &key, const FunGen &data)
 {
     StoreMem.begin("my-app", false);
 
+    // Clear ALL old fgen keys first to ensure clean migration from old 2-chunk format
+    StoreMem.remove("fgen");
+    StoreMem.remove("fgen_t1");
+    StoreMem.remove("fgen_t2");
+    StoreMem.remove("fgen_t3");
+    StoreMem.remove("fgen_t4");
+    StoreMem.remove("fgen_arb");
+
     FunGenSettings settings = {data.frequency, data.amplitude, data.offset, data.dutyCycle};
     StoreMem.putBytes("fgen", &settings, sizeof(settings));
 
