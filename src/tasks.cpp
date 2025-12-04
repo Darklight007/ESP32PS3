@@ -227,21 +227,25 @@ void Task_ADC(void *pvParameters)
             lastCCCVStatus = currentCCCVStatus;
         }
 
-        // Update histogram and graph data
-        HistPush();
-        GraphPush();
+        // Check if FUN Only mode is active (for debugging sine wave quality)
+        bool funOnlyMode = lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED);
 
-        // Refresh histogram chart on page 0
-        if (Tabs::getCurrentPage() == Pages::HISTOGRAM && !lvglIsBusy && !lvglChartIsBusy && !blockAll)
+        // Update histogram and graph data (skip if FUN Only mode)
+        if (!funOnlyMode) {
+            HistPush();
+            GraphPush();
+        }
+
+        // Refresh histogram chart on page 0 (skip if FUN Only mode)
+        if (!funOnlyMode && Tabs::getCurrentPage() == Pages::HISTOGRAM && !lvglIsBusy && !lvglChartIsBusy && !blockAll)
         {
             lvglChartIsBusy = true;
             lv_chart_refresh(PowerSupply.stats.chart);
             lvglChartIsBusy = false;
         }
 
-        // Refresh graph chart on page 1 with throttling
-        // Slow down graph updates when FUN is active to reduce processing load
-        if (Tabs::getCurrentPage() == Pages::GRAPH && !lvglIsBusy)
+        // Refresh graph chart on page 1 with throttling (skip if FUN Only mode)
+        if (!funOnlyMode && Tabs::getCurrentPage() == Pages::GRAPH && !lvglIsBusy)
         {
             bool funActive = lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED);
             unsigned long graphInterval = funActive

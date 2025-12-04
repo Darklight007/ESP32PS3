@@ -485,6 +485,15 @@ void Utility_tabview(lv_obj_t *parent)
     lv_label_set_text(Utility_objs.switch_keys_label, "Keys scan");
     lv_obj_align_to(Utility_objs.switch_keys_label, Utility_objs.switch_keys_scan, LV_ALIGN_BOTTOM_MID, 0, 14);
 
+    // FUN-only mode switch (disables everything except FUN and touch for testing)
+    Utility_objs.switch_fun_only = lv_switch_create(tab2);
+    lv_obj_align(Utility_objs.switch_fun_only, LV_ALIGN_DEFAULT, 180, 140);
+    lv_obj_set_size(Utility_objs.switch_fun_only, 48, 22);
+
+    Utility_objs.switch_fun_only_label = lv_label_create(tab2);
+    lv_label_set_text(Utility_objs.switch_fun_only_label, "FUN Only");
+    lv_obj_align_to(Utility_objs.switch_fun_only_label, Utility_objs.switch_fun_only, LV_ALIGN_BOTTOM_MID, 0, 14);
+
     // Utility page Tab 3 ****************************************************************************************************************************
 
     lv_obj_clear_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
