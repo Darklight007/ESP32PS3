@@ -57,6 +57,7 @@ void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_color16_t 
 void draw_event_stat_chart_cb(lv_event_t *e);
 void draw_event_cb2(lv_event_t *e);
 void btn_function_gen_event_cb(lv_event_t *e);
+void switch_fun_only_event_cb(lv_event_t *e);
 
 // External UI objects
 extern lv_obj_t *label_legend1;

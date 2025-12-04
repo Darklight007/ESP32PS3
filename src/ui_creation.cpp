@@ -493,6 +493,7 @@ void Utility_tabview(lv_obj_t *parent)
     Utility_objs.switch_fun_only_label = lv_label_create(tab2);
     lv_label_set_text(Utility_objs.switch_fun_only_label, "FUN Only");
     lv_obj_align_to(Utility_objs.switch_fun_only_label, Utility_objs.switch_fun_only, LV_ALIGN_BOTTOM_MID, 0, 14);
+    lv_obj_add_event_cb(Utility_objs.switch_fun_only, switch_fun_only_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     // Utility page Tab 3 ****************************************************************************************************************************
 

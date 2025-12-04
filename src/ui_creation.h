@@ -34,6 +34,7 @@ static void table_draw_cell_event_cb(lv_event_t *e);
 void select_next_row(lv_obj_t *table, lv_coord_t row_height);
 void select_previous_row(lv_obj_t *table, lv_coord_t row_height);
 void btn_function_gen_event_cb(lv_event_t *e);
+void switch_fun_only_event_cb(lv_event_t *e);
 static void spinbox_change_event_cb(lv_event_t *e);
 static void draw_event_util_Arbit_chart_cb(lv_event_t *e);
 static void dropdownEventCb(lv_event_t *e);
