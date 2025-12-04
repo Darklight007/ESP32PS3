@@ -55,6 +55,13 @@ void Task_BarGraph(void *pvParameters)
 {
     for (;;)
     {
+        // Skip all bar graph updates in FUN Only mode
+        if (lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
+        {
+            vTaskDelay(100);  // Sleep longer when disabled
+            continue;
+        }
+
         if (Tabs::getCurrentPage() != Pages::MAIN)
         {
             vTaskDelay(TaskTiming::BARGRAPH_DELAY_OFF_PAGE_MS);
@@ -94,6 +101,9 @@ void Task_ADC(void *pvParameters)
     {
         toneOff();
 
+        // Check if FUN Only mode is active (minimal processing for clean waveforms)
+        bool funOnlyMode = lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED);
+
         // Update DAC outputs (faster when function generator active)
         unsigned long dacInterval = lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED)
             ? TaskTiming::DAC_UPDATE_INTERVAL_FUNGEN_MS
@@ -104,6 +114,13 @@ void Task_ADC(void *pvParameters)
                 functionGenerator();
             PowerSupply.DACUpdate();
         }, dacInterval, dacUpdateTimer);
+
+        // In FUN Only mode: skip ALL processing except DAC updates (above) and LCD touch
+        if (funOnlyMode)
+        {
+            vTaskDelay(1);  // Minimal delay, just yield to other tasks
+            continue;
+        }
 
         // Handle keyboard and encoder input for responsive UI
         if (wireConnected)
@@ -227,25 +244,20 @@ void Task_ADC(void *pvParameters)
             lastCCCVStatus = currentCCCVStatus;
         }
 
-        // Check if FUN Only mode is active (for debugging sine wave quality)
-        bool funOnlyMode = lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED);
+        // Update histogram and graph data
+        HistPush();
+        GraphPush();
 
-        // Update histogram and graph data (skip if FUN Only mode)
-        if (!funOnlyMode) {
-            HistPush();
-            GraphPush();
-        }
-
-        // Refresh histogram chart on page 0 (skip if FUN Only mode)
-        if (!funOnlyMode && Tabs::getCurrentPage() == Pages::HISTOGRAM && !lvglIsBusy && !lvglChartIsBusy && !blockAll)
+        // Refresh histogram chart on page 0
+        if (Tabs::getCurrentPage() == Pages::HISTOGRAM && !lvglIsBusy && !lvglChartIsBusy && !blockAll)
         {
             lvglChartIsBusy = true;
             lv_chart_refresh(PowerSupply.stats.chart);
             lvglChartIsBusy = false;
         }
 
-        // Refresh graph chart on page 1 with throttling (skip if FUN Only mode)
-        if (!funOnlyMode && Tabs::getCurrentPage() == Pages::GRAPH && !lvglIsBusy)
+        // Refresh graph chart on page 1 with throttling
+        if (Tabs::getCurrentPage() == Pages::GRAPH && !lvglIsBusy)
         {
             bool funActive = lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED);
             unsigned long graphInterval = funActive
