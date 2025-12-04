@@ -10,12 +10,13 @@ namespace TaskTiming {
     constexpr unsigned long BARGRAPH_DELAY_OFF_PAGE_MS = 10;
     constexpr unsigned long BARGRAPH_DELAY_ACTIVE_MS = 1;
     constexpr unsigned long DAC_UPDATE_INTERVAL_NORMAL_MS = 100;
-    constexpr unsigned long DAC_UPDATE_INTERVAL_FUNGEN_MS = 5;
+    constexpr unsigned long DAC_UPDATE_INTERVAL_FUNGEN_MS = 1;  // 1ms for smooth waveforms (was 5ms)
     constexpr unsigned long KEY_CHECK_INTERVAL_ULTRAFAST_MS = 2;  // Ultra-fast when actively typing
     constexpr unsigned long KEY_CHECK_INTERVAL_FAST_MS = 10;
     constexpr unsigned long KEY_CHECK_INTERVAL_SLOW_MS = 105;
     constexpr unsigned long ADC_NOTIFY_TIMEOUT_MS = 1;
     constexpr unsigned long GRAPH_REFRESH_INTERVAL_MS = 125;
+    constexpr unsigned long GRAPH_REFRESH_INTERVAL_FUNGEN_MS = 500;  // Slow down graph updates during FUN
 }
 
 // Page indices
@@ -227,11 +228,15 @@ void Task_ADC(void *pvParameters)
         }
 
         // Update histogram and graph data
-        HistPush();
-        GraphPush();
+        // Skip data collection when FUN is active to reduce CPU load
+        bool funActive = lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED);
+        if (!funActive) {
+            HistPush();
+            GraphPush();
+        }
 
-        // Refresh histogram chart on page 0
-        if (Tabs::getCurrentPage() == Pages::HISTOGRAM && !lvglIsBusy && !lvglChartIsBusy && !blockAll)
+        // Refresh histogram chart on page 0 (skip when FUN is active)
+        if (!funActive && Tabs::getCurrentPage() == Pages::HISTOGRAM && !lvglIsBusy && !lvglChartIsBusy && !blockAll)
         {
             lvglChartIsBusy = true;
             lv_chart_refresh(PowerSupply.stats.chart);
@@ -239,9 +244,13 @@ void Task_ADC(void *pvParameters)
         }
 
         // Refresh graph chart on page 1 with throttling
+        // Slow down graph updates when FUN is active to reduce processing load
         if (Tabs::getCurrentPage() == Pages::GRAPH && !lvglIsBusy)
         {
-            unsigned long graphInterval = TaskTiming::GRAPH_REFRESH_INTERVAL_MS;
+            bool funActive = lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED);
+            unsigned long graphInterval = funActive
+                ? TaskTiming::GRAPH_REFRESH_INTERVAL_FUNGEN_MS  // 500ms when FUN active
+                : TaskTiming::GRAPH_REFRESH_INTERVAL_MS;        // 125ms normally
             schedule([]{
                 if (!lvglChartIsBusy && !blockAll)
                 {
