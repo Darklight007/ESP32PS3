@@ -204,12 +204,9 @@ bool functionGenerator()
     double value = currentWaveform.function(t);
     double outputValue = value * PowerSupply.funGenMem.amplitude + PowerSupply.funGenMem.offset;
 
-    static double lastOutputValue = 0.0;
-    if (outputValue != lastOutputValue)
-    {
-        PowerSupply.Voltage.SetUpdate(outputValue * PowerSupply.Voltage.adjFactor);
-        lastOutputValue = outputValue;
-    }
+    // ALWAYS update DAC - no change detection!
+    // Change detection was causing stepped/choppy waveforms
+    PowerSupply.Voltage.SetUpdate(outputValue * PowerSupply.Voltage.adjFactor);
 
     // Track minimal change intervals
     //  Serial.printf("\nmonitor output: %1.3f ", monitorMinChanges(value, t) );
