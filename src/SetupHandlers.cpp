@@ -444,14 +444,14 @@ void createTasks()
         0              /* Pin task to core 0 */
     );
 
-    // Create a task for ADC reading and FUN generation with HIGH priority
-    // Priority 20 ensures smooth waveform generation (was 1 - too low!)
+    // Create a task for ADC reading and FUN generation
+    // Priority 5 - balanced (was 1 too low, 20 was too high)
     xTaskCreatePinnedToCore(
         Task_ADC,                /* Task function */
         "Voltage & Current ADC", /* Name of task */
         14000,                   /* Stack size of task */
         NULL,                    /* Parameter of the task */
-        20,                      /* Priority of the task (HIGH for FUN mode) */
+        5,                       /* Priority of the task */
         &Task_adc,               /* Task handle */
         0                        /* Pin task to core 0 */
     );
