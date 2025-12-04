@@ -228,15 +228,11 @@ void Task_ADC(void *pvParameters)
         }
 
         // Update histogram and graph data
-        // Skip data collection when FUN is active to reduce CPU load
-        bool funActive = lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED);
-        if (!funActive) {
-            HistPush();
-            GraphPush();
-        }
+        HistPush();
+        GraphPush();
 
-        // Refresh histogram chart on page 0 (skip when FUN is active)
-        if (!funActive && Tabs::getCurrentPage() == Pages::HISTOGRAM && !lvglIsBusy && !lvglChartIsBusy && !blockAll)
+        // Refresh histogram chart on page 0
+        if (Tabs::getCurrentPage() == Pages::HISTOGRAM && !lvglIsBusy && !lvglChartIsBusy && !blockAll)
         {
             lvglChartIsBusy = true;
             lv_chart_refresh(PowerSupply.stats.chart);

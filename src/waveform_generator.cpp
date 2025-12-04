@@ -184,24 +184,31 @@ int numWaveforms = sizeof(waveforms) / sizeof(waveforms[0]);
 // Function to generate waveform based on parameters
 bool functionGenerator()
 {
+    // Cache waveform selection to avoid slow LVGL object access every call
+    static int cached_waveform_index = 0;
+    static unsigned long last_waveform_check = 0;
+
+    // Only check waveform selection every 100ms (not every 1ms!)
+    if (millis() - last_waveform_check > 100) {
+        cached_waveform_index = (int)Utility_objs.table_fun_gen_list->user_data;
+        last_waveform_check = millis();
+    }
 
     static unsigned long startTime = micros();
     unsigned long currentTime = micros();
     double elapsedTime = (currentTime - startTime) / 1'000'000.0;
     double t = fmod(elapsedTime * PowerSupply.funGenMem.frequency, 1.0);
-    int selected_row = (int)Utility_objs.table_fun_gen_list->user_data;
-    Waveform currentWaveform = waveforms[selected_row];
+
+    // Use cached waveform - NO LVGL ACCESS during generation!
+    const Waveform &currentWaveform = waveforms[cached_waveform_index];
     double value = currentWaveform.function(t);
-    // Serial.println(t);
     double outputValue = value * PowerSupply.funGenMem.amplitude + PowerSupply.funGenMem.offset;
 
     static double lastOutputValue = 0.0;
     if (outputValue != lastOutputValue)
     {
         PowerSupply.Voltage.SetUpdate(outputValue * PowerSupply.Voltage.adjFactor);
-        // PowerSupply.Voltage.adjValue = outputValue;
         lastOutputValue = outputValue;
-        // Serial.printf("\nSet output: %8.4f ", outputValue*2000.0);
     }
 
     // Track minimal change intervals
