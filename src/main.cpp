@@ -113,10 +113,11 @@ void loop() {
   // neopixelWrite(RGB_BUILTIN,0,0,0); // Green
 
   // FUN Only mode: skip ALL main loop processing for cleanest waveforms
+  // LVGL timer handler is DISABLED - touch won't work but waveform will be perfect
+  // Use SCPI commands or restart to exit FUN Only mode
   if (lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
   {
-    lv_timer_handler();  // Only handle LVGL for touch input
-    delay(50);           // Match DAC update rate
+    delay(50);  // Match DAC update rate
     return;
   }
 
