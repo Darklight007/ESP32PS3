@@ -682,26 +682,15 @@ void btn_function_gen_event_cb(lv_event_t *e)
 
 void switch_fun_only_event_cb(lv_event_t *e)
 {
-    static uint8_t savedAdcRate = 0;  // Saved ADC rate before FUN Only mode
-
+    // FUN Only mode toggle - ADC rate stays at user setting
     lv_obj_t *sw = lv_event_get_target(e);
 
     if (lv_obj_has_state(sw, LV_STATE_CHECKED))
     {
-        // FUN Only mode ON: reduce ADC to minimum (20 SPS)
-        savedAdcRate = PowerSupply.settingParameters.adcRate;
-        PowerSupply.settingParameters.adcRate = 0;  // 0 = 20 SPS (minimum)
-        PowerSupply.adc.ads1219->setDataRate(20);
-
-        Serial.println("\n[FUN Only] ADC reduced to 20 SPS for clean waveforms");
+        Serial.println("\n[FUN Only] Mode ON - ADC rate unchanged");
     }
     else
     {
-        // FUN Only mode OFF: restore previous ADC rate
-        PowerSupply.settingParameters.adcRate = savedAdcRate;
-        const int rates[] = {20, 90, 330, 1000};
-        PowerSupply.adc.ads1219->setDataRate(rates[savedAdcRate]);
-
-        Serial.printf("\n[FUN Only] ADC restored to %d SPS\n", rates[savedAdcRate]);
+        Serial.println("\n[FUN Only] Mode OFF");
     }
 }
