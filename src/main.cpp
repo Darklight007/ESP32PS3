@@ -122,9 +122,24 @@ void loop() {
     {
       lv_timer_handler();  // Enable touch for FUN/FUN Only controls
       lastTouchCheck = millis();
+
+      // Re-check state after touch processing - if user disabled FUN Only, exit immediately
+      if (!lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
+      {
+        // FUN Only was just disabled, continue to normal processing
+        // Fall through to normal loop below
+      }
+      else
+      {
+        delay(20);  // Still in FUN Only mode, delay and return
+        return;
+      }
     }
-    delay(20);  // Match DAC update rate (50 Hz)
-    return;
+    else
+    {
+      delay(20);  // Match DAC update rate (50 Hz)
+      return;
+    }
   }
 
   // Adaptive encoder response: fast when active, slower when idle
