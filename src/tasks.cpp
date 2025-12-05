@@ -105,12 +105,12 @@ void Task_ADC(void *pvParameters)
         bool funOnlyMode = lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED);
 
         // Update DAC outputs
-        // FUN Only mode: 50ms interval = 20 Hz (cleanest waveform)
+        // FUN Only mode: 20ms interval = 50 Hz (smooth waveform)
         // FUN active: 5ms interval = 200 Hz
         // Normal: 100ms interval = 10 Hz
         unsigned long dacInterval;
         if (funOnlyMode)
-            dacInterval = 50;  // 20 Hz update rate for clean waveforms
+            dacInterval = 20;  // 50 Hz update rate for smooth waveforms
         else if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
             dacInterval = TaskTiming::DAC_UPDATE_INTERVAL_FUNGEN_MS;
         else
@@ -122,10 +122,10 @@ void Task_ADC(void *pvParameters)
             PowerSupply.DACUpdate();
         }, dacInterval, dacUpdateTimer);
 
-        // In FUN Only mode: skip ALL processing except DAC updates (above) and LCD touch
+        // In FUN Only mode: skip ALL processing except DAC updates (above)
         if (funOnlyMode)
         {
-            vTaskDelay(50);  // 50ms delay to match DAC update rate (20 Hz)
+            vTaskDelay(20);  // 20ms delay to match DAC update rate (50 Hz)
             continue;
         }
 
