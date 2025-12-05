@@ -112,6 +112,14 @@ void loop() {
   // pixels.setPixelColor(0, pixels.Color(0, 0, 0)); // Red
   // neopixelWrite(RGB_BUILTIN,0,0,0); // Green
 
+  // FUN Only mode: skip ALL main loop processing for cleanest waveforms
+  if (lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
+  {
+    lv_timer_handler();  // Only handle LVGL for touch input
+    delay(50);           // Match DAC update rate
+    return;
+  }
+
   // Adaptive encoder response: fast when active, slower when idle
   // This makes encoder feel more responsive while saving CPU when idle
   bool encoderActive = (millis() - encoderTimeStamp) < 500;  // 500ms idle threshold
