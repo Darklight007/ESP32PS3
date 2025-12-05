@@ -122,9 +122,27 @@ void Task_ADC(void *pvParameters)
             PowerSupply.DACUpdate();
         }, dacInterval, dacUpdateTimer);
 
-        // In FUN Only mode: skip ALL processing except DAC updates (above)
+        // In FUN Only mode: skip most processing but allow keyboard
         if (funOnlyMode)
         {
+            // Allow keyboard input even in FUN Only mode for parameter adjustments
+            if (wireConnected)
+            {
+                bool textareaVisible = !lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
+
+                if (textareaVisible || lv_obj_has_state(Utility_objs.switch_keys_scan, LV_STATE_CHECKED))
+                {
+                    unsigned long keyInterval = textareaVisible && keyboardInputActive
+                        ? TaskTiming::KEY_CHECK_INTERVAL_ULTRAFAST_MS
+                        : TaskTiming::KEY_CHECK_INTERVAL_FAST_MS;
+                    KeyCheckInterval(keyInterval);
+                }
+                else
+                {
+                    keyboardInputActive = false;
+                }
+            }
+
             vTaskDelay(20);  // 20ms delay to match DAC update rate (50 Hz)
             continue;
         }
