@@ -118,10 +118,9 @@ void initializeDisplay()
 // Initialize the touch screen
 void initializeTouch()
 {
-    // Touchscreen calibration data (rotation 3)
-    uint16_t calData[5] = {366, 3445, 310, 3406, 1}; // 475, 3300, 212, 3360, 1
-    tft.setTouch(calData);
-    Serial.println("Touch Screen Calibrated.");
+    // Touch is initialized through LVGL's input device driver system
+    // See init_touch() in input_handler.cpp for actual touch setup
+    Serial.println("Touch Screen Ready.");
 }
 
 // Initialize LVGL graphics library

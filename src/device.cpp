@@ -914,16 +914,11 @@ void Device::setStatus(DEVICE status_)
     if (status_ == DEVICE::OFF)
     {
         myTone(NOTE_A3, 200);
-        // Make sure function generator is also off and restore ADC rate ONLY if we were in FUN mode
+        // Make sure function generator is also off and restore ADC rate
         lv_obj_clear_state(btn_function_gen, LV_STATE_CHECKED);
         lv_obj_add_state(btn_function_gen, LV_STATE_DISABLED);
         lv_label_set_text(lv_obj_get_child(btn_function_gen, 0), "OFF");
-
-        // Only restore ADC rate if we were actually in FUN mode (not OFF, ON, VC, or CC)
-        if (status == DEVICE::FUN)
-        {
-            restoreAdcRateFromFUN();
-        }
+        restoreAdcRateFromFUN();  // Restore ADC rate if it was changed by FUN mode
 
         lv_label_set_text(controlMode, "OFF");
         lv_label_set_text(lv_obj_get_child(powerSwitch.btn, 0), "OFF");
