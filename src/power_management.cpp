@@ -258,7 +258,14 @@ void loadEnergyFromStorage()
     energyPrefs.begin("energy", true);  // Read-only
     PowerSupply.energyAccumulatedWh = energyPrefs.getDouble("wh", 0.0);
     energyPrefs.end();
-    Serial.printf("Loaded energy: %.6f Wh\n", PowerSupply.energyAccumulatedWh);
+
+    // Validate loaded value
+    if (!std::isfinite(PowerSupply.energyAccumulatedWh) || PowerSupply.energyAccumulatedWh < 0) {
+        Serial.println("Energy data invalid, resetting to 0");
+        PowerSupply.energyAccumulatedWh = 0.0;
+    } else {
+        Serial.printf("Loaded energy: %.6f Wh\n", PowerSupply.energyAccumulatedWh);
+    }
 }
 
 // Save energy to persistent storage (call periodically or on significant change)

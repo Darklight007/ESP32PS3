@@ -405,7 +405,8 @@ public:
         //     ads1219->readDifferential_2_3();
         //     // ads1219->readSingleEnded(3);
 
-        ads1219->readSingleEnded(channel);
+        ads1219->readSingleEnded(channel);  // Configure channel
+        ads1219->start();  // Actually START the conversion!
         busyChannel = channel;
     }
 

@@ -19,20 +19,31 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
 
 void Device::setupADC(uint8_t pin, void func(void), TwoWire *_awire)
 {
+    ESP_LOGI("ADC", "=== Starting ADC setup ===");
+    ESP_LOGI("ADC", "Setting up DRDY interrupt on pin %d", pin);
     pinMode(pin, INPUT_PULLUP);
     attachInterrupt(pin, func, FALLING);
     LoadCalibrationData();
 
+    ESP_LOGI("ADC", "Resetting ADS1219 config");
     adc.ads1219->resetConfig();
 
+    // Call begin() - needed to initialize ADS1219 library internal state
+    // Wire1.begin() was already called in initializeI2C() with correct pins/speed
+    // This will just trigger "Bus already started" warning but won't reset pins
+    ESP_LOGI("ADC", "Calling ADS1219 begin()");
     adc.ads1219->begin();
+
+    ESP_LOGI("ADC", "Configuring ADS1219: external ref, gain=1, single-shot");
     adc.ads1219->setVoltageReference(REF_EXTERNAL);
     adc.ads1219->setGain(ONE);
     adc.ads1219->setConversionMode(SINGLE_SHOT);
 
+    ESP_LOGI("ADC", "Starting first conversion");
     adc.startConversion(VOLTAGE, REF_EXTERNAL);
     adcDataReady = false;
     adc.dataReady = false;
+    ESP_LOGI("ADC", "=== ADC setup complete ===");
 }
 
 void Device::setupDAC(uint8_t addr)
@@ -342,15 +353,30 @@ FunGen Device::LoadMemoryFgen(const String &key)
 {
     FunGen data;
 
+    // Initialize with safe defaults
+    data.frequency = 1.0;
+    data.amplitude = 5.0;
+    data.offset = 0.0;
+    data.dutyCycle = 0.5;
+    memset(data.table_points, 0, sizeof(data.table_points));
+    memset(data.arbitrary_points, 0, sizeof(data.arbitrary_points));
+
     // Load small settings from NVS
     StoreMem.begin("my-app", false);
     FunGenSettings settings;
     size_t bytesRead = StoreMem.getBytes("fgen", &settings, sizeof(settings));
     if (bytesRead > 0) {
-        data.frequency = settings.frequency;
-        data.amplitude = settings.amplitude;
-        data.offset = settings.offset;
-        data.dutyCycle = settings.dutyCycle;
+        // Validate loaded data before using it
+        if (std::isfinite(settings.frequency) && std::isfinite(settings.amplitude) &&
+            std::isfinite(settings.offset) && std::isfinite(settings.dutyCycle) &&
+            settings.frequency > 0 && settings.amplitude >= 0 && settings.dutyCycle >= 0 && settings.dutyCycle <= 1.0) {
+            data.frequency = settings.frequency;
+            data.amplitude = settings.amplitude;
+            data.offset = settings.offset;
+            data.dutyCycle = settings.dutyCycle;
+        } else {
+            Serial.println("FunGen NVS data invalid, using defaults");
+        }
     }
     StoreMem.end();
 

@@ -62,14 +62,23 @@ void setup()
   // Disable Task Watchdog Timer
   // esp_task_wdt_deinit(); // Deinitializes the task watchdog timer
 
+  ESP_LOGI("SETUP", ">>> Starting setup()");
   initializeSerial();
+  ESP_LOGI("SETUP", ">>> After initializeSerial()");
   ErrorHandler::init(true, true);  // Enable serial and UI error reporting
+  ESP_LOGI("SETUP", ">>> After ErrorHandler::init()");
   initialMemory();
+  ESP_LOGI("SETUP", ">>> After initialMemory()");
   initializeI2C();
+  ESP_LOGI("SETUP", ">>> After initializeI2C()");
   initializeDisplay();
+  ESP_LOGI("SETUP", ">>> After initializeDisplay()");
   initializeTouch();
+  ESP_LOGI("SETUP", ">>> After initializeTouch()");
   setupLVGL();
+  ESP_LOGI("SETUP", ">>> After setupLVGL()");
   setupDMA();
+  ESP_LOGI("SETUP", ">>> After setupDMA()");
 
   // lv_demo_music();
   // lv_demo_benchmark();
@@ -104,11 +113,19 @@ void setup()
 bool oneTimeCommandDone = false;
 
 void loop() {
+  static unsigned long loopCounter = 0;
   if (!oneTimeCommandDone) {
   esp_task_wdt_init(120, false); // X second timeout
   esp_task_wdt_add(NULL);       // Add current task to watchdog
     oneTimeCommandDone = true;
+    ESP_LOGI("LOOP", "Watchdog initialized - 120s timeout");
   }
+
+  // Debug: Log every 1000 loops
+  if (loopCounter++ % 1000 == 0) {
+    ESP_LOGI("LOOP", "Loop %lu - millis: %lu", loopCounter, millis());
+  }
+
   // pixels.setPixelColor(0, pixels.Color(0, 0, 0)); // Red
   // neopixelWrite(RGB_BUILTIN,0,0,0); // Green
 
@@ -148,7 +165,7 @@ void loop() {
 
   scpiParser.process();          // Process SCPI commands from Serial
   StatusBarUpdateInterval(443);
-  LvglUpdatesInterval(0, encoderActive);  // Force update when encoder active for immediate response
+  LvglUpdatesInterval(0, true);  // Force update when encoder active for immediate response
   PowerManagementInterval(500);  // Timer, Energy, Auto-save, Limits
   MemoryMonitorInterval(5000);   // Memory monitoring every 5 seconds
   RecordingPlaybackInterval();   // Voltage recording and playback

@@ -40,7 +40,15 @@ void initializeSerial()
 {
     Serial.begin(115200);
     delay(1000); // Wait for serial connection to stabilize
+
+    // Use ESP_LOGI for debugging since Serial.print may not work
+    ESP_LOGI("SETUP", "=== ESP32-S3 BOOT ===");
+    ESP_LOGI("SETUP", "CPU Frequency: %d MHz", ESP.getCpuFreqMHz());
+
+    Serial.printf("CPU Frequency: %d MHz\n", ESP.getCpuFreqMHz());
     Serial.println("Serial connection initialized.");
+
+    ESP_LOGI("SETUP", "Serial connection initialized");
 }
 
 // Initialize and display memory usage information
@@ -74,10 +82,13 @@ void initializeI2C()
 {
     // Initialize I2C buses with appropriate clock rates
     Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_1_7M); // For ADS1219 (supports up to 1 Mbps)
-    Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_1_7M);  // For other devices (supports up to 1.7 Mbps)
+    Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_1_7M);  // For keyboard/DAC (must initialize even if HW disconnected!)
 
-    // Initialize I2C recovery system for both buses
-    I2CRecovery::init(&Wire, SDA_2_KEY, SCL_2_KEY);    // Wire: DAC bus
+    // NOTE: I2CRecovery disabled - it resets bus to wrong speed (100kHz instead of 1.7MHz)
+    // causing all I2C peripherals to stop working!
+    // I2CRecovery::init(&Wire, SDA_2_KEY, SCL_2_KEY);
+
+
     // Note: Wire1 is ADC bus, but ADS1219 uses internal error handling
 
     // delay(100);                                          // Wait for I2C buses to stabilize
@@ -413,8 +424,8 @@ void setupADC()
          40'000.0} // Internal current consumption in Amperes;
     };
 
-    // Setup ADC with READY pin number, ISR function, and I2C bus
-    PowerSupply.setupADC(9, ADCPinISR, &Wire);
+    // Setup ADC with READY pin number, ISR function, and I2C bus (Wire1)
+    PowerSupply.setupADC(9, ADCPinISR, &Wire1);  // FIXED: ADC is on Wire1, not Wire!
     Serial.print("\nADC Setup & Calibration Completed.");
 }
 
