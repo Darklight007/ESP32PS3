@@ -1,5 +1,6 @@
 #include "SetupHandlers.h" // Include the setup handlers header
 #include "i2c_recovery.h"  // Include I2C bus recovery module
+#include "calib_inl.h"     // Include INL calibration for startup rebuild
 
 // **Pin Definitions**
 #define SDA_1_ADC 17 // SDA pin for I2C bus 1 (ADC)
@@ -384,10 +385,7 @@ void setupPowerSupply()
     // btn_calibration_ADC_voltage_event_cb(NULL);
     // btn_calibration_ADC_current_event_cb(NULL);
 
-    // g_voltINL.setPoints(CalBank[bankCalibId].adc_inl_measure, CalBank[bankCalibId].adc_inl_ideal);
-    // g_voltINL.build();
-    // g_voltINL_ready = true;
-    // g_voltINL.printKnotTable();
+    // NOTE: rebuildINLFromCalibration() moved to setupADC() after CalBank is initialized
 }
 
 // Setup the calibration page
@@ -427,6 +425,9 @@ void setupADC()
     // Setup ADC with READY pin number, ISR function, and I2C bus (Wire1)
     PowerSupply.setupADC(9, ADCPinISR, &Wire1);  // FIXED: ADC is on Wire1, not Wire!
     Serial.print("\nADC Setup & Calibration Completed.");
+
+    // Rebuild INL interpolator from saved calibration data (must be after CalBank init)
+    rebuildINLFromCalibration();
 }
 
 // Setup the DAC (Digital-to-Analog Converter)
