@@ -83,8 +83,9 @@ public:
 	long readConversionResult();
 	TwoWire *_wire;
 
+	void start();  // Made public for direct conversion control
+
 private:
-	void start();
 	uint8_t readRegister(uint8_t reg);
 	void writeRegister(uint8_t data);
 	uint8_t config;

@@ -606,3 +606,48 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
     lv_obj_set_style_pad_ver(cont, 0, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
 }
+
+// =============================================================================
+// Rebuild INL interpolator from saved calibration data (called on startup)
+// =============================================================================
+void rebuildINLFromCalibration()
+{
+    INL_dbg("[INL] Checking saved calibration data...");
+
+    // Ensure CalBank is populated
+    if (PowerSupply.CalBank.empty())
+    {
+        INL_dbg("[INL] ERROR: CalBank is empty!");
+        g_voltINL_ready = false;
+        return;
+    }
+
+    const double *measure = PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure;
+    const double *ideal = PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal;
+
+    // Check if data looks valid (not all zeros or default identity)
+    double sum_diff = 0.0;
+    for (size_t i = 0; i < NPTS && i < 36; i++)
+    {
+        sum_diff += fabs(measure[i] - ideal[i]);
+    }
+
+    // If there's meaningful difference between measured and ideal, data was calibrated
+    if (sum_diff <= 0.001)
+    {
+        INL_dbg("[INL] No valid INL calibration data found (identity or zeros)");
+        g_voltINL_ready = false;
+        return;
+    }
+
+    INL_dbg("[INL] Found valid INL data, rebuilding interpolator...");
+
+    std::vector<double> X(measure, measure + NPTS);
+    std::vector<double> Y(ideal, ideal + NPTS);
+
+    g_voltINL.setPoints(X, Y);
+    g_voltINL.build();
+    g_voltINL_ready = true;
+
+    INL_dbg("[INL] INL interpolator rebuilt from saved data (ready=%d)", int(g_voltINL_ready));
+}

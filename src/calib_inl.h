@@ -12,6 +12,7 @@ extern bool g_voltINL_ready;
 
 // Public API
 void ADC_INL_Voltage_calibration_cb(lv_event_t *e);
+void rebuildINLFromCalibration();  // Rebuild INL interpolator from saved data at startup
 
 // Internal debugging (Serial only)
 void INL_dbg(const char *fmt, ...);
