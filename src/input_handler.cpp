@@ -842,6 +842,13 @@ void keyCheckLoop()
                  Tabs::setCurrentPage(3);
              });
 
+    // Full screen refresh - press 'r' to clear any dirty pixels
+    keyMenus('r', " RELEASED.", []
+             {
+                 lv_obj_invalidate(lv_scr_act());
+                 lv_refr_now(NULL);
+             });
+
     // Long press T - REL mode: zero current display (like Keithley 2010 REL)
     // Must be before RELEASED handlers to set the flag
     static bool T_hold_triggered = false;
