@@ -30,6 +30,28 @@ namespace
     {
         PowerSupply.LoadCalibrationData();
         myTone(NOTE_A4, 200);
+
+        // Update voltage calibration spinboxes if window is visible
+        if (PowerSupply.gui.calibration.win_ADC_voltage_calibration &&
+            !lv_obj_has_flag(PowerSupply.gui.calibration.win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN))
+        {
+            auto &v = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
+            if (Calib_GUI.Voltage.code_1) lv_spinbox_set_value(Calib_GUI.Voltage.code_1, v.code_1);
+            if (Calib_GUI.Voltage.code_2) lv_spinbox_set_value(Calib_GUI.Voltage.code_2, v.code_2);
+            if (Calib_GUI.Voltage.vin_1) lv_spinbox_set_value(Calib_GUI.Voltage.vin_1, (int32_t)llround(10000.0 * v.value_1));
+            if (Calib_GUI.Voltage.vin_2) lv_spinbox_set_value(Calib_GUI.Voltage.vin_2, (int32_t)llround(10000.0 * v.value_2));
+        }
+
+        // Update current calibration spinboxes if window is visible
+        if (PowerSupply.gui.calibration.win_ADC_current_calibration &&
+            !lv_obj_has_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN))
+        {
+            auto &i = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
+            if (Calib_GUI.Current.code_1) lv_spinbox_set_value(Calib_GUI.Current.code_1, i[PowerSupply.mA_Active].code_1);
+            if (Calib_GUI.Current.code_2) lv_spinbox_set_value(Calib_GUI.Current.code_2, i[PowerSupply.mA_Active].code_2);
+            if (Calib_GUI.Current.vin_1) lv_spinbox_set_value(Calib_GUI.Current.vin_1, (int32_t)llround(10000.0 * i[PowerSupply.mA_Active].value_1));
+            if (Calib_GUI.Current.vin_2) lv_spinbox_set_value(Calib_GUI.Current.vin_2, (int32_t)llround(10000.0 * i[PowerSupply.mA_Active].value_2));
+        }
     }
 
     static void autoZeroCurrent_cb(lv_event_t *)
@@ -148,9 +170,9 @@ void build_adc_calibration_window(lv_obj_t **win_holder,
         styles_inited = true;
     }
 
-    lv_point_t offset{10, 20};
-    lv_coord_t w = 110, col = w + 30, row = 38;
-    lv_point_t pad{5, 5};
+    lv_point_t offset{10, 14};
+    lv_coord_t w = 110, col = w + 30, row = 36;
+    lv_point_t pad{5, 4};
 
     gui.vin_1 = spinbox_pro(cont, "#FFFFF7 Vin1:#", -10000, 400000, 6, 2, LV_ALIGN_TOP_LEFT, offset.x, offset.y, w, 10, &graph_R_16);
     gui.code_1 = spinbox_pro(cont, "#FFFFF7 Code1:#", -10000, 8388608, 7, 0, LV_ALIGN_TOP_LEFT, offset.x, offset.y + row, w, 11, &graph_R_16);
@@ -178,11 +200,11 @@ void build_adc_calibration_window(lv_obj_t **win_holder,
     auto *lbl_er = LVLabel::create(cont, "Effective Resolution:", gui.lbl_rawAVG_, 0, pad.y, &style_lbl);
     gui.lbl_ER = LVLabel::create(cont, "00.00", lbl_er, 0, pad.y - 2, &style_val);
 
-    lv_point_t btn_pos{140 + offset.x, 160};
-    LVButton btnSave(cont, "Save", btn_pos.x + 62, btn_pos.y, 54, 26, nullptr, save_cb);
-    LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 54, 26, nullptr, load_cb);
+    lv_point_t btn_pos{140 + offset.x, offset.y + 125};
+    LVButton btnSave(cont, "Save", btn_pos.x + 62, btn_pos.y, 54, 25, nullptr, save_cb);
+    LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 54, 25, nullptr, load_cb);
 
-    LVButton btnAutoZeros(cont, "Auto zeros", btn_pos.x + 5, btn_pos.y + 31, 2 * 54, 26, nullptr, autoZeroCurrent_cb);
+    LVButton btnAutoZeros(cont, "Auto zeros", btn_pos.x , btn_pos.y + 28, 2 * 54+62-54, 25, nullptr, autoZeroCurrent_cb);
 
     // m, b, and Vin_cal notes (simple labels)
     auto *label_m = lv_label_create(cont);
