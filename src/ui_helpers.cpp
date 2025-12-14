@@ -669,10 +669,12 @@ void btn_function_gen_event_cb(lv_event_t *e)
         PowerSupply.adc.ads1219->setDataRate(1000);
 
         // Update settings slider to show 1000 SPS
+        // Note: slider_adcRate is the container, slider is child 2, value label is child 1
         if (PowerSupply.gui.slider_adcRate) {
-            lv_slider_set_value(PowerSupply.gui.slider_adcRate, 3, LV_ANIM_OFF);
-            lv_obj_t *label_sps = lv_obj_get_child(lv_obj_get_parent(PowerSupply.gui.slider_adcRate), 1);
-            if (label_sps) lv_label_set_text(label_sps, "1000");
+            lv_obj_t *slider = lv_obj_get_child(PowerSupply.gui.slider_adcRate, 2);
+            lv_obj_t *val_lbl = lv_obj_get_child(PowerSupply.gui.slider_adcRate, 1);
+            if (slider) lv_slider_set_value(slider, 3, LV_ANIM_OFF);
+            if (val_lbl) lv_label_set_text(val_lbl, "1000");
         }
     }
     else
@@ -686,9 +688,10 @@ void btn_function_gen_event_cb(lv_event_t *e)
         // Update settings slider to show restored rate
         if (PowerSupply.gui.slider_adcRate) {
             static const char* ADC_SPS[] = {"  20", "  90", " 330", "1000"};
-            lv_slider_set_value(PowerSupply.gui.slider_adcRate, PowerSupply.settingParameters.adcRate, LV_ANIM_OFF);
-            lv_obj_t *label_sps = lv_obj_get_child(lv_obj_get_parent(PowerSupply.gui.slider_adcRate), 1);
-            if (label_sps) lv_label_set_text(label_sps, ADC_SPS[PowerSupply.settingParameters.adcRate]);
+            lv_obj_t *slider = lv_obj_get_child(PowerSupply.gui.slider_adcRate, 2);
+            lv_obj_t *val_lbl = lv_obj_get_child(PowerSupply.gui.slider_adcRate, 1);
+            if (slider) lv_slider_set_value(slider, PowerSupply.settingParameters.adcRate, LV_ANIM_OFF);
+            if (val_lbl) lv_label_set_text(val_lbl, ADC_SPS[PowerSupply.settingParameters.adcRate]);
         }
     }
 
