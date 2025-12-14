@@ -184,6 +184,7 @@ struct Calibration_gui
 
 struct GUI
 {
+    lv_obj_t *slider_adcRate = nullptr;
     lv_obj_t *slider_Avgs = nullptr;
     lv_obj_t *setting_menu = nullptr;
     lv_obj_t *textarea_set_value = nullptr;
