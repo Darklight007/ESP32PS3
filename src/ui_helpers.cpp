@@ -667,15 +667,6 @@ void btn_function_gen_event_cb(lv_event_t *e)
         PowerSupply.settingParameters.adcRateSavedForFUN = PowerSupply.settingParameters.adcRate;
         PowerSupply.settingParameters.adcRate = 3;  // 3 = 1000 SPS
         PowerSupply.adc.ads1219->setDataRate(1000);
-
-        // Update settings slider to show 1000 SPS
-        // Note: slider_adcRate is the container, slider is child 2, value label is child 1
-        if (PowerSupply.gui.slider_adcRate) {
-            lv_obj_t *slider = lv_obj_get_child(PowerSupply.gui.slider_adcRate, 2);
-            lv_obj_t *val_lbl = lv_obj_get_child(PowerSupply.gui.slider_adcRate, 1);
-            if (slider) lv_slider_set_value(slider, 3, LV_ANIM_OFF);
-            if (val_lbl) lv_label_set_text(val_lbl, "1000");
-        }
     }
     else
     {
@@ -684,15 +675,6 @@ void btn_function_gen_event_cb(lv_event_t *e)
 
         // Restore previous ADC rate
         PowerSupply.restoreAdcRateFromFUN();
-
-        // Update settings slider to show restored rate
-        if (PowerSupply.gui.slider_adcRate) {
-            static const char* ADC_SPS[] = {"  20", "  90", " 330", "1000"};
-            lv_obj_t *slider = lv_obj_get_child(PowerSupply.gui.slider_adcRate, 2);
-            lv_obj_t *val_lbl = lv_obj_get_child(PowerSupply.gui.slider_adcRate, 1);
-            if (slider) lv_slider_set_value(slider, PowerSupply.settingParameters.adcRate, LV_ANIM_OFF);
-            if (val_lbl) lv_label_set_text(val_lbl, ADC_SPS[PowerSupply.settingParameters.adcRate]);
-        }
     }
 
     remove_selected_spinbox();
