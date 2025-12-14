@@ -665,6 +665,9 @@ void Device::toggle_measure_unit()
     else
         lv_obj_add_flag(Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
 
+    // Force display refresh to ensure A<>mA change is visible
+    lv_obj_invalidate(lv_scr_act());
+
     // Note: Internal resistor spinboxes are now separate for A and mA, no need to update on toggle
 }
 
