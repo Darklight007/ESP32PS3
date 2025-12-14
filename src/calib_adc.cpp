@@ -56,6 +56,7 @@ namespace
 
     static void autoZeroCurrent_cb(lv_event_t *)
     {
+        myTone(NOTE_A4, 200);
         Warning_msgbox("Auto Zero", auto_zero_event_cb);
     }
 
