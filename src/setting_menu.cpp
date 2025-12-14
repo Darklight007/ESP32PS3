@@ -458,6 +458,9 @@ namespace
             if (Calib_GUI.internalLeakage_mA)
                 lv_spinbox_set_value(Calib_GUI.internalLeakage_mA, PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1] * 1000.0);
         }
+
+        // Refresh DAC calibration window spinboxes
+        refreshDacCalibSpinboxes();
     }
 
     // slider factory

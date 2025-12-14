@@ -131,3 +131,28 @@ void open_dac_calibration_cb(lv_event_t *)
     lv_obj_add_event_cb(s_zc, DAC_current_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
     lv_obj_add_event_cb(s_mc, DAC_current_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 }
+
+// Refresh DAC spinboxes from saved data (called by Load button)
+void refreshDacCalibSpinboxes()
+{
+    if (!PowerSupply.gui.calibration.win_DAC_calibration ||
+        lv_obj_has_flag(PowerSupply.gui.calibration.win_DAC_calibration, LV_OBJ_FLAG_HIDDEN))
+        return;
+
+    if (s_zv) lv_spinbox_set_value(s_zv, PowerSupply.dac_data.zero_voltage);
+    if (s_mv) lv_spinbox_set_value(s_mv, PowerSupply.dac_data.max_voltage);
+    if (s_zc) lv_spinbox_set_value(s_zc, PowerSupply.dac_data.zero_current);
+    if (s_mc) lv_spinbox_set_value(s_mc, PowerSupply.dac_data.max_current);
+
+    // Update labels
+    if (s_label_maxV) {
+        double zv = PowerSupply.dac_data.zero_voltage;
+        double mv = PowerSupply.dac_data.max_voltage;
+        lv_label_set_text_fmt(s_label_maxV, "%+07.4fV", (mv - zv) / 2000.0);
+    }
+    if (s_label_maxC) {
+        double zc = PowerSupply.dac_data.zero_current;
+        double mc = PowerSupply.dac_data.max_current;
+        lv_label_set_text_fmt(s_label_maxC, "%+06.4fA", (mc - zc) / 10000.0);
+    }
+}
