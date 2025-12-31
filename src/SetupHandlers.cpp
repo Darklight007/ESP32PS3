@@ -83,7 +83,7 @@ void initializeI2C()
 {
     // Initialize I2C buses with appropriate clock rates
     Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_1_7M); // For ADS1219 (supports up to 1 Mbps)
-    Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_1_7M);  // For keyboard/DAC (must initialize even if HW disconnected!)
+    Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_1_7M );  // For keyboard/DAC (must initialize even if HW disconnected!) I2C_CLKRATE_1_7M
 
     // NOTE: I2CRecovery disabled - it resets bus to wrong speed (100kHz instead of 1.7MHz)
     // causing all I2C peripherals to stop working!
