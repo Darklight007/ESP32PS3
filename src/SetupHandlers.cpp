@@ -81,18 +81,16 @@ void initialMemory()
 // Initialize I2C buses and scan for devices
 void initializeI2C()
 {
-    // Initialize I2C buses with appropriate clock rates
-    Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_1_7M); // For ADS1219 (supports up to 1 Mbps)
-    Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_1_7M );  // For keyboard/DAC (must initialize even if HW disconnected!) I2C_CLKRATE_1_7M
+    // Initialize I2C buses at 1MHz first, then switch to 1.7MHz
+    // This fixes cold-boot timing issues where MCP23017 may not respond
+    // at high speeds until the bus has been properly synchronized
+    Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_1M);  // Start ADC bus at 1MHz
+    Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_1M);   // Start keypad/DAC bus at 1MHz
+    delay(10);  // Give peripherals time to sync at slower speed
 
-    // NOTE: I2CRecovery disabled - it resets bus to wrong speed (100kHz instead of 1.7MHz)
-    // causing all I2C peripherals to stop working!
-    // I2CRecovery::init(&Wire, SDA_2_KEY, SCL_2_KEY);
-
-
-    // Note: Wire1 is ADC bus, but ADS1219 uses internal error handling
-
-    // delay(100);                                          // Wait for I2C buses to stabilize
+    // Now switch to full 1.7MHz speed
+    Wire1.setClock(I2C_CLKRATE_1_7M);
+    Wire.setClock(I2C_CLKRATE_1_7M);
     // Scan the default I2C bus (Wire)
     wireConnected = scanI2CBus(Wire, 0x20);
 
