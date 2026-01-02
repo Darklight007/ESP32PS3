@@ -144,7 +144,10 @@ double linearChirp(double t)
 
 double tablePoint(double t)
 {
-    return PowerSupply.funGenMem.table_points[int(t * 100) % 100][0];
+    int len = PowerSupply.funGenMem.table_length;
+    if (len < 1) len = 1;
+    if (len > RECORDING_TABLE_SIZE) len = RECORDING_TABLE_SIZE;
+    return PowerSupply.funGenMem.table_points[int(t * len) % len][0];
 }
 
 double arbitraryBank0(double t)

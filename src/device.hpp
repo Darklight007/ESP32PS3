@@ -69,6 +69,7 @@ struct FunGen
     double amplitude;
     double offset;
     double dutyCycle;
+    int table_length = 100;  // Table length limit for playback (1-250)
     double table_points[RECORDING_TABLE_SIZE][2];
     double arbitrary_points[40][2];
 };

@@ -72,6 +72,7 @@ struct objs_list
     lv_chart_series_t *record_chart_series;
     lv_obj_t *record_sample_rate_spinbox;
     lv_obj_t *record_duration_spinbox;
+    lv_obj_t *table_length_spinbox;  // Table length limit for FGen playback
 };
 
 extern struct objs_list Utility_objs;

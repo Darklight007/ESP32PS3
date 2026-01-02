@@ -756,6 +756,21 @@ void Utility_tabview(lv_obj_t *parent)
 
 lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 20);
 
+    // Table length limit spinbox (to the right of SPS)
+    Utility_objs.table_length_spinbox = spinbox_pro(tab4, "Len:", 1, RECORDING_TABLE_SIZE, 3, 0, LV_ALIGN_BOTTOM_LEFT, 170, -66, 50, 1, &graph_R_16);
+    lv_spinbox_set_value(Utility_objs.table_length_spinbox, PowerSupply.funGenMem.table_length);
+    lv_obj_align_to(Utility_objs.table_length_spinbox, Utility_objs.record_sample_rate_spinbox, LV_ALIGN_OUT_RIGHT_MID, 5, 0);
+
+    // Update table_length on change
+    auto table_length_change_cb = [](lv_event_t *e)
+    {
+        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+        {
+            PowerSupply.funGenMem.table_length = lv_spinbox_get_value(Utility_objs.table_length_spinbox);
+        }
+    };
+    lv_obj_add_event_cb(Utility_objs.table_length_spinbox, table_length_change_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
 
     // Bottom row: Record and Stop buttons
     Utility_objs.record_btn = lv_btn_create(tab4);
