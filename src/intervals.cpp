@@ -3,6 +3,7 @@
 #include <lvgl.h>
 #include "device.hpp"
 #include "globals.h"
+#include "tabs.h"
 #include "FFTHandler.h"
 #include "power_management.h"
 #include "memory_monitor.h"
@@ -100,6 +101,29 @@ void LvglFullUpdates(unsigned long interval)
     static unsigned long timer_ = {0};
     schedule([]
              { lv_obj_invalidate(lv_scr_act()); }, interval, timer_);
+}
+
+// Clean right side of page 2 to fix dirty pixels
+void Page2RightSideCleanup(unsigned long interval)
+{
+    static unsigned long timer_ = {0};
+    schedule([]
+             {
+                 // Only clean when on page 2 (Main page)
+                 if (Tabs::getCurrentPage() != 2) return;
+
+                 // Invalidate right side elements that often get dirty
+                 if (PowerSupply.Power.label_measureValue)
+                     lv_obj_invalidate(PowerSupply.Power.label_measureValue);
+                 if (PowerSupply.gui.label_energy_counter)
+                     lv_obj_invalidate(PowerSupply.gui.label_energy_counter);
+                 if (PowerSupply.gui.label_power_on_time)
+                     lv_obj_invalidate(PowerSupply.gui.label_power_on_time);
+                 if (PowerSupply.gui.label_timer_remaining)
+                     lv_obj_invalidate(PowerSupply.gui.label_timer_remaining);
+                 if (PowerSupply.powerSwitch.btn)
+                     lv_obj_invalidate(PowerSupply.powerSwitch.btn);
+             }, interval, timer_);
 }
 
 void VCCCInterval(unsigned long interval)

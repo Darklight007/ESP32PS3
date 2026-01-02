@@ -169,6 +169,7 @@ void loop() {
   PowerManagementInterval(500);  // Timer, Energy, Auto-save, Limits
   MemoryMonitorInterval(5000);   // Memory monitoring every 5 seconds
   RecordingPlaybackInterval();   // Voltage recording and playback
+  Page2RightSideCleanup(1000);   // Clean dirty pixels on right side of page 2
 
   // trackLoopExecution(__func__);
 
