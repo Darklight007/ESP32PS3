@@ -84,14 +84,14 @@ void initializeI2C()
     // Initialize I2C buses at 1MHz first, then switch to 1.7MHz
     // This fixes cold-boot timing issues where MCP23017 may not respond
     // at high speeds until the bus has been properly synchronized
-    Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_1M);  // Start ADC bus at 1MHz
-    Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_1M);   // Start keypad/DAC bus at 1MHz
-    delay(10);  // Give peripherals time to sync at slower speed
+    Wire1.begin(SDA_1_ADC, SCL_1_ADC, I2C_CLKRATE_1_7M);  // Start ADC bus at 1MHz
+    Wire.begin(SDA_2_KEY, SCL_2_KEY, I2C_CLKRATE_1_7M);   // Start keypad/DAC bus at 1MHz
+    delay(100);  // Give peripherals time to sync at slower speed
 
     // Now switch to full 1.7MHz speed
     Wire1.setClock(I2C_CLKRATE_1_7M);
-    Wire.setClock(I2C_CLKRATE_1_7M);
-    // Scan the default I2C bus (Wire)
+    Wire.setClock(I2C_CLKRATE_400K);
+    // Scan the default I2C bus (Wire) 
     wireConnected = scanI2CBus(Wire, 0x20);
 
     // Scan the secondary I2C bus (Wire1)
