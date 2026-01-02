@@ -112,9 +112,25 @@ void Page2RightSideCleanup(unsigned long interval)
                  // Only clean when on page 2 (Main page)
                  if (Tabs::getCurrentPage() != 2) return;
 
-                 // Invalidate right side elements that often get dirty
+                 // Invalidate current display elements (including mA/A prefix)
+                 if (PowerSupply.Current.label_si_prefix)
+                     lv_obj_invalidate(PowerSupply.Current.label_si_prefix);
+                 if (PowerSupply.Current.label_unit)
+                     lv_obj_invalidate(PowerSupply.Current.label_unit);
+                 if (PowerSupply.Current.label_measureValue)
+                     lv_obj_invalidate(PowerSupply.Current.label_measureValue);
+
+                 // Invalidate voltage display elements
+                 if (PowerSupply.Voltage.label_unit)
+                     lv_obj_invalidate(PowerSupply.Voltage.label_unit);
+                 if (PowerSupply.Voltage.label_measureValue)
+                     lv_obj_invalidate(PowerSupply.Voltage.label_measureValue);
+
+                 // Invalidate power and other right side elements
                  if (PowerSupply.Power.label_measureValue)
                      lv_obj_invalidate(PowerSupply.Power.label_measureValue);
+                 if (PowerSupply.Power.label_unit)
+                     lv_obj_invalidate(PowerSupply.Power.label_unit);
                  if (PowerSupply.gui.label_energy_counter)
                      lv_obj_invalidate(PowerSupply.gui.label_energy_counter);
                  if (PowerSupply.gui.label_power_on_time)
