@@ -1,4 +1,7 @@
 #include "tabs.h"
+#include "device.hpp"
+
+extern Device PowerSupply;
 
 uint8_t Tabs::numberOfPage = 0;
 uint8_t Tabs::defaultPage;
@@ -62,21 +65,38 @@ int Tabs::getCurrentPage()
 }
 void Tabs::setCurrentPage(int n)
 {
+    // Save FGen settings when leaving Utility page (page 3)
+    if (getCurrentPage() == 3 && n != 3)
+    {
+        PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
+    }
     lv_tabview_set_act(Tabs::tabview, n, LV_ANIM_ON);
 }
 
 void Tabs::nextPage()
 {
-    if (getCurrentPage() < 4)
-        lv_tabview_set_act(Tabs::tabview, getCurrentPage() + 1, LV_ANIM_ON);
+    int current = getCurrentPage();
+    if (current < 4)
+    {
+        // Save FGen settings when leaving Utility page (page 3)
+        if (current == 3)
+            PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
+        lv_tabview_set_act(Tabs::tabview, current + 1, LV_ANIM_ON);
+    }
     else
         setCurrentPage(0);
 }
 
 void Tabs::previousPage()
 {
-    if (getCurrentPage() > 0)
-        lv_tabview_set_act(Tabs::tabview, std::max(getCurrentPage() - 1, 0), LV_ANIM_ON);
+    int current = getCurrentPage();
+    if (current > 0)
+    {
+        // Save FGen settings when leaving Utility page (page 3)
+        if (current == 3)
+            PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
+        lv_tabview_set_act(Tabs::tabview, current - 1, LV_ANIM_ON);
+    }
     else
         setCurrentPage(4);
 }
