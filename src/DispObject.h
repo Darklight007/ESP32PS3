@@ -620,6 +620,8 @@ public:
     double oldValue;
     unsigned long timeKeeper{0};
     bool changed;
+    uint32_t sampleCountSinceDisplay{0};  // Counter for proportional display update
+    bool displayReady{false};              // Flag when enough samples collected
 
     const char *restrict {"%+07.3f"};
     const lv_font_t *font_measure{&lv_font_montserrat_42}; // dseg_b_48

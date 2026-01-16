@@ -25,6 +25,14 @@ void DispObjects::measureUpdate(double value)
     // Store raw value for bar (independent of averaging)
     rawBarValue = value;
 
+    // Count samples for proportional display update
+    sampleCountSinceDisplay++;
+    if (sampleCountSinceDisplay >= measured.NofAvgs)
+    {
+        displayReady = true;
+        sampleCountSinceDisplay = 0;
+    }
+
     // ignore the rest for Power measurement
     if (!strcmp(lv_label_get_text(label_unit), "W"))
         return;
@@ -53,28 +61,20 @@ void DispObjects::StatisticsUpdate(double value)
 
 void DispObjects::displayUpdate(void)
 {
+    // Only update display after NofAvgs samples collected
+    if (!displayReady)
+        return;
+
+    displayReady = false;
+
     static double mean_;
     mean_ = measured.Mean();
     if (oldValue != mean_ && !blockAll)
     {
-        // Display mean  of measured data not the value
+        // Display mean of measured data
         lv_label_set_text_fmt(label_measureValue, restrict, mean_);
-        // lv_obj_invalidate(label_measureValue);
-        // changed = true;
         oldValue = mean_;
     }
-
-    // if ((millis() - timeKeeper) >= 250)
-    // {
-    // timeKeeper = millis();
-
-    // lv_label_set_text_fmt(label_setSmallFont, "%+08.4f", adjValue+adjOffset);
-    //     lv_label_set_text_fmt(label_value, "%+08.4f", measured.value);
-    //     lv_label_set_text_fmt(label_mean, "%+08.4f", mean);
-    //     lv_label_set_text_fmt(label_std, "%07.4f", measured.StandardDeviation());
-    //     lv_label_set_text_fmt(label_max, "%+08.4f", measured.absMax);
-    //     lv_label_set_text_fmt(label_min, "%+08.4f", measured.absMin);
-    // }
 }
 
 void DispObjects::displayUpdate(bool update)
