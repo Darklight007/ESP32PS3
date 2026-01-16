@@ -134,10 +134,14 @@ void initializeTouch()
     Serial.println("Touch Screen Calibrated.");
 }
 
+// External mutex init function (defined in DispObject.cpp)
+extern void lvgl_mutex_init();
+
 // Initialize LVGL graphics library
 void setupLVGL()
 {
     lv_init();      // Initialize LVGL library
+    lvgl_mutex_init();  // Initialize LVGL mutex for bar updates
     init_display(); // Initialize the display driver for LVGL
     init_touch();   // Initialize the touch driver for LVGL
 
