@@ -130,12 +130,12 @@ void loop() {
   // neopixelWrite(RGB_BUILTIN,0,0,0); // Green
 
   // FUN Only mode: skip ALL main loop processing for cleanest waveforms
-  // LVGL timer handler called every 500ms for touch control only
+  // LVGL timer handler called every 50ms for responsive touch control
   if (lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
   {
     static unsigned long lastTouchCheck = 0;
-    // Check touch every 500ms for responsive control
-    if (millis() - lastTouchCheck >= 500)
+    // Check touch every 50ms for responsive control
+    if (millis() - lastTouchCheck >= 50)
     {
       lv_timer_handler();  // Enable touch for FUN/FUN Only controls
       lastTouchCheck = millis();
@@ -148,14 +148,12 @@ void loop() {
       }
       else
       {
-        delay(20);  // Still in FUN Only mode, delay and return
-        return;
+        return;  // Still in FUN Only mode
       }
     }
     else
     {
-      delay(20);  // Match DAC update rate (50 Hz)
-      return;
+      return;  // Skip other processing
     }
   }
 

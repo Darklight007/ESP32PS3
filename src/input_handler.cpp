@@ -56,6 +56,9 @@ void updateDutySpinboxState()
         // Hide the Duty spinbox for non-PWM waveforms
         lv_obj_add_flag(Utility_objs.fun.Duty, LV_OBJ_FLAG_HIDDEN);
     }
+    // Force redraw of Duty spinbox and its label
+    lv_obj_invalidate(Utility_objs.fun.Duty);
+    lv_obj_invalidate(lv_obj_get_parent(Utility_objs.fun.Duty));
 }
 
 void touch_calibrate()
