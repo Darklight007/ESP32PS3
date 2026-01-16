@@ -105,12 +105,12 @@ void Task_ADC(void *pvParameters)
         bool funOnlyMode = lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED);
 
         // Update DAC outputs
-        // FUN Only mode: 20ms interval = 50 Hz (smooth waveform)
+        // FUN Only mode: 2ms interval = 500 Hz (cleanest waveform, no I2C interference)
         // FUN active: 5ms interval = 200 Hz
         // Normal: 100ms interval = 10 Hz
         unsigned long dacInterval;
         if (funOnlyMode)
-            dacInterval = 20;  // 50 Hz update rate for smooth waveforms
+            dacInterval = 2;  // 500 Hz update rate for cleanest waveforms
         else if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
             dacInterval = TaskTiming::DAC_UPDATE_INTERVAL_FUNGEN_MS;
         else
@@ -122,11 +122,9 @@ void Task_ADC(void *pvParameters)
             PowerSupply.DACUpdate();
         }, dacInterval, dacUpdateTimer);
 
-        // FUN Only mode: Allow full ADC processing, histogram, and graph updates
-        // The only bottleneck was lv_timer_handler() which is now at 500ms in main loop
-
+        // FUN Only mode: Skip key scanning entirely (I2C causes jitter)
         // Handle keyboard and encoder input for responsive UI
-        if (wireConnected)
+        if (wireConnected && !funOnlyMode)
         {
             bool textareaVisible = !lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
 
@@ -152,7 +150,8 @@ void Task_ADC(void *pvParameters)
                 keyboardInputActive = false;
             }
         }
-        getSettingEncoder(NULL, NULL);
+        if (!funOnlyMode)
+            getSettingEncoder(NULL, NULL);
 
         // Wait for ADC interrupt notification with short timeout for responsiveness
         if (!adcDataReady)
