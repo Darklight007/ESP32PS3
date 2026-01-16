@@ -22,6 +22,9 @@ void DispObjects::measureUpdate(double value)
     measured(value);
     StatisticsUpdate(value);
 
+    // Store raw value for bar (independent of averaging)
+    rawBarValue = value;
+
     // ignore the rest for Power measurement
     if (!strcmp(lv_label_get_text(label_unit), "W"))
         return;
@@ -111,7 +114,7 @@ void DispObjects::barUpdate(void)
         cachedScaleFactor = adjFactor / maxValue;
     }
 
-    lv_bar_set_value(Bar.bar, measured.value * cachedScaleFactor * cachedBarMax, LV_ANIM_OFF);
+    lv_bar_set_value(Bar.bar, rawBarValue * cachedScaleFactor * cachedBarMax, LV_ANIM_OFF);
     lv_obj_invalidate(Bar.bar);
 
     static double oldMaxValue{0};

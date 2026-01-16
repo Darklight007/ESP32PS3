@@ -600,6 +600,7 @@ public:
     Histogram hist;
 
     int rawValue;
+    double rawBarValue;  // Raw value for bar display (independent of averaging)
     double calib_m;
     double calib_1m;
     double calib_b;
