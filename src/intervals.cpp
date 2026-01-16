@@ -14,6 +14,7 @@ extern bool lvglChartIsBusy;
 extern bool blockAll;
 extern volatile bool adcDataReady;
 extern bool lvglIsBusy;
+extern portMUX_TYPE lvgl_spinlock;  // Shared spinlock for bar updates
 extern FFTHandler V;
 extern FFTHandler I;
 
@@ -165,7 +166,9 @@ void LvglUpdatesInterval(unsigned long interval, bool forceUpdate)
                  if (!lvglChartIsBusy && !blockAll && (forceUpdate || adcDataReady))
                  {
                      lvglIsBusy = 1;
+                     portENTER_CRITICAL(&lvgl_spinlock);
                      lv_timer_handler();
+                     portEXIT_CRITICAL(&lvgl_spinlock);
                      lvglIsBusy = 0;
                      lvglIsBlocked = 0;
                      return;

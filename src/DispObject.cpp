@@ -1,6 +1,9 @@
 #include "DispObject.h"
 
 extern bool lvglIsBusy, blockAll;
+
+// Spinlock for LVGL bar updates to prevent tearing (shared with intervals.cpp)
+portMUX_TYPE lvgl_spinlock = portMUX_INITIALIZER_UNLOCKED;
 void DispObjects::SetEncoderPins(int aPintNumber, int bPinNumber, enc_isr_cb_t enc_isr_cb = nullptr)
 {
     // NOTE: encoder is a member variable (not a pointer), so no memory leak
@@ -114,20 +117,29 @@ void DispObjects::barUpdate(void)
         cachedScaleFactor = adjFactor / maxValue;
     }
 
-    lv_bar_set_value(Bar.bar, rawBarValue * cachedScaleFactor * cachedBarMax, LV_ANIM_OFF);
-    lv_obj_invalidate(Bar.bar);
+    // Compute bar value before critical section
+    int32_t newBarValue = rawBarValue * cachedScaleFactor * cachedBarMax;
+    int newMaxX = cachedBarX + int(measured.absMax * cachedScaleFactor * cachedBarWidth) - 3;
+    int newMinX = cachedBarX + int(measured.absMin * cachedScaleFactor * cachedBarWidth) - 3;
+
+    // Critical section for LVGL updates to prevent tearing
+    portENTER_CRITICAL(&lvgl_spinlock);
+
+    lv_bar_set_value(Bar.bar, newBarValue, LV_ANIM_OFF);
 
     static double oldMaxValue{0};
     if (measured.absMax != oldMaxValue) {
-        lv_obj_set_x(Bar.bar_maxMarker, cachedBarX + int(measured.absMax * cachedScaleFactor * cachedBarWidth) - 3);
+        lv_obj_set_x(Bar.bar_maxMarker, newMaxX);
         oldMaxValue = measured.absMax;
     }
 
     static double oldMinValue{0};
     if (measured.absMin != oldMinValue) {
-        lv_obj_set_x(Bar.bar_minMarker, cachedBarX + int(measured.absMin * cachedScaleFactor * cachedBarWidth) - 3);
+        lv_obj_set_x(Bar.bar_minMarker, newMinX);
         oldMinValue = measured.absMin;
     }
+
+    portEXIT_CRITICAL(&lvgl_spinlock);
 
     Bar.changed = false;
 }
