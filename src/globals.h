@@ -56,8 +56,6 @@ struct objs_list
     lv_obj_t *table_point_list;
     lv_obj_t *table_spinbox_value;
     double table_current_value;
-    lv_obj_t *switch_keys_scan;
-    lv_obj_t *switch_keys_label;
     lv_obj_t *switch_fun_only;      // Toggle for FUN-only mode (disable everything else)
     lv_obj_t *switch_fun_only_label;
     lv_coord_t arbitrary_points[20][2];

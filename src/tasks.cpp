@@ -140,15 +140,7 @@ void Task_ADC(void *pvParameters)
             else
                 keyInterval = TaskTiming::KEY_CHECK_INTERVAL_SLOW_MS;
 
-            if (textareaVisible || lv_obj_has_state(Utility_objs.switch_keys_scan, LV_STATE_CHECKED))
-            {
-                KeyCheckInterval(keyInterval);
-            }
-            else
-            {
-                // Disable scanning when textarea closed and manual scan switch is OFF
-                keyboardInputActive = false;
-            }
+            KeyCheckInterval(keyInterval);
         }
         if (!funOnlyMode)
             getSettingEncoder(NULL, NULL);

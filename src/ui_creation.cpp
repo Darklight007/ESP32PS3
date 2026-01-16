@@ -476,18 +476,9 @@ void Utility_tabview(lv_obj_t *parent)
     lv_style_set_bg_color(&style_btn_gray, lv_palette_darken(LV_PALETTE_GREY, 0));
     lv_obj_add_style(btn_function_gen, &style_btn_gray, LV_PART_MAIN | LV_STATE_DISABLED);
 
-    Utility_objs.switch_keys_scan = lv_switch_create(tab2);
-    lv_obj_add_state(Utility_objs.switch_keys_scan, LV_STATE_CHECKED);
-    lv_obj_align(Utility_objs.switch_keys_scan, LV_ALIGN_DEFAULT, 100, 140);
-    lv_obj_set_size(Utility_objs.switch_keys_scan, 48, 22);
-
-    Utility_objs.switch_keys_label = lv_label_create(tab2);
-    lv_label_set_text(Utility_objs.switch_keys_label, "Keys scan");
-    lv_obj_align_to(Utility_objs.switch_keys_label, Utility_objs.switch_keys_scan, LV_ALIGN_BOTTOM_MID, 0, 14);
-
     // FUN-only mode switch (disables everything except FUN and touch for testing)
     Utility_objs.switch_fun_only = lv_switch_create(tab2);
-    lv_obj_align(Utility_objs.switch_fun_only, LV_ALIGN_DEFAULT, 180, 140);
+    lv_obj_align(Utility_objs.switch_fun_only, LV_ALIGN_DEFAULT, 100, 140);
     lv_obj_set_size(Utility_objs.switch_fun_only, 48, 22);
 
     Utility_objs.switch_fun_only_label = lv_label_create(tab2);
@@ -1097,6 +1088,12 @@ static void table_touch_event_cb(lv_event_t *e)
         table->user_data = (void *)row;
         lv_obj_invalidate(table); // Redraw the table to apply changes
         lv_table_get_cell_value(table, row, col);
+
+        // Update Duty spinbox visibility when FGen waveform table is touched
+        if (table == Utility_objs.table_fun_gen_list)
+        {
+            updateDutySpinboxState();
+        }
 
         const char *cell_str = lv_table_get_cell_value(table, row, 1);
         Utility_objs.table_current_value = atof(cell_str);
