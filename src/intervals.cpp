@@ -14,7 +14,6 @@ extern bool lvglChartIsBusy;
 extern bool blockAll;
 extern volatile bool adcDataReady;
 extern bool lvglIsBusy;
-extern SemaphoreHandle_t lvgl_mutex;  // Shared mutex for bar updates
 extern FFTHandler V;
 extern FFTHandler I;
 
@@ -166,9 +165,7 @@ void LvglUpdatesInterval(unsigned long interval, bool forceUpdate)
                  if (!lvglChartIsBusy && !blockAll && (forceUpdate || adcDataReady))
                  {
                      lvglIsBusy = 1;
-                     if (lvgl_mutex) xSemaphoreTake(lvgl_mutex, portMAX_DELAY);
                      lv_timer_handler();
-                     if (lvgl_mutex) xSemaphoreGive(lvgl_mutex);
                      lvglIsBusy = 0;
                      lvglIsBlocked = 0;
                      return;

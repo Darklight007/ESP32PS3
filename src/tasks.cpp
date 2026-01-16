@@ -7,8 +7,8 @@
 
 // Task timing constants
 namespace TaskTiming {
-    constexpr unsigned long BARGRAPH_DELAY_OFF_PAGE_MS = 10;
-    constexpr unsigned long BARGRAPH_DELAY_ACTIVE_MS = 1;
+    constexpr unsigned long BARGRAPH_DELAY_OFF_PAGE_MS = 50;
+    constexpr unsigned long BARGRAPH_DELAY_ACTIVE_MS = 16;  // ~60 FPS
     constexpr unsigned long DAC_UPDATE_INTERVAL_NORMAL_MS = 100;
     constexpr unsigned long DAC_UPDATE_INTERVAL_FUNGEN_MS = 5;  // Back to 5ms - 0ms was too fast
     constexpr unsigned long KEY_CHECK_INTERVAL_ULTRAFAST_MS = 2;  // Ultra-fast when actively typing

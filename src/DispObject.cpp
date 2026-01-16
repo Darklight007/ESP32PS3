@@ -1,15 +1,6 @@
 #include "DispObject.h"
 
 extern bool lvglIsBusy, blockAll;
-
-// Mutex for LVGL bar updates to prevent tearing (shared with intervals.cpp)
-SemaphoreHandle_t lvgl_mutex = NULL;
-
-void lvgl_mutex_init() {
-    if (lvgl_mutex == NULL) {
-        lvgl_mutex = xSemaphoreCreateMutex();
-    }
-}
 void DispObjects::SetEncoderPins(int aPintNumber, int bPinNumber, enc_isr_cb_t enc_isr_cb = nullptr)
 {
     // NOTE: encoder is a member variable (not a pointer), so no memory leak
@@ -128,23 +119,19 @@ void DispObjects::barUpdate(void)
     int newMaxX = cachedBarX + int(measured.absMax * cachedScaleFactor * cachedBarWidth) - 3;
     int newMinX = cachedBarX + int(measured.absMin * cachedScaleFactor * cachedBarWidth) - 3;
 
-    // Mutex for LVGL updates to prevent tearing
-    if (lvgl_mutex && xSemaphoreTake(lvgl_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-        lv_bar_set_value(Bar.bar, newBarValue, LV_ANIM_OFF);
+    // Update bar value (LVGL handles invalidation automatically)
+    lv_bar_set_value(Bar.bar, newBarValue, LV_ANIM_OFF);
 
-        static double oldMaxValue{0};
-        if (measured.absMax != oldMaxValue) {
-            lv_obj_set_x(Bar.bar_maxMarker, newMaxX);
-            oldMaxValue = measured.absMax;
-        }
+    static double oldMaxValue{0};
+    if (measured.absMax != oldMaxValue) {
+        lv_obj_set_x(Bar.bar_maxMarker, newMaxX);
+        oldMaxValue = measured.absMax;
+    }
 
-        static double oldMinValue{0};
-        if (measured.absMin != oldMinValue) {
-            lv_obj_set_x(Bar.bar_minMarker, newMinX);
-            oldMinValue = measured.absMin;
-        }
-
-        xSemaphoreGive(lvgl_mutex);
+    static double oldMinValue{0};
+    if (measured.absMin != oldMinValue) {
+        lv_obj_set_x(Bar.bar_minMarker, newMinX);
+        oldMinValue = measured.absMin;
     }
 
     Bar.changed = false;
