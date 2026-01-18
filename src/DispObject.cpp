@@ -119,8 +119,9 @@ void DispObjects::barUpdate(void)
     int newMaxX = cachedBarX + int(measured.absMax * cachedScaleFactor * cachedBarWidth) - 3;
     int newMinX = cachedBarX + int(measured.absMin * cachedScaleFactor * cachedBarWidth) - 3;
 
-    // Update bar value (LVGL handles invalidation automatically)
+    // Update bar value and force full redraw to clear old pixels when bar shrinks
     lv_bar_set_value(Bar.bar, newBarValue, LV_ANIM_OFF);
+    lv_obj_invalidate(Bar.bar);
 
     static double oldMaxValue{0};
     if (measured.absMax != oldMaxValue) {
