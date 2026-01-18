@@ -163,20 +163,7 @@ void loop() {
 
   scpiParser.process();          // Process SCPI commands from Serial
   StatusBarUpdateInterval(443);
-
-  // Fast bar refresh on main page when FUN active or high averaging
-  bool funActive = lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED);
-  bool highAvg = PowerSupply.Voltage.measured.NofAvgs > 32;
-  bool onMainPage = Tabs::getCurrentPage() == 2;
-
-  if (onMainPage && (funActive || highAvg))
-  {
-    lv_timer_handler();  // Direct call for fast bar updates
-  }
-  else
-  {
-    LvglUpdatesInterval(0, true);  // Normal update path
-  }
+  LvglUpdatesInterval(0, true);  // Force update for immediate response
   PowerManagementInterval(500);  // Timer, Energy, Auto-save, Limits
   MemoryMonitorInterval(5000);   // Memory monitoring every 5 seconds
   RecordingPlaybackInterval();   // Voltage recording and playback
