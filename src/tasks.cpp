@@ -68,11 +68,19 @@ void Task_BarGraph(void *pvParameters)
             continue;
         }
 
-        // Update bar values (fast operation, actual render happens in lv_timer_handler)
+        // Update bar values
         if (!blockAll)
         {
             PowerSupply.Voltage.barUpdate();
             PowerSupply.Current.barUpdate();
+
+            // Fast bar-only refresh when FUN active or high averaging (>32)
+            bool funActive = lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED);
+            bool highAvg = PowerSupply.Voltage.measured.NofAvgs > 32;
+            if (funActive || highAvg)
+            {
+                lv_refr_now(NULL);  // Force immediate render of invalidated bars
+            }
         }
 
         vTaskDelay(TaskTiming::BARGRAPH_DELAY_ACTIVE_MS);
