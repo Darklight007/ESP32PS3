@@ -37,12 +37,9 @@ void DispObjects::measureUpdate(double value)
     if (!strcmp(lv_label_get_text(label_unit), "W"))
         return;
 
-    double rv = round(value * 320);
-    if (Bar.oldValue != rv) //&& (Bar.oldValue+3) < rv || (Bar.oldValue-3) > rv
-    {
-        Bar.changed = true;
-        Bar.oldValue = rv;
-    }
+    // Always update bar with raw values for fast response
+    Bar.changed = true;
+    Bar.oldValue = round(value * 320);
     if (oldValue != value)
     {
         oldValue = value;
