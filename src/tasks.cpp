@@ -44,38 +44,20 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data);
 bool functionGenerator();
 
 /**
- * @brief Bar graph update task (runs on Core 1)
+ * @brief Bar graph update task (DISABLED - moved to Core 1 main loop)
  *
- * Updates voltage and current bar graphs on the main page.
- * Runs slower when not on main page to save CPU cycles.
+ * Bar updates are now handled in main.cpp loop() for LVGL thread safety.
+ * This task is kept for potential future use but does nothing.
  *
  * @param pvParameters Unused FreeRTOS parameter
  */
 void Task_BarGraph(void *pvParameters)
 {
+    // Bar updates moved to main loop (Core 1) for LVGL thread safety
+    // This task now just sleeps to free up CPU
     for (;;)
     {
-        // Skip all bar graph updates in FUN Only mode
-        if (lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
-        {
-            vTaskDelay(100);  // Sleep longer when disabled
-            continue;
-        }
-
-        if (Tabs::getCurrentPage() != Pages::MAIN)
-        {
-            vTaskDelay(TaskTiming::BARGRAPH_DELAY_OFF_PAGE_MS);
-            continue;
-        }
-
-        // Update bar values
-        if (!blockAll)
-        {
-            PowerSupply.Voltage.barUpdate();
-            PowerSupply.Current.barUpdate();
-        }
-
-        vTaskDelay(TaskTiming::BARGRAPH_DELAY_ACTIVE_MS);
+        vTaskDelay(1000);  // Sleep 1 second, effectively disabled
     }
 }
 

@@ -57,7 +57,7 @@
 void setup()
 {
   esp_task_wdt_init(120, false); // X second timeout
-  esp_task_wdt_add(NULL);       // Add current task to watchdog
+  esp_task_wdt_add(NULL);        // Add current task to watchdog
 
   // Disable Task Watchdog Timer
   // esp_task_wdt_deinit(); // Deinitializes the task watchdog timer
@@ -65,7 +65,7 @@ void setup()
   ESP_LOGI("SETUP", ">>> Starting setup()");
   initializeSerial();
   ESP_LOGI("SETUP", ">>> After initializeSerial()");
-  ErrorHandler::init(true, true);  // Enable serial and UI error reporting
+  ErrorHandler::init(true, true); // Enable serial and UI error reporting
   ESP_LOGI("SETUP", ">>> After ErrorHandler::init()");
   initialMemory();
   ESP_LOGI("SETUP", ">>> After initialMemory()");
@@ -95,9 +95,9 @@ void setup()
   setupCalibPage();
   createTasks();
   initialMemory();
-  loadEnergyFromStorage();  // Load persistent energy counter
-  MemoryMonitor::init();    // Initialize memory monitoring
-  scpiParser.init();        // Initialize SCPI command parser
+  loadEnergyFromStorage(); // Load persistent energy counter
+  MemoryMonitor::init();   // Initialize memory monitoring
+  scpiParser.init();       // Initialize SCPI command parser
 
   Serial.printf("\nSetup() run on core: #%i \n\n", xPortGetCoreID());
 
@@ -112,17 +112,20 @@ void setup()
 
 bool oneTimeCommandDone = false;
 
-void loop() {
+void loop()
+{
   static unsigned long loopCounter = 0;
-  if (!oneTimeCommandDone) {
-  esp_task_wdt_init(120, false); // X second timeout
-  esp_task_wdt_add(NULL);       // Add current task to watchdog
+  if (!oneTimeCommandDone)
+  {
+    esp_task_wdt_init(120, false); // X second timeout
+    esp_task_wdt_add(NULL);        // Add current task to watchdog
     oneTimeCommandDone = true;
     ESP_LOGI("LOOP", "Watchdog initialized - 120s timeout");
   }
 
   // Debug: Log every 1000 loops
-  if (loopCounter++ % 1000 == 0) {
+  if (loopCounter++ % 1000 == 0)
+  {
     ESP_LOGI("LOOP", "Loop %lu - millis: %lu", loopCounter, millis());
   }
 
@@ -131,13 +134,13 @@ void loop() {
 
   // FUN Only mode: skip ALL main loop processing for cleanest waveforms
   // LVGL timer handler called every 50ms for responsive touch control
-  if (lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
+  // if (lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
   {
     static unsigned long lastTouchCheck = 0;
     // Check touch every 50ms for responsive control
     if (millis() - lastTouchCheck >= 50)
     {
-      lv_timer_handler();  // Enable touch for FUN/FUN Only controls
+      lv_timer_handler(); // Enable touch for FUN/FUN Only controls
       lastTouchCheck = millis();
 
       // Re-check state after touch processing - if user disabled FUN Only, exit immediately
@@ -148,40 +151,49 @@ void loop() {
       }
       else
       {
-        return;  // Still in FUN Only mode
+        return; // Still in FUN Only mode
       }
     }
     else
     {
-      return;  // Skip other processing
+      return; // Skip other processing
     }
   }
 
   // Adaptive encoder response: fast when active, slower when idle
   // This makes encoder feel more responsive while saving CPU when idle
-  bool encoderActive = (millis() - encoderTimeStamp) < 500;  // 500ms idle threshold
+  bool encoderActive = (millis() - encoderTimeStamp) < 500; // 500ms idle threshold
 
-  scpiParser.process();          // Process SCPI commands from Serial
-  StatusBarUpdateInterval(443);
-  LvglUpdatesInterval(0, true);  // Force update for immediate response
-  PowerManagementInterval(500);  // Timer, Energy, Auto-save, Limits
-  MemoryMonitorInterval(5000);   // Memory monitoring every 5 seconds
-  RecordingPlaybackInterval();   // Voltage recording and playback
-  Page2RightSideCleanup(1000);   // Clean dirty pixels on right side of page 2
+  scpiParser.process(); // Process SCPI commands from Serial
+  StatusBarUpdateInterval(450);
+  LvglUpdatesInterval(0, true); // Force update for immediate response
 
-  // trackLoopExecution(__func__);
+  // Bar graph updates (moved to Core 1 for LVGL thread safety)
+  // Only update on main page for efficiency
+  if (Tabs::getCurrentPage() == 2 && !blockAll)
+  {
+    PowerSupply.Voltage.barUpdate();
+    PowerSupply.Current.barUpdate();
+  }
+
+  PowerManagementInterval(500); // Timer, Energy, Auto-save, Limits
+  MemoryMonitorInterval(5000);  // Memory monitoring every 5 seconds
+  RecordingPlaybackInterval();  // Voltage recording and playback
+  Page2RightSideCleanup(1000);  // Clean dirty pixels on right side of page 2
+
+  trackLoopExecution(__func__);
 
   // Flush measures - faster when encoder active for immediate visual feedback
   if (encoderActive)
-    FlushMeasuresInterval(10);  // Very fast update during encoder activity
+    FlushMeasuresInterval(10); // Very fast update during encoder activity
   else
-    FlushMeasuresInterval(50);  // Fast update even when idle for responsive display
+    FlushMeasuresInterval(50); // Fast update even when idle for responsive display
 
   // Adaptive statistics update: faster when encoder active for responsive display
   if (encoderActive)
-    statisticUpdateInterval(100);  // Fast update during encoder activity
+    statisticUpdateInterval(100); // Fast update during encoder activity
   else
-    statisticUpdateInterval(333);  // Normal update when idle
+    statisticUpdateInterval(333); // Normal update when idle
 
   // FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?
@@ -195,9 +207,9 @@ void loop() {
 
   // Adaptive VCCC update: faster when encoder active
   if (encoderActive)
-    VCCCInterval(10);   // Fast update during encoder activity
+    VCCCInterval(10); // Fast update during encoder activity
   else
-    VCCCInterval(33);   // Normal update when idle
+    VCCCInterval(33); // Normal update when idle
   // KeyCheckInterval(45);
   // Serial.printf("\nVoltage.encoder.getCount %l",PowerSupply.Voltage.encoder.getCount());
   // KeyCheckInterval(0); // moved to adc taskse
@@ -205,6 +217,8 @@ void loop() {
 
   //  Serial.printf("\nADC_loopCounter %l",PowerSupply.adc.ADC_loopCounter);
   //  Serial.printf("\n Current utiltap%i", lv_tabview_get_tab_act(tabview_utility));
+
+  
 }
 
 /*
