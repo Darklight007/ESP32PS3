@@ -133,23 +133,27 @@ void loop()
   // neopixelWrite(RGB_BUILTIN,0,0,0); // Green
 
   // Bar graph updates - run every loop iteration for maximum speed
+  // Force LVGL render after bar updates for immediate visual feedback
   if (Tabs::getCurrentPage() == 2 && !blockAll)
   {
     PowerSupply.Voltage.barUpdate();
     PowerSupply.Current.barUpdate();
+
+    // Render bars immediately (throttled to ~60 FPS to avoid DMA issues)
+    static unsigned long lastBarRender = 0;
+    if (millis() - lastBarRender >= 16)
+    {
+      lvglIsBusy = true;
+      lv_timer_handler();
+      lvglIsBusy = false;
+      lastBarRender = millis();
+    }
   }
 
   // FUN Only mode: skip most processing for cleanest waveforms
   if (lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
   {
-    static unsigned long lastTouchCheck = 0;
-    // Check touch every 50ms for responsive control
-    if (millis() - lastTouchCheck >= 50)
-    {
-      lv_timer_handler(); // Enable touch for FUN/FUN Only controls
-      lastTouchCheck = millis();
-    }
-    return; // Skip other processing in FUN Only mode
+    return; // Skip other processing in FUN Only mode (bars already rendered above)
   }
 
   // Adaptive encoder response: fast when active, slower when idle
