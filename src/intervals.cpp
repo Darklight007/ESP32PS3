@@ -164,6 +164,13 @@ void LvglUpdatesInterval(unsigned long interval, bool forceUpdate)
                  // for immediate UI responsiveness
                  if (!lvglChartIsBusy && !blockAll && (forceUpdate || adcDataReady))
                  {
+
+                    // PowerSupply.Voltage.barUpdate();
+                    // PowerSupply.Current.barUpdate();
+
+                    lv_obj_invalidate( PowerSupply.Current.Bar.bar);
+                    lv_obj_invalidate( PowerSupply.Voltage.Bar.bar);
+
                      lvglIsBusy = 1;
                      lv_timer_handler();
                      lvglIsBusy = 0;
