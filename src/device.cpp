@@ -673,12 +673,15 @@ void Device::toggle_measure_unit()
 
 void Device::restoreAdcRateFromFUN()
 {
-    // Restore ADC rate from saved value when exiting FUN mode or turning OFF
+    // Restore ADC rate from saved value when exiting FUN mode
     if (settingParameters.adcRateSavedForFUN <= 3)
     {
         settingParameters.adcRate = settingParameters.adcRateSavedForFUN;
         const int rates[] = {20, 90, 330, 1000};
         adc.ads1219->setDataRate(rates[settingParameters.adcRateSavedForFUN]);
+
+        // Clear the saved value to prevent accidental reuse
+        settingParameters.adcRateSavedForFUN = 255;  // Invalid value marker
     }
 }
 
@@ -947,7 +950,11 @@ void Device::setStatus(DEVICE status_)
         lv_obj_clear_state(btn_function_gen, LV_STATE_CHECKED);
         lv_obj_add_state(btn_function_gen, LV_STATE_DISABLED);
         lv_label_set_text(lv_obj_get_child(btn_function_gen, 0), "OFF");
-        restoreAdcRateFromFUN();  // Restore ADC rate if it was changed by FUN mode
+
+        // Only restore ADC rate if transitioning FROM FUN mode
+        if (oldStatus == DEVICE::FUN) {
+            restoreAdcRateFromFUN();  // Restore ADC rate if it was changed by FUN mode
+        }
 
         lv_label_set_text(controlMode, "OFF");
         lv_label_set_text(lv_obj_get_child(powerSwitch.btn, 0), "OFF");
@@ -964,6 +971,11 @@ void Device::setStatus(DEVICE status_)
         // if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
         // PowerSupply.setStatus(DEVICE::FUN);
         // }
+
+        // If transitioning FROM FUN mode to another state (VC/CC/ON), restore ADC rate
+        if (oldStatus == DEVICE::FUN && status_ != DEVICE::FUN) {
+            restoreAdcRateFromFUN();
+        }
 
         // myTone(NOTE_A5, 200);
         settingParameters.isPowerSupplyOn = true;
