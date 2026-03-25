@@ -198,36 +198,10 @@ void Task_ADC(void *pvParameters)
                     // Store normalized value in table_points array
                     PowerSupply.funGenMem.table_points[PowerSupply.recordingMem.sample_count][0] = normalized;
 
-                    // Update UI on-the-fly if SPS is slow enough (period >= 50ms = 20 SPS or slower)
-                    bool slowSampling = (PowerSupply.recordingMem.sample_rate_ms >= 50);
-                    if (slowSampling && !lvglIsBusy)
-                    {
-                        // Update table row
-                        if (Utility_objs.table_point_list)
-                        {
-                            lv_table_set_cell_value_fmt(Utility_objs.table_point_list,
-                                                        PowerSupply.recordingMem.sample_count, 1,
-                                                        "%+06.4f", normalized);
-                        }
-
-                        // Update chart point
-                        if (Utility_objs.record_chart && Utility_objs.record_chart_series)
-                        {
-                            lv_chart_set_value_by_id(Utility_objs.record_chart, Utility_objs.record_chart_series,
-                                                     PowerSupply.recordingMem.sample_count,
-                                                     (int32_t)(normalized * 100));
-                            lv_chart_refresh(Utility_objs.record_chart);
-                        }
-
-                        // Update status every 5 samples
-                        if (Utility_objs.record_status_label && (PowerSupply.recordingMem.sample_count % 5 == 0))
-                        {
-                            lv_label_set_text_fmt(Utility_objs.record_status_label, "Recording: %d/%d",
-                                                  PowerSupply.recordingMem.sample_count + 1, RECORDING_TABLE_SIZE);
-                        }
-                    }
-
                     PowerSupply.recordingMem.sample_count++;
+
+                    // Set flag for UI update (LVGL calls moved to Core 1 UpdateRecordingUI)
+                    PowerSupply.recordingMem.needs_ui_update = true;
                 }
                 else
                 {
@@ -250,33 +224,10 @@ void Task_ADC(void *pvParameters)
             lastCCCVStatus = currentCCCVStatus;
         }
 
-        // Update histogram and graph data
+        // Update histogram and graph data (data only, no LVGL)
         HistPush();
         GraphPush();
 
-        // Refresh histogram chart on page 0
-        if (Tabs::getCurrentPage() == Pages::HISTOGRAM && !lvglIsBusy && !lvglChartIsBusy && !blockAll)
-        {
-            lvglChartIsBusy = true;
-            lv_chart_refresh(PowerSupply.stats.chart);
-            lvglChartIsBusy = false;
-        }
-
-        // Refresh graph chart on page 1 with throttling
-        if (Tabs::getCurrentPage() == Pages::GRAPH && !lvglIsBusy)
-        {
-            bool funActive = lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED);
-            unsigned long graphInterval = funActive
-                                              ? TaskTiming::GRAPH_REFRESH_INTERVAL_FUNGEN_MS // 500ms when FUN active
-                                              : TaskTiming::GRAPH_REFRESH_INTERVAL_MS;       // 125ms normally
-            schedule([]
-                     {
-                if (!lvglChartIsBusy && !blockAll)
-                {
-                    lvglChartIsBusy = true;
-                    lv_chart_refresh(PowerSupply.graph.chart);
-                    lvglChartIsBusy = false;
-                } }, graphInterval, graphRefreshTimer);
-        }
+        // Chart refresh moved to Core 1 (main loop) for LVGL thread-safety
     }
 }

@@ -21,3 +21,5 @@ void FFTUpdateInterval(unsigned long interval);
 void PowerManagementInterval(unsigned long interval);  // New: Timer, Energy, Auto-save, Limits
 void MemoryMonitorInterval(unsigned long interval);    // New: Heap and stack monitoring
 void RecordingPlaybackInterval();                      // New: Voltage recording and playback
+void HistogramChartRefreshInterval(unsigned long interval);  // Refresh histogram chart (Core 1 only)
+void GraphChartRefreshInterval(unsigned long interval);      // Refresh graph chart (Core 1 only)

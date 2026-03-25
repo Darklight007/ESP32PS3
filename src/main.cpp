@@ -170,6 +170,10 @@ void loop()
     MemoryMonitorInterval(5000);  // Memory monitoring every 5 seconds
     RecordingPlaybackInterval();  // Voltage recording and playback
     Page2RightSideCleanup(1000);  // Clean dirty pixels on right side of page 2
+
+    // Chart refresh (Core 1 only - LVGL thread-safe)
+    HistogramChartRefreshInterval(125);  // Refresh histogram chart every 125ms
+    GraphChartRefreshInterval(125);      // Refresh graph chart every 125ms
   }
 
   // Flush measures - Slow when encoder active for immediate visual feedback

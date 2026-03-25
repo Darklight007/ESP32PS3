@@ -385,3 +385,35 @@ void RecordingPlaybackInterval()
         }
     }
 }
+
+// Refresh histogram chart on page 0 (Core 1 only - LVGL thread-safe)
+void HistogramChartRefreshInterval(unsigned long interval)
+{
+    static unsigned long timer_ = 0;
+    schedule([]
+             {
+                 // Only refresh when on histogram page (page 0)
+                 if (Tabs::getCurrentPage() == 0 && !lvglChartIsBusy && !blockAll)
+                 {
+                     lvglChartIsBusy = true;
+                     lv_chart_refresh(PowerSupply.stats.chart);
+                     lvglChartIsBusy = false;
+                 } },
+             interval, timer_);
+}
+
+// Refresh graph chart on page 1 (Core 1 only - LVGL thread-safe)
+void GraphChartRefreshInterval(unsigned long interval)
+{
+    static unsigned long timer_ = 0;
+    schedule([]
+             {
+                 // Only refresh when on graph page (page 1)
+                 if (Tabs::getCurrentPage() == 1 && !lvglChartIsBusy && !blockAll)
+                 {
+                     lvglChartIsBusy = true;
+                     lv_chart_refresh(PowerSupply.graph.chart);
+                     lvglChartIsBusy = false;
+                 } },
+             interval, timer_);
+}
