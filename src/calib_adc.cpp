@@ -134,7 +134,8 @@ namespace
 void build_adc_calibration_window(lv_obj_t **win_holder,
                                    const char *title,
                                    AdcCalibrationControls &gui,
-                                   const CalPrefill &pf)
+                                   const CalPrefill &pf,
+                                   bool show_autozero)
 {
     if (*win_holder)
     {
@@ -205,7 +206,11 @@ void build_adc_calibration_window(lv_obj_t **win_holder,
     LVButton btnSave(cont, "Save", btn_pos.x + 62, btn_pos.y, 54, 25, nullptr, save_cb);
     LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 54, 25, nullptr, load_cb);
 
-    LVButton btnAutoZeros(cont, "Auto zeros", btn_pos.x , btn_pos.y + 28, 2 * 54+62-54, 25, nullptr, autoZeroCurrent_cb);
+    // Only show "Auto zeros" button for current calibration (not voltage)
+    if (show_autozero)
+    {
+        LVButton btnAutoZeros(cont, "Auto zeros", btn_pos.x , btn_pos.y + 28, 2 * 54+62-54, 25, nullptr, autoZeroCurrent_cb);
+    }
 
     // m, b, and Vin_cal notes (simple labels)
     auto *label_m = lv_label_create(cont);
@@ -240,12 +245,12 @@ void btn_calibration_ADC_voltage_event_cb(lv_event_t *)
 {
     auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
     CalPrefill pf{cal.code_1, cal.code_2, cal.value_1, cal.value_2, "V"};
-    build_adc_calibration_window(&PowerSupply.gui.calibration.win_ADC_voltage_calibration, "ADC Voltage Calibration", Calib_GUI.Voltage, pf);
+    build_adc_calibration_window(&PowerSupply.gui.calibration.win_ADC_voltage_calibration, "ADC Voltage Calibration", Calib_GUI.Voltage, pf, false); // No autozero for voltage
 }
 
 void btn_calibration_ADC_current_event_cb(lv_event_t *)
 {
     auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
     CalPrefill pf{cal[PowerSupply.mA_Active].code_1, cal[PowerSupply.mA_Active].code_2, cal[PowerSupply.mA_Active].value_1, cal[PowerSupply.mA_Active].value_2, "A"};
-    build_adc_calibration_window(&PowerSupply.gui.calibration.win_ADC_current_calibration, "ADC Current Calibration [A]", Calib_GUI.Current, pf);
+    build_adc_calibration_window(&PowerSupply.gui.calibration.win_ADC_current_calibration, "ADC Current Calibration [A]", Calib_GUI.Current, pf, true); // Show autozero for current
 }
