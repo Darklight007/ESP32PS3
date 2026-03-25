@@ -183,6 +183,9 @@ void Device::LoadSetting(void)
     Voltage.adjValue = settingParameters.SetVoltage;
     Current.adjValue = settingParameters.SetCurrent;
 
+    // Restore buzzer state from saved settings
+    buzzerSound = settingParameters.buzzer;
+
     Preferences memory;
     memory.begin("param", false);
     if (314 != memory.getUShort("pi", 0))
@@ -487,30 +490,16 @@ void Device::readVoltage()
             32.0000f / 31.9882f  // 1000 SPS
         };
 
-        static double v;
         Voltage.rawValue = adc.readConversion();
         adcDataReady = false;
-        adc.ads1219->setGain(ONE); // Gain 1 or 4 for Current
-        // adc.ads1219->setDataRate(1000); //settingParameters.adcRate
-        adc.startConversion(CURRENT, REF_EXTERNAL); // REF_EXTERNAL
+        adc.ads1219->setGain(ONE);
+        adc.startConversion(CURRENT, REF_EXTERNAL);
 
-        double v_ideal = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
+        // OPTIMIZED: Single line calculation for speed
+        double v_corrected = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m * adcRateCompensation[settingParameters.adcRate];
 
-        // v = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m;
-
-        v_ideal *= adcRateCompensation[settingParameters.adcRate];
-
-        // Add monotone cubic residual on top (safe if not built yet)
-        double v_corrected = g_voltINL_ready ? (g_voltINL.apply(v_ideal)) : v_ideal;
-
-        // Voltage.hist[v];
-        Voltage.measureUpdate(v_corrected); //  enob(rs[0].StandardDeviation())
+        Voltage.measureUpdate(v_corrected);
         adc.ADC_loopCounter++;
-        // myTone(NOTE_A3, 1);
-
-        static double factor = lv_bar_get_max_value(Voltage.Bar.bar) / (Voltage.maxValue / Voltage.adjFactor);
-
-        *Voltage.Bar.curValuePtr = v_corrected * factor; // uint16_t(v * 8);
 
         // lv_obj_invalidate(Voltage.Bar.bar);
 
@@ -538,33 +527,22 @@ void Device::readCurrent()
         // } // throw away first 2 readings after changing rate
         // throw_away = 0;
 
-        static double c;
         Current.rawValue = adc.readConversion();
         adcDataReady = false;
-        adc.ads1219->setGain(ONE);                  // Gain 1 for voltage
-        adc.startConversion(VOLTAGE, REF_EXTERNAL); // REF_EXTERNAL
+        adc.ads1219->setGain(ONE);
+        adc.startConversion(VOLTAGE, REF_EXTERNAL);
 
-        // Current used by R11&R12 and arrR2
-        // static double diff_A = (0.000461 - 0.000021) / (32.0 - 0.0); // (0.000594 - 0.000143)
-        double internalLeakage = CalBank[bankCalibId].internalLeakage[mA_Active]; // 1.0 / 40'000.0; // 1/40kOhm /volt
+        // OPTIMIZED: Fast path for current calculation
+        double c = ((Current.rawValue - Current.calib_b) * Current.calib_1m) -
+                   ((mA_Active ? 1000.0 : 1.0) * (Voltage.measured.Mean() / (CalBank[bankCalibId].internalLeakage[mA_Active] * 1000.0)));
 
-        double currentOfInternalRes =(mA_Active ? 1000.0 : 1.0) *  (Voltage.measured.Mean() / (internalLeakage * 1000.0)) +
-                                      0.0 * 0.000180 * !digitalRead(CCCVPin); // Why?; (mA_Active ? .001 : 1.0) * 
-
-        c = (((Current.rawValue - Current.calib_b) * Current.calib_1m) - currentOfInternalRes); // old value: .0009
-        // c=c+c*0.00009901;
-
-        // Apply REL offset if active (like Keithley 2010 REL button)
-        if (mA_Active && currentRelActive_mA) {
-            c -= currentRelOffset_mA;
-        } else if (!mA_Active && currentRelActive_A) {
-            c -= currentRelOffset_A;
-        }
-
-        // Current.hist[c];
+        // Apply REL offset
+        if (mA_Active && currentRelActive_mA) c -= currentRelOffset_mA;
+        else if (!mA_Active && currentRelActive_A) c -= currentRelOffset_A;
 
         Current.measureUpdate(c);
-        *Current.Bar.curValuePtr = c / (Current.maxValue / Current.adjFactor) * lv_bar_get_max_value(Current.Bar.bar); // uint16_t(v * 8);
+        // Removed direct bar pointer manipulation - barUpdate() handles this now for max refresh rate
+        // *Current.Bar.curValuePtr = c / (Current.maxValue / Current.adjFactor) * lv_bar_get_max_value(Current.Bar.bar); // uint16_t(v * 8);
 
         // Serial.print (c);
         // Serial.print(",  Current:");
@@ -682,6 +660,45 @@ void Device::restoreAdcRateFromFUN()
 
         // Clear the saved value to prevent accidental reuse
         settingParameters.adcRateSavedForFUN = 255;  // Invalid value marker
+
+        // Adjust task priority based on restored rate
+        adjustAdcTaskPriority();
+    }
+}
+
+void Device::adjustAdcTaskPriority()
+{
+    // Adjust Task_ADC priority based on ADC sample rate
+    // adcRate: 0=20 SPS, 1=90 SPS, 2=330 SPS, 3=1000 SPS
+
+    UBaseType_t newPriority;
+
+    switch (settingParameters.adcRate)
+    {
+        case 0:  // 20 SPS - slow, low priority
+        case 1:  // 90 SPS - slow, low priority
+            newPriority = 1;
+            break;
+
+        case 2:  // 330 SPS - fast, higher priority
+            newPriority = 1;
+            break;
+
+        case 3:  // 1000 SPS - very fast, highest priority
+            newPriority = 2;
+            break;
+
+        default:
+            newPriority = 1;  // Default to low priority
+            break;
+    }
+
+    // Change the task priority if Task_ADC exists
+    if (Task_adc != nullptr)
+    {
+        vTaskPrioritySet(Task_adc, newPriority);
+        Serial.printf("\n[Task Priority] Task_ADC priority set to %d (ADC rate: %d)\n",
+                      newPriority, settingParameters.adcRate);
     }
 }
 

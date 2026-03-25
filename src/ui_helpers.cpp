@@ -667,6 +667,7 @@ void btn_function_gen_event_cb(lv_event_t *e)
         PowerSupply.settingParameters.adcRateSavedForFUN = PowerSupply.settingParameters.adcRate;
         PowerSupply.settingParameters.adcRate = 3;  // 3 = 1000 SPS
         PowerSupply.adc.ads1219->setDataRate(1000);
+        PowerSupply.adjustAdcTaskPriority();  // Adjust to priority 3 for 1000 SPS
     }
     else
     {

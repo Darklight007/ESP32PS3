@@ -219,6 +219,7 @@ namespace
         lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), ADC_SPS.at(v));
         PowerSupply.adc.ads1219->setDataRate(atoi(ADC_SPS.at(v)));
         PowerSupply.settingParameters.adcRate = v;
+        PowerSupply.adjustAdcTaskPriority();  // Adjust task priority based on new rate
         PowerSupply.ResetStats();
         PowerSupply.SaveSetting();
     }
@@ -284,13 +285,16 @@ namespace
         if (lv_obj_get_state(sw) & LV_STATE_CHECKED)
         {
             buzzerSound = true;
+            PowerSupply.settingParameters.buzzer = true;
             myTone(NOTE_A5, 10, true);
         }
         else
         {
             buzzerSound = false;
+            PowerSupply.settingParameters.buzzer = false;
             myTone(NOTE_A3, 10);
         }
+        PowerSupply.SaveSetting();  // Save buzzer state
     }
 
     // General save/load callbacks used by settings menu and internal calibration window

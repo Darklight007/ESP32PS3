@@ -5,6 +5,14 @@ unsigned long toneTime[2];
 bool toneIsOn = true;
 bool buzzerSound = true;
 
+// Initialize buzzer LEDC peripheral - must be called during setup
+void initBuzzer()
+{
+    ledcSetup(SOUND_PWM_CHANNEL, 1000, SOUND_RESOLUTION); // Default 1kHz frequency
+    ledcAttachPin(BUZZER_PIN, SOUND_PWM_CHANNEL);
+    ledcWrite(SOUND_PWM_CHANNEL, SOUND_OFF); // Start silent
+}
+
 void myTone(int &&frequency, int &&duration)
 {
     if (!buzzerSound)
@@ -33,10 +41,10 @@ void myTone(int frequency, int duration, bool blockingDelay)
         ledcWrite(SOUND_PWM_CHANNEL, SOUND_OFF);
         return;
     }
-    
+
     toneTime[0] = millis() + duration;
     ledcSetup(SOUND_PWM_CHANNEL, frequency, SOUND_RESOLUTION); // Set up PWM channel
-    ledcAttachPin(BUZZER_PIN, SOUND_PWM_CHANNEL);              // Attach channel to pin
+    // Pin already attached in initBuzzer(), no need to reattach
     ledcWrite(SOUND_PWM_CHANNEL, SOUND_ON);
     delay(duration);
     ledcWrite(SOUND_PWM_CHANNEL, SOUND_OFF);

@@ -26,7 +26,7 @@
 #include "esp_log.h"
 
 #define DMA true
-#define COLOR_DEPTH 32
+#define COLOR_DEPTH 16
 #define IWIDTH 320
 #define IHEIGHT 240
 
@@ -105,6 +105,7 @@ void setupTasks();
 void setupPreferences();
 void setupADC();
 void setupDAC();
+void setupBuzzer();
 void createTasks();
 void setupCalibPage();
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);

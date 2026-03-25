@@ -6,21 +6,23 @@
 #include "buzzer.h"
 
 // Task timing constants
-namespace TaskTiming {
+namespace TaskTiming
+{
     constexpr unsigned long BARGRAPH_DELAY_OFF_PAGE_MS = 50;
-    constexpr unsigned long BARGRAPH_DELAY_ACTIVE_MS = 2;  // Fast updates
+    constexpr unsigned long BARGRAPH_DELAY_ACTIVE_MS = 10; // Fast updates
     constexpr unsigned long DAC_UPDATE_INTERVAL_NORMAL_MS = 100;
-    constexpr unsigned long DAC_UPDATE_INTERVAL_FUNGEN_MS = 5;  // Back to 5ms - 0ms was too fast
-    constexpr unsigned long KEY_CHECK_INTERVAL_ULTRAFAST_MS = 2;  // Ultra-fast when actively typing
+    constexpr unsigned long DAC_UPDATE_INTERVAL_FUNGEN_MS = 5;   // Back to 5ms - 0ms was too fast
+    constexpr unsigned long KEY_CHECK_INTERVAL_ULTRAFAST_MS = 2; // Ultra-fast when actively typing
     constexpr unsigned long KEY_CHECK_INTERVAL_FAST_MS = 10;
     constexpr unsigned long KEY_CHECK_INTERVAL_SLOW_MS = 105;
     constexpr unsigned long ADC_NOTIFY_TIMEOUT_MS = 1;
-    constexpr unsigned long GRAPH_REFRESH_INTERVAL_MS = 125;
-    constexpr unsigned long GRAPH_REFRESH_INTERVAL_FUNGEN_MS = 500;  // Slow down graph updates during FUN
+    constexpr unsigned long GRAPH_REFRESH_INTERVAL_MS = 60;
+    constexpr unsigned long GRAPH_REFRESH_INTERVAL_FUNGEN_MS = 500; // Slow down graph updates during FUN
 }
 
 // Page indices
-namespace Pages {
+namespace Pages
+{
     constexpr int HISTOGRAM = 0;
     constexpr int GRAPH = 1;
     constexpr int MAIN = 2;
@@ -56,11 +58,11 @@ void Task_BarGraph(void *pvParameters)
     for (;;)
     {
         // Skip all bar graph updates in FUN Only mode
-        if (lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
-        {
-            vTaskDelay(100);  // Sleep longer when disabled
-            continue;
-        }
+        // if (lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
+        // {
+        //     vTaskDelay(100);  // Sleep longer when disabled
+        //     continue;
+        // }
 
         if (Tabs::getCurrentPage() != Pages::MAIN)
         {
@@ -73,6 +75,10 @@ void Task_BarGraph(void *pvParameters)
         {
             PowerSupply.Voltage.barUpdate();
             PowerSupply.Current.barUpdate();
+
+            lv_obj_invalidate(PowerSupply.Current.Bar.bar);
+            lv_obj_invalidate(PowerSupply.Voltage.Bar.bar);
+            continue;
         }
 
         vTaskDelay(TaskTiming::BARGRAPH_DELAY_ACTIVE_MS);
@@ -111,17 +117,17 @@ void Task_ADC(void *pvParameters)
         // Normal: 100ms interval = 10 Hz
         unsigned long dacInterval;
         if (funOnlyMode)
-            dacInterval = 2;  // 500 Hz update rate for cleanest waveforms
+            dacInterval = 2; // 500 Hz update rate for cleanest waveforms
         else if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
             dacInterval = TaskTiming::DAC_UPDATE_INTERVAL_FUNGEN_MS;
         else
             dacInterval = TaskTiming::DAC_UPDATE_INTERVAL_NORMAL_MS;
 
-        schedule([&] {
+        schedule([&]
+                 {
             if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
                 functionGenerator();
-            PowerSupply.DACUpdate();
-        }, dacInterval, dacUpdateTimer);
+            PowerSupply.DACUpdate(); }, dacInterval, dacUpdateTimer);
 
         // FUN Only mode: Skip key scanning entirely (I2C causes jitter)
         // Handle keyboard and encoder input for responsive UI
@@ -159,12 +165,15 @@ void Task_ADC(void *pvParameters)
         }
 
         // Process ADC data
-        if (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0)
+        // Dont read ADC during LCD SPI activity if SPS set to 0 (slowest)
+        // if (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0)
+        
         {
             PowerSupply.readVoltage();
             PowerSupply.readCurrent();
         }
 
+        // continue;
         // Fast recording logic (runs at ADC speed, up to ~300 SPS)
         // UI update strategy: on-the-fly for slow SPS (<=50ms period), batch for fast SPS
         static unsigned long lastRecordTime = 0;
@@ -179,10 +188,12 @@ void Task_ADC(void *pvParameters)
                     double voltage = PowerSupply.Voltage.measured.Mean();
 
                     // Normalize voltage to 0-1 range using ADC max voltage from setup
-                    double normalized = voltage / PowerSupply.Voltage.adc_maxValue;  // 32.768V
+                    double normalized = voltage / PowerSupply.Voltage.adc_maxValue; // 32.768V
                     // Clamp to valid range
-                    if (normalized < 0.0) normalized = 0.0;
-                    if (normalized > 1.0) normalized = 1.0;
+                    if (normalized < 0.0)
+                        normalized = 0.0;
+                    if (normalized > 1.0)
+                        normalized = 1.0;
 
                     // Store normalized value in table_points array
                     PowerSupply.funGenMem.table_points[PowerSupply.recordingMem.sample_count][0] = normalized;
@@ -195,16 +206,16 @@ void Task_ADC(void *pvParameters)
                         if (Utility_objs.table_point_list)
                         {
                             lv_table_set_cell_value_fmt(Utility_objs.table_point_list,
-                                                       PowerSupply.recordingMem.sample_count, 1,
-                                                       "%+06.4f", normalized);
+                                                        PowerSupply.recordingMem.sample_count, 1,
+                                                        "%+06.4f", normalized);
                         }
 
                         // Update chart point
                         if (Utility_objs.record_chart && Utility_objs.record_chart_series)
                         {
                             lv_chart_set_value_by_id(Utility_objs.record_chart, Utility_objs.record_chart_series,
-                                                    PowerSupply.recordingMem.sample_count,
-                                                    (int32_t)(normalized * 100));
+                                                     PowerSupply.recordingMem.sample_count,
+                                                     (int32_t)(normalized * 100));
                             lv_chart_refresh(Utility_objs.record_chart);
                         }
 
@@ -212,7 +223,7 @@ void Task_ADC(void *pvParameters)
                         if (Utility_objs.record_status_label && (PowerSupply.recordingMem.sample_count % 5 == 0))
                         {
                             lv_label_set_text_fmt(Utility_objs.record_status_label, "Recording: %d/%d",
-                                                 PowerSupply.recordingMem.sample_count + 1, RECORDING_TABLE_SIZE);
+                                                  PowerSupply.recordingMem.sample_count + 1, RECORDING_TABLE_SIZE);
                         }
                     }
 
@@ -222,7 +233,7 @@ void Task_ADC(void *pvParameters)
                 {
                     // Max samples reached, stop recording and trigger UI update
                     PowerSupply.recordingMem.is_recording = false;
-                    PowerSupply.recordingMem.needs_ui_update = true;  // Flag for batch update at end
+                    PowerSupply.recordingMem.needs_ui_update = true; // Flag for batch update at end
                 }
             }
         }
@@ -256,16 +267,16 @@ void Task_ADC(void *pvParameters)
         {
             bool funActive = lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED);
             unsigned long graphInterval = funActive
-                ? TaskTiming::GRAPH_REFRESH_INTERVAL_FUNGEN_MS  // 500ms when FUN active
-                : TaskTiming::GRAPH_REFRESH_INTERVAL_MS;        // 125ms normally
-            schedule([]{
+                                              ? TaskTiming::GRAPH_REFRESH_INTERVAL_FUNGEN_MS // 500ms when FUN active
+                                              : TaskTiming::GRAPH_REFRESH_INTERVAL_MS;       // 125ms normally
+            schedule([]
+                     {
                 if (!lvglChartIsBusy && !blockAll)
                 {
                     lvglChartIsBusy = true;
                     lv_chart_refresh(PowerSupply.graph.chart);
                     lvglChartIsBusy = false;
-                }
-            }, graphInterval, graphRefreshTimer);
+                } }, graphInterval, graphRefreshTimer);
         }
     }
 }

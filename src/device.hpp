@@ -537,6 +537,7 @@ public:
 
     void toggle_measure_unit(void);
     void restoreAdcRateFromFUN(void);  // Restore ADC rate after FUN mode
+    void adjustAdcTaskPriority(void);  // Adjust Task_ADC priority based on ADC rate
 
     void SaveCalibData(const String &key, const Calibration &data);
     Calibration LoadCalibData(const String &key);

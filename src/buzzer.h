@@ -18,6 +18,7 @@ struct Buzzer
 };
 
 
+void initBuzzer();
 void myTone(int &&frequency, int &&duration);
 void myTone(int frequency, int duration, bool blockingDelay);
 void toneOff();

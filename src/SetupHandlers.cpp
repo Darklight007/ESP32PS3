@@ -436,6 +436,13 @@ void setupDAC()
     PowerSupply.DAC.writeAndPowerAll(DAC_VOLTAGE, 0); // Initialize DAC outputs
     Serial.print("\nDAC Setup Completed.");
 }
+
+// Setup the Buzzer (LEDC PWM)
+void setupBuzzer()
+{
+    initBuzzer(); // Initialize LEDC peripheral for buzzer
+    Serial.print("\nBuzzer Setup Completed.");
+}
 // void startTasks(){
 //   xTaskCreatePinnedToCore(adc_task, "ADC_TASK", 4096, nullptr, 4, &adcTaskHandle, 0);
 // }
@@ -461,7 +468,7 @@ void createTasks()
         "Voltage & Current ADC", /* Name of task */
         14000,                   /* Stack size of task */
         NULL,                    /* Parameter of the task */
-        5,                       /* Priority of the task */
+        1,                       /* Priority of the task */
         &Task_adc,               /* Task handle */
         0                        /* Pin task to core 0 */
     );
@@ -479,6 +486,9 @@ void createTasks()
     // );
 
     Serial.print("\nReal-time tasks created and pinned to cores.");
+
+    // Set initial task priority based on loaded ADC rate setting
+    PowerSupply.adjustAdcTaskPriority();
 }
 
 // **Utility Functions**

@@ -90,6 +90,7 @@ void setup()
   setupPreferences();
   setupADC();
   setupDAC();
+  setupBuzzer();
   // SetupOVP();  // Create OVP/OCP protection
 
   setupCalibPage();
@@ -114,41 +115,41 @@ bool oneTimeCommandDone = false;
 
 void loop()
 {
-  static unsigned long loopCounter = 0;
+  // static unsigned long loopCounter = 0;
   if (!oneTimeCommandDone)
   {
     esp_task_wdt_init(120, false); // X second timeout
     esp_task_wdt_add(NULL);        // Add current task to watchdog
     oneTimeCommandDone = true;
-    ESP_LOGI("LOOP", "Watchdog initialized - 120s timeout");
+    // ESP_LOGI("LOOP", "Watchdog initialized - 120s timeout");
   }
 
-  // Debug: Log every 1000 loops
-  if (loopCounter++ % 1000 == 0)
-  {
-    ESP_LOGI("LOOP", "Loop %lu - millis: %lu", loopCounter, millis());
-  }
+  // // Debug: Log every 1000 loops
+  // if (loopCounter++ % 1000 == 0)
+  // {
+  //   // ESP_LOGI("LOOP", "Loop %lu - millis: %lu", loopCounter, millis());
+  // }
 
   // pixels.setPixelColor(0, pixels.Color(0, 0, 0)); // Red
   // neopixelWrite(RGB_BUILTIN,0,0,0); // Green
 
   // Bar graph updates - run every loop iteration for maximum speed
-  // Force LVGL render after bar updates for immediate visual feedback
-  if (Tabs::getCurrentPage() == 2 && !blockAll)
-  {
-    PowerSupply.Voltage.barUpdate();
-    PowerSupply.Current.barUpdate();
+  // // Force LVGL render after bar updates for immediate visual feedback
+  // if (Tabs::getCurrentPage() == 2 && !blockAll)
+  // {
+  //   PowerSupply.Voltage.barUpdate();
+  //   PowerSupply.Current.barUpdate();
 
-    // Render bars immediately (throttled to ~60 FPS to avoid DMA issues)
-    static unsigned long lastBarRender = 0;
-    if (millis() - lastBarRender >= 16)
-    {
-      lvglIsBusy = true;
-      lv_timer_handler();
-      lvglIsBusy = false;
-      lastBarRender = millis();
-    }
-  }
+  //   // Render bars immediately (throttled to ~60 FPS to avoid DMA issues)
+  //   static unsigned long lastBarRender = 0;
+  //   if (millis() - lastBarRender >= 16)
+  //   {
+  //     lvglIsBusy = true;
+  //     lv_timer_handler();
+  //     lvglIsBusy = false;
+  //     lastBarRender = millis();
+  //   }
+  // }
 
   // FUN Only mode: skip most processing for cleanest waveforms
   if (lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
@@ -159,26 +160,36 @@ void loop()
   // Adaptive encoder response: fast when active, slower when idle
   bool encoderActive = (millis() - encoderTimeStamp) < 500; // 500ms idle threshold
 
-  scpiParser.process(); // Process SCPI commands from Serial
-  StatusBarUpdateInterval(450);
   LvglUpdatesInterval(0, true); // Force update for immediate response
+  StatusBarUpdateInterval(300);
 
-  PowerManagementInterval(500); // Timer, Energy, Auto-save, Limits
-  MemoryMonitorInterval(5000);  // Memory monitoring every 5 seconds
-  RecordingPlaybackInterval();  // Voltage recording and playback
-  Page2RightSideCleanup(1000);  // Clean dirty pixels on right side of page 2
+  if (1)
+  {
+    scpiParser.process(); // Process SCPI commands from Serial
+    PowerManagementInterval(500); // Timer, Energy, Auto-save, Limits
+    MemoryMonitorInterval(5000);  // Memory monitoring every 5 seconds
+    RecordingPlaybackInterval();  // Voltage recording and playback
+    Page2RightSideCleanup(1000);  // Clean dirty pixels on right side of page 2
+  }
 
-  // Flush measures - faster when encoder active for immediate visual feedback
+  // Flush measures - Slow when encoder active for immediate visual feedback
   if (encoderActive)
-    FlushMeasuresInterval(10); // Very fast update during encoder activity
+    FlushMeasuresInterval(300); // Very xxxx update during encoder activity
   else
-    FlushMeasuresInterval(50); // Fast update even when idle for responsive display
+    FlushMeasuresInterval(100); // Slow update even when idle for responsive display
 
-  // Adaptive statistics update: faster when encoder active for responsive display
+  // Adaptive statistics update: Slow when encoder active for responsive display
   if (encoderActive)
-    statisticUpdateInterval(100); // Fast update during encoder activity
+    statisticUpdateInterval(500); // Slow update during encoder activity
   else
     statisticUpdateInterval(333); // Normal update when idle
+
+    // Adaptive VCCC update: faster when encoder active
+    if (encoderActive)
+      VCCCInterval(100); // Slow update during encoder activity
+    else
+      VCCCInterval(60); // Normal update when idle
+
 
   // FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?
@@ -190,11 +201,6 @@ void loop()
   //   KeyCheckInterval(400);
   // DACInterval(100);
 
-  // Adaptive VCCC update: faster when encoder active
-  if (encoderActive)
-    VCCCInterval(10); // Fast update during encoder activity
-  else
-    VCCCInterval(33); // Normal update when idle
   // KeyCheckInterval(45);
   // Serial.printf("\nVoltage.encoder.getCount %l",PowerSupply.Voltage.encoder.getCount());
   // KeyCheckInterval(0); // moved to adc taskse
@@ -204,7 +210,6 @@ void loop()
   //  Serial.printf("\n Current utiltap%i", lv_tabview_get_tab_act(tabview_utility));
 
   // trackLoopExecution(__func__);
-  
 }
 
 /*

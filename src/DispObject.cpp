@@ -20,30 +20,23 @@ DispObjects::~DispObjects() {};
 void DispObjects::measureUpdate(double value)
 {
     measured(value);
-    StatisticsUpdate(value);
-
-    // Store raw value for bar (independent of averaging)
-    rawBarValue = value;
-
-    // Count samples for proportional display update
-    sampleCountSinceDisplay++;
-    if (sampleCountSinceDisplay >= measured.NofAvgs)
-    {
-        displayReady = true;
-        sampleCountSinceDisplay = 0;
-    }
-
-    // ignore the rest for Power measurement
-    if (!strcmp(lv_label_get_text(label_unit), "W"))
-        return;
-
-    // Always update bar with raw values for fast response
+    rawBarValue = value;  // CRITICAL: Bar uses raw value
     Bar.changed = true;
-    Bar.oldValue = round(value * 320);
-    if (oldValue != value)
-    {
-        oldValue = value;
-        changed = true;
+
+    // Fast path: skip statistics if not power
+    bool isPower = (label_unit && lv_label_get_text(label_unit)[0] == 'W');
+    if (!isPower) {
+        StatisticsUpdate(value);
+
+        if (++sampleCountSinceDisplay >= measured.NofAvgs) {
+            displayReady = true;
+            sampleCountSinceDisplay = 0;
+        }
+
+        if (oldValue != value) {
+            oldValue = value;
+            changed = true;
+        }
     }
 }
 
@@ -95,7 +88,11 @@ void DispObjects::statUpdate(void)
 
 void DispObjects::barUpdate(void)
 {
-    if (!Bar.changed || !Bar.bar) return;  // Add null check for Power measurement
+    // Always update bars for maximum refresh rate (not limited by ADC rate)
+    if (!Bar.bar) return;  // Add null check for Power measurement
+
+    // Bars use rawBarValue which is updated EVERY ADC sample (not averaged)
+    // This is set in measureUpdate() with the raw instantaneous value
 
     // Pre-compute scale factors (cached - only recalc if bar size changes)
     static lv_coord_t cachedBarMax = 0;
@@ -116,21 +113,17 @@ void DispObjects::barUpdate(void)
     int newMaxX = cachedBarX + int(measured.absMax * cachedScaleFactor * cachedBarWidth) - 3;
     int newMinX = cachedBarX + int(measured.absMin * cachedScaleFactor * cachedBarWidth) - 3;
 
-    // Update bar value and force full redraw to clear old pixels when bar shrinks
-    lv_bar_set_value(Bar.bar, newBarValue, LV_ANIM_OFF);
-    lv_obj_invalidate(Bar.bar);
-
-    static double oldMaxValue{0};
-    if (measured.absMax != oldMaxValue) {
-        lv_obj_set_x(Bar.bar_maxMarker, newMaxX);
-        oldMaxValue = measured.absMax;
+    // Update bar value - LVGL is smart enough to skip if value unchanged
+    static int32_t lastBarValue = -999999;
+    if (newBarValue != lastBarValue) {
+        lv_bar_set_value(Bar.bar, newBarValue, LV_ANIM_OFF);
+        lv_obj_invalidate(Bar.bar);
+        lastBarValue = newBarValue;
     }
 
-    static double oldMinValue{0};
-    if (measured.absMin != oldMinValue) {
-        lv_obj_set_x(Bar.bar_minMarker, newMinX);
-        oldMinValue = measured.absMin;
-    }
+    // Always update max/min markers (remove old value check for maximum refresh)
+    lv_obj_set_x(Bar.bar_maxMarker, newMaxX);
+    lv_obj_set_x(Bar.bar_minMarker, newMinX);
 
     Bar.changed = false;
 }
