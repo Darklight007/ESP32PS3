@@ -166,8 +166,7 @@ void Task_ADC(void *pvParameters)
 
         // Process ADC data
         // Dont read ADC during LCD SPI activity if SPS set to 0 (slowest)
-        // if (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0)
-        
+        if (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0)
         {
             PowerSupply.readVoltage();
             PowerSupply.readCurrent();

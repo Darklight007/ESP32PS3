@@ -177,7 +177,7 @@ void Device::LoadSetting(void)
     Serial.print("done.");
 
     // Make sure loaded data is not out of range
-    settingParameters.adcRate = std::clamp((int)settingParameters.adcRate, 0, 3);
+    settingParameters.adcRate = std::clamp((int)settingParameters.adcRate, 0, 4);
     settingParameters.adcNumberOfAvgs = std::clamp((int)settingParameters.adcNumberOfAvgs, 0, 12);
     settingParameters.adcNumberOfDigits = std::clamp((int)settingParameters.adcNumberOfDigits, 1, 4);
     Voltage.adjValue = settingParameters.SetVoltage;
@@ -241,14 +241,17 @@ void Device::LoadSetting(void)
     case 0:
         adc.ads1219->setDataRate(20);
         break;
-
     case 1:
+        adc.ads1219->setDataRate(20);
+        break;
+
+    case 2:
         adc.ads1219->setDataRate(90);
         break;
-    case 2:
+    case 3:
         adc.ads1219->setDataRate(330);
         break;
-    case 3:
+    case 4:
         adc.ads1219->setDataRate(1000);
         break;
     default:

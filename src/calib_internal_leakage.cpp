@@ -145,3 +145,58 @@ void start_current_zero_calibration(lv_event_t *e)
     lv_timer_t *t = lv_timer_create(seq_cb, 50, nullptr);
     seq_start(t, steps, sizeof(steps) / sizeof(steps[0]), nullptr);
 }
+
+// Global storage for voltage auto-zero calibration result
+static int32_t g_zero_voltage_code = 0;
+
+void start_voltage_zero_calibration(lv_event_t *e)
+{
+    // Reset the global before starting
+    g_zero_voltage_code = 0;
+
+    static const SeqStep steps[] = {
+        {"Setting voltage to 0V", 1500, 500,
+         []()
+         { PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); }, nullptr},
+        {"Reset statistics", 1000, 1500,
+         []()
+         { PowerSupply.Voltage.rawValueStats.ResetStats(); }, nullptr},
+        {"Measuring voltage at 0V", 10000, 1500,
+         nullptr, []()
+         {
+             g_zero_voltage_code = PowerSupply.Voltage.rawValueStats.Mean();
+             Serial.printf("\n Code 1 at zero voltage:%i", g_zero_voltage_code);
+         }},
+        {"Setting code for 0.0V", 1500, 500, []()
+         {
+             if (Calib_GUI.Voltage.code_1)
+                 lv_spinbox_set_value(Calib_GUI.Voltage.code_1, g_zero_voltage_code);
+         },
+         nullptr},
+        {"Finalize", 1500, 1500, []()
+         {
+             esp_task_wdt_reset();
+
+             lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
+             lv_timer_set_repeat_count(close_t, 1);
+
+             esp_task_wdt_reset();
+             Serial.printf("\nSetting code_1 spinbox to %i", g_zero_voltage_code);
+             if (Calib_GUI.Voltage.code_1) {
+                 lv_spinbox_set_value(Calib_GUI.Voltage.code_1, g_zero_voltage_code);
+                 Serial.printf("\ncode_1 spinbox updated");
+             }
+
+             esp_task_wdt_reset();
+             auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
+             cal.code_1 = g_zero_voltage_code;
+
+             esp_task_wdt_reset();
+             Serial.printf("\n Code 1 at zero voltage:%i", g_zero_voltage_code);
+         },
+         nullptr},
+    };
+
+    lv_timer_t *t = lv_timer_create(seq_cb, 50, nullptr);
+    seq_start(t, steps, sizeof(steps) / sizeof(steps[0]), nullptr);
+}

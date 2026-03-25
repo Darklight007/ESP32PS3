@@ -54,10 +54,21 @@ namespace
         }
     }
 
+    // Context markers for auto_zero_event_cb to know which calibration is active
+    static enum class AutoZeroContext { FOR_CURRENT, FOR_VOLTAGE } g_autozero_context = AutoZeroContext::FOR_CURRENT;
+
     static void autoZeroCurrent_cb(lv_event_t *)
     {
+        g_autozero_context = AutoZeroContext::FOR_CURRENT;
         myTone(NOTE_A4, 200);
-        Warning_msgbox("Auto Zero", auto_zero_event_cb);
+        Warning_msgbox("Auto Zero Current", auto_zero_event_cb);
+    }
+
+    static void autoZeroVoltage_cb(lv_event_t *)
+    {
+        g_autozero_context = AutoZeroContext::FOR_VOLTAGE;
+        myTone(NOTE_A4, 200);
+        Warning_msgbox("Auto Zero Voltage", auto_zero_event_cb);
     }
 
     // Dummy callback for error message boxes
@@ -123,7 +134,14 @@ namespace
         log_clear();
 
         // Run calibration directly on main thread (LVGL is NOT thread-safe)
-        start_current_zero_calibration(nullptr);
+        // Call the appropriate calibration function based on context
+        if (g_autozero_context == AutoZeroContext::FOR_VOLTAGE) {
+            Serial.println("Starting voltage auto-zero calibration");
+            start_voltage_zero_calibration(nullptr);
+        } else {
+            Serial.println("Starting current auto-zero calibration");
+            start_current_zero_calibration(nullptr);
+        }
 
         Serial.println("Auto-zero calibration started");
         in_progress = false;
@@ -135,7 +153,7 @@ void build_adc_calibration_window(lv_obj_t **win_holder,
                                    const char *title,
                                    AdcCalibrationControls &gui,
                                    const CalPrefill &pf,
-                                   bool show_autozero)
+                                   lv_event_cb_t autozero_cb)
 {
     if (*win_holder)
     {
@@ -206,10 +224,10 @@ void build_adc_calibration_window(lv_obj_t **win_holder,
     LVButton btnSave(cont, "Save", btn_pos.x + 62, btn_pos.y, 54, 25, nullptr, save_cb);
     LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 54, 25, nullptr, load_cb);
 
-    // Only show "Auto zeros" button for current calibration (not voltage)
-    if (show_autozero)
+    // Show "Auto zeros" button with context-specific callback
+    if (autozero_cb)
     {
-        LVButton btnAutoZeros(cont, "Auto zeros", btn_pos.x , btn_pos.y + 28, 2 * 54+62-54, 25, nullptr, autoZeroCurrent_cb);
+        LVButton btnAutoZeros(cont, "Auto zeros", btn_pos.x , btn_pos.y + 28, 2 * 54+62-54, 25, nullptr, autozero_cb);
     }
 
     // m, b, and Vin_cal notes (simple labels)
@@ -245,12 +263,12 @@ void btn_calibration_ADC_voltage_event_cb(lv_event_t *)
 {
     auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
     CalPrefill pf{cal.code_1, cal.code_2, cal.value_1, cal.value_2, "V"};
-    build_adc_calibration_window(&PowerSupply.gui.calibration.win_ADC_voltage_calibration, "ADC Voltage Calibration", Calib_GUI.Voltage, pf, false); // No autozero for voltage
+    build_adc_calibration_window(&PowerSupply.gui.calibration.win_ADC_voltage_calibration, "ADC Voltage Calibration", Calib_GUI.Voltage, pf, autoZeroVoltage_cb);
 }
 
 void btn_calibration_ADC_current_event_cb(lv_event_t *)
 {
     auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
     CalPrefill pf{cal[PowerSupply.mA_Active].code_1, cal[PowerSupply.mA_Active].code_2, cal[PowerSupply.mA_Active].value_1, cal[PowerSupply.mA_Active].value_2, "A"};
-    build_adc_calibration_window(&PowerSupply.gui.calibration.win_ADC_current_calibration, "ADC Current Calibration [A]", Calib_GUI.Current, pf, true); // Show autozero for current
+    build_adc_calibration_window(&PowerSupply.gui.calibration.win_ADC_current_calibration, "ADC Current Calibration [A]", Calib_GUI.Current, pf, autoZeroCurrent_cb);
 }
