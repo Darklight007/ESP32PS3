@@ -14,6 +14,9 @@
 extern Device PowerSupply;
 extern CalibrationGui Calib_GUI;
 
+// Global flag to prevent concurrent calibrations (defined here, declared in header)
+bool g_calibration_in_progress = false;
+
 namespace
 {
     // Forward declaration
@@ -88,9 +91,11 @@ namespace
         lv_obj_t *obj = lv_event_get_current_target(e);
         if (!obj) return;
 
-        // Prevent multiple triggers with static guard
-        static bool in_progress = false;
-        if (in_progress) return;
+        // Prevent multiple triggers - check global flag
+        if (g_calibration_in_progress) {
+            Serial.println("Auto-zero: Calibration already in progress, ignoring");
+            return;
+        }
 
         // Get button text to check which button was pressed
         const char *btn_txt = lv_msgbox_get_active_btn_text(obj);
@@ -109,7 +114,6 @@ namespace
             return;
         }
 
-        in_progress = true;
         Serial.println("Auto-zero OK pressed - starting calibration");
 
         // Check system resources first
@@ -121,10 +125,12 @@ namespace
 
         if (free_heap < 30000 || largest_block < 10000) {
             Serial.println("ERROR: System resources too low for calibration");
-            in_progress = false;
             Warning_msgbox("Error: Low Resources", error_msgbox_dummy_cb);
             return;
         }
+
+        // Set global flag - will be cleared by calibration completion
+        g_calibration_in_progress = true;
 
         // Reset watchdog before long operation
         esp_task_wdt_reset();
@@ -144,7 +150,7 @@ namespace
         }
 
         Serial.println("Auto-zero calibration started");
-        in_progress = false;
+        // NOTE: in_progress flag is cleared in calibration finalize step
     }
 } // end anonymous namespace
 

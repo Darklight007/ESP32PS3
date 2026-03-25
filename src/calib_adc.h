@@ -20,3 +20,6 @@ void build_adc_calibration_window(lv_obj_t **win_holder,
 void btn_calibration_ADC_voltage_event_cb(lv_event_t *e);
 void btn_calibration_ADC_current_event_cb(lv_event_t *e);
 
+// Global calibration state (used by calibration sequences to prevent concurrent runs)
+extern bool g_calibration_in_progress;
+

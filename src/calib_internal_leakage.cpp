@@ -1,6 +1,7 @@
 #include "calib_internal_leakage.h"
 #include "calib_log_window.h"
 #include "calib_sequencer.h"
+#include "calib_adc.h"  // For g_calibration_in_progress
 #include "device.hpp"
 #include "setting_menu.h"
 #include "esp_task_wdt.h"
@@ -84,6 +85,9 @@ void start_leakage_resistance_measurement(lv_event_t *)
 
              esp_task_wdt_reset();
              blockAll = false;
+
+             // Reset calibration flag to allow subsequent calibrations
+             g_calibration_in_progress = false;
          }},
     };
 
@@ -138,6 +142,9 @@ void start_current_zero_calibration(lv_event_t *e)
 
              esp_task_wdt_reset();
              Serial.printf("\n Code 1 at zero current:%i", g_zero_current_code);
+
+             // Reset calibration flag to allow subsequent calibrations
+             g_calibration_in_progress = false;
          },
          nullptr},
     };
@@ -193,6 +200,9 @@ void start_voltage_zero_calibration(lv_event_t *e)
 
              esp_task_wdt_reset();
              Serial.printf("\n Code 1 at zero voltage:%i", g_zero_voltage_code);
+
+             // Reset calibration flag to allow subsequent calibrations
+             g_calibration_in_progress = false;
          },
          nullptr},
     };

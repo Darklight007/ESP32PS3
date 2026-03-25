@@ -758,7 +758,14 @@ static void event_cb(lv_event_t *e)
 
         if (is_ok)
         {
+            // Prevent multiple triggers - check global flag
+            if (g_calibration_in_progress) {
+                Serial.println("Leakage resistance: Calibration already in progress, ignoring");
+                return;
+            }
+
             blockAll = true;
+            g_calibration_in_progress = true;  // Set flag before starting async calibration
             esp_task_wdt_reset();  // Reset watchdog immediately
             vTaskDelay(pdMS_TO_TICKS(100));  // Small delay to stabilize
             create_log_window();
