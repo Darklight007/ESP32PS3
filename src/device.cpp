@@ -225,10 +225,11 @@ void Device::LoadSetting(void)
 
     static std::map<int, const char *> ADC_SPS;
 
-    ADC_SPS[0] = "  20";
-    ADC_SPS[1] = "  90";
-    ADC_SPS[2] = " 330";
-    ADC_SPS[3] = "1000";
+    ADC_SPS[0] = " ~10";
+    ADC_SPS[1] = " ~20";
+    ADC_SPS[2] = " ~70";
+    ADC_SPS[3] = "~200";
+    ADC_SPS[4] = "~500";
 
     Serial.printf("\nadcRate:           %sSPS", ADC_SPS[settingParameters.adcRate]);
     Serial.printf("\nadcNumberOfAvgs:   %f", pow(2, settingParameters.adcNumberOfAvgs));
@@ -652,10 +653,10 @@ void Device::toggle_measure_unit()
 void Device::restoreAdcRateFromFUN()
 {
     // Restore ADC rate from saved value when exiting FUN mode
-    if (settingParameters.adcRateSavedForFUN <= 3)
+    if (settingParameters.adcRateSavedForFUN <= 4)
     {
         settingParameters.adcRate = settingParameters.adcRateSavedForFUN;
-        const int rates[] = {20, 90, 330, 1000};
+        const int rates[] = {20, 20, 90, 330, 1000};
         adc.ads1219->setDataRate(rates[settingParameters.adcRateSavedForFUN]);
 
         // Clear the saved value to prevent accidental reuse
@@ -669,22 +670,23 @@ void Device::restoreAdcRateFromFUN()
 void Device::adjustAdcTaskPriority()
 {
     // Adjust Task_ADC priority based on ADC sample rate
-    // adcRate: 0=20 SPS, 1=90 SPS, 2=330 SPS, 3=1000 SPS
+    // adcRate: 0=20 SPS, 1=20 SPS, 2=90 SPS, 3=330 SPS, 4=1000 SPS
 
     UBaseType_t newPriority;
 
     switch (settingParameters.adcRate)
     {
-        case 0:  // 20 SPS - slow, low priority
-        case 1:  // 90 SPS - slow, low priority
+        case 0:  // 20 SPS - very slow, low priority (low noise mode)
+        case 1:  // 20 SPS - very slow, low priority
+        case 2:  // 90 SPS - slow, low priority
             newPriority = 1;
             break;
 
-        case 2:  // 330 SPS - fast, higher priority
+        case 3:  // 330 SPS - fast, higher priority
             newPriority = 1;
             break;
 
-        case 3:  // 1000 SPS - very fast, highest priority
+        case 4:  // 1000 SPS - very fast, highest priority
             newPriority = 2;
             break;
 

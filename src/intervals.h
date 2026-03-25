@@ -23,3 +23,4 @@ void MemoryMonitorInterval(unsigned long interval);    // New: Heap and stack mo
 void RecordingPlaybackInterval();                      // New: Voltage recording and playback
 void HistogramChartRefreshInterval(unsigned long interval);  // Refresh histogram chart (Core 1 only)
 void GraphChartRefreshInterval(unsigned long interval);      // Refresh graph chart (Core 1 only)
+void CustomFPSMonitor();                                     // Custom FPS-only monitor

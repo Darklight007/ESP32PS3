@@ -417,3 +417,41 @@ void GraphChartRefreshInterval(unsigned long interval)
                  } },
              interval, timer_);
 }
+
+// Custom FPS-only monitor (replaces LVGL's built-in CPU+FPS monitor)
+void CustomFPSMonitor()
+{
+    static lv_obj_t *fps_label = nullptr;
+    static unsigned long last_time = 0;
+    static unsigned long frame_count = 0;
+    static unsigned long elaps_sum = 0;
+
+    // Create label on first call
+    if (fps_label == nullptr)
+    {
+        fps_label = lv_label_create(lv_scr_act());
+        lv_obj_set_style_bg_opa(fps_label, LV_OPA_50, 0);
+        lv_obj_set_style_bg_color(fps_label, lv_color_black(), 0);
+        lv_obj_set_style_text_color(fps_label, lv_color_white(), 0);
+        lv_obj_set_style_pad_all(fps_label, 3, 0);
+        lv_obj_align(fps_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_label_set_text(fps_label, "-- FPS");
+        last_time = millis();
+    }
+
+    // Track frame rendering
+    frame_count++;
+    unsigned long now = millis();
+    unsigned long elaps = now - last_time;
+    elaps_sum += elaps;
+    last_time = now;
+
+    // Update display every ~500ms
+    if (elaps_sum >= 500)
+    {
+        uint32_t fps = (frame_count * 1000) / elaps_sum;
+        lv_label_set_text_fmt(fps_label, "%lu FPS", fps);
+        frame_count = 0;
+        elaps_sum = 0;
+    }
+}

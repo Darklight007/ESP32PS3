@@ -215,9 +215,10 @@ namespace
         auto *slider = lv_event_get_target(e);
         uint8_t v = lv_slider_get_value(slider);
         static std::map<int, const char *> ADC_SPS{
-            {0, "  20"}, {1, "  90"}, {2, " 330"}, {3, "1000"}};
+            {0, " ~10"}, {1, " ~20"}, {2, " ~70"}, {3, "~200"}, {4, "~500"}};
+        const int rates[] = {20, 20, 90, 330, 1000};
         lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), ADC_SPS.at(v));
-        PowerSupply.adc.ads1219->setDataRate(atoi(ADC_SPS.at(v)));
+        PowerSupply.adc.ads1219->setDataRate(rates[v]);
         PowerSupply.settingParameters.adcRate = v;
         PowerSupply.adjustAdcTaskPriority();  // Adjust task priority based on new rate
         PowerSupply.ResetStats();
@@ -610,7 +611,7 @@ void SettingMenu(lv_obj_t *parent)
     // Measure
     lv_obj_t *sub_measure = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_measure);
-    PowerSupply.gui.slider_adcRate = create_slider(section, nullptr, "ADC SPS", 0, 3, PowerSupply.settingParameters.adcRate, slider_adcRate_event_cb, LV_EVENT_VALUE_CHANGED);
+    PowerSupply.gui.slider_adcRate = create_slider(section, nullptr, "ADC SPS", 0, 4, PowerSupply.settingParameters.adcRate, slider_adcRate_event_cb, LV_EVENT_VALUE_CHANGED);
     PowerSupply.gui.slider_Avgs = create_slider(section, nullptr, "ADC # of Avgs", 0, (int)std::log2(MAX_NO_OF_AVG), PowerSupply.settingParameters.adcNumberOfAvgs, slider_adcAVG_event_cb, LV_EVENT_VALUE_CHANGED);
     create_slider(section, nullptr, "Number of Digits", 1, 4, PowerSupply.settingParameters.adcNumberOfDigits, slider_decimalPoints_event_cb, LV_EVENT_VALUE_CHANGED);
     create_switch_(section, nullptr, "Auto Bar-Graph", false, switch_buzzer_event_cb, LV_EVENT_VALUE_CHANGED, PowerSupply.gui.setting_menu);

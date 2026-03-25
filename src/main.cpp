@@ -161,6 +161,7 @@ void loop()
   bool encoderActive = (millis() - encoderTimeStamp) < 500; // 500ms idle threshold
 
   LvglUpdatesInterval(0, true); // Force update for immediate response
+  CustomFPSMonitor();           // Track FPS only (no CPU usage)
   StatusBarUpdateInterval(300);
 
   if (1)
