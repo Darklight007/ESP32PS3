@@ -189,11 +189,11 @@ void loop()
   else
     statisticUpdateInterval(333); // Normal update when idle
 
-    // Adaptive VCCC update: faster when encoder active
+    // Adaptive VCCC update: slower when encoder active to reduce CPU load
     if (encoderActive)
       VCCCInterval(100); // Slow update during encoder activity
     else
-      VCCCInterval(60); // Normal update when idle
+      VCCCInterval(60); // Fast update when idle
 
 
   // FFTUpdateInterval(1000);
