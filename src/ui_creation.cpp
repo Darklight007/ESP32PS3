@@ -712,11 +712,27 @@ void Utility_tabview(lv_obj_t *parent)
         if (code == LV_EVENT_CLICKED)
         {
             PowerSupply.funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
+
+            // Update table and chart with loaded data
             for (int i = 0; i < RECORDING_TABLE_SIZE; i++)
             {
                 lv_table_set_cell_value_fmt(Utility_objs.table_point_list, i, 1, "%+06.4f", PowerSupply.funGenMem.table_points[i][0]);
+
+                // Update chart with loaded data (normalized 0-1 values * 100)
+                if (Utility_objs.record_chart && Utility_objs.record_chart_series)
+                {
+                    lv_chart_set_value_by_id(Utility_objs.record_chart, Utility_objs.record_chart_series,
+                                            i, (int32_t)(PowerSupply.funGenMem.table_points[i][0] * 100));
+                }
             }
+
             lv_obj_invalidate(Utility_objs.table_point_list);
+
+            // Refresh the chart to show loaded data
+            if (Utility_objs.record_chart)
+            {
+                lv_chart_refresh(Utility_objs.record_chart);
+            }
         }
     };
 
