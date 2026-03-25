@@ -665,9 +665,26 @@ void btn_function_gen_event_cb(lv_event_t *e)
 
         // Save current ADC rate and set to 1000 SPS for function generator
         PowerSupply.settingParameters.adcRateSavedForFUN = PowerSupply.settingParameters.adcRate;
-        PowerSupply.settingParameters.adcRate = 3;  // 3 = 1000 SPS
+        PowerSupply.settingParameters.adcRate = 4;  // 4 = 1000 SPS (matches the actual hardware setting)
         PowerSupply.adc.ads1219->setDataRate(1000);
         PowerSupply.adjustAdcTaskPriority();  // Adjust to priority 3 for 1000 SPS
+
+        // Update UI slider to reflect new SPS setting
+        if (PowerSupply.gui.slider_adcRate != nullptr)
+        {
+            // slider_adcRate is the container, the actual slider is child 2
+            lv_obj_t *slider = lv_obj_get_child(PowerSupply.gui.slider_adcRate, 2);
+            if (slider != nullptr)
+            {
+                lv_slider_set_value(slider, 4, LV_ANIM_OFF);
+            }
+            // Update the value label (child 1)
+            lv_obj_t *val_label = lv_obj_get_child(PowerSupply.gui.slider_adcRate, 1);
+            if (val_label != nullptr)
+            {
+                lv_label_set_text(val_label, "~500");
+            }
+        }
     }
     else
     {
@@ -676,6 +693,25 @@ void btn_function_gen_event_cb(lv_event_t *e)
 
         // Restore previous ADC rate
         PowerSupply.restoreAdcRateFromFUN();
+
+        // Update UI slider to reflect restored SPS setting
+        if (PowerSupply.gui.slider_adcRate != nullptr)
+        {
+            // slider_adcRate is the container, the actual slider is child 2
+            lv_obj_t *slider = lv_obj_get_child(PowerSupply.gui.slider_adcRate, 2);
+            if (slider != nullptr)
+            {
+                lv_slider_set_value(slider, PowerSupply.settingParameters.adcRate, LV_ANIM_OFF);
+            }
+            // Update the value label (child 1)
+            static std::map<int, const char *> ADC_SPS{
+                {0, " ~10"}, {1, " ~20"}, {2, " ~70"}, {3, "~200"}, {4, "~500"}};
+            lv_obj_t *val_label = lv_obj_get_child(PowerSupply.gui.slider_adcRate, 1);
+            if (val_label != nullptr && PowerSupply.settingParameters.adcRate <= 4)
+            {
+                lv_label_set_text(val_label, ADC_SPS.at(PowerSupply.settingParameters.adcRate));
+            }
+        }
     }
 
     remove_selected_spinbox();

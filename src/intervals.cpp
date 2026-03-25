@@ -429,12 +429,13 @@ void CustomFPSMonitor()
     // Create label on first call
     if (fps_label == nullptr)
     {
-        fps_label = lv_label_create(lv_scr_act());
+        // Create on layer_top to ensure it's always visible above all content
+        fps_label = lv_label_create(lv_layer_top());
         lv_obj_set_style_bg_opa(fps_label, LV_OPA_50, 0);
         lv_obj_set_style_bg_color(fps_label, lv_color_black(), 0);
         lv_obj_set_style_text_color(fps_label, lv_color_white(), 0);
         lv_obj_set_style_pad_all(fps_label, 3, 0);
-        lv_obj_align(fps_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_obj_align(fps_label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
         lv_label_set_text(fps_label, "-- FPS");
         last_time = millis();
     }
