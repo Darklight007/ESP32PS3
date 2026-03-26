@@ -495,6 +495,7 @@ public:
     FunGen funGenMem;
     FunGen funGenArbitraryMem;
     Recording recordingMem;
+    bool funGenMemDirty = false;  // Track if FunGen settings have changed since last save
 
     // Runtime tracking variables (features #5 and #6)
     unsigned long powerOnStartTime = 0;      // millis() when output turned ON

@@ -111,6 +111,7 @@ static void spinbox_change_event_cb(lv_event_t *e)
         int row = (int)Utility_objs.table_point_list->user_data;
         lv_table_set_cell_value_fmt(Utility_objs.table_point_list, row, 1, "%+06.4f", value);
         PowerSupply.funGenMem.table_points[row][0] = value;
+        PowerSupply.funGenMemDirty = true;  // Mark settings as changed
     }
 }
 
@@ -774,6 +775,7 @@ lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_
         if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
         {
             PowerSupply.funGenMem.table_length = lv_spinbox_get_value(Utility_objs.table_length_spinbox);
+            PowerSupply.funGenMemDirty = true;  // Mark settings as changed
         }
     };
     lv_obj_add_event_cb(Utility_objs.table_length_spinbox, table_length_change_cb, LV_EVENT_VALUE_CHANGED, NULL);

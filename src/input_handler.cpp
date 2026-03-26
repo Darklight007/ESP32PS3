@@ -648,7 +648,8 @@ void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_l
         PowerSupply.funGenMem.frequency = lv_spinbox_get_value(Utility_objs.fun.Frequency) / 1000.0;
         PowerSupply.funGenMem.offset = lv_spinbox_get_value(Utility_objs.fun.Offset) / 1000.0;
         PowerSupply.funGenMem.dutyCycle = lv_spinbox_get_value(Utility_objs.fun.Duty) / 10000.0;
-        // Note: FGen settings saved when leaving tab (see ui_helpers.cpp)
+        PowerSupply.funGenMemDirty = true;  // Mark settings as changed
+        // Note: FGen settings saved when leaving tab only if changed (see tabs.cpp)
     }
 }
 

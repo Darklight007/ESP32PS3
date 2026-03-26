@@ -65,10 +65,11 @@ int Tabs::getCurrentPage()
 }
 void Tabs::setCurrentPage(int n)
 {
-    // Save FGen settings when leaving Utility page (page 3)
-    if (getCurrentPage() == 3 && n != 3)
+    // Save FGen settings when leaving Utility page (page 3) - only if changed
+    if (getCurrentPage() == 3 && n != 3 && PowerSupply.funGenMemDirty)
     {
         PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
+        PowerSupply.funGenMemDirty = false;  // Clear dirty flag after save
     }
     lv_tabview_set_act(Tabs::tabview, n, LV_ANIM_ON);
 }
@@ -78,9 +79,12 @@ void Tabs::nextPage()
     int current = getCurrentPage();
     if (current < 4)
     {
-        // Save FGen settings when leaving Utility page (page 3)
-        if (current == 3)
+        // Save FGen settings when leaving Utility page (page 3) - only if changed
+        if (current == 3 && PowerSupply.funGenMemDirty)
+        {
             PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
+            PowerSupply.funGenMemDirty = false;  // Clear dirty flag after save
+        }
         lv_tabview_set_act(Tabs::tabview, current + 1, LV_ANIM_ON);
     }
     else
@@ -92,9 +96,12 @@ void Tabs::previousPage()
     int current = getCurrentPage();
     if (current > 0)
     {
-        // Save FGen settings when leaving Utility page (page 3)
-        if (current == 3)
+        // Save FGen settings when leaving Utility page (page 3) - only if changed
+        if (current == 3 && PowerSupply.funGenMemDirty)
+        {
             PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
+            PowerSupply.funGenMemDirty = false;  // Clear dirty flag after save
+        }
         lv_tabview_set_act(Tabs::tabview, current - 1, LV_ANIM_ON);
     }
     else
