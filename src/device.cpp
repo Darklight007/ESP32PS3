@@ -486,13 +486,13 @@ void Device::readVoltage()
         //     return;
         // } // throw away first 2 readings after changing rate
         // throw_away = 0;
-
-        constexpr float adcRateCompensation[4] = {
-            1.00000f,            // 20 SPS
-            32.0000f / 31.9985f, // 90 SPS
-            32.0000f / 31.9945f, // 330 SPS
-            32.0000f / 31.9882f  // 1000 SPS
-        };
+  constexpr float adcRateCompensation[5] = {
+      1.00000f,            // Index 0: 10 SPS
+      1.00000f,            // Index 1: 20 SPS
+      32.0000f / 31.9985f, // Index 2: 90 SPS
+      32.0000f / 31.9945f, // Index 3: 330 SPS
+      32.0000f / 31.9882f  // Index 4: 1000 SPS
+  };
 
         Voltage.rawValue = adc.readConversion();
         adcDataReady = false;

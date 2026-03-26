@@ -39,6 +39,10 @@ void saveMemory(lv_obj_t *btn)
     lv_label_set_text_fmt(labelV, "%+08.4fV", scaleVoltage(mem.memory[memAddress].voltage));
     lv_label_set_text_fmt(labelI, "%+08.4fA", scaleCurrent(mem.memory[memAddress].current));
 
+    // Force display update immediately
+    lv_obj_invalidate(labelV);
+    lv_obj_invalidate(labelI);
+
     Serial.printf("\n ****** Saved : %+08.4fV", scaleVoltage(mem.memory[memAddress].voltage));
 }
 
