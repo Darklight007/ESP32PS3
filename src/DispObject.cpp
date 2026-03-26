@@ -169,8 +169,14 @@ void DispObjects::SetUpdate(int value)
     // LV_LOG_USER("LOG: %s", "Beep!");
     // lv_disp_enable_invalidation( lv_disp_get_default(), false);
     // if (!lvglIsBusy)
-    lv_label_set_text_fmt(label_setValue, "%+08.4f%s", (adjValue - adjOffset) / adjFactor, lv_label_get_text(label_unit));
-    lv_obj_set_width(Bar.bar_adjValue, ((adjValue - adjOffset)) / maxValue * lv_bar_get_max_value(Bar.bar));
+
+    // Null pointer checks to prevent crashes during calibration or when UI not initialized
+    if (label_setValue && label_unit) {
+        lv_label_set_text_fmt(label_setValue, "%+08.4f%s", (adjValue - adjOffset) / adjFactor, lv_label_get_text(label_unit));
+    }
+    if (Bar.bar_adjValue && Bar.bar) {
+        lv_obj_set_width(Bar.bar_adjValue, ((adjValue - adjOffset)) / maxValue * lv_bar_get_max_value(Bar.bar));
+    }
     // lv_obj_invalidate(label_setValue);
 
     // Serial.printf("\nmaxValue %15.5f  ",maxValue);
