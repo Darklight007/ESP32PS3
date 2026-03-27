@@ -732,6 +732,12 @@ void Device::VCCCStatusUpdate(void)
     if (lastCCCVStatus == currentStatus)
         return;
 
+    // Beep on CC/CV transitions (skip on first check after power on)
+    if (lastCCCVStatus != -1 && settingParameters.beeperOnPowerChange)
+    {
+        myTone(currentStatus == false ? NOTE_A3 : NOTE_A5, 100);  // Lower tone for CC, higher for VC
+    }
+
     if (currentStatus == false)
         setStatus(DEVICE::CC);
     else
