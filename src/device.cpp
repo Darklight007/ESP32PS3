@@ -1055,25 +1055,36 @@ void Device::FlushMeasures(void)
         Current.displayUpdate();
         Power.displayUpdate();
 
-        // Over-range indicator for mA mode (>= 3.900 mA) - blink like multimeter OL
-        if (mA_Active && Current.measured.Mean() >= 3.900)
+        // OPTIMIZATION: Over-range indicator - only execute when actually needed
+        // Check mA_Active first to avoid unnecessary Mean() call and comparisons
+        if (mA_Active)
         {
-            static bool blinkState = false;
-            static unsigned long lastBlink = 0;
-            if (millis() - lastBlink >= 250)  // 4Hz blink
+            static bool wasOverRange = false;
+            bool isOverRange = Current.measured.Mean() >= 3.900;
+
+            if (isOverRange)
             {
-                blinkState = !blinkState;
-                lastBlink = millis();
+                // Over-range blink logic (>= 3.900 mA) - blink like multimeter OL
+                static bool blinkState = false;
+                static unsigned long lastBlink = 0;
+                if (millis() - lastBlink >= 250)  // 4Hz blink
+                {
+                    blinkState = !blinkState;
+                    lastBlink = millis();
+                }
+                // OPTIMIZATION: Only update flag if state changed
+                if (blinkState)
+                    lv_obj_add_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
+                else
+                    lv_obj_clear_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
+                wasOverRange = true;
             }
-            if (blinkState)
-                lv_obj_add_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
-            else
+            else if (wasOverRange)
+            {
+                // OPTIMIZATION: Only clear flag once when exiting over-range
                 lv_obj_clear_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
-        }
-        else
-        {
-            // Ensure visible when not over-range
-            lv_obj_clear_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
+                wasOverRange = false;
+            }
         }
 
         Voltage.changed = false;
