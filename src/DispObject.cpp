@@ -23,20 +23,22 @@ void DispObjects::measureUpdate(double value)
     rawBarValue = value;  // CRITICAL: Bar uses raw value
     Bar.changed = true;
 
-    // Fast path: skip statistics if not power
+    // Fast path: skip statistics if power (calculated from V×I, not measured directly)
     bool isPower = (label_unit && lv_label_get_text(label_unit)[0] == 'W');
     if (!isPower) {
         StatisticsUpdate(value);
+    }
 
-        if (++sampleCountSinceDisplay >= measured.NofAvgs) {
-            displayReady = true;
-            sampleCountSinceDisplay = 0;
-        }
+    // Update display ready flag for all measurements (V, I, and P) every N samples
+    if (++sampleCountSinceDisplay >= (measured.NofAvgs)) {
+        displayReady = true;
+        sampleCountSinceDisplay = 0;
+    }
 
-        if (oldValue != value) {
-            oldValue = value;
-            changed = true;
-        }
+    // Always set changed flag for all measurements (including Power)
+    if (oldValue != value) {
+        oldValue = value;
+        changed = true;
     }
 }
 
@@ -88,42 +90,45 @@ void DispObjects::statUpdate(void)
 
 void DispObjects::barUpdate(void)
 {
-    // Always update bars for maximum refresh rate (not limited by ADC rate)
-    if (!Bar.bar) return;  // Add null check for Power measurement
+    // ULTRA-FAST PATH: Maximum speed bar update with direct memory manipulation
+    // Every nanosecond counts in the Core 0 ADC critical path!
 
-    // Bars use rawBarValue which is updated EVERY ADC sample (not averaged)
-    // This is set in measureUpdate() with the raw instantaneous value
+    // Fast null check - branch prediction friendly (usually true)
+    if (__builtin_expect((!Bar.bar || !Bar.curValuePtr), 0)) return;
 
-    // Pre-compute scale factors (cached - only recalc if bar size changes)
+    // Pre-compute scale factors (cached - only on first call)
     static lv_coord_t cachedBarMax = 0;
-    static lv_coord_t cachedBarWidth = 0;
     static lv_coord_t cachedBarX = 0;
-    static double cachedScaleFactor = 0;
+    static float cachedBarScaleFactor = 0.0f;      // float is faster than double on ESP32
+    static float cachedMarkerScaleFactor = 0.0f;   // Pre-multiplied for markers
 
-    lv_coord_t barMax = lv_bar_get_max_value(Bar.bar);
-    if (barMax != cachedBarMax || cachedScaleFactor == 0) {
-        cachedBarMax = barMax;
-        cachedBarWidth = lv_obj_get_width(Bar.bar);
+    // Initialization path (taken once)
+    if (__builtin_expect((cachedBarMax == 0), 0)) {
+        cachedBarMax = lv_bar_get_max_value(Bar.bar);
+        lv_coord_t cachedBarWidth = lv_obj_get_width(Bar.bar);
         cachedBarX = lv_obj_get_x(Bar.bar);
-        cachedScaleFactor = adjFactor / maxValue;
+        cachedBarScaleFactor = (adjFactor / maxValue) * cachedBarMax;     // Pre-multiply
+        cachedMarkerScaleFactor = (adjFactor / maxValue) * cachedBarWidth; // Pre-multiply
     }
 
-    // Compute bar value before critical section
-    int32_t newBarValue = rawBarValue * cachedScaleFactor * cachedBarMax;
-    int newMaxX = cachedBarX + int(measured.absMax * cachedScaleFactor * cachedBarWidth) - 3;
-    int newMinX = cachedBarX + int(measured.absMin * cachedScaleFactor * cachedBarWidth) - 3;
+    // DIRECT MEMORY WRITE: Bar value (no function calls, no validation)
+    int32_t newBarValue = static_cast<int32_t>(rawBarValue * cachedBarScaleFactor);
 
-    // Update bar value - LVGL is smart enough to skip if value unchanged
-    static int32_t lastBarValue = -999999;
-    if (newBarValue != lastBarValue) {
-        lv_bar_set_value(Bar.bar, newBarValue, LV_ANIM_OFF);
-        lv_obj_invalidate(Bar.bar);
-        lastBarValue = newBarValue;
+    if (*Bar.curValuePtr != newBarValue) {
+        *Bar.curValuePtr = newBarValue;  // Direct write to lv_bar_t.cur_value
+        lv_obj_invalidate(Bar.bar);      // Mark for redraw (TODO: can we bypass this too?)
     }
 
-    // Always update max/min markers (remove old value check for maximum refresh)
-    lv_obj_set_x(Bar.bar_maxMarker, newMaxX);
-    lv_obj_set_x(Bar.bar_minMarker, newMinX);
+    // DIRECT MEMORY WRITE: Marker positions (bypass lv_obj_set_x completely)
+    // Writing directly to coords.x1 - MAXIMUM SPEED!
+    if (__builtin_expect((Bar.maxMarkerXPtr && Bar.minMarkerXPtr), 1)) {
+        *Bar.maxMarkerXPtr = cachedBarX + static_cast<lv_coord_t>(measured.absMax * cachedMarkerScaleFactor) - 3;
+        *Bar.minMarkerXPtr = cachedBarX + static_cast<lv_coord_t>(measured.absMin * cachedMarkerScaleFactor) - 3;
+
+        // Mark markers as dirty (faster than full lv_obj_set_x which does layout recalc)
+        lv_obj_invalidate(Bar.bar_maxMarker);
+        lv_obj_invalidate(Bar.bar_minMarker);
+    }
 
     Bar.changed = false;
 }
@@ -616,4 +621,9 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     lv_obj_add_style(Bar.bar_maxMarker, &style_barLabelMaxMarker, LV_STATE_DEFAULT);
 
     lv_obj_align(Bar.bar_maxMarker, 0, -1, 70 + 4);
+
+    // SPEED OPTIMIZATION: Direct pointers to marker X coordinates
+    // Bypasses lv_obj_set_x() function call overhead for maximum performance
+    Bar.minMarkerXPtr = &(Bar.bar_minMarker->coords.x1);
+    Bar.maxMarkerXPtr = &(Bar.bar_maxMarker->coords.x1);
 }

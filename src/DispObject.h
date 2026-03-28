@@ -558,7 +558,9 @@ struct _bar
     bool changed = true;
     double oldValue;
     double scaleFactor;
-    int32_t *curValuePtr; // = &((lv_bar_t *)PowerSupply.Voltage.Bar.bar)->cur_value;
+    int32_t *curValuePtr;      // Direct pointer to lv_bar_t.cur_value
+    lv_coord_t *minMarkerXPtr; // Direct pointer to marker X coordinate
+    lv_coord_t *maxMarkerXPtr; // Direct pointer to marker X coordinate
 };
 
 struct _statisticsSmallLabels
