@@ -71,8 +71,10 @@ void DispObjects::displayUpdate(void)
     double threshold = (maxValue > 10.0) ? 0.0001 : 0.00001;
     if (std::abs(mean_ - oldValue) > threshold)
     {
-        // Display mean of measured data
-        lv_label_set_text_fmt(label_measureValue, restrict, mean_);
+        // OPTIMIZATION: Pre-format string then use lv_label_set_text (faster than lv_label_set_text_fmt)
+        // Avoids LVGL's internal printf parsing overhead
+        snprintf(textBuffer, sizeof(textBuffer), restrict, mean_);
+        lv_label_set_text(label_measureValue, textBuffer);
         oldValue = mean_;
     }
 }
