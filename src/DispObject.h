@@ -626,7 +626,6 @@ public:
     bool displayReady{false};              // Flag when enough samples collected
 
     const char *restrict {"%+07.3f"};
-    char textBuffer[16];                   // OPTIMIZATION: Pre-allocated buffer for text formatting
     const lv_font_t *font_measure{&lv_font_montserrat_42}; // dseg_b_48
     const lv_font_t *font_set{&graph_R_16};                //&unscii_16b4 Tauri_R_20
     const lv_font_t *font_unit{&Tauri_R_62};

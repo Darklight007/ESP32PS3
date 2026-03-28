@@ -63,10 +63,8 @@ void DispObjects::displayUpdate(void)
     mean_ = measured.Mean();
     if (oldValue != mean_ && !blockAll)
     {
-        // OPTIMIZATION: Pre-format string then use lv_label_set_text (faster than lv_label_set_text_fmt)
-        // Avoids LVGL's internal printf parsing overhead
-        snprintf(textBuffer, sizeof(textBuffer), restrict, mean_);
-        lv_label_set_text(label_measureValue, textBuffer);
+        // Display mean of measured data
+        lv_label_set_text_fmt(label_measureValue, restrict, mean_);
         oldValue = mean_;
     }
 }
