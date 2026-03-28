@@ -59,17 +59,9 @@ void DispObjects::displayUpdate(void)
 
     displayReady = false;
 
-    // OPTIMIZATION: Check blockAll once at entry
-    if (blockAll)
-        return;
-
-    double mean_ = measured.Mean();  // Now cached, no division overhead
-
-    // OPTIMIZATION: Dead-band filtering - skip update if change is insignificant
-    // Threshold: 0.0001 for voltage (0.1mV), 0.00001 for current (0.01mA)
-    // Reduces unnecessary string formatting and LVGL updates by ~80%
-    double threshold = (maxValue > 10.0) ? 0.0001 : 0.00001;
-    if (std::abs(mean_ - oldValue) > threshold)
+    static double mean_;
+    mean_ = measured.Mean();
+    if (oldValue != mean_ && !blockAll)
     {
         // OPTIMIZATION: Pre-format string then use lv_label_set_text (faster than lv_label_set_text_fmt)
         // Avoids LVGL's internal printf parsing overhead
