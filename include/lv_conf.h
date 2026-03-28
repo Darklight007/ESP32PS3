@@ -78,7 +78,7 @@
  *====================*/
 
 /*Default display refresh period. LVG will redraw changed areas with this period time*/
-#define LV_DISP_DEF_REFR_PERIOD 10      /*[ms] - reduced from 30 for smoother UI (~50 FPS)*/
+#define LV_DISP_DEF_REFR_PERIOD 33      /*[ms] - reduced from 30 for smoother UI (~50 FPS)*/
 
 /*Input device read period in milliseconds*/
 #define LV_INDEV_DEF_READ_PERIOD 33     /*[ms] - reduced from 30 for faster input response*/

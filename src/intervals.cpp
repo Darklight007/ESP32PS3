@@ -172,7 +172,8 @@ void LvglUpdatesInterval(unsigned long interval, bool forceUpdate)
                     // lv_obj_invalidate( PowerSupply.Voltage.Bar.bar);
 
                      lvglIsBusy = 1;
-                     lv_timer_handler();
+                    //  lv_timer_handler();
+                     lv_refr_now(NULL);
                      lvglIsBusy = 0;
                      lvglIsBlocked = 0;
                      return;

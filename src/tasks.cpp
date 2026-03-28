@@ -8,8 +8,8 @@
 // Task timing constants
 namespace TaskTiming
 {
-    constexpr unsigned long BARGRAPH_DELAY_OFF_PAGE_MS = 50;
-    constexpr unsigned long BARGRAPH_DELAY_ACTIVE_MS = 10; // Fast updates
+    constexpr unsigned long BARGRAPH_DELAY_OFF_PAGE_MS = 500;
+    constexpr unsigned long BARGRAPH_DELAY_ACTIVE_MS = 1; // Fast updates
     constexpr unsigned long DAC_UPDATE_INTERVAL_NORMAL_MS = 100;
     constexpr unsigned long DAC_UPDATE_INTERVAL_FUNGEN_MS = 5;   // Back to 5ms - 0ms was too fast
     constexpr unsigned long KEY_CHECK_INTERVAL_ULTRAFAST_MS = 2; // Ultra-fast when actively typing
@@ -76,8 +76,8 @@ void Task_BarGraph(void *pvParameters)
             PowerSupply.Voltage.barUpdate();
             PowerSupply.Current.barUpdate();
 
-            lv_obj_invalidate(PowerSupply.Current.Bar.bar);
-            lv_obj_invalidate(PowerSupply.Voltage.Bar.bar);
+            // lv_obj_invalidate(PowerSupply.Current.Bar.bar);
+            // lv_obj_invalidate(PowerSupply.Voltage.Bar.bar);
             continue;
         }
 

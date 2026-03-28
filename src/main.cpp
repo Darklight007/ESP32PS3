@@ -141,14 +141,14 @@ void loop()
   //   PowerSupply.Current.barUpdate();
 
   //   // Render bars immediately (throttled to ~60 FPS to avoid DMA issues)
-  //   static unsigned long lastBarRender = 0;
-  //   if (millis() - lastBarRender >= 16)
-  //   {
-  //     lvglIsBusy = true;
-  //     lv_timer_handler();
-  //     lvglIsBusy = false;
-  //     lastBarRender = millis();
-  //   }
+    static unsigned long lastBarRender = 0;
+    if (millis() - lastBarRender >= 100)
+    {
+      // lvglIsBusy = true;
+      lv_timer_handler();
+      // lvglIsBusy = false;
+      lastBarRender = millis();
+    }
   // }
 
   // FUN Only mode: skip most processing for cleanest waveforms
@@ -179,9 +179,9 @@ void loop()
 
   // Flush measures - Slow when encoder active for immediate visual feedback
   if (encoderActive)
-    FlushMeasuresInterval(300); // Very xxxx update during encoder activity
+    FlushMeasuresInterval(500); // Very xxxx update during encoder activity
   else
-    FlushMeasuresInterval(100); // Slow update even when idle for responsive display
+    FlushMeasuresInterval(100*PowerSupply.Voltage.measured.NofAvgs); // Slow update even when idle for responsive display
 
   // Adaptive statistics update: Slow when encoder active for responsive display
   if (encoderActive)
@@ -214,7 +214,7 @@ void loop()
   //  Serial.printf("\nADC_loopCounter %l",PowerSupply.adc.ADC_loopCounter);
   //  Serial.printf("\n Current utiltap%i", lv_tabview_get_tab_act(tabview_utility));
 
-  // trackLoopExecution(__func__);
+  trackLoopExecution(__func__);
 }
 
 /*
