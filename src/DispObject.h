@@ -289,6 +289,8 @@ public:
     uint64_t windowSizeIndex_{0};
     double sum_{0.0};
     double sum_sq_{0.0}; // Running sum of squares for RMS
+    mutable double cachedMean_{0.0}; // OPTIMIZATION: Cached mean to avoid repeated divisions
+    mutable bool meanDirty_{true};   // Flag to track if mean needs recalculation
 
     // Constructor with explicit keyword to prevent implicit conversions
     explicit MovingStatistics(uint16_t n = 64)
@@ -329,6 +331,9 @@ public:
             windowSizeIndex_++;
         }
 
+        // OPTIMIZATION: Mark mean as dirty so it will be recalculated on next access
+        meanDirty_ = true;
+
         return *this;
     }
 
@@ -346,10 +351,14 @@ public:
     }
 
     // Calculate the mean of the samples
+    // OPTIMIZED: Uses cached value to avoid repeated divisions (10-40 CPU cycles saved per call)
     double Mean() const
     {
-        // size_t currentSize = std::min(windowSizeIndex_, static_cast<uint64_t>(NofAvgs));
-        return sum_ / std::max(uint64_t(1), std::min(windowSizeIndex_, uint64_t(NofAvgs)));
+        if (meanDirty_) {
+            cachedMean_ = sum_ / std::max(uint64_t(1), std::min(windowSizeIndex_, uint64_t(NofAvgs)));
+            meanDirty_ = false;
+        }
+        return cachedMean_;
     }
 
     // Get the sum of the samples
@@ -401,6 +410,8 @@ public:
         windowSizeIndex_ = 0;
         absMin = +std::numeric_limits<double>::infinity();
         absMax = -std::numeric_limits<double>::infinity();
+        cachedMean_ = 0.0;
+        meanDirty_ = true;  // OPTIMIZATION: Mark mean for recalculation
     }
 };
 
