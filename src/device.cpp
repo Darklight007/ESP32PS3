@@ -59,6 +59,20 @@ void Device::calibrate(void)
 
 void Device::calibrationUpdate(void)
 {
+    // CRITICAL: Validate array bounds before accessing calibration data
+    if (CalBank.empty() || bankCalibId < 0 || bankCalibId >= (int8_t)CalBank.size())
+    {
+        Serial.printf("\nERROR in calibrationUpdate: Invalid bankCalibId=%d, CalBank.size()=%d",
+                     bankCalibId, CalBank.size());
+        return;
+    }
+
+    if (mA_Active < 0 || mA_Active > 1)
+    {
+        Serial.printf("\nERROR in calibrationUpdate: Invalid mA_Active=%d", mA_Active);
+        return;
+    }
+
     Voltage.calib_m = (CalBank[bankCalibId].vCal.code_2 - CalBank[bankCalibId].vCal.code_1) /
                       (CalBank[bankCalibId].vCal.value_2 - CalBank[bankCalibId].vCal.value_1);
     Voltage.calib_b = CalBank[bankCalibId].vCal.code_1 - Voltage.calib_m * CalBank[bankCalibId].vCal.value_1;
@@ -105,6 +119,20 @@ Calibration Device::LoadCalibData(const String &key)
 
 void Device::SaveCalibrationData()
 {
+    // CRITICAL: Validate array bounds before saving
+    if (CalBank.empty() || bankCalibId < 0 || bankCalibId >= (int8_t)CalBank.size())
+    {
+        Serial.printf("\nERROR in SaveCalibrationData: Invalid bankCalibId=%d, CalBank.size()=%d",
+                     bankCalibId, CalBank.size());
+        return;
+    }
+
+    if (mA_Active < 0 || mA_Active > 1)
+    {
+        Serial.printf("\nERROR in SaveCalibrationData: Invalid mA_Active=%d", mA_Active);
+        return;
+    }
+
     Device::SaveCalibData("cal", CalBank[bankCalibId]);
     Serial.print("\ndata saved.");
 
@@ -121,6 +149,20 @@ void Device::SaveCalibrationData()
 
 void Device::LoadCalibrationData()
 {
+    // CRITICAL: Validate array bounds before loading
+    if (CalBank.empty() || bankCalibId < 0 || bankCalibId >= (int8_t)CalBank.size())
+    {
+        Serial.printf("\nERROR in LoadCalibrationData: Invalid bankCalibId=%d, CalBank.size()=%d",
+                     bankCalibId, CalBank.size());
+        return;
+    }
+
+    if (mA_Active < 0 || mA_Active > 1)
+    {
+        Serial.printf("\nERROR in LoadCalibrationData: Invalid mA_Active=%d", mA_Active);
+        return;
+    }
+
     Calibration outputData = Device::LoadCalibData("cal");
     CalBank[bankCalibId] = {outputData};
 
@@ -536,9 +578,15 @@ void Device::readCurrent()
         adc.ads1219->setGain(ONE);
         adc.startConversion(VOLTAGE, REF_EXTERNAL);
 
-        // OPTIMIZED: Fast path for current calculation
-        double c = ((Current.rawValue - Current.calib_b) * Current.calib_1m) -
-                   ((mA_Active ? 1000.0 : 1.0) * (Voltage.measured.Mean() / (CalBank[bankCalibId].internalLeakage[mA_Active] * 1000.0)));
+        // OPTIMIZED: Fast path for current calculation with bounds check
+        double c = (Current.rawValue - Current.calib_b) * Current.calib_1m;
+
+        // Leakage compensation (with bounds validation)
+        if (!CalBank.empty() && bankCalibId >= 0 && bankCalibId < (int8_t)CalBank.size() &&
+            mA_Active >= 0 && mA_Active <= 1)
+        {
+            c -= ((mA_Active ? 1000.0 : 1.0) * (Voltage.measured.Mean() / (CalBank[bankCalibId].internalLeakage[mA_Active] * 1000.0)));
+        }
 
         // Apply REL offset
         if (mA_Active && currentRelActive_mA) c -= currentRelOffset_mA;

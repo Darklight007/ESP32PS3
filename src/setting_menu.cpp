@@ -439,6 +439,20 @@ namespace
         PowerSupply.LoadCalibrationData();
         PRESSED_event_cb(nullptr);
 
+        // CRITICAL: Validate array bounds after loading (LoadCalibrationData already validates, but double-check)
+        if (PowerSupply.CalBank.empty() || PowerSupply.bankCalibId < 0 ||
+            PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size())
+        {
+            Serial.printf("\nERROR in load_cb: Invalid bankCalibId=%d after load", PowerSupply.bankCalibId);
+            return;
+        }
+
+        if (PowerSupply.mA_Active < 0 || PowerSupply.mA_Active > 1)
+        {
+            Serial.printf("\nERROR in load_cb: Invalid mA_Active=%d", PowerSupply.mA_Active);
+            return;
+        }
+
         if (PowerSupply.gui.calibration.win_ADC_voltage_calibration && !lv_obj_has_flag(PowerSupply.gui.calibration.win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN))
         {
             auto &v = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
@@ -504,6 +518,16 @@ namespace
     {
         if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED)
             return;
+
+        // CRITICAL: Validate array bounds
+        if (PowerSupply.CalBank.empty() || PowerSupply.bankCalibId < 0 ||
+            PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size())
+        {
+            Serial.printf("\nERROR in ADC_internalRes_A_change_cb: Invalid bankCalibId=%d",
+                         PowerSupply.bankCalibId);
+            return;
+        }
+
         double val = lv_spinbox_get_value(Calib_GUI.internalLeakage_A) / 1000.0;
         PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[0] = val;  // [0] = A range
     }
@@ -512,6 +536,16 @@ namespace
     {
         if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED)
             return;
+
+        // CRITICAL: Validate array bounds
+        if (PowerSupply.CalBank.empty() || PowerSupply.bankCalibId < 0 ||
+            PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size())
+        {
+            Serial.printf("\nERROR in ADC_internalRes_mA_change_cb: Invalid bankCalibId=%d",
+                         PowerSupply.bankCalibId);
+            return;
+        }
+
         double val = lv_spinbox_get_value(Calib_GUI.internalLeakage_mA) / 1000.0;
         PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1] = val;  // [1] = mA range
     }
@@ -764,6 +798,16 @@ static void event_cb(lv_event_t *e)
                 return;
             }
 
+            // CRITICAL: Validate array bounds before starting
+            if (PowerSupply.CalBank.empty() || PowerSupply.bankCalibId < 0 ||
+                PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size() ||
+                PowerSupply.mA_Active < 0 || PowerSupply.mA_Active > 1)
+            {
+                Serial.printf("\nERROR in AutoMeasureTotalRes_cb: Invalid indices! bankCalibId=%d, mA_Active=%d",
+                             PowerSupply.bankCalibId, PowerSupply.mA_Active);
+                return;
+            }
+
             blockAll = true;
             g_calibration_in_progress = true;  // Set flag before starting async calibration
             esp_task_wdt_reset();  // Reset watchdog immediately
@@ -817,6 +861,15 @@ static void AutoMeasureTotalRes_cb(lv_event_t *)
 // Open/create the Internal Current Calibration window (shows both A and mA ranges)
 void internal_leakage_calibration_cb(lv_event_t *)
 {
+    // CRITICAL: Validate array bounds before accessing calibration data
+    if (PowerSupply.CalBank.empty() || PowerSupply.bankCalibId < 0 ||
+        PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size())
+    {
+        Serial.printf("\nERROR in internal_leakage_calibration_cb: Invalid bankCalibId=%d",
+                     PowerSupply.bankCalibId);
+        return;
+    }
+
     if (PowerSupply.gui.calibration.win_int_current_calibration)
     {
         // Update spinbox values when reopening

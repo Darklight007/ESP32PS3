@@ -970,6 +970,12 @@ void StatusBar()
 
     if (PowerSupply.gui.calibration.win_ADC_voltage_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_voltage_calibration))
     {
+        // CRITICAL: Validate bounds before array access
+        if (PowerSupply.CalBank.empty() || PowerSupply.bankCalibId < 0 ||
+            PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size())
+        {
+            return; // Silent return in frequent update function to avoid log spam
+        }
 
         int code1 = lv_spinbox_get_value(Calib_GUI.Voltage.code_1);
         int code2 = lv_spinbox_get_value(Calib_GUI.Voltage.code_2);
@@ -1001,6 +1007,13 @@ void StatusBar()
     }
     if (PowerSupply.gui.calibration.win_ADC_current_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_current_calibration))
     {
+        // CRITICAL: Validate bounds before array access
+        if (PowerSupply.CalBank.empty() || PowerSupply.bankCalibId < 0 ||
+            PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size() ||
+            PowerSupply.mA_Active < 0 || PowerSupply.mA_Active > 1)
+        {
+            return; // Silent return in frequent update function to avoid log spam
+        }
 
         int code1 = lv_spinbox_get_value(Calib_GUI.Current.code_1);
         int code2 = lv_spinbox_get_value(Calib_GUI.Current.code_2);

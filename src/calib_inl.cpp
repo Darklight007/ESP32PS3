@@ -196,6 +196,17 @@ static void INL_timer_cb(lv_timer_t *)
     case INL_FSM::COMPUTE:
     {
         INL_dbg("[INL] COMPUTE begin");
+
+        // CRITICAL: Validate array bounds before saving INL data
+        if (PowerSupply.CalBank.empty() || PowerSupply.bankCalibId < 0 ||
+            PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size())
+        {
+            INL_dbg("[INL] ERROR: Invalid bankCalibId=%d, cannot save INL data", PowerSupply.bankCalibId);
+            g_voltINL_ready = false;
+            inl.ph = INL_FSM::DONE;
+            break;
+        }
+
         std::vector<double> X(inl.x_raw, inl.x_raw + INL_FSM::NPTS); // ideal volts (Mean)
         std::vector<double> Y(TRUE_IDEAL, TRUE_IDEAL + NPTS);        // true volts (set)
         g_voltINL.setPoints(X, Y);
@@ -498,21 +509,31 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
             INL_dbg("[INL] Re-enabling: loading calibration data");
             PowerSupply.LoadCalibrationData();
 
-            try
+            // CRITICAL: Validate array bounds before accessing INL data
+            if (PowerSupply.CalBank.empty() || PowerSupply.bankCalibId < 0 ||
+                PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size())
             {
-                std::vector<double> X(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure,
-                                      PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure + NPTS);
-                std::vector<double> Y(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal,
-                                      PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal + NPTS);
-                g_voltINL.setPoints(X, Y);
-                g_voltINL.build();
-                g_voltINL_ready = true;
-                INL_dbg("[INL] Calibration data loaded successfully");
-            }
-            catch (...)
-            {
-                INL_dbg("[INL] ERROR: Failed to load calibration data");
+                INL_dbg("[INL] ERROR: Invalid bankCalibId=%d, cannot load INL data", PowerSupply.bankCalibId);
                 g_voltINL_ready = false;
+            }
+            else
+            {
+                try
+                {
+                    std::vector<double> X(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure,
+                                          PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure + NPTS);
+                    std::vector<double> Y(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal,
+                                          PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal + NPTS);
+                    g_voltINL.setPoints(X, Y);
+                    g_voltINL.build();
+                    g_voltINL_ready = true;
+                    INL_dbg("[INL] Calibration data loaded successfully");
+                }
+                catch (...)
+                {
+                    INL_dbg("[INL] ERROR: Failed to load calibration data");
+                    g_voltINL_ready = false;
+                }
             }
         }
 
@@ -614,10 +635,11 @@ void rebuildINLFromCalibration()
 {
     INL_dbg("[INL] Checking saved calibration data...");
 
-    // Ensure CalBank is populated
-    if (PowerSupply.CalBank.empty())
+    // CRITICAL: Validate array bounds
+    if (PowerSupply.CalBank.empty() || PowerSupply.bankCalibId < 0 ||
+        PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size())
     {
-        INL_dbg("[INL] ERROR: CalBank is empty!");
+        INL_dbg("[INL] ERROR: CalBank empty or invalid bankCalibId=%d", PowerSupply.bankCalibId);
         g_voltINL_ready = false;
         return;
     }
