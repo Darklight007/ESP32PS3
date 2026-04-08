@@ -73,16 +73,32 @@ void start_leakage_resistance_measurement(lv_event_t *)
          []()
          {
              esp_task_wdt_reset();
-             blockAll = true;
 
-             esp_task_wdt_reset();
+             // Log measurement results
              log_step("           i0 = %+1.6f", g_leakage_i_at_0v);
              log_step("           i1 = %+1.6f", g_leakage_i_at_32v);
              double Rtot = (PowerSupply.mA_Active ? 1000.0 : 1.0) * 32.0f / (g_leakage_i_at_32v - g_leakage_i_at_0v) / 1000.0f;
              log_step("Measured Res: %4.3fk", Rtot);
 
              esp_task_wdt_reset();
-             // Update the correct spinbox based on current mode (with null checks)
+
+             // CRITICAL: Validate indices before array access
+             if (PowerSupply.CalBank.empty() ||
+                 PowerSupply.bankCalibId < 0 ||
+                 PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size() ||
+                 PowerSupply.mA_Active < 0 ||
+                 PowerSupply.mA_Active > 1)
+             {
+                 Serial.printf("\nERROR in leakage finalize: Invalid indices! bankCalibId=%d, CalBank.size()=%d, mA_Active=%d",
+                              PowerSupply.bankCalibId, PowerSupply.CalBank.size(), PowerSupply.mA_Active);
+                 g_calibration_in_progress = false;
+                 return;
+             }
+
+             // Save the measured resistance value
+             PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[PowerSupply.mA_Active] = Rtot;
+
+             // Update the spinbox with the measured value (with null checks)
              Serial.printf("\nUpdating spinbox: mA_Active=%d", PowerSupply.mA_Active);
              if (PowerSupply.mA_Active) {
                  if (Calib_GUI.internalLeakage_mA) {
@@ -98,30 +114,18 @@ void start_leakage_resistance_measurement(lv_event_t *)
                  }
              }
 
-             esp_task_wdt_reset();
-             // CRITICAL: Re-validate indices before array access
-             if (PowerSupply.CalBank.empty() ||
-                 PowerSupply.bankCalibId < 0 ||
-                 PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size() ||
-                 PowerSupply.mA_Active < 0 ||
-                 PowerSupply.mA_Active > 1)
-             {
-                 Serial.printf("\nERROR in leakage finalize: Invalid indices! bankCalibId=%d, CalBank.size()=%d, mA_Active=%d",
-                              PowerSupply.bankCalibId, PowerSupply.CalBank.size(), PowerSupply.mA_Active);
-                 blockAll = false;
-                 g_calibration_in_progress = false;
-                 return;
-             }
-
-             PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[PowerSupply.mA_Active] = Rtot;
+             // Set voltage back to 0V
              PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
 
              esp_task_wdt_reset();
+
+             // Schedule log window to close after 6 seconds
              lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
-             lv_timer_set_repeat_count(close_t, 1);
+             if (close_t) {
+                 lv_timer_set_repeat_count(close_t, 1);
+             }
 
              esp_task_wdt_reset();
-             blockAll = false;
 
              // Reset calibration flag to allow subsequent calibrations
              g_calibration_in_progress = false;

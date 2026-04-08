@@ -808,17 +808,22 @@ static void event_cb(lv_event_t *e)
                 return;
             }
 
-            blockAll = true;
-            g_calibration_in_progress = true;  // Set flag before starting async calibration
-            esp_task_wdt_reset();  // Reset watchdog immediately
-            vTaskDelay(pdMS_TO_TICKS(100));  // Small delay to stabilize
+            // Set flag to prevent concurrent calibrations
+            g_calibration_in_progress = true;
+            esp_task_wdt_reset();
+
+            // Create log window FIRST (before blocking or modifying data)
             create_log_window();
-            PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[PowerSupply.mA_Active] = FLT_MAX;
             log_reset();
             log_clear();
-            esp_task_wdt_reset();  // Reset again before starting
+
+            // Mark leakage as unmeasured (will be updated by calibration)
+            PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[PowerSupply.mA_Active] = FLT_MAX;
+
+            esp_task_wdt_reset();
+
+            // Start the calibration sequence (runs in LVGL timer)
             start_leakage_resistance_measurement(nullptr);
-            blockAll = false;
         }
     }
 }
@@ -872,9 +877,11 @@ void internal_leakage_calibration_cb(lv_event_t *)
 
     if (PowerSupply.gui.calibration.win_int_current_calibration)
     {
-        // Update spinbox values when reopening
-        lv_spinbox_set_value(Calib_GUI.internalLeakage_A, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[0]);
-        lv_spinbox_set_value(Calib_GUI.internalLeakage_mA, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1]);
+        // Update spinbox values when reopening (with null checks)
+        if (Calib_GUI.internalLeakage_A)
+            lv_spinbox_set_value(Calib_GUI.internalLeakage_A, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[0]);
+        if (Calib_GUI.internalLeakage_mA)
+            lv_spinbox_set_value(Calib_GUI.internalLeakage_mA, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1]);
         lv_obj_clear_flag(PowerSupply.gui.calibration.win_int_current_calibration, LV_OBJ_FLAG_HIDDEN);
         return;
     }

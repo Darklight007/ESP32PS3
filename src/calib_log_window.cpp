@@ -156,11 +156,37 @@ void log_reset()
 
 void create_log_window()
 {
+    // CRITICAL: Delete existing window first to avoid memory leak and stale pointers
+    if (log_win)
+    {
+        lv_obj_del(log_win);
+        log_win = NULL;
+        log_label = NULL;
+    }
+
     log_win = lv_win_create(lv_scr_act(), 40);
+    if (!log_win)
+    {
+        Serial.println("ERROR: Failed to create log window!");
+        return;
+    }
+
     lv_win_add_title(log_win, "Measuring total internal resistor");
 
     lv_obj_t *cont = lv_win_get_content(log_win);
+    if (!cont)
+    {
+        Serial.println("ERROR: Failed to get log window content!");
+        return;
+    }
+
     log_label = lv_label_create(cont);
+    if (!log_label)
+    {
+        Serial.println("ERROR: Failed to create log label!");
+        return;
+    }
+
     lv_label_set_text(log_label, "");
     lv_label_set_long_mode(log_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(log_label, lv_pct(100));

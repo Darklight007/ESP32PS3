@@ -581,11 +581,16 @@ void Device::readCurrent()
         // OPTIMIZED: Fast path for current calculation with bounds check
         double c = (Current.rawValue - Current.calib_b) * Current.calib_1m;
 
-        // Leakage compensation (with bounds validation)
+        // Leakage compensation (with bounds validation and division-by-zero protection)
         if (!CalBank.empty() && bankCalibId >= 0 && bankCalibId < (int8_t)CalBank.size() &&
             mA_Active >= 0 && mA_Active <= 1)
         {
-            c -= ((mA_Active ? 1000.0 : 1.0) * (Voltage.measured.Mean() / (CalBank[bankCalibId].internalLeakage[mA_Active] * 1000.0)));
+            double leakage_R = CalBank[bankCalibId].internalLeakage[mA_Active];
+            // Only apply leakage compensation if resistance is valid (not zero, not FLT_MAX, not NaN)
+            if (std::isfinite(leakage_R) && leakage_R > 0.001 && leakage_R < 1e9)
+            {
+                c -= ((mA_Active ? 1000.0 : 1.0) * (Voltage.measured.Mean() / (leakage_R * 1000.0)));
+            }
         }
 
         // Apply REL offset
