@@ -544,6 +544,10 @@ void Device::readVoltage()
         // OPTIMIZED: Single line calculation for speed
         double v_corrected = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m * adcRateCompensation[settingParameters.adcRate];
 
+        // Apply INL correction if calibration data is available
+        if (g_voltINL_ready)
+            v_corrected = g_voltINL.apply(v_corrected);
+
         Voltage.measureUpdate(v_corrected);
         adc.ADC_loopCounter++;
 
