@@ -66,7 +66,8 @@ ADS1219 ADC → GPIO9 DRDY interrupt → Task_ADC
 ### DAC Update Timing
 
 - **Normal mode:** 100ms interval (10 Hz)
-- **Function Generator mode:** 5ms interval (200 Hz) - optimized for waveform generation with minimal jitter
+- **Function Generator mode:** 5ms interval (200 Hz)
+- **FUN Only mode:** 2ms interval (500 Hz) - cleanest waveforms, skips I2C key scanning to eliminate jitter
 - Updates happen in Task_ADC (Core 0) for deterministic timing
 
 ### FUN Only Mode
@@ -76,6 +77,31 @@ Special optimization when function generator needs minimal UI overhead:
 - Reduces graph refresh rate (500ms vs 125ms)
 - Keyboard polling goes to ultra-fast (2ms when typing, otherwise 10ms)
 - Allows maximum waveform generation performance
+
+### Cross-Core Synchronization Flags
+
+- **`blockAll`** - Set `true` during destructive UI operations (calibration windows, full-screen overlays). Both cores check this before touching shared state. Used in ~11 files.
+- **`lvglIsBusy`** - Set `true` while LVGL is rendering. Core 0 skips ADC reads at slowest SPS (rate 0) when display SPI is active to avoid bus contention.
+- **`lvglChartIsBusy`** - Prevents chart data pushes while LVGL is actively rendering chart widgets.
+
+### Interval Scheduling Pattern
+
+The main loop uses a `schedule()` helper (in `intervals.cpp`) for all periodic functions. Each interval function wraps `schedule()` with a `static unsigned long` timer. Pattern:
+```cpp
+void MyInterval(unsigned long interval) {
+    static unsigned long timer_ = {0};
+    schedule(&MyFunction, interval, timer_);
+}
+```
+This is the standard way to add periodic behavior — do not use raw `millis()` checks in the main loop.
+
+### Calibration Sequencer
+
+Calibration procedures (`calib_adc.cpp`, `calib_dac.cpp`, `calib_inl.cpp`, `calib_internal_leakage.cpp`) use a step-based sequencer (`calib_sequencer.cpp`). Define an array of `SeqStep` structs with label, timing, begin/end callbacks, then call `seq_start()`. The sequencer runs via LVGL timers on Core 1.
+
+### Error Handler
+
+`ErrorHandler` namespace (`error_handler.h/cpp`) provides centralized error reporting with severity levels (DEBUG through CRITICAL) and categories (HARDWARE, CALIBRATION, VALIDATION, MEMORY, SCPI, SYSTEM, USER_INPUT). Initialized in `setup()` with serial and UI reporting enabled.
 
 ## Code Structure
 
@@ -87,7 +113,7 @@ src/
 ├── DispObject.h/cpp      # Measurement display objects (Voltage/Current)
 ├── tasks.cpp             # FreeRTOS tasks (Task_ADC, Task_BarGraph)
 ├── intervals.cpp         # Scheduled periodic functions
-├── ui_creation.cpp       # LVGL UI layout (5 tabs: Stats/Graph/Main/Utility/Settings)
+├── ui_creation.cpp       # LVGL UI layout (5 tabs: Histogram[0]/Graph[1]/Main[2]/Utility[3]/Settings[4])
 ├── ui_helpers.cpp        # UI event callbacks
 ├── input_handler.cpp     # Encoder/keypad/touch input routing
 ├── waveform_generator.cpp # Function generator (18 waveforms)
@@ -176,8 +202,13 @@ Container (returned object, e.g., gui.slider_adcRate)
 
 ## Development Workflow Notes
 
-- Build optimization: `-O3` for release builds
-- Logging: Adjust `CORE_DEBUG_LEVEL` in platformio.ini (currently 4 = INFO)
+- Build optimization: `-O3` for release builds (warnings suppressed with `-w`)
+- Logging: Adjust `CORE_DEBUG_LEVEL` in platformio.ini (currently 4 = INFO). Use `ESP_LOGI`/`ESP_LOGW`/`ESP_LOGE` macros.
 - Partitions: Using `par/default_16MB_2.csv` (huge_app configuration)
 - Upload speed: 921600 baud
 - Monitor speed: 115200 baud
+- `src/experimental/` is excluded from builds via `build_src_filter` in platformio.ini
+- Libraries are vendored in `lib/` (LVGL 8.4, TFT_eSPI, ADS1219, ESP32Encoder, Keypad/MCP017, arduinoFFT)
+- LVGL config: `include/lv_conf.h`, TFT_eSPI config: `include/User_Setup.h`
+- DMA double-buffering enabled by default (`#define DMA 1` in `config.hpp`) using two `TFT_eSprite` buffers
+- Watchdog timeout: 120 seconds (set in `setup()` and `loop()` first iteration)

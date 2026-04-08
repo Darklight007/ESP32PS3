@@ -98,36 +98,48 @@ void start_leakage_resistance_measurement(lv_event_t *)
              // Save the measured resistance value
              PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[PowerSupply.mA_Active] = Rtot;
 
-             // Update the spinbox with the measured value (with null checks)
+             // Update the spinbox with the measured value (with null and validity checks)
              Serial.printf("\nUpdating spinbox: mA_Active=%d", PowerSupply.mA_Active);
              if (PowerSupply.mA_Active) {
-                 if (Calib_GUI.internalLeakage_mA) {
+                 if (Calib_GUI.internalLeakage_mA && lv_obj_is_valid(Calib_GUI.internalLeakage_mA)) {
                      Serial.printf("\nSetting mA spinbox to %f", 1000.0f * Rtot);
                      lv_spinbox_set_value(Calib_GUI.internalLeakage_mA, 1000.0f * Rtot);
                      Serial.printf("\nmA spinbox updated");
+                 } else {
+                     Serial.println("\nWARNING: mA spinbox is NULL or invalid");
                  }
              } else {
-                 if (Calib_GUI.internalLeakage_A) {
+                 if (Calib_GUI.internalLeakage_A && lv_obj_is_valid(Calib_GUI.internalLeakage_A)) {
                      Serial.printf("\nSetting A spinbox to %f", 1000.0f * Rtot);
                      lv_spinbox_set_value(Calib_GUI.internalLeakage_A, 1000.0f * Rtot);
                      Serial.printf("\nA spinbox updated");
+                 } else {
+                     Serial.println("\nWARNING: A spinbox is NULL or invalid");
                  }
              }
 
+             esp_task_wdt_reset();
+
              // Set voltage back to 0V
+             Serial.println("\nSetting voltage to 0V");
              PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
 
              esp_task_wdt_reset();
 
              // Schedule log window to close after 6 seconds
+             Serial.println("\nScheduling log window close");
              lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
              if (close_t) {
                  lv_timer_set_repeat_count(close_t, 1);
+                 Serial.println("\nClose timer created successfully");
+             } else {
+                 Serial.println("\nERROR: Failed to create close timer");
              }
 
              esp_task_wdt_reset();
 
              // Reset calibration flag to allow subsequent calibrations
+             Serial.println("\nLeakage measurement completed successfully");
              g_calibration_in_progress = false;
          }},
     };
