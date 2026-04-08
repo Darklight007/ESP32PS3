@@ -2,7 +2,7 @@
 #include "config.hpp"
 
 // External task handles from config
-extern TaskHandle_t Task_adc, Task1;
+extern TaskHandle_t Task_adc, Task_bargraph;
 
 // Static member initialization
 MemoryStats MemoryMonitor::stats = {};
@@ -52,9 +52,9 @@ void MemoryMonitor::update()
         stats.task1StackHighWater = uxTaskGetStackHighWaterMark(Task_adc);
     }
 
-    if (Task1 != NULL)
+    if (Task_bargraph != NULL)
     {
-        stats.task2StackHighWater = uxTaskGetStackHighWaterMark(Task1);
+        stats.task2StackHighWater = uxTaskGetStackHighWaterMark(Task_bargraph);
     }
 
     // Check warning conditions
@@ -77,7 +77,7 @@ void MemoryMonitor::update()
         if (!stats.lowStackWarning)
         {
             stats.lowStackWarning = true;
-            Serial.printf("WARNING: Low stack! Task1: %u, Task2: %u bytes\n",
+            Serial.printf("WARNING: Low stack! Task_bargraph: %u, Task2: %u bytes\n",
                          stats.task1StackHighWater, stats.task2StackHighWater);
         }
     }

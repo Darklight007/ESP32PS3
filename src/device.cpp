@@ -676,6 +676,8 @@ void Device::adjustAdcTaskPriority()
     // adcRate: 0=20 SPS, 1=20 SPS, 2=90 SPS, 3=330 SPS, 4=1000 SPS
 
     UBaseType_t newPriority;
+    UBaseType_t newPriority_bargraph;
+
 
     switch (settingParameters.adcRate)
     {
@@ -683,18 +685,22 @@ void Device::adjustAdcTaskPriority()
         case 1:  // 20 SPS - very slow, low priority
         case 2:  // 90 SPS - slow, low priority
             newPriority = 1;
+            newPriority_bargraph =0;
             break;
 
         case 3:  // 330 SPS - fast, higher priority
             newPriority = 1;
+            newPriority_bargraph =0;
             break;
 
         case 4:  // 1000 SPS - very fast, highest priority
-            newPriority = 2;
+            newPriority = 5;
+            newPriority_bargraph =0;
             break;
 
         default:
             newPriority = 1;  // Default to low priority
+            newPriority_bargraph =0;
             break;
     }
 
@@ -704,6 +710,10 @@ void Device::adjustAdcTaskPriority()
         vTaskPrioritySet(Task_adc, newPriority);
         Serial.printf("\n[Task Priority] Task_ADC priority set to %d (ADC rate: %d)\n",
                       newPriority, settingParameters.adcRate);
+        vTaskPrioritySet(Task_bargraph, newPriority_bargraph);
+        Serial.printf("\n[Task Priority] Task_bargraph priority set to %d (ADC rate: %d)\n",
+                      newPriority_bargraph, settingParameters.adcRate);
+
     }
 }
 

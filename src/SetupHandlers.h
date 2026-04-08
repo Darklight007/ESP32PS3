@@ -74,7 +74,7 @@ extern void updateObjectPos_cb(lv_event_t *e);
 
 
 extern TaskHandle_t Task_adc; 
-extern TaskHandle_t Task1; 
+extern TaskHandle_t Task_bargraph; 
 extern TaskHandle_t Task_dac; 
 
 // extern lv_obj_t *dd_calibration;

@@ -80,8 +80,8 @@ Do not use: 26 27 28 29 30 31 32 33 34 35 36 37  => PSRAM
             pin 0 is not work for TOUCH_CS
 
 
-vTaskSuspend(Task1);
-vTaskResume(Task1);
+vTaskSuspend(Task_bargraph);
+vTaskResume(Task_bargraph);
 Current.SetUpdate(Current.adjValue+.0001);
   
 lock_trim_free: Asserted at expression: block_is_free(block) && "block must be free" 

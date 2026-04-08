@@ -51,7 +51,7 @@ inline constexpr uint8_t resolution         = 8;
 
 // Flags and handles
 extern bool buzzerSound;               // defined elsewhere
-extern TaskHandle_t Task_adc, Task1;
+extern TaskHandle_t Task_adc, Task_bargraph;
 
 extern bool ismyTextHiddenChange;
 extern bool lvglIsBusy, lvglChartIsBusy, emergencyRefresh, blockAll;
@@ -164,7 +164,7 @@ void IRAM_ATTR ADCPinISR(void *arg);
 // // ledcAttachPin(BUZZER_PIN, SOUND_PWM_CHANNEL);
 
 // extern bool buzzerSound;
-// TaskHandle_t Task_adc, Task1;
+// TaskHandle_t Task_adc, Task_bargraph;
 // bool ismyTextHiddenChange = false;
 
 // bool lvglIsBusy, lvglChartIsBusy, emergencyRefresh, blockAll = false;

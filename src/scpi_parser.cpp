@@ -413,7 +413,7 @@ void SCPIParser::cmd_TST_Q()
     // Test 10: FreeRTOS Tasks Health
     // Verify critical tasks are running
     extern TaskHandle_t Task_adc;
-    extern TaskHandle_t Task1;
+    extern TaskHandle_t Task_bargraph;
 
     if (Task_adc == NULL || eTaskGetState(Task_adc) == eDeleted)
     {
@@ -421,7 +421,7 @@ void SCPIParser::cmd_TST_Q()
         failureDetails += "TASK_ADC_FAIL;";
     }
 
-    if (Task1 == NULL || eTaskGetState(Task1) == eDeleted)
+    if (Task_bargraph == NULL || eTaskGetState(Task_bargraph) == eDeleted)
     {
         allTestsPassed = false;
         failureDetails += "TASK_GUI_FAIL;";

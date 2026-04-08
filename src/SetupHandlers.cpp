@@ -453,11 +453,11 @@ void createTasks()
     // Create a task for Bar Graph display, with priority 0, pinned to core 0
     xTaskCreatePinnedToCore(
         Task_BarGraph, /* Task function */
-        "Task1",       /* Name of task */
+        "Task_bargraph",       /* Name of task */
         8000,          /* Stack size of task */
         NULL,          /* Parameter of the task */
         0,             /* Priority of the task */
-        &Task1,        /* Task handle to keep track of created task */
+        &Task_bargraph,        /* Task handle to keep track of created task */
         0              /* Pin task to core 0 */
     );
 

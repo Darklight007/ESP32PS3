@@ -57,7 +57,7 @@ Keypad_MC17 kpd(makeKeymap(keys), (uint8_t*)rowPins, (uint8_t*)colPins,
                 ROWS, COLS, I2CADDR);
 
 // Flags and handles
-TaskHandle_t Task_adc = nullptr, Task1 = nullptr;
+TaskHandle_t Task_adc = nullptr, Task_bargraph = nullptr;
 
 bool ismyTextHiddenChange = false;
 

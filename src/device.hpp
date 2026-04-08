@@ -93,6 +93,7 @@ extern bool blockAll;
 
 // Task handle for ADC task (needed for notifications)
 extern TaskHandle_t Task_adc;
+extern TaskHandle_t Task_bargraph;
 
 static void IRAM_ATTR ADCPinISR()
 {

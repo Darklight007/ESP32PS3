@@ -141,14 +141,14 @@ void loop()
   //   PowerSupply.Current.barUpdate();
 
   //   // Render bars immediately (throttled to ~60 FPS to avoid DMA issues)
-    static unsigned long lastBarRender = 0;
-    if (millis() - lastBarRender >= 100)
-    {
-      // lvglIsBusy = true;
-      lv_timer_handler();
-      // lvglIsBusy = false;
-      lastBarRender = millis();
-    }
+  static unsigned long lastBarRender = 0;
+  if (millis() - lastBarRender >= 100)
+  {
+    // lvglIsBusy = true;
+    lv_timer_handler();
+    // lvglIsBusy = false;
+    lastBarRender = millis();
+  }
   // }
 
   // FUN Only mode: skip most processing for cleanest waveforms
@@ -164,24 +164,21 @@ void loop()
   // CustomFPSMonitor();           // Optional custom FPS (built-in LVGL FPS is more accurate)
   StatusBarUpdateInterval(300);
 
-  if (1)
-  {
-    scpiParser.process(); // Process SCPI commands from Serial
-    PowerManagementInterval(500); // Timer, Energy, Auto-save, Limits
-    MemoryMonitorInterval(5000);  // Memory monitoring every 5 seconds
-    RecordingPlaybackInterval();  // Voltage recording and playback
-    Page2RightSideCleanup(1000);  // Clean dirty pixels on right side of page 2
+  scpiParser.process();         // Process SCPI commands from Serial
+  PowerManagementInterval(500); // Timer, Energy, Auto-save, Limits
+  MemoryMonitorInterval(5000);  // Memory monitoring every 5 seconds
+  RecordingPlaybackInterval();  // Voltage recording and playback
+  Page2RightSideCleanup(1000);  // Clean dirty pixels on right side of page 2
 
-    // Chart refresh (Core 1 only - LVGL thread-safe)
-    HistogramChartRefreshInterval(125);  // Refresh histogram chart every 125ms
-    GraphChartRefreshInterval(125);      // Refresh graph chart every 125ms
-  }
+  // Chart refresh (Core 1 only - LVGL thread-safe)
+  HistogramChartRefreshInterval(125); // Refresh histogram chart every 125ms
+  GraphChartRefreshInterval(125);     // Refresh graph chart every 125ms
 
   // Flush measures - Slow when encoder active for immediate visual feedback
   if (encoderActive)
     FlushMeasuresInterval(500); // Very xxxx update during encoder activity
   else
-    FlushMeasuresInterval(100*PowerSupply.Voltage.measured.NofAvgs); // Slow update even when idle for responsive display
+    FlushMeasuresInterval(100 /**PowerSupply.Voltage.measured.NofAvgs*/); // Slow update even when idle for responsive display
 
   // Adaptive statistics update: Slow when encoder active for responsive display
   if (encoderActive)
@@ -189,12 +186,11 @@ void loop()
   else
     statisticUpdateInterval(333); // Normal update when idle
 
-    // Adaptive VCCC update: slower when encoder active to reduce CPU load
-    if (encoderActive)
-      VCCCInterval(100); // Slow update during encoder activity
-    else
-      VCCCInterval(60); // Fast update when idle
-
+  // // Adaptive VCCC update: slower when encoder active to reduce CPU load
+  // if (encoderActive)
+  //   VCCCInterval(100); // Slow update during encoder activity
+  // else
+  //   VCCCInterval(60); // Fast update when idle
 
   // FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?
