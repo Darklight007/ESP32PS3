@@ -786,31 +786,27 @@ void Device::writeDAC_Current(uint16_t value)
 
 void Device::VCCCStatusUpdate(void)
 {
+    // Fast path: read pin first, bail if unchanged (most common case)
+    int currentStatus = digitalRead(CCCVPin);
+    if (currentStatus == lastCCCVStatus)
+        return;
+
     // Skip if output is off or in function generator mode
-    if (getStatus() == DEVICE::OFF || getStatus() == DEVICE::FUN)
+    DEVICE s = status;
+    if (s == DEVICE::OFF || s == DEVICE::FUN)
     {
         lastCCCVStatus = -1;  // Reset so we re-check when turning on
         return;
     }
 
-    int currentStatus = digitalRead(CCCVPin);
-
-    // Skip if status hasn't changed (but -1 means first check after power on)
-    if (lastCCCVStatus == currentStatus)
-        return;
-
     // Beep on CC/CV transitions (skip on first check after power on)
     if (lastCCCVStatus != -1 && settingParameters.beeperOnPowerChange)
     {
-        myTone(currentStatus == false ? NOTE_A3 : NOTE_A5, 10);  // Lower tone for CC, higher for VC
+        myTone(currentStatus == false ? NOTE_A3 : NOTE_A5, 10);
     }
 
-    if (currentStatus == false)
-        setStatus(DEVICE::CC);
-    else
-        setStatus(DEVICE::VC);
-
     lastCCCVStatus = currentStatus;
+    setStatus(currentStatus ? DEVICE::VC : DEVICE::CC);
 }
 
 void Device::DACUpdate(void)

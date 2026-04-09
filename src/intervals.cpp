@@ -146,9 +146,7 @@ void VCCCInterval(unsigned long interval)
 {
     static unsigned long timer_ = {0};
     schedule([]
-             {
-                if (!lvglChartIsBusy && !blockAll)
-                     PowerSupply.VCCCStatusUpdate(); },
+             { PowerSupply.VCCCStatusUpdate(); },
              interval, timer_);
 }
 
