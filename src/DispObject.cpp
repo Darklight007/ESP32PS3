@@ -59,8 +59,7 @@ void DispObjects::displayUpdate(void)
 
     displayReady = false;
 
-    static double mean_;
-    mean_ = measured.Mean();
+    double mean_ = measured.Mean();
     if (oldValue != mean_ && !blockAll)
     {
         // Display mean of measured data
@@ -71,8 +70,7 @@ void DispObjects::displayUpdate(void)
 
 void DispObjects::displayUpdate(bool update)
 {
-    static double mean_;
-    mean_ = measured.Mean();
+    double mean_ = measured.Mean();
     // Display mean  of measured data not the value
     lv_label_set_text_fmt(label_measureValue, restrict, mean_);
 }
@@ -94,15 +92,7 @@ void DispObjects::barUpdate(void)
     // Always update bars for maximum refresh rate (not limited by ADC rate)
     if (!Bar.bar || !Bar.curValuePtr) return;  // Add null check for Power measurement
 
-    // Bars use rawBarValue which is updated EVERY ADC sample (not averaged)
-    // This is set in measureUpdate() with the raw instantaneous value
-
-    // Pre-compute scale factors (cached - only recalc if bar size changes)
-    static lv_coord_t cachedBarMax = 0;
-    static lv_coord_t cachedBarWidth = 0;
-    static lv_coord_t cachedBarX = 0;
-    static double cachedScaleFactor = 0;
-
+    // Pre-compute scale factors (per-instance cache in DispObject.h)
     lv_coord_t barMax = lv_bar_get_max_value(Bar.bar);
     if (barMax != cachedBarMax || cachedScaleFactor == 0) {
         cachedBarMax = barMax;
@@ -550,12 +540,14 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
         lv_obj_set_size(Bar.bar_adjValue, barLength, 5);
         lv_obj_align(Bar.bar_adjValue, 0, 5, 70);
         static lv_style_t style_bar_adjValue;
-        lv_style_init(&style_bar_adjValue);
-        // lv_style_set_radius(&style_bar_adjValue, 0);
-        lv_style_set_border_width(&style_bar_adjValue, 0);
-
-        lv_style_set_bg_opa(&style_bar_adjValue, LV_OPA_40);
-        lv_style_set_bg_color(&style_bar_adjValue, lv_color_hex(0xB1BFB1)); // lv_color_hex(0x919F91) //lv_palette_darken(LV_PALETTE_GREY, 1)
+        static bool style_bar_adjValue_inited = false;
+        if (!style_bar_adjValue_inited) {
+            style_bar_adjValue_inited = true;
+            lv_style_init(&style_bar_adjValue);
+            lv_style_set_border_width(&style_bar_adjValue, 0);
+            lv_style_set_bg_opa(&style_bar_adjValue, LV_OPA_40);
+            lv_style_set_bg_color(&style_bar_adjValue, lv_color_hex(0xB1BFB1));
+        }
         lv_obj_remove_style(Bar.bar_adjValue, &style_bar_adjValue, LV_STATE_DEFAULT);
         lv_obj_add_style(Bar.bar_adjValue, &style_bar_adjValue, LV_STATE_DEFAULT);
     }
@@ -575,15 +567,16 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     LV_IMG_DECLARE(img_skew_strip328);
     lv_bar_set_range(Bar.bar, 0, barLength);
     static lv_style_t style_indic;
-    lv_style_init(&style_indic);
-    lv_style_set_bg_img_src(&style_indic, &img_skew_strip328);
-    lv_style_set_bg_img_tiled(&style_indic, 40);
-    //  lv_img_set_zoom(img1, 256 / 11);
-
-    lv_style_set_bg_img_opa(&style_indic, LV_OPA_50);
-    lv_style_set_radius(&style_indic, 0);
+    static bool style_indic_inited = false;
+    if (!style_indic_inited) {
+        style_indic_inited = true;
+        lv_style_init(&style_indic);
+        lv_style_set_bg_img_src(&style_indic, &img_skew_strip328);
+        lv_style_set_bg_img_tiled(&style_indic, 40);
+        lv_style_set_bg_img_opa(&style_indic, LV_OPA_50);
+        lv_style_set_radius(&style_indic, 0);
+    }
     lv_obj_remove_style(Bar.bar, NULL, LV_PART_MAIN);
-    // lv_style_set_bg_color(&style_indic, lv_color_hex(0x000000)); // lv_palette_darken(LV_PALETTE_BLUE, 3)
     lv_obj_remove_style(Bar.bar, &style_indic, LV_STATE_DEFAULT);
     lv_obj_add_style(Bar.bar, &style_indic, LV_PART_INDICATOR);
     lv_obj_set_size(Bar.bar, barLength, 5);
@@ -623,10 +616,14 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
 
     lv_label_set_text(Bar.bar_maxValue, buffer);
     static lv_style_t style_barMaxValue;
-    lv_style_init(&style_barMaxValue);
-    lv_style_set_text_letter_space(&style_barMaxValue, 0);
-    lv_style_set_text_color(&style_barMaxValue, lv_palette_lighten(LV_PALETTE_AMBER, 5));
-    lv_style_set_text_font(&style_barMaxValue, &ATARISTOCRAT_16bt);
+    static bool style_barMaxValue_inited = false;
+    if (!style_barMaxValue_inited) {
+        style_barMaxValue_inited = true;
+        lv_style_init(&style_barMaxValue);
+        lv_style_set_text_letter_space(&style_barMaxValue, 0);
+        lv_style_set_text_color(&style_barMaxValue, lv_palette_lighten(LV_PALETTE_AMBER, 5));
+        lv_style_set_text_font(&style_barMaxValue, &ATARISTOCRAT_16bt);
+    }
     lv_obj_remove_style(Bar.bar_maxValue, &style_barMaxValue, LV_STATE_DEFAULT);
     lv_obj_add_style(Bar.bar_maxValue, &style_barMaxValue, LV_STATE_DEFAULT);
     lv_obj_align(Bar.bar_maxValue, LV_ALIGN_DEFAULT, x + barLength + 26, 70 - 2);
@@ -642,9 +639,13 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     Bar.bar_minMarker = lv_label_create(label_set);
     lv_label_set_text(Bar.bar_minMarker, "^");
     static lv_style_t style_barLabelMinMarker;
-    lv_style_init(&style_barLabelMinMarker);
-    lv_style_set_text_font(&style_barLabelMinMarker, &lv_font_unscii_8); // Tauri_R_56,SairaExtraCondensed_R_56, PathwayGothicOne_R_56
-    lv_style_set_text_color(&style_barLabelMinMarker, lv_palette_lighten(LV_PALETTE_AMBER, 1));
+    static bool style_barMinMarker_inited = false;
+    if (!style_barMinMarker_inited) {
+        style_barMinMarker_inited = true;
+        lv_style_init(&style_barLabelMinMarker);
+        lv_style_set_text_font(&style_barLabelMinMarker, &lv_font_unscii_8);
+        lv_style_set_text_color(&style_barLabelMinMarker, lv_palette_lighten(LV_PALETTE_AMBER, 1));
+    }
     lv_obj_remove_style(Bar.bar_minMarker, &style_barLabelMinMarker, LV_STATE_DEFAULT);
     lv_obj_add_style(Bar.bar_minMarker, &style_barLabelMinMarker, LV_STATE_DEFAULT);
 
@@ -656,9 +657,13 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     Bar.bar_maxMarker = lv_label_create(label_set);
     lv_label_set_text(Bar.bar_maxMarker, "^");
     static lv_style_t style_barLabelMaxMarker;
-    lv_style_init(&style_barLabelMaxMarker);
-    lv_style_set_text_font(&style_barLabelMaxMarker, &lv_font_unscii_8); // Tauri_R_56,SairaExtraCondensed_R_56, PathwayGothicOne_R_56
-    lv_style_set_text_color(&style_barLabelMaxMarker, lv_palette_lighten(LV_PALETTE_RED, 1));
+    static bool style_barMaxMarker_inited = false;
+    if (!style_barMaxMarker_inited) {
+        style_barMaxMarker_inited = true;
+        lv_style_init(&style_barLabelMaxMarker);
+        lv_style_set_text_font(&style_barLabelMaxMarker, &lv_font_unscii_8);
+        lv_style_set_text_color(&style_barLabelMaxMarker, lv_palette_lighten(LV_PALETTE_RED, 1));
+    }
     lv_obj_remove_style(Bar.bar_maxMarker, &style_barLabelMaxMarker, LV_STATE_DEFAULT);
     lv_obj_add_style(Bar.bar_maxMarker, &style_barLabelMaxMarker, LV_STATE_DEFAULT);
 
