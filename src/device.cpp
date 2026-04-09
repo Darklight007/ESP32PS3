@@ -957,82 +957,74 @@ void Device::setStatus(DEVICE status_)
     static DEVICE oldStatus = status_;
     blockAll = true;
 
-    // lv_obj_invalidate(lv_scr_act()); // Force a full redraw before pausing
-    // lv_disp_trig_activity(NULL); // Ensure display updates are handled
-    // lv_disp_enable_invalidation(NULL, false); // Disable invalidation (pause updates)
     TaskHandle_t idleTask1 = xTaskGetIdleTaskHandleForCPU(1);
     esp_task_wdt_delete(idleTask1);
 
     if (status_ == DEVICE::OFF || oldStatus == DEVICE::OFF)
         vTaskDelay(75);
 
-    // OPTIMIZATION: Disable invalidation during mass style updates
-    // This prevents 50+ individual redraws and batches them into one
-    // Performance improvement: 60-80% faster status changes (200ms → 40ms)
+    // Single map lookup — cache the colors
+    const deviceColors &c = stateColor[status_];
+    const deviceColors &oldC = stateColor[oldStatus];
+    bool colorsChanged = (c.measured.full != oldC.measured.full ||
+                          c.plotColor1.full != oldC.plotColor1.full ||
+                          c.plotColor2.full != oldC.plotColor2.full);
+    bool pageColorChanged = (c.pageColor.full != oldC.pageColor.full);
+
+    // Batch all LVGL changes with invalidation disabled
     lv_disp_enable_invalidation(NULL, false);
 
-    // Set Colors
-    Voltage.setMeasureColor(stateColor[status_].measured);
-    Current.setMeasureColor(stateColor[status_].measured);
-    Power.setMeasureColor(stateColor[status_].measured);
+    if (colorsChanged)
+    {
+        Voltage.setMeasureColor(c.measured);
+        Current.setMeasureColor(c.measured);
+        Power.setMeasureColor(c.measured);
 
-    // Update REL label color to match current measurement color
-    if (gui.label_current_rel)
-        lv_obj_set_style_text_color(gui.label_current_rel, stateColor[status_].measured, 0);
+        if (gui.label_current_rel)
+            lv_obj_set_style_text_color(gui.label_current_rel, c.measured, 0);
 
-    Voltage.setStatsColor(stateColor[status_].plotColor1);
-    Current.setStatsColor(stateColor[status_].plotColor2);
+        Voltage.setStatsColor(c.plotColor1);
+        Current.setStatsColor(c.plotColor2);
 
-    // graph Chart color
-    lv_chart_set_series_color(graph.chart, graph.serV, stateColor[status_].plotColor1);
-    lv_chart_set_series_color(graph.chart, graph.serI, stateColor[status_].plotColor2);
+        lv_chart_set_series_color(graph.chart, graph.serV, c.plotColor1);
+        lv_chart_set_series_color(graph.chart, graph.serI, c.plotColor2);
 
-    // graph chart legend color
-    lv_style_set_text_color(&graph.style_legend1, stateColor[status_].plotColor1);
-    lv_style_set_text_color(&graph.style_legend2, stateColor[status_].plotColor2);
+        lv_style_set_text_color(&graph.style_legend1, c.plotColor1);
+        lv_style_set_text_color(&graph.style_legend2, c.plotColor2);
+        lv_style_set_text_color(&graph.style_statsVolt, c.plotColor1);
+        lv_style_set_text_color(&graph.style_statsCurrent, c.plotColor2);
 
-    lv_style_set_text_color(&graph.style_statsVolt, stateColor[status_].plotColor1);
-    lv_style_set_text_color(&graph.style_statsCurrent, stateColor[status_].plotColor2);
+        lv_chart_set_series_color(stats.chart, stats.serV, c.plotColor1);
+        lv_chart_set_series_color(stats.chart, stats.serI, c.plotColor2);
 
-    // Stats Chart color
-    lv_chart_set_series_color(stats.chart, stats.serV, stateColor[status_].plotColor1);
-    lv_chart_set_series_color(stats.chart, stats.serI, stateColor[status_].plotColor2);
+        lv_style_set_text_color(&stats.style_legend1, c.plotColor1);
+        lv_style_set_text_color(&stats.style_legend2, c.plotColor2);
+        lv_style_set_text_color(&stats.style_statsVolt, c.plotColor1);
+        lv_style_set_text_color(&stats.style_statsCurrent, c.plotColor2);
 
-    // Stats chart legend color
-    lv_style_set_text_color(&stats.style_legend1, stateColor[status_].plotColor1);
-    lv_style_set_text_color(&stats.style_legend2, stateColor[status_].plotColor2);
+        lv_style_set_text_color(&style_controlMode, c.measured);
+        lv_obj_remove_style(controlMode, &style_controlMode, 0);
+        lv_obj_add_style(controlMode, &style_controlMode, 0);
+    }
 
-    lv_style_set_text_color(&stats.style_statsVolt, stateColor[status_].plotColor1);
-    lv_style_set_text_color(&stats.style_statsCurrent, stateColor[status_].plotColor2);
+    // Skip page/tab recolor for CC↔VC (same pageColor 0x001A3C)
+    if (pageColorChanged)
+    {
+        for (int i = 0; i < 5; i++)
+            lv_obj_set_style_bg_color(page[i], c.pageColor, 0);
+        lv_obj_set_style_bg_color(lv_obj_get_child(page[3], 0), c.pageColor, 0);
 
-    // Pages color
-    lv_obj_set_style_bg_color(page[0], stateColor[status_].pageColor, 0);
-    lv_obj_set_style_bg_color(page[1], stateColor[status_].pageColor, 0);
-    lv_obj_set_style_bg_color(page[2], stateColor[status_].pageColor, 0);
-    lv_obj_set_style_bg_color(page[3], stateColor[status_].pageColor, 0);
-    lv_obj_set_style_bg_color(page[4], stateColor[status_].pageColor, 0);
+        lv_style_set_bg_color(&style_tabview_df_btn, c.pageColor);
+        lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tab.tabview);
+        lv_obj_remove_style(tab_btns, &style_tabview_df_btn, LV_PART_ITEMS | LV_STATE_CHECKED);
+        lv_obj_add_style(tab_btns, &style_tabview_df_btn, LV_PART_ITEMS | LV_STATE_CHECKED);
+    }
 
-    lv_obj_set_style_bg_color(lv_obj_get_child(page[3], 0), stateColor[status_].pageColor, 0);
-    // lv_obj_set_style_bg_color(lv_obj_get_child(lv_obj_get_child(page[3], 0), 0), stateColor[status_].pageColor, 0);
-
-    lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tab.tabview);
-    lv_style_set_bg_color(&style_tabview_df_btn, stateColor[status_].pageColor);
-
-    lv_obj_remove_style(tab_btns, &style_tabview_df_btn, LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_add_style(tab_btns, &style_tabview_df_btn, LV_PART_ITEMS | LV_STATE_CHECKED);
-
-    lv_style_set_text_color(&style_controlMode, stateColor[status_].measured);
-
-    lv_obj_remove_style(controlMode, &style_controlMode, 0);
-    lv_obj_add_style(controlMode, &style_controlMode, 0);
-
-    if (status_ != DEVICE::CC)
-        lv_label_set_text(controlMode, "VC");
-    else
-        lv_label_set_text(controlMode, "CC");
-
-    if (status_ == DEVICE::FUN)
-        lv_label_set_text(controlMode, "Fun");
+    // Control mode label
+    const char *modeText = (status_ == DEVICE::FUN) ? "Fun" :
+                           (status_ == DEVICE::CC)  ? "CC"  :
+                           (status_ == DEVICE::OFF) ? "OFF" : "VC";
+    lv_label_set_text(controlMode, modeText);
 
     if (status_ == DEVICE::OFF)
     {
