@@ -894,8 +894,12 @@ void keyCheckLoop()
                      PowerSupply.toggle_measure_unit();
 
                      blockAll = true;
-                     btn_calibration_ADC_current_event_cb(nullptr); // Refresh the calibration window if open
-                     lv_obj_add_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
+                     // Refresh calibration window spinboxes if window already exists
+                     if (PowerSupply.gui.calibration.win_ADC_current_calibration)
+                     {
+                         btn_calibration_ADC_current_event_cb(nullptr);
+                         lv_obj_add_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
+                     }
                      PowerSupply.calibrationUpdate();
                      PowerSupply.Current.displayUpdate(true);
                      // Update REL label for new range
@@ -906,15 +910,21 @@ void keyCheckLoop()
                      }
                      blockAll = false; });
 
-    keyMenusPage('T', " RELEASED.", 4, [&]
+    keyMenusPage('+', " RELEASED.", 4, [&]
                  {
                      if (T_hold_triggered) { T_hold_triggered = false; return; }
                      myTone(NOTE_A4, 10, false);
                      PowerSupply.toggle_measure_unit();
 
                      blockAll = true;
-                     btn_calibration_ADC_current_event_cb(nullptr); // Refresh the calibration window if open
-                     lv_obj_invalidate(PowerSupply.gui.calibration.win_ADC_current_calibration);
+                     // Refresh calibration window spinboxes if window already exists
+                     if (PowerSupply.gui.calibration.win_ADC_current_calibration)
+                     {
+                         btn_calibration_ADC_current_event_cb(nullptr);
+                         lv_obj_invalidate(PowerSupply.gui.calibration.win_ADC_current_calibration);
+                     }
+                     PowerSupply.calibrationUpdate();
+                     PowerSupply.Current.displayUpdate(true);
                      blockAll = false; });
 
     keyMenusPage('-', " RELEASED.", 0, [&]
