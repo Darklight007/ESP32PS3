@@ -12,6 +12,7 @@
 #include "globalFunctions.h"
 #include "waveform_generator.h"
 #include "Key.h"  // For LIST_MAX, PRESSED, HOLD key states
+#include "calib_adc.h"
 
 // External references
 extern TFT_eSPI tft;
@@ -20,6 +21,11 @@ extern lv_obj_t *slider_x;
 extern Waveform waveforms[];
 extern int numWaveforms;
 extern Keypad_MC17 kpd;
+
+// Deferred mA toggle flag - set on Core 0 (key handler), processed on Core 1 (main loop)
+// This avoids calling LVGL functions from Core 0 which causes race conditions.
+static volatile bool mA_toggle_pending = false;
+static volatile int mA_toggle_source_page = -1; // which page triggered the toggle
 
 // Touch attribute structure
 struct TouchAttr_
@@ -887,45 +893,27 @@ void keyCheckLoop()
                  }
              });
 
-    keyMenusPage('T', " RELEASED.", 2, [&]
+    keyMenusPage('+', " RELEASED.", 2, [&]
                  {
                      if (T_hold_triggered) { T_hold_triggered = false; return; }
                      myTone(NOTE_A4, 10);
-                     PowerSupply.toggle_measure_unit();
-
-                     blockAll = true;
-                     // Refresh calibration window spinboxes if window already exists
-                     if (PowerSupply.gui.calibration.win_ADC_current_calibration)
-                     {
-                         btn_calibration_ADC_current_event_cb(nullptr);
-                         lv_obj_add_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
-                     }
+                     // Hardware toggle only - LVGL updates deferred to Core 1
+                     PowerSupply.mA_Active = digitalRead(PowerSupply.AmA_Pin) ^ 1;
+                     digitalWrite(PowerSupply.AmA_Pin, PowerSupply.mA_Active);
                      PowerSupply.calibrationUpdate();
-                     PowerSupply.Current.displayUpdate(true);
-                     // Update REL label for new range
-                     bool relActive = PowerSupply.mA_Active ? PowerSupply.currentRelActive_mA : PowerSupply.currentRelActive_A;
-                     if (PowerSupply.gui.label_current_rel) {
-                         if (relActive) lv_obj_clear_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
-                         else lv_obj_add_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
-                     }
-                     blockAll = false; });
+                     mA_toggle_source_page = 2;
+                     mA_toggle_pending = true; });
 
     keyMenusPage('+', " RELEASED.", 4, [&]
                  {
                      if (T_hold_triggered) { T_hold_triggered = false; return; }
                      myTone(NOTE_A4, 10, false);
-                     PowerSupply.toggle_measure_unit();
-
-                     blockAll = true;
-                     // Refresh calibration window spinboxes if window already exists
-                     if (PowerSupply.gui.calibration.win_ADC_current_calibration)
-                     {
-                         btn_calibration_ADC_current_event_cb(nullptr);
-                         lv_obj_invalidate(PowerSupply.gui.calibration.win_ADC_current_calibration);
-                     }
+                     // Hardware toggle only - LVGL updates deferred to Core 1
+                     PowerSupply.mA_Active = digitalRead(PowerSupply.AmA_Pin) ^ 1;
+                     digitalWrite(PowerSupply.AmA_Pin, PowerSupply.mA_Active);
                      PowerSupply.calibrationUpdate();
-                     PowerSupply.Current.displayUpdate(true);
-                     blockAll = false; });
+                     mA_toggle_source_page = 4;
+                     mA_toggle_pending = true; });
 
     keyMenusPage('-', " RELEASED.", 0, [&]
                  {
@@ -1327,4 +1315,64 @@ void keyCheckLoop()
     {
         keyChar = ' ';
     }
+}
+
+// Called from Core 1 main loop to safely perform LVGL updates after mA toggle
+void processDeferredMaToggle()
+{
+    if (!mA_toggle_pending)
+        return;
+    mA_toggle_pending = false;
+    int srcPage = mA_toggle_source_page;
+
+    blockAll = true;
+
+    // Update window titles and mA prefix visibility (LVGL calls, Core 1 only)
+    if (PowerSupply.gui.calibration.win_ADC_current_calibration) {
+        lv_obj_t *hdr = lv_win_get_header(PowerSupply.gui.calibration.win_ADC_current_calibration);
+        if (hdr) {
+            lv_obj_t *title_lbl = lv_obj_get_child(hdr, 0);
+            if (title_lbl)
+                lv_label_set_text(title_lbl, PowerSupply.mA_Active
+                    ? "ADC Current Calibration [mA]" : "ADC Current Calibration [A]");
+        }
+    }
+    if (PowerSupply.gui.calibration.win_int_current_calibration) {
+        lv_obj_t *hdr = lv_win_get_header(PowerSupply.gui.calibration.win_int_current_calibration);
+        if (hdr) {
+            lv_obj_t *title_lbl = lv_obj_get_child(hdr, 0);
+            if (title_lbl)
+                lv_label_set_text(title_lbl, PowerSupply.mA_Active
+                    ? "Internal Current Calibration [mA]" : "Internal Current Calibration [A]");
+        }
+    }
+
+    // Update mA prefix visibility
+    if (PowerSupply.mA_Active)
+        lv_obj_clear_flag(PowerSupply.Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_add_flag(PowerSupply.Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
+
+    // Refresh calibration window spinboxes
+    if (PowerSupply.gui.calibration.win_ADC_current_calibration) {
+        btn_calibration_ADC_current_event_cb(nullptr);
+        if (srcPage == 2)
+            lv_obj_add_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN);
+        else
+            lv_obj_invalidate(PowerSupply.gui.calibration.win_ADC_current_calibration);
+    }
+
+    PowerSupply.Current.displayUpdate(true);
+
+    // Update REL label for new range (page 2)
+    if (srcPage == 2) {
+        bool relActive = PowerSupply.mA_Active ? PowerSupply.currentRelActive_mA : PowerSupply.currentRelActive_A;
+        if (PowerSupply.gui.label_current_rel) {
+            if (relActive) lv_obj_clear_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_add_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    lv_obj_invalidate(lv_scr_act());
+    blockAll = false;
 }

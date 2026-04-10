@@ -673,41 +673,8 @@ void Device::getPower()
 void Device::toggle_measure_unit()
 {
     mA_Active = digitalRead(AmA_Pin) ^ 1;
-
-    digitalWrite(AmA_Pin, mA_Active); // Toggle the pin state
-
-    // Update ADC Current Calibration window title (only if window exists)
-    if (gui.calibration.win_ADC_current_calibration) {
-        lv_obj_t *hdr = lv_win_get_header(gui.calibration.win_ADC_current_calibration);
-        if (hdr) {
-            lv_obj_t *title_lbl = lv_obj_get_child(hdr, 0);
-            if (title_lbl) {
-                lv_label_set_text(title_lbl, mA_Active ? "ADC Current Calibration [mA]" : "ADC Current Calibration [A]");
-            }
-        }
-    }
-
-    // Update Internal Current Calibration window title (only if window exists)
-    if (gui.calibration.win_int_current_calibration) {
-        lv_obj_t *hdr_int = lv_win_get_header(gui.calibration.win_int_current_calibration);
-        if (hdr_int) {
-            lv_obj_t *title_lbl_int = lv_obj_get_child(hdr_int, 0);
-            if (title_lbl_int) {
-                lv_label_set_text(title_lbl_int, mA_Active ? "Internal Current Calibration [mA]" : "Internal Current Calibration [A]");
-            }
-        }
-    }
-
-    // Update mA prefix visibility
-    if (mA_Active)
-        lv_obj_clear_flag(Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
-    else
-        lv_obj_add_flag(Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
-
-    // Force display refresh to ensure A<>mA change is visible
-    lv_obj_invalidate(lv_scr_act());
-
-    // Note: Internal resistor spinboxes are now separate for A and mA, no need to update on toggle
+    digitalWrite(AmA_Pin, mA_Active);
+    // UI updates (LVGL calls) are handled by processDeferredMaToggle() on Core 1
 }
 
 void Device::restoreAdcRateFromFUN()

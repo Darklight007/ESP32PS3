@@ -39,10 +39,10 @@ namespace
             !lv_obj_has_flag(PowerSupply.gui.calibration.win_ADC_voltage_calibration, LV_OBJ_FLAG_HIDDEN))
         {
             auto &v = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
-            if (Calib_GUI.Voltage.code_1) lv_spinbox_set_value(Calib_GUI.Voltage.code_1, v.code_1);
-            if (Calib_GUI.Voltage.code_2) lv_spinbox_set_value(Calib_GUI.Voltage.code_2, v.code_2);
-            if (Calib_GUI.Voltage.vin_1) lv_spinbox_set_value(Calib_GUI.Voltage.vin_1, (int32_t)llround(10000.0 * v.value_1));
-            if (Calib_GUI.Voltage.vin_2) lv_spinbox_set_value(Calib_GUI.Voltage.vin_2, (int32_t)llround(10000.0 * v.value_2));
+            if (Calib_GUI.Voltage.code_1) { lv_spinbox_set_value(Calib_GUI.Voltage.code_1, v.code_1); lv_obj_invalidate(Calib_GUI.Voltage.code_1); }
+            if (Calib_GUI.Voltage.code_2) { lv_spinbox_set_value(Calib_GUI.Voltage.code_2, v.code_2); lv_obj_invalidate(Calib_GUI.Voltage.code_2); }
+            if (Calib_GUI.Voltage.vin_1) { lv_spinbox_set_value(Calib_GUI.Voltage.vin_1, (int32_t)llround(10000.0 * v.value_1)); lv_obj_invalidate(Calib_GUI.Voltage.vin_1); }
+            if (Calib_GUI.Voltage.vin_2) { lv_spinbox_set_value(Calib_GUI.Voltage.vin_2, (int32_t)llround(10000.0 * v.value_2)); lv_obj_invalidate(Calib_GUI.Voltage.vin_2); }
         }
 
         // Update current calibration spinboxes if window is visible
@@ -50,10 +50,10 @@ namespace
             !lv_obj_has_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN))
         {
             auto &i = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
-            if (Calib_GUI.Current.code_1) lv_spinbox_set_value(Calib_GUI.Current.code_1, i[PowerSupply.mA_Active].code_1);
-            if (Calib_GUI.Current.code_2) lv_spinbox_set_value(Calib_GUI.Current.code_2, i[PowerSupply.mA_Active].code_2);
-            if (Calib_GUI.Current.vin_1) lv_spinbox_set_value(Calib_GUI.Current.vin_1, (int32_t)llround(10000.0 * i[PowerSupply.mA_Active].value_1));
-            if (Calib_GUI.Current.vin_2) lv_spinbox_set_value(Calib_GUI.Current.vin_2, (int32_t)llround(10000.0 * i[PowerSupply.mA_Active].value_2));
+            if (Calib_GUI.Current.code_1) { lv_spinbox_set_value(Calib_GUI.Current.code_1, i[PowerSupply.mA_Active].code_1); lv_obj_invalidate(Calib_GUI.Current.code_1); }
+            if (Calib_GUI.Current.code_2) { lv_spinbox_set_value(Calib_GUI.Current.code_2, i[PowerSupply.mA_Active].code_2); lv_obj_invalidate(Calib_GUI.Current.code_2); }
+            if (Calib_GUI.Current.vin_1) { lv_spinbox_set_value(Calib_GUI.Current.vin_1, (int32_t)llround(10000.0 * i[PowerSupply.mA_Active].value_1)); lv_obj_invalidate(Calib_GUI.Current.vin_1); }
+            if (Calib_GUI.Current.vin_2) { lv_spinbox_set_value(Calib_GUI.Current.vin_2, (int32_t)llround(10000.0 * i[PowerSupply.mA_Active].value_2)); lv_obj_invalidate(Calib_GUI.Current.vin_2); }
         }
     }
 
@@ -167,6 +167,13 @@ void build_adc_calibration_window(lv_obj_t **win_holder,
         lv_spinbox_set_value(gui.code_2, pf.code2);
         lv_spinbox_set_value(gui.vin_1, (int32_t)llround(10000.0 * pf.val1));
         lv_spinbox_set_value(gui.vin_2, (int32_t)llround(10000.0 * pf.val2));
+
+        // Force visual refresh of all spinboxes (lv_spinbox_set_value may skip
+        // redraw when the textarea label area isn't fully invalidated)
+        lv_obj_invalidate(gui.code_1);
+        lv_obj_invalidate(gui.code_2);
+        lv_obj_invalidate(gui.vin_1);
+        lv_obj_invalidate(gui.vin_2);
 
         lv_obj_clear_flag(*win_holder, LV_OBJ_FLAG_HIDDEN);
         return;

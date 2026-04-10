@@ -25,5 +25,8 @@ void managePageEncoderInteraction();
 // Keyboard input handler
 void keyCheckLoop();
 
+// Deferred mA toggle UI update (must be called from Core 1 main loop)
+void processDeferredMaToggle();
+
 // Waveform selection helper
 void updateDutySpinboxState();

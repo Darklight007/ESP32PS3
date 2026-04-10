@@ -460,6 +460,10 @@ namespace
             lv_spinbox_set_value(Calib_GUI.Voltage.code_2, v.code_2);
             lv_spinbox_set_value(Calib_GUI.Voltage.vin_1, (int32_t)llround(10000.0 * v.value_1));
             lv_spinbox_set_value(Calib_GUI.Voltage.vin_2, (int32_t)llround(10000.0 * v.value_2));
+            lv_obj_invalidate(Calib_GUI.Voltage.code_1);
+            lv_obj_invalidate(Calib_GUI.Voltage.code_2);
+            lv_obj_invalidate(Calib_GUI.Voltage.vin_1);
+            lv_obj_invalidate(Calib_GUI.Voltage.vin_2);
         }
         if (PowerSupply.gui.calibration.win_ADC_current_calibration && !lv_obj_has_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN))
         {
@@ -468,6 +472,10 @@ namespace
             lv_spinbox_set_value(Calib_GUI.Current.code_2, i[PowerSupply.mA_Active].code_2);
             lv_spinbox_set_value(Calib_GUI.Current.vin_1, (int32_t)llround(10000.0 * i[PowerSupply.mA_Active].value_1));
             lv_spinbox_set_value(Calib_GUI.Current.vin_2, (int32_t)llround(10000.0 * i[PowerSupply.mA_Active].value_2));
+            lv_obj_invalidate(Calib_GUI.Current.code_1);
+            lv_obj_invalidate(Calib_GUI.Current.code_2);
+            lv_obj_invalidate(Calib_GUI.Current.vin_1);
+            lv_obj_invalidate(Calib_GUI.Current.vin_2);
         }
         if (PowerSupply.gui.calibration.win_int_current_calibration && !lv_obj_has_flag(PowerSupply.gui.calibration.win_int_current_calibration, LV_OBJ_FLAG_HIDDEN))
         {
