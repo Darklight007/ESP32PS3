@@ -14,9 +14,16 @@ static bool s_pending = false; // true after _begin(), cleared by _done()
 
 static lv_obj_t *log_win;
 static lv_obj_t *log_label;
+static lv_obj_t *log_title_label;
+
+// When true, close_log_cb is suppressed (used by full auto calibration)
+bool g_log_window_keep_open = false;
 
 void close_log_cb(lv_timer_t *t)
 {
+    if (g_log_window_keep_open)
+        return; // Full auto cal is running — don't hide
+
     if (log_win && lv_obj_is_valid(log_win))
     {
         lv_obj_add_flag(log_win, LV_OBJ_FLAG_HIDDEN);
@@ -152,12 +159,20 @@ void log_reset()
     s_pending = false;
 }
 
-void create_log_window()
+void log_set_title(const char *title)
+{
+    if (log_title_label && lv_obj_is_valid(log_title_label))
+        lv_label_set_text(log_title_label, title ? title : "Calibration");
+}
+
+void create_log_window(const char *title)
 {
     // Reuse existing hidden window if still valid
     if (log_win && lv_obj_is_valid(log_win))
     {
         lv_obj_clear_flag(log_win, LV_OBJ_FLAG_HIDDEN);
+        if (title)
+            log_set_title(title);
         return;
     }
 
@@ -168,7 +183,7 @@ void create_log_window()
         return;
     }
 
-    lv_win_add_title(log_win, "Measuring total internal resistor");
+    log_title_label = lv_win_add_title(log_win, title ? title : "Calibration");
 
     lv_obj_t *cont = lv_win_get_content(log_win);
     if (!cont)

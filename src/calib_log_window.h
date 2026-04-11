@@ -20,8 +20,14 @@ void log_clear();
 // Reset the internal log state (clears buffer and pending flag)
 void log_reset();
 
-// Create the logging window UI
-void create_log_window();
+// Create the logging window UI (title defaults to "Calibration" if nullptr)
+void create_log_window(const char *title = nullptr);
+
+// Update the title of an existing log window
+void log_set_title(const char *title);
 
 // Timer callback to close the log window (for use with lv_timer_create)
 void close_log_cb(lv_timer_t *t);
+
+// When true, close_log_cb won't hide the window (used by full auto calibration)
+extern bool g_log_window_keep_open;
