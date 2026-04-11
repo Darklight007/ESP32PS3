@@ -164,15 +164,20 @@ static void full_auto_timer_cb(lv_timer_t *t)
 
     case FullAutoPhase::INL:
         Serial.println("[FullAuto] Step 6/6: ADC INL Calibration");
-        log_set_title("6/6 INL Calibration");
-        log_reset();
-        log_clear();
+        // Open the INL calibration window (shows table, progress bar, etc.)
+        ADC_INL_Voltage_calibration_cb(nullptr);
         start_inl_calibration();
         phase = FullAutoPhase::WAIT_INL;
         break;
 
     case FullAutoPhase::WAIT_INL:
         if (!is_inl_calibration_running()) {
+            // Hide the INL window now that calibration is done
+            if (PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration &&
+                lv_obj_is_valid(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration))
+            {
+                lv_obj_add_flag(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration, LV_OBJ_FLAG_HIDDEN);
+            }
             phase = FullAutoPhase::DONE;
         }
         break;
