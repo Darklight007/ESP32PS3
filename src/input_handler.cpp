@@ -893,7 +893,7 @@ void keyCheckLoop()
                  }
              });
 
-    keyMenusPage('+', " RELEASED.", 2, [&]
+    keyMenusPage('T', " RELEASED.", 2, [&]
                  {
                      if (T_hold_triggered) { T_hold_triggered = false; return; }
                      myTone(NOTE_A4, 10);
@@ -904,7 +904,7 @@ void keyCheckLoop()
                      mA_toggle_source_page = 2;
                      mA_toggle_pending = true; });
 
-    keyMenusPage('+', " RELEASED.", 4, [&]
+    keyMenusPage('T', " RELEASED.", 4, [&]
                  {
                      if (T_hold_triggered) { T_hold_triggered = false; return; }
                      myTone(NOTE_A4, 10, false);

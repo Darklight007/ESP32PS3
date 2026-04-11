@@ -78,7 +78,7 @@ void DispObjects::displayUpdate(bool update)
 void DispObjects::statUpdate(void)
 {
 
-    lv_label_set_text_fmt(statLabels.label_setSmallFont, "%+08.4f", adjValue / adjFactor);
+    lv_label_set_text_fmt(statLabels.label_setSmallFont, "%+08.4f", (adjValue - adjOffset) / adjFactor);
     lv_label_set_text_fmt(statLabels.label_value, "%+08.4f", Statistics.value);
     lv_label_set_text_fmt(statLabels.label_mean, "%+08.4f", Statistics.Mean());
     lv_label_set_text_fmt(statLabels.label_std, "%07.4f", Statistics.StandardDeviation());
@@ -231,15 +231,15 @@ void DispObjects::Flush(void)
         // lv_label_set_text_fmt(label_setValue, a, adjValue +adjOffset);
         if (strcmp(lv_label_get_text(label_unit), "A"))
 
-            lv_label_set_text_fmt(label_setValue, "%+08.4fV", adjValue / adjFactor);
+            lv_label_set_text_fmt(label_setValue, "%+08.4fV", (adjValue - adjOffset) / adjFactor);
         else
-            lv_label_set_text_fmt(label_setValue, "%+08.4fA", adjValue / adjFactor);
+            lv_label_set_text_fmt(label_setValue, "%+08.4fA", (adjValue - adjOffset) / adjFactor);
 
         // update bar setting shadaow
-        lv_obj_set_width(Bar.bar_adjValue, (adjValue / adjFactor) / maxValue * lv_bar_get_max_value(Bar.bar));
+        lv_obj_set_width(Bar.bar_adjValue, ((adjValue - adjOffset) / adjFactor) / maxValue * lv_bar_get_max_value(Bar.bar));
         adjValueChanged = false;
         // lv_obj_invalidate(label_setValue);
-        Serial.printf("\n%10.4f", adjValue / adjFactor);
+        Serial.printf("\n%10.4f", (adjValue - adjOffset) / adjFactor);
     }
     // _lv_disp_refr_timer(NULL);
 }

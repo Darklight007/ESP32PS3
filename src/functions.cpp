@@ -58,7 +58,6 @@ static const class_map_t class_map[] = {
     {NULL, NULL} // Sentinel
 };
 
-
 void autoScrollY()
 {
 
@@ -85,7 +84,6 @@ void autoScrollY()
 
     lv_obj_scroll_to_y(PowerSupply.graph.chart, lv_coord_t(calc), LV_ANIM_OFF);
 }
-
 
 void print_obj_type(lv_obj_t *obj)
 {
@@ -124,7 +122,13 @@ void trackLoopExecution(const char *callerName)
     if ((currentTime - lastLoopTime) >= loopInterval)
     {
         // Print the caller's name along with the loop count and time
-        Serial.printf("\n%s: Loop Count: %5.0f @ %07.2f seconds.%c", callerName, loopCount * 1000.0 / loopInterval, currentTime / 1000.0, keyChar);
+        Serial.printf("\n%s: Loop Count: %5.0f @ %07.2f seconds. Last key:  %c",
+                      callerName, loopCount * 1000.0 / loopInterval,
+                      currentTime / 1000.0,
+                    //   0*PowerSupply.Current.adjFactor,
+                    //   0* PowerSupply.Current.adjOffset,
+                      keyChar
+                    );
         lastLoopTime = currentTime;
         loopCount = 0;
     }

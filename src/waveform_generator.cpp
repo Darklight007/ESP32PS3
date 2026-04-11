@@ -209,7 +209,7 @@ bool functionGenerator()
 
     // ALWAYS update DAC - no change detection!
     // Change detection was causing stepped/choppy waveforms
-    PowerSupply.Voltage.SetUpdate(outputValue * PowerSupply.Voltage.adjFactor);
+    PowerSupply.Voltage.SetUpdate(outputValue * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
 
     // Track minimal change intervals
     //  Serial.printf("\nmonitor output: %1.3f ", monitorMinChanges(value, t) );

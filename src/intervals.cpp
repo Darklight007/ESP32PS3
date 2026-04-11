@@ -56,11 +56,14 @@ void statisticUpdateInterval(unsigned long interval)
     static unsigned long timer_ = {0};
     schedule([]
              {
-                // Only save settings if values actually changed
+                // Only save settings if values actually changed AND not in FUN mode
+                // (FUN mode changes adjValue at 200-500Hz — saving to NVS that fast
+                // causes flash GC stalls that freeze the display)
                 static uint16_t lastVoltage = 0;
                 static uint16_t lastCurrent = 0;
-                if (PowerSupply.Voltage.adjValue != lastVoltage ||
-                    PowerSupply.Current.adjValue != lastCurrent) {
+                if (PowerSupply.getStatus() != DEVICE::FUN &&
+                    (PowerSupply.Voltage.adjValue != lastVoltage ||
+                     PowerSupply.Current.adjValue != lastCurrent)) {
                     PowerSupply.settingParameters.SetVoltage = PowerSupply.Voltage.adjValue;
                     PowerSupply.settingParameters.SetCurrent = PowerSupply.Current.adjValue;
                     PowerSupply.SaveSetting();
@@ -156,21 +159,18 @@ static unsigned int lvglIsBlocked = {0};
 
 void LvglUpdatesInterval(unsigned long interval, bool forceUpdate)
 {
+    // Safety: ensure invalidation is always enabled (could get stuck disabled
+    // if setStatus() is interrupted or exits abnormally)
+    if (!lv_disp_is_invalidation_enabled(NULL))
+        lv_disp_enable_invalidation(NULL, true);
+
     schedule([forceUpdate]
              {
                  // When forceUpdate is true (encoder active), bypass adcDataReady check
                  // for immediate UI responsiveness
                  if (!lvglChartIsBusy && !blockAll && (forceUpdate || adcDataReady))
                  {
-
-                    // PowerSupply.Voltage.barUpdate();
-                    // PowerSupply.Current.barUpdate();
-
-                    // lv_obj_invalidate( PowerSupply.Current.Bar.bar);
-                    // lv_obj_invalidate( PowerSupply.Voltage.Bar.bar);
-
                      lvglIsBusy = 1;
-                    //  lv_timer_handler();
                      lv_refr_now(NULL);
                      lvglIsBusy = 0;
                      lvglIsBlocked = 0;
