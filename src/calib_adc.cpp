@@ -1,6 +1,7 @@
 #include "calib_adc.h"
 #include "calib_internal_leakage.h"
 #include "calib_log_window.h"
+#include "setting_menu.h"
 #include "device.hpp"
 #include "spinbox_pro.h"
 #include "lv_gui_helper.h"
@@ -76,10 +77,9 @@ namespace
 
     // Dummy callback for error message boxes
     static void error_msgbox_dummy_cb(lv_event_t *e) {
-        // Do nothing - just close the message box
         lv_obj_t *obj = lv_event_get_current_target(e);
         if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED) {
-            lv_msgbox_close_async(obj);
+            msgbox_close_deferred(obj);
         }
     }
 
@@ -105,10 +105,9 @@ namespace
         // Check if OK button was pressed (compare text, not index)
         bool is_ok = (btn_txt && strcmp(btn_txt, "OK") == 0);
 
-        // Close message box asynchronously
-        lv_msgbox_close_async(obj);
+        // Close message box
+        msgbox_close_deferred(obj);
 
-        // Only proceed if OK was pressed
         if (!is_ok) {
             Serial.println("Auto-zero: Not OK, returning");
             return;
@@ -135,11 +134,10 @@ namespace
         // Reset watchdog before long operation
         esp_task_wdt_reset();
 
-        create_log_window();
+        create_log_window("Auto Zero Calibration");
         log_reset();
         log_clear();
 
-        // Run calibration directly on main thread (LVGL is NOT thread-safe)
         // Call the appropriate calibration function based on context
         if (g_autozero_context == AutoZeroContext::FOR_VOLTAGE) {
             Serial.println("Starting voltage auto-zero calibration");
@@ -150,7 +148,6 @@ namespace
         }
 
         Serial.println("Auto-zero calibration started");
-        // NOTE: in_progress flag is cleared in calibration finalize step
     }
 } // end anonymous namespace
 
