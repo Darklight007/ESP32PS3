@@ -170,7 +170,11 @@ static void INL_timer_cb(lv_timer_t *)
 
     case INL_FSM::SETTLE:
     {
-        if (since(inl.t0) >= (uint32_t)100 * lv_spinbox_get_value(PowerSupply.gui.calibration.inl.settle_time))
+        uint32_t settle_val = (PowerSupply.gui.calibration.inl.settle_time &&
+                                lv_obj_is_valid(PowerSupply.gui.calibration.inl.settle_time))
+                               ? lv_spinbox_get_value(PowerSupply.gui.calibration.inl.settle_time)
+                               : 30; // default 3.0s when GUI not open
+        if (since(inl.t0) >= (uint32_t)100 * settle_val)
         {
             INL_dbg("[INL] SETTLE  +%u ms", unsigned(since(inl.t0)));
             inl.ph = INL_FSM::MEASURE;
@@ -316,6 +320,27 @@ static void INL_start(lv_event_t *e)
 static void ADC_INL_VCalib_cb(lv_event_t *)
 {
     Warning_msgbox("ADC INL Calibration", INL_start);
+}
+
+// Public API to start INL calibration programmatically (no msgbox prompt)
+void start_inl_calibration()
+{
+    INL_dbg("[INL] Starting INL calibration (programmatic)");
+    g_voltINL_ready = false;
+    if (inl.timer)
+    {
+        lv_timer_del(inl.timer);
+        inl.timer = nullptr;
+    }
+    inl = INL_FSM{};
+    inl.ph = INL_FSM::PREPARE;
+    inl.timer = lv_timer_create(INL_timer_cb, 10, nullptr);
+}
+
+// Check if INL calibration is currently running
+bool is_inl_calibration_running()
+{
+    return (inl.timer != nullptr && inl.ph != INL_FSM::DONE);
 }
 
 // =============================================================================
