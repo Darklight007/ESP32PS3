@@ -638,8 +638,7 @@ void draw_event_cb2(lv_event_t *e)
         else if (dsc->id == LV_CHART_AXIS_SECONDARY_Y)
         {
             static int index_sy = 0;
-            static char *tickLabels_sy[] = {nullptr, "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0"};
-            tickLabels_sy[0] = PowerSupply.mA_Active ? (char*)"8.0mA" : (char*)"8.0A";
+            static char *tickLabels_sy[] = {"8.0A", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0"};
 
             if (strcmp(dsc->text, "8000") == 0)
                 index_sy = 0;
