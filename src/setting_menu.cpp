@@ -5,6 +5,7 @@
 #include "calib_dac.h"
 #include "calib_adc.h"
 #include "calib_inl.h"
+#include "calib_full_auto.h"
 
 // heavy/private includes live ONLY in the .cpp
 #include "spinbox_pro.h"
@@ -416,7 +417,7 @@ namespace
 
         // Convert slider value (0-11) to time spans
         // 0=5s, 1=10s, 2=30s, 3=60s(1m), 4=5m, 5=10m, 6=30m, 7=1h, 8=2h, 9=4h, 10=8h, 11=12h
-        const uint16_t timeSpans[] = {5, 10, 30, 60, 300, 600, 1800, 3600, 7200, 14400, 28800, 43200};
+        const uint16_t timeSpans[] = { 5, 10, 30, 60, 300, 600, 1800, 3600, 7200, 14400, 28800, 43200};
         const char* labels[] = {"5s", "10s", "30s", "1m", "5m", "10m", "30m", "1h", "2h", "4h", "8h", "12h"};
 
         if (v >= 0 && v < 12)
@@ -460,10 +461,6 @@ namespace
             lv_spinbox_set_value(Calib_GUI.Voltage.code_2, v.code_2);
             lv_spinbox_set_value(Calib_GUI.Voltage.vin_1, (int32_t)llround(10000.0 * v.value_1));
             lv_spinbox_set_value(Calib_GUI.Voltage.vin_2, (int32_t)llround(10000.0 * v.value_2));
-            lv_obj_invalidate(Calib_GUI.Voltage.code_1);
-            lv_obj_invalidate(Calib_GUI.Voltage.code_2);
-            lv_obj_invalidate(Calib_GUI.Voltage.vin_1);
-            lv_obj_invalidate(Calib_GUI.Voltage.vin_2);
         }
         if (PowerSupply.gui.calibration.win_ADC_current_calibration && !lv_obj_has_flag(PowerSupply.gui.calibration.win_ADC_current_calibration, LV_OBJ_FLAG_HIDDEN))
         {
@@ -666,6 +663,7 @@ void SettingMenu(lv_obj_t *parent)
     create_button_item(section, open_dac_calibration_cb, "V/I DAC");
     create_button_item(section, internal_leakage_calibration_cb, "Inter. Current");
     create_button_item(section, ADC_INL_Voltage_calibration_cb, "ADC INL V_CAL");
+    create_button_item(section, full_auto_calibration_cb, "Full Auto Cal");
 
     create_button_item(section, nullptr /* Stats reset wiring */, "Reset Stats");
     create_button_item(section, LCD_Calibration_cb, "LCD Touch");
@@ -821,7 +819,7 @@ static void event_cb(lv_event_t *e)
             esp_task_wdt_reset();
 
             // Create log window FIRST (before blocking or modifying data)
-            create_log_window();
+            create_log_window("Internal Resistance");
             log_reset();
             log_clear();
 
@@ -837,6 +835,22 @@ static void event_cb(lv_event_t *e)
 }
 
 // Create warning message box with red styling
+// Safe deferred msgbox close — use instead of lv_msgbox_close_async() inside event
+// callbacks to avoid crashing in _lv_event_mark_deleted.
+static void _msgbox_close_timer_cb(lv_timer_t *t)
+{
+    lv_obj_t *mbox = (lv_obj_t *)t->user_data;
+    lv_timer_del(t);
+    if (mbox) lv_msgbox_close(mbox);
+}
+
+void msgbox_close_deferred(lv_obj_t *mbox)
+{
+    // 50ms delay ensures this fires in the NEXT lv_timer_handler() pass,
+    // not the current one (which would crash _lv_event_mark_deleted)
+    lv_timer_create(_msgbox_close_timer_cb, 50, mbox);
+}
+
 void Warning_msgbox(const char *title, lv_event_cb_t event_cb)
 {
     esp_task_wdt_reset();
