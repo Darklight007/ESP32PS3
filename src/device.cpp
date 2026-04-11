@@ -549,6 +549,7 @@ void Device::readVoltage()
             v_corrected = g_voltINL.apply(v_corrected);
 
         Voltage.measureUpdate(v_corrected);
+        Voltage.rawValueStats(Voltage.rawValue);
         adc.ADC_loopCounter++;
 
         // lv_obj_invalidate(Voltage.Bar.bar);

@@ -252,6 +252,7 @@ void setupPowerSupply()
     PowerSupply.Current.effectiveResolution.SetWindowSize(32);
     PowerSupply.Power.effectiveResolution.SetWindowSize(1);
 
+    PowerSupply.Voltage.rawValueStats.SetWindowSize(2048);
     PowerSupply.Current.rawValueStats.SetWindowSize(2048);
     // Setup current parameters
     PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", PowerSupply.Current.maxValue, PowerSupply.Current.minValue,
