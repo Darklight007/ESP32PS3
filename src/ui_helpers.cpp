@@ -90,15 +90,15 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     lv_obj_set_size(PowerSupply.graph.chart, 242, 154);
     lv_obj_align(PowerSupply.graph.chart, LV_ALIGN_DEFAULT, x, y);
 
-    lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_Y, -.3 * 1000, 32000);  // 40000mv
-    lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_Y, -.3 * 1000, 8000); // 8000ma
+    lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_Y, -4000, 32000);   // -4V to 32V (9 ticks, 4V each)
+    lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_Y, -1000, 8000); // -1A to 8A (10 ticks, 1A each)
     lv_chart_set_range(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_X, 0, 300);
 
-    lv_chart_set_div_line_count(PowerSupply.graph.chart, 9, 13);
+    lv_chart_set_div_line_count(PowerSupply.graph.chart, 10, 13);
     lv_obj_set_style_text_color(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_GREY), LV_PART_TICKS);
-    lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_Y, 5, 3, 9, 4, true, 40);
+    lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_Y, 5, 3, 10, 4, true, 40);   // 10 ticks: -4V to 32V
     lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_X, 5, 3, 7, 10, true, 50);
-    lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_Y, 5, 3, 9, 10, true, 50);
+    lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_Y, 5, 3, 10, 10, true, 50); // 10 ticks: -1A to 8A
 
     lv_chart_set_type(PowerSupply.graph.chart, LV_CHART_TYPE_LINE);
 
@@ -265,29 +265,35 @@ void GraphPush()
 {
     static unsigned long lastPushTime = 0;
 
-    // In time mode, only push data when enough time has elapsed
     if (PowerSupply.settingParameters.graphXaxisTimeMode)
     {
-        unsigned long currentTime = millis();
+        unsigned long now = millis();
+        // graphTimeSpanSeconds is per-division; total chart = value * 24 divisions
+        unsigned long msPerPoint = (PowerSupply.settingParameters.graphTimeSpanSeconds / 24.0 * 1000UL) / CHART_SIZE;
+        if (msPerPoint < 1) msPerPoint = 1;
 
-        // Calculate milliseconds per point based on selected time span
-        // timeSpan is in seconds, CHART_SIZE is number of points
-        unsigned long msPerPoint = (PowerSupply.settingParameters.graphTimeSpanSeconds * 1000UL) / CHART_SIZE;
+        if (lastPushTime == 0) { lastPushTime = now; return; }
 
-        // Only push if enough time has elapsed
-        if (lastPushTime > 0 && (currentTime - lastPushTime) < msPerPoint)
-        {
-            return;  // Not enough time elapsed, skip this push
+        int count = (now - lastPushTime) / msPerPoint;
+        if (count < 1) return;
+        if (count > CHART_SIZE) count = CHART_SIZE;
+
+        lv_coord_t vVal = PowerSupply.Voltage.measured.value * 1000.0;
+        lv_coord_t iVal = PowerSupply.Current.measured.value * 1000.0;
+
+        memmove(&graph_data_V[0], &graph_data_V[count], (CHART_SIZE - count) * sizeof(graph_data_V[0]));
+        memmove(&graph_data_I[0], &graph_data_I[count], (CHART_SIZE - count) * sizeof(graph_data_I[0]));
+        for (int i = CHART_SIZE - count; i < CHART_SIZE; i++) {
+            graph_data_V[i] = vVal;
+            graph_data_I[i] = iVal;
         }
-
-        lastPushTime = currentTime;
+        lastPushTime += (unsigned long)count * msPerPoint;
+        return;
     }
 
-    // First shift everything left by one position
+    // Points mode: one point per ADC call
     memcpy(&graph_data_V[0], &graph_data_V[1], (CHART_SIZE - 1) * sizeof(graph_data_V[0]));
     memcpy(&graph_data_I[0], &graph_data_I[1], (CHART_SIZE - 1) * sizeof(graph_data_I[0]));
-
-    // Now place the new value at the end
     graph_data_V[CHART_SIZE - 1] = PowerSupply.Voltage.measured.value * 1000.0;
     graph_data_I[CHART_SIZE - 1] = PowerSupply.Current.measured.value * 1000.0;
 }
@@ -558,64 +564,39 @@ void draw_event_cb2(lv_event_t *e)
         /* Handle LV_CHART_AXIS_PRIMARY_X */
         if (dsc->id == LV_CHART_AXIS_PRIMARY_X)
         {
+            // Use dsc->value as tick index (0..NUM_LABELS-1) — no fragile static counter
+            int idx = dsc->value;
+            if (idx < 0 || idx >= NUM_LABELS) idx = 0;
+
             if (PowerSupply.settingParameters.graphXaxisTimeMode)
             {
-                // Time mode: Show time in seconds, minutes, or hours
                 uint16_t timeSpan = PowerSupply.settingParameters.graphTimeSpanSeconds;
 
-                for (int i = 0; i < NUM_LABELS; i++)
+                if (idx == NUM_LABELS - 1)
                 {
-                    if (i == NUM_LABELS - 1)
-                    {
-                        strcpy(tickLabels_x[i], "0");
-                    }
-                    else
-                    {
-                        int timeValue = timeSpan * (NUM_LABELS - 1 - i) / (NUM_LABELS - 1);
+                    lv_snprintf(dsc->text, dsc->text_length, "0");
+                }
+                else
+                {
+                    int timeValue = timeSpan * 24 * (NUM_LABELS - 1 - idx) / (NUM_LABELS - 1);
 
-                        if (timeSpan < 120)  // Less than 2 minutes, show in seconds
-                        {
-                            sprintf(tickLabels_x[i], "%ds", timeValue);
-                        }
-                        else if (timeSpan < 3600)  // Less than 1 hour, show in minutes
-                        {
-                            sprintf(tickLabels_x[i], "%dm", timeValue / 60);
-                        }
-                        else  // 1 hour or more, show in hours:minutes
-                        {
-                            int hours = timeValue / 3600;
-                            int mins = (timeValue % 3600) / 60;
-                            if (mins == 0)
-                                sprintf(tickLabels_x[i], "%dh", hours);
-                            else
-                                sprintf(tickLabels_x[i], "%d:%02d", hours, mins);
-                        }
-                    }
+                    if (timeValue < 60)
+                        lv_snprintf(dsc->text, dsc->text_length, "%ds", timeValue);
+                    else if (timeValue < 3600)
+                        lv_snprintf(dsc->text, dsc->text_length, timeValue % 60 ? "%d:%02d" : "%dm", timeValue / 60, timeValue % 60);
+                    else
+                        lv_snprintf(dsc->text, dsc->text_length, (timeValue % 3600) / 60 ? "%d:%02d" : "%dh", timeValue / 3600, (timeValue % 3600) / 60);
                 }
             }
             else
             {
-                // Points mode: Show point numbers
-                for (int i = 0; i < NUM_LABELS; i++)
-                {
-                    if (i == NUM_LABELS - 1)
-                    {
-                        strcpy(tickLabels_x[i], "0 pts");
-                    }
-                    else
-                    {
-                        int value = CHART_SIZE * (NUM_LABELS - 1 - i) / (NUM_LABELS - 1);
-                        sprintf(tickLabels_x[i], "%d", value);
-                    }
+                if (idx == NUM_LABELS - 1)
+                    lv_snprintf(dsc->text, dsc->text_length, "0 pts");
+                else {
+                    int value = CHART_SIZE * (NUM_LABELS - 1 - idx) / (NUM_LABELS - 1);
+                    lv_snprintf(dsc->text, dsc->text_length, "%d", value);
                 }
             }
-
-            static int index_x = 0;
-
-            if (index_x == 7)
-                index_x = 0;
-
-            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabels_x[index_x++]);
 
             if (dsc->label_dsc)
                 dsc->label_dsc->font = &lv_font_montserrat_10;
@@ -624,7 +605,7 @@ void draw_event_cb2(lv_event_t *e)
         else if (dsc->id == LV_CHART_AXIS_PRIMARY_Y)
         {
             static int index_y = 0;
-            static char *tickLabels_y[] = {"32.0V", "28.0", "24.0", "20.0", "16.0", "12.0", "8.0", "4.0", "0.0"};
+            static char *tickLabels_y[] = {"32.0V", "28.0", "24.0", "20.0", "16.0", "12.0", "8.0", "4.0", "0.0", "-4.0"};
 
             if (strcmp(dsc->text, "32000") == 0)
                 index_y = 0;
@@ -638,7 +619,7 @@ void draw_event_cb2(lv_event_t *e)
         else if (dsc->id == LV_CHART_AXIS_SECONDARY_Y)
         {
             static int index_sy = 0;
-            static char *tickLabels_sy[] = {"8.0A", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0"};
+            static char *tickLabels_sy[] = {"8.0A", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0", "-1.0"};
 
             if (strcmp(dsc->text, "8000") == 0)
                 index_sy = 0;
