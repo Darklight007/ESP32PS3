@@ -165,14 +165,14 @@ void Task_ADC(void *pvParameters)
         }
 
         // Process ADC data
-        // Dont read ADC during LCD SPI activity if SPS set to 0 (slowest)
-        if (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0)
+        // Dont read ADC during LCD SPI activity if SPS set to 0 (slowest) — noise sensitive
+        bool adcRead = (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0);
+        if (adcRead)
         {
             PowerSupply.readVoltage();
             PowerSupply.readCurrent();
         }
 
-        // continue;
         // Fast recording logic (runs at ADC speed, up to ~300 SPS)
         // UI update strategy: on-the-fly for slow SPS (<=50ms period), batch for fast SPS
         static unsigned long lastRecordTime = 0;
@@ -223,10 +223,12 @@ void Task_ADC(void *pvParameters)
             lastCCCVStatus = currentCCCVStatus;
         }
 
-        // Update histogram and graph data (data only, no LVGL)
-        HistPush();
-        GraphPush();
-
-        // Chart refresh moved to Core 1 (main loop) for LVGL thread-safety
+        // Only push to graph/histogram when ADC actually read fresh data
+        if (adcRead)
+        {
+            HistPush();
+            GraphPush();
+        }
     }
 }
+ 
