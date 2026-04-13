@@ -173,7 +173,7 @@ void loop()
 
   // Chart refresh (Core 1 only - LVGL thread-safe)
   HistogramChartRefreshInterval(125); // Refresh histogram chart every 125ms
-  GraphChartRefreshInterval(125);     // Refresh graph chart every 125ms
+  GraphChartRefreshInterval(1);     // Refresh graph chart every 125ms
 
   // Flush measures - Slow when encoder active for immediate visual feedback
   if (encoderActive)
