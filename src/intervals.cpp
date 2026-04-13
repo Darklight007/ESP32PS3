@@ -3,6 +3,7 @@
 #include <lvgl.h>
 #include "device.hpp"
 #include "globals.h"
+#include "ui_helpers.h"
 #include "tabs.h"
 #include "FFTHandler.h"
 #include "power_management.h"
@@ -407,6 +408,11 @@ void GraphChartRefreshInterval(unsigned long interval)
     static unsigned long timer_ = 0;
     schedule([]
              {
+                 // In time mode, push data from Core 1 at the correct fixed rate
+                 // (independent of ADC speed — repeated values are fine)
+                 if (PowerSupply.settingParameters.graphXaxisTimeMode)
+                     GraphPush();
+
                  // Only refresh when on graph page (page 1)
                  if (Tabs::getCurrentPage() == 1 && !lvglChartIsBusy && !blockAll)
                  {
