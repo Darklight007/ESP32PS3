@@ -840,15 +840,17 @@ static void event_cb(lv_event_t *e)
 static void _msgbox_close_timer_cb(lv_timer_t *t)
 {
     lv_obj_t *mbox = (lv_obj_t *)t->user_data;
-    lv_timer_del(t);
-    if (mbox) lv_msgbox_close(mbox);
+    if (mbox && lv_obj_is_valid(mbox))
+        lv_msgbox_close(mbox);
+    // Timer auto-deletes after this (repeat_count=1 set at creation)
 }
 
 void msgbox_close_deferred(lv_obj_t *mbox)
 {
     // 50ms delay ensures this fires in the NEXT lv_timer_handler() pass,
     // not the current one (which would crash _lv_event_mark_deleted)
-    lv_timer_create(_msgbox_close_timer_cb, 50, mbox);
+    lv_timer_t *t = lv_timer_create(_msgbox_close_timer_cb, 50, mbox);
+    lv_timer_set_repeat_count(t, 1);  // auto-delete after firing (safe, no manual lv_timer_del)
 }
 
 void Warning_msgbox(const char *title, lv_event_cb_t event_cb)
