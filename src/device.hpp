@@ -155,6 +155,7 @@ struct SettingParameters
     // Graph X-axis Display Mode
     bool graphXaxisTimeMode = false;  // false = points mode, true = time mode
     uint16_t graphTimeSpanSeconds = 60;  // Time span for X-axis in seconds (1 min to several hours)
+    bool graphAutoStop = false;  // Auto-pause graph after one full time span
 };
 
 class LVLabel_class; // Forward declaration

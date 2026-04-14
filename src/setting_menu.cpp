@@ -408,6 +408,13 @@ namespace
         Serial.printf("\nGraph X-axis mode: %s", timeMode ? "Time" : "Points");
     }
 
+    static void switch_graph_autostop_event_cb(lv_event_t *e)
+    {
+        auto *sw = lv_event_get_target(e);
+        PowerSupply.settingParameters.graphAutoStop = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        Serial.printf("\nGraph auto-stop: %s", PowerSupply.settingParameters.graphAutoStop ? "ON" : "OFF");
+    }
+
     // Graph time span slider callback
     static void slider_graph_timespan_event_cb(lv_event_t *e)
     {
@@ -716,6 +723,7 @@ void SettingMenu(lv_obj_t *parent)
     }
     create_slider(section, nullptr, "Time Span", 0, 11, initialSliderPos, slider_graph_timespan_event_cb, LV_EVENT_VALUE_CHANGED);
     create_text(section, nullptr, "Time span: 5s to 12h\nOnly used when Time Mode enabled", 0, nullptr);
+    create_switch_(section, nullptr, "Auto-Stop after Full Span", PowerSupply.settingParameters.graphAutoStop, switch_graph_autostop_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     // Beeper Control (feature #11) - Buzzer enable at top, volume removed
     lv_obj_t *sub_beeper_detail = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);

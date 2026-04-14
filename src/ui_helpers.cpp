@@ -262,11 +262,14 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 
 
 bool g_graphPaused = false;
+static int g_graphPushCount = 0;
 
 void GraphPush()
 {
     static unsigned long lastPushTime = 0;
-    if (g_graphPaused) return;
+    static bool wasPaused = false;
+    if (g_graphPaused) { wasPaused = true; return; }
+    if (wasPaused) { g_graphPushCount = 0; lastPushTime = 0; wasPaused = false; }
 
     if (PowerSupply.settingParameters.graphXaxisTimeMode)
     {
@@ -291,6 +294,15 @@ void GraphPush()
             graph_data_I[i] = iVal;
         }
         lastPushTime += (unsigned long)count * msPerPoint;
+
+        // Auto-stop after one full chart fill
+        if (PowerSupply.settingParameters.graphAutoStop) {
+            g_graphPushCount += count;
+            if (g_graphPushCount >= CHART_SIZE) {
+                g_graphPaused = true;
+                g_graphPushCount = 0;
+            }
+        }
         return;
     }
 
@@ -299,6 +311,15 @@ void GraphPush()
     memcpy(&graph_data_I[0], &graph_data_I[1], (CHART_SIZE - 1) * sizeof(graph_data_I[0]));
     graph_data_V[CHART_SIZE - 1] = PowerSupply.Voltage.measured.value * 1000.0;
     graph_data_I[CHART_SIZE - 1] = PowerSupply.Current.measured.value * 1000.0;
+
+    // Auto-stop after one full chart fill
+    if (PowerSupply.settingParameters.graphAutoStop) {
+        g_graphPushCount++;
+        if (g_graphPushCount >= CHART_SIZE) {
+            g_graphPaused = true;
+            g_graphPushCount = 0;
+        }
+    }
 }
 
 void HistPush()

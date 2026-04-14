@@ -1270,7 +1270,7 @@ void keyCheckLoop()
 
                      chart_mode = !chart_mode; });
 
-    keyMenusPage('X', " RELEASED.", 1, []
+    keyMenusPage('W', " RELEASED.", 1, []
                  {
                      g_graphPaused = !g_graphPaused;
                      Serial.printf("[Graph] %s\n", g_graphPaused ? "Paused" : "Resumed"); });
