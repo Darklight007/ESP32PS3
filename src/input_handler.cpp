@@ -1270,6 +1270,11 @@ void keyCheckLoop()
 
                      chart_mode = !chart_mode; });
 
+    keyMenusPage('X', " RELEASED.", 1, []
+                 {
+                     g_graphPaused = !g_graphPaused;
+                     Serial.printf("[Graph] %s\n", g_graphPaused ? "Paused" : "Resumed"); });
+
     keyMenusPage('X', " RELEASED.", 2, []
                  {
                      PowerSupply.Voltage.SetRotaryStep(1); //0.0005

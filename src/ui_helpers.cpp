@@ -261,9 +261,12 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 #define NUM_LABELS 7
 
 
+bool g_graphPaused = false;
+
 void GraphPush()
 {
     static unsigned long lastPushTime = 0;
+    if (g_graphPaused) return;
 
     if (PowerSupply.settingParameters.graphXaxisTimeMode)
     {
