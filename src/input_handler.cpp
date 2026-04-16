@@ -1273,6 +1273,12 @@ void keyCheckLoop()
     keyMenusPage('W', " RELEASED.", 1, []
                  {
                      g_graphPaused = !g_graphPaused;
+                     if (PowerSupply.graph.label_pause) {
+                         if (g_graphPaused)
+                             lv_obj_clear_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
+                         else
+                             lv_obj_add_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
+                     }
                      Serial.printf("[Graph] %s\n", g_graphPaused ? "Paused" : "Resumed"); });
 
     keyMenusPage('X', " RELEASED.", 2, []

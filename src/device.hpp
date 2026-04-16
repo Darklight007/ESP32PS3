@@ -214,6 +214,7 @@ public:
     lv_style_t style_statsCurrent;
     int y_min = 0.0;
     int y_max = 30.0;
+    lv_obj_t *label_pause = nullptr;
 };
 struct Stats_
 {
