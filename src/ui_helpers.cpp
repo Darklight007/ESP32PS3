@@ -141,6 +141,14 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     lv_obj_add_style(slider, &style_slider, LV_PART_MAIN);
     lv_obj_add_style(slider, &style_slider, LV_PART_KNOB);
 
+    // Pause indicator label (hidden by default)
+    PowerSupply.graph.label_pause = lv_label_create(parent);
+    lv_label_set_text(PowerSupply.graph.label_pause, LV_SYMBOL_PAUSE " PAUSED");
+    lv_obj_set_style_text_color(PowerSupply.graph.label_pause, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
+    lv_obj_set_style_text_font(PowerSupply.graph.label_pause, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_align_to(PowerSupply.graph.label_pause, PowerSupply.graph.chart, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_add_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
+
     legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V-Set", lv_palette_main(LV_PALETTE_AMBER), "I-set", 25, 0);
 
     lv_obj_set_parent(PowerSupply.Voltage.statLabels.label_fft, parent);
@@ -301,6 +309,8 @@ void GraphPush()
             if (g_graphPushCount >= CHART_SIZE) {
                 g_graphPaused = true;
                 g_graphPushCount = 0;
+                if (PowerSupply.graph.label_pause)
+                    lv_obj_clear_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
             }
         }
         return;
@@ -318,6 +328,8 @@ void GraphPush()
         if (g_graphPushCount >= CHART_SIZE) {
             g_graphPaused = true;
             g_graphPushCount = 0;
+            if (PowerSupply.graph.label_pause)
+                lv_obj_clear_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
         }
     }
 }
@@ -602,7 +614,7 @@ void draw_event_cb2(lv_event_t *e)
                 }
                 else
                 {
-                    int timeValue = timeSpan * 24 * (NUM_LABELS - 1 - idx) / (NUM_LABELS - 1);
+                    int timeValue = timeSpan * (NUM_LABELS - 1 - idx) / (NUM_LABELS - 1);
 
                     if (timeValue < 60)
                         lv_snprintf(dsc->text, dsc->text_length, "%ds", timeValue);
@@ -643,7 +655,8 @@ void draw_event_cb2(lv_event_t *e)
         else if (dsc->id == LV_CHART_AXIS_SECONDARY_Y)
         {
             static int index_sy = 0;
-            static char *tickLabels_sy[] = {"8.0A", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0", "-1.0"};
+            static char *tickLabels_sy[] = {nullptr, "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0", "-1.0"};
+            tickLabels_sy[0] = PowerSupply.mA_Active ? (char *)"8.0mA" : (char *)"8.0A";
 
             if (strcmp(dsc->text, "8000") == 0)
                 index_sy = 0;
