@@ -6,10 +6,15 @@
 // Create and start the sequencer runner
 SeqRunner *seq_start(lv_timer_t *t, const SeqStep *steps, size_t count, measure_ctx_t *mctx)
 {
+    if (!t)
+    {
+        Serial.println("ERROR: seq_start called with NULL timer (LVGL heap full?)");
+        return nullptr;
+    }
     auto *r = static_cast<SeqRunner *>(lv_mem_alloc(sizeof(SeqRunner)));
     if (!r)
     {
-        Serial.println("ERROR: Failed to allocate memory!");
+        Serial.println("ERROR: Failed to allocate SeqRunner memory!");
         lv_timer_del(t);
         return nullptr;
     }

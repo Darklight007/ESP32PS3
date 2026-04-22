@@ -319,6 +319,7 @@ static void INL_start(lv_event_t *e)
 
 static void ADC_INL_VCalib_cb(lv_event_t *)
 {
+    if (!calib_check_current_setpoint(10.0f)) return;
     Warning_msgbox("ADC INL Calibration", INL_start);
 }
 

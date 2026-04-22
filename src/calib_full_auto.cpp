@@ -271,5 +271,6 @@ static void full_auto_msgbox_cb(lv_event_t *e)
 
 void full_auto_calibration_cb(lv_event_t *)
 {
+    if (!calib_check_current_setpoint(10.0f)) return;
     Warning_msgbox("Full Auto Calibration", full_auto_msgbox_cb);
 }

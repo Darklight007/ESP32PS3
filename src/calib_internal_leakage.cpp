@@ -7,6 +7,7 @@
 #include "esp_task_wdt.h"
 #include <Arduino.h>
 #include <float.h>
+#include <cmath>
 
 // External references
 extern Device PowerSupply;
@@ -77,7 +78,17 @@ void start_leakage_resistance_measurement(lv_event_t *)
              // Log measurement results
              log_step("           i0 = %+1.6f", g_leakage_i_at_0v);
              log_step("           i1 = %+1.6f", g_leakage_i_at_32v);
-             double Rtot = (PowerSupply.mA_Active ? 1000.0 : 1.0) * 32.0f / (g_leakage_i_at_32v - g_leakage_i_at_0v) / 1000.0f;
+             double diff = g_leakage_i_at_32v - g_leakage_i_at_0v;
+             if (fabs(diff) < 1e-9) {
+                 log_step("ERROR: Current diff too small (< 1nA), cannot compute resistance");
+                 Serial.printf("\nERROR: Leakage diff too small: %e", diff);
+                 g_calibration_in_progress = false;
+                 return;
+             }
+             double Rtot = (PowerSupply.mA_Active ? 1000.0 : 1.0) * 32.0 / diff / 1000.0;
+             // Clamp to valid int32 spinbox range (0..9999 kΩ)
+             if (!std::isfinite(Rtot) || Rtot < 0.0) Rtot = 0.0;
+             if (Rtot > 9999.0) Rtot = 9999.0;
              log_step("Measured Res: %4.3fk", Rtot);
 
              esp_task_wdt_reset();
@@ -145,6 +156,11 @@ void start_leakage_resistance_measurement(lv_event_t *)
     };
 
     lv_timer_t *t = lv_timer_create(seq_cb, 50, nullptr);
+    if (!t) {
+        Serial.println("ERROR: Failed to create leakage seq timer (LVGL heap full)");
+        g_calibration_in_progress = false;
+        return;
+    }
     seq_start(t, steps, sizeof(steps) / sizeof(steps[0]), nullptr);
 }
 
@@ -195,11 +211,9 @@ void start_current_zero_calibration(lv_event_t *e)
         {"Setting code for 0.0A", 1500, 500, []()
          {
              Serial.printf("\nSetting code_1 preview to %i", g_zero_current_code);
-             if (Calib_GUI.Current.code_1) {
+             if (Calib_GUI.Current.code_1 && lv_obj_is_valid(Calib_GUI.Current.code_1)) {
                  lv_spinbox_set_value(Calib_GUI.Current.code_1, g_zero_current_code);
                  Serial.printf("\nPreview updated successfully");
-             } else {
-                 Serial.println("\nWARNING: Calib_GUI.Current.code_1 is NULL");
              }
          },
          nullptr},
@@ -207,43 +221,49 @@ void start_current_zero_calibration(lv_event_t *e)
          {
              esp_task_wdt_reset();
 
-             lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
-             lv_timer_set_repeat_count(close_t, 1);
+             // CRITICAL: Save cal data FIRST before any UI operations that could fail
+             if (!PowerSupply.CalBank.empty() &&
+                 PowerSupply.bankCalibId >= 0 &&
+                 PowerSupply.bankCalibId < (int8_t)PowerSupply.CalBank.size() &&
+                 PowerSupply.mA_Active >= 0 &&
+                 PowerSupply.mA_Active <= 1)
+             {
+                 auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
+                 cal[PowerSupply.mA_Active].code_1 = g_zero_current_code;
+                 Serial.printf("\n Code 1 at zero current saved: %i", g_zero_current_code);
+             }
+             else
+             {
+                 Serial.printf("\nERROR in finalize: Invalid indices! bankCalibId=%d, CalBank.size()=%d, mA_Active=%d",
+                              PowerSupply.bankCalibId, PowerSupply.CalBank.size(), PowerSupply.mA_Active);
+             }
+
+             // Reset calibration flag before UI ops so a crash here doesn't lock out future runs
+             g_calibration_in_progress = false;
 
              esp_task_wdt_reset();
              Serial.printf("\nSetting code_1 spinbox to %i", g_zero_current_code);
-             if (Calib_GUI.Current.code_1) {
+             if (Calib_GUI.Current.code_1 && lv_obj_is_valid(Calib_GUI.Current.code_1)) {
                  lv_spinbox_set_value(Calib_GUI.Current.code_1, g_zero_current_code);
                  Serial.printf("\ncode_1 spinbox updated");
              }
 
              esp_task_wdt_reset();
-             // CRITICAL: Re-validate indices before array access (they could change during sequence)
-             if (PowerSupply.CalBank.empty() ||
-                 PowerSupply.bankCalibId < 0 ||
-                 PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size() ||
-                 PowerSupply.mA_Active < 0 ||
-                 PowerSupply.mA_Active > 1)
-             {
-                 Serial.printf("\nERROR in finalize: Invalid indices! bankCalibId=%d, CalBank.size()=%d, mA_Active=%d",
-                              PowerSupply.bankCalibId, PowerSupply.CalBank.size(), PowerSupply.mA_Active);
-                 g_calibration_in_progress = false;
-                 return;
-             }
-
-             auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal;
-             cal[PowerSupply.mA_Active].code_1 = g_zero_current_code;
-
-             esp_task_wdt_reset();
-             Serial.printf("\n Code 1 at zero current:%i", g_zero_current_code);
-
-             // Reset calibration flag to allow subsequent calibrations
-             g_calibration_in_progress = false;
+             lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
+             if (close_t)
+                 lv_timer_set_repeat_count(close_t, 1);
+             else
+                 Serial.println("\nWARNING: Failed to create close timer (low LVGL heap)");
          },
          nullptr},
     };
 
     lv_timer_t *t = lv_timer_create(seq_cb, 50, nullptr);
+    if (!t) {
+        Serial.println("ERROR: Failed to create current zero seq timer (LVGL heap full)");
+        g_calibration_in_progress = false;
+        return;
+    }
     seq_start(t, steps, sizeof(steps) / sizeof(steps[0]), nullptr);
 }
 
@@ -285,7 +305,7 @@ void start_voltage_zero_calibration(lv_event_t *e)
          }},
         {"Setting code for 0.0V", 1500, 500, []()
          {
-             if (Calib_GUI.Voltage.code_1)
+             if (Calib_GUI.Voltage.code_1 && lv_obj_is_valid(Calib_GUI.Voltage.code_1))
                  lv_spinbox_set_value(Calib_GUI.Voltage.code_1, g_zero_voltage_code);
          },
          nullptr},
@@ -293,40 +313,46 @@ void start_voltage_zero_calibration(lv_event_t *e)
          {
              esp_task_wdt_reset();
 
-             lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
-             lv_timer_set_repeat_count(close_t, 1);
+             // CRITICAL: Save cal data FIRST before any UI operations that could fail
+             if (!PowerSupply.CalBank.empty() &&
+                 PowerSupply.bankCalibId >= 0 &&
+                 PowerSupply.bankCalibId < (int8_t)PowerSupply.CalBank.size())
+             {
+                 auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
+                 cal.code_1 = g_zero_voltage_code;
+                 Serial.printf("\n Code 1 at zero voltage saved: %i", g_zero_voltage_code);
+             }
+             else
+             {
+                 Serial.printf("\nERROR in finalize: Invalid bankCalibId=%d, CalBank.size()=%d",
+                              PowerSupply.bankCalibId, PowerSupply.CalBank.size());
+             }
+
+             // Reset calibration flag before UI ops so a crash here doesn't lock out future runs
+             g_calibration_in_progress = false;
 
              esp_task_wdt_reset();
              Serial.printf("\nSetting code_1 spinbox to %i", g_zero_voltage_code);
-             if (Calib_GUI.Voltage.code_1) {
+             if (Calib_GUI.Voltage.code_1 && lv_obj_is_valid(Calib_GUI.Voltage.code_1)) {
                  lv_spinbox_set_value(Calib_GUI.Voltage.code_1, g_zero_voltage_code);
                  Serial.printf("\ncode_1 spinbox updated");
              }
 
              esp_task_wdt_reset();
-             // CRITICAL: Re-validate indices before array access (they could change during sequence)
-             if (PowerSupply.CalBank.empty() ||
-                 PowerSupply.bankCalibId < 0 ||
-                 PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size())
-             {
-                 Serial.printf("\nERROR in finalize: Invalid bankCalibId=%d, CalBank.size()=%d",
-                              PowerSupply.bankCalibId, PowerSupply.CalBank.size());
-                 g_calibration_in_progress = false;
-                 return;
-             }
-
-             auto &cal = PowerSupply.CalBank[PowerSupply.bankCalibId].vCal;
-             cal.code_1 = g_zero_voltage_code;
-
-             esp_task_wdt_reset();
-             Serial.printf("\n Code 1 at zero voltage:%i", g_zero_voltage_code);
-
-             // Reset calibration flag to allow subsequent calibrations
-             g_calibration_in_progress = false;
+             lv_timer_t *close_t = lv_timer_create(close_log_cb, 6000, nullptr);
+             if (close_t)
+                 lv_timer_set_repeat_count(close_t, 1);
+             else
+                 Serial.println("\nWARNING: Failed to create close timer (low LVGL heap)");
          },
          nullptr},
     };
 
     lv_timer_t *t = lv_timer_create(seq_cb, 50, nullptr);
+    if (!t) {
+        Serial.println("ERROR: Failed to create voltage zero seq timer (LVGL heap full)");
+        g_calibration_in_progress = false;
+        return;
+    }
     seq_start(t, steps, sizeof(steps) / sizeof(steps[0]), nullptr);
 }

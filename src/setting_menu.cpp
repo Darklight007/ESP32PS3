@@ -5,6 +5,7 @@
 #include "calib_dac.h"
 #include "calib_adc.h"
 #include "calib_inl.h"
+// #include "calib_inl_zc.h"
 #include "calib_full_auto.h"
 
 // heavy/private includes live ONLY in the .cpp
@@ -670,6 +671,7 @@ void SettingMenu(lv_obj_t *parent)
     create_button_item(section, open_dac_calibration_cb, "V/I DAC");
     create_button_item(section, internal_leakage_calibration_cb, "Inter. Current");
     create_button_item(section, ADC_INL_Voltage_calibration_cb, "ADC INL V_CAL");
+    // create_button_item(section, ADC_INL_ZC_calibration_cb, "ADC INL ZC_CAL");
     create_button_item(section, full_auto_calibration_cb, "Full Auto Cal");
 
     create_button_item(section, nullptr /* Stats reset wiring */, "Reset Stats");
@@ -858,7 +860,37 @@ void msgbox_close_deferred(lv_obj_t *mbox)
     // 50ms delay ensures this fires in the NEXT lv_timer_handler() pass,
     // not the current one (which would crash _lv_event_mark_deleted)
     lv_timer_t *t = lv_timer_create(_msgbox_close_timer_cb, 50, mbox);
-    lv_timer_set_repeat_count(t, 1);  // auto-delete after firing (safe, no manual lv_timer_del)
+    if (t)
+        lv_timer_set_repeat_count(t, 1);  // auto-delete after firing
+    else if (mbox && lv_obj_is_valid(mbox))
+        lv_msgbox_close(mbox);  // fallback: close immediately if timer alloc failed
+}
+
+bool calib_check_current_setpoint(float min_mA)
+{
+    // Compute current setpoint in mA regardless of A/mA range
+    // adjFactor always converts DAC codes → Amps in both A and mA ranges
+    double setpoint = (PowerSupply.Current.adjValue - PowerSupply.Current.adjOffset)
+                      / PowerSupply.Current.adjFactor;
+    double setpoint_mA = setpoint * 1000.0;  // A → mA, always
+
+    if (setpoint_mA >= min_mA)
+        return true;
+
+    // Show a blocking error msgbox — user must set current before calibrating
+    static const char *btn[] = {"OK", ""};
+    char msg[64];
+    snprintf(msg, sizeof(msg), "Set current >= %.0f mA before calibrating!", min_mA);
+    lv_obj_t *mbox = lv_msgbox_create(NULL, "Current Too Low", msg, btn, true);
+    lv_obj_center(mbox);
+    // dismiss-only: wire OK to the deferred-close helper
+    lv_obj_add_event_cb(mbox, [](lv_event_t *e) {
+        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+            msgbox_close_deferred(lv_event_get_current_target(e));
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    Serial.printf("[CAL] Blocked: current setpoint %.2f mA < %.0f mA\n", setpoint_mA, min_mA);
+    return false;
 }
 
 void Warning_msgbox(const char *title, lv_event_cb_t event_cb)

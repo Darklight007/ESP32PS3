@@ -63,6 +63,7 @@ namespace
 
     static void autoZeroCurrent_cb(lv_event_t *)
     {
+        if (!calib_check_current_setpoint(10.0f)) return;  // needs real load to calibrate current ADC
         g_autozero_context = AutoZeroContext::FOR_CURRENT;
         myTone(NOTE_A4, 200);
         Warning_msgbox("Auto Zero Current", auto_zero_event_cb);
@@ -70,6 +71,7 @@ namespace
 
     static void autoZeroVoltage_cb(lv_event_t *)
     {
+        if (!calib_check_current_setpoint(10.0f)) return;
         g_autozero_context = AutoZeroContext::FOR_VOLTAGE;
         myTone(NOTE_A4, 200);
         Warning_msgbox("Auto Zero Voltage", auto_zero_event_cb);
