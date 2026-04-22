@@ -860,10 +860,16 @@ void msgbox_close_deferred(lv_obj_t *mbox)
     // 50ms delay ensures this fires in the NEXT lv_timer_handler() pass,
     // not the current one (which would crash _lv_event_mark_deleted)
     lv_timer_t *t = lv_timer_create(_msgbox_close_timer_cb, 50, mbox);
-    if (t)
+    if (t) {
         lv_timer_set_repeat_count(t, 1);  // auto-delete after firing
-    else if (mbox && lv_obj_is_valid(mbox))
-        lv_msgbox_close(mbox);  // fallback: close immediately if timer alloc failed
+    } else if (mbox && lv_obj_is_valid(mbox)) {
+        // Heap full — cannot create timer. lv_msgbox_close() calls lv_obj_del() which is
+        // UNSAFE from inside an event callback (crashes _lv_event_mark_deleted).
+        // Hide the backdrop+msgbox instead: lv_obj_add_flag never allocates.
+        lv_obj_add_flag(mbox, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_t *backdrop = lv_obj_get_parent(mbox);
+        if (backdrop) lv_obj_add_flag(backdrop, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 bool calib_check_current_setpoint(float min_mA)
