@@ -1,11 +1,15 @@
 #include "scpi_parser.h"
 #include "device.hpp"
 #include "globals.h"
+#include "ui_helpers.h"
 #include "buzzer.h"
 #include "version.h"
 #include "error_handler.h"
+#include "functions.h"
+#include "waveform_generator.h"
 #include <Wire.h>
 #include <cstring>
+#include <cmath>
 
 extern Device PowerSupply;
 extern lv_obj_t *btn_function_gen;
@@ -142,6 +146,12 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("CURR") > 0) cmd_SOUR_CURR(paramPart);
         else if (cmdPart.indexOf("FUNC?") > 0) cmd_SOUR_FUNC_Q();
         else if (cmdPart.indexOf("FUNC") > 0) cmd_SOUR_FUNC(paramPart);
+        else if (cmdPart.indexOf("FGEN:FREQ") > 0) cmd_FGEN_FREQ(paramPart);
+        else if (cmdPart.indexOf("FGEN:AMPL") > 0) cmd_FGEN_AMPL(paramPart);
+        else if (cmdPart.indexOf("FGEN:OFFS") > 0) cmd_FGEN_OFFS(paramPart);
+        else if (cmdPart.indexOf("FGEN:DUTY") > 0) cmd_FGEN_DUTY(paramPart);
+        else if (cmdPart.indexOf("FGEN:WAVE?") > 0) cmd_FGEN_WAVE_Q();
+        else if (cmdPart.indexOf("FGEN:WAVE") > 0) cmd_FGEN_WAVE(paramPart);
         else addError(ERR_UNDEFINED_HEADER);
         return;
     }
@@ -194,6 +204,66 @@ void SCPIParser::executeCommand(const String& command)
         if (cmdPart.indexOf("STAT?") > 0) cmd_CAL_STAT_Q();
         else if (cmdPart.indexOf("SAVE") > 0) cmd_CAL_SAVE();
         else if (cmdPart.indexOf("LOAD") > 0) cmd_CAL_LOAD();
+        else addError(ERR_UNDEFINED_HEADER);
+        return;
+    }
+
+    // SCPI DATA subsystem
+    if (cmdPart.startsWith("DATA"))
+    {
+        if (cmdPart.indexOf("STAT?") > 0) cmd_DATA_STATUS_Q();
+        else if (cmdPart.indexOf("SETT?") > 0) cmd_DATA_SETTINGS_Q();
+        else if (cmdPart.indexOf("MEM?") > 0) cmd_DATA_MEM_Q();
+        else if (cmdPart.indexOf("FGEN?") > 0) cmd_DATA_FGEN_Q();
+        else if (cmdPart.indexOf("STATS?") > 0) cmd_DATA_STATS_Q();
+        else if (cmdPart.indexOf("GRAPH:RST") > 0) cmd_DATA_GRAPH_RST();
+        else if (cmdPart.indexOf("GRAPH:STAT?") > 0) cmd_DATA_GRAPH_STAT_Q();
+        else if (cmdPart.indexOf("GRAPH?") > 0 || cmdPart.indexOf("GRAP?") > 0) cmd_DATA_GRAPH_Q();
+        else if (cmdPart.indexOf("ARBT?") > 0) cmd_DATA_ARBT_Q(paramPart);
+        else if (cmdPart.indexOf("ARBT") > 0) cmd_DATA_ARBT(paramPart);
+        else if (cmdPart.indexOf("TABL?") > 0) cmd_DATA_TABL_Q();
+        else if (cmdPart.indexOf("TABL") > 0) cmd_DATA_TABL(paramPart);
+        else if (cmdPart.indexOf("CAL?") > 0) cmd_DATA_CAL_Q();
+        else if (cmdPart.indexOf("CAL:SET") > 0) cmd_DATA_CAL_SET(paramPart);
+        else addError(ERR_UNDEFINED_HEADER);
+        return;
+    }
+
+    // SCPI SETT subsystem (settings write)
+    if (cmdPart.startsWith("SETT"))
+    {
+        if (cmdPart.indexOf("ADC:RATE") > 0) cmd_SETT_ADC_RATE(paramPart);
+        else if (cmdPart.indexOf("ADC:AVG") > 0) cmd_SETT_ADC_AVG(paramPart);
+        else if (cmdPart.indexOf("ADC:DIG") > 0) cmd_SETT_ADC_DIG(paramPart);
+        else if (cmdPart.indexOf("BEEP:VOL") > 0) cmd_SETT_BEEP_VOL(paramPart);
+        else if (cmdPart.indexOf("BEEP:PWR") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.beeperOnPowerChange);
+        else if (cmdPart.indexOf("BEEP:ERR") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.beeperOnError);
+        else if (cmdPart.indexOf("BEEP:KEY") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.beeperOnKeypress);
+        else if (cmdPart.indexOf("BEEP") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.buzzer);
+        else if (cmdPart.indexOf("TIM:EN") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.timerEnabled);
+        else if (cmdPart.indexOf("TIM:DUR") > 0) cmd_SETT_TIMER_DUR(paramPart);
+        else if (cmdPart.indexOf("OVP:LVL") > 0) cmd_SETT_OVP_LVL(paramPart);
+        else if (cmdPart.indexOf("OVP:EN") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.ovpEnabled);
+        else if (cmdPart.indexOf("OCP:LVL") > 0) cmd_SETT_OCP_LVL(paramPart);
+        else if (cmdPart.indexOf("OCP:EN") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.ocpEnabled);
+        else if (cmdPart.indexOf("DELAY") > 0) cmd_SETT_DELAY(paramPart);
+        else if (cmdPart.indexOf("ASAVE") > 0) cmd_SETT_AUTOSAVE(paramPart);
+        else if (cmdPart.indexOf("GRAPH:TIME") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.graphXaxisTimeMode);
+        else if (cmdPart.indexOf("GRAPH:SPAN") > 0) cmd_SETT_GRAPH_SPAN(paramPart);
+        else if (cmdPart.indexOf("GRAPH:STOP") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.graphAutoStop);
+        else if (cmdPart.indexOf("BACK") > 0) cmd_SETT_BACKLIGHT(paramPart);
+        else if (cmdPart.indexOf("START") > 0) cmd_SETT_STARTUP(paramPart);
+        else if (cmdPart.indexOf("SAVE") > 0) { PowerSupply.SaveSetting(); sendResponse("OK"); }
+        else if (cmdPart.indexOf("LOAD") > 0) { PowerSupply.LoadSetting(); sendResponse("OK"); }
+        else addError(ERR_UNDEFINED_HEADER);
+        return;
+    }
+
+    // SCPI MEM subsystem (memory presets)
+    if (cmdPart.startsWith("MEM"))
+    {
+        if (cmdPart.indexOf("STOR") > 0) cmd_MEM_STORE(paramPart);
+        else if (cmdPart.indexOf("RCL") > 0) cmd_MEM_RECALL(paramPart);
         else addError(ERR_UNDEFINED_HEADER);
         return;
     }
@@ -572,15 +642,19 @@ void SCPIParser::cmd_SOUR_FUNC(const String& param)
 
     if (p == "CV" || p == "VOLT")
     {
-        // Constant voltage mode (default)
-        if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+        // Constant voltage mode — set state then fire event for theme/ADC changes
+        if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED)) {
             lv_obj_clear_state(btn_function_gen, LV_STATE_CHECKED);
+            lv_event_send(btn_function_gen, LV_EVENT_SHORT_CLICKED, NULL);
+        }
     }
     else if (p == "FGEN" || p == "FUNC")
     {
-        // Function generator mode
-        if (!lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
+        // Function generator mode — set state then fire event for theme/ADC changes
+        if (!lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED)) {
             lv_obj_add_state(btn_function_gen, LV_STATE_CHECKED);
+            lv_event_send(btn_function_gen, LV_EVENT_SHORT_CLICKED, NULL);
+        }
     }
     else
     {
@@ -660,16 +734,15 @@ void SCPIParser::cmd_OUTP_STAT(const String& param)
 {
     String p = param;
     toUpperCase(p);
+    bool isOn = (PowerSupply.getStatus() != DEVICE::OFF);
 
     if (p == "ON" || p == "1")
     {
-        // Enable output - controlled via toggle() method
-        PowerSupply.toggle();
+        if (!isOn) PowerSupply.toggle();
     }
     else if (p == "OFF" || p == "0")
     {
-        // Disable output - controlled via toggle() method
-        PowerSupply.toggle();
+        if (isOn) PowerSupply.toggle();
     }
     else
     {
@@ -679,8 +752,7 @@ void SCPIParser::cmd_OUTP_STAT(const String& param)
 
 void SCPIParser::cmd_OUTP_STAT_Q()
 {
-    // Query output state via CC/CV pin or other status indicator
-    sendResponse(digitalRead(PowerSupply.CCCVPin) ? "1" : "0");
+    sendResponse((PowerSupply.getStatus() != DEVICE::OFF) ? "1" : "0");
 }
 
 void SCPIParser::cmd_OUTP_PROT_CLE()
@@ -795,6 +867,477 @@ void SCPIParser::cmd_CAL_SAVE()
 void SCPIParser::cmd_CAL_LOAD()
 {
     PowerSupply.LoadCalibrationData();
+}
+
+// =============================================================================
+// DATA subsystem
+// =============================================================================
+
+void SCPIParser::cmd_DATA_GRAPH_Q()
+{
+    // First line: metadata with mA_Active flag
+    Serial.printf("META,mA_Active=%d\n", PowerSupply.mA_Active ? 1 : 0);
+    // Dump all chart points as CSV: index,voltage_mV,current_mA
+    for (int i = 0; i < CHART_SIZE; i++) {
+        Serial.printf("%d,%d,%d\n", i, (int)graph_data_V[i], (int)graph_data_I[i]);
+    }
+}
+
+void SCPIParser::cmd_DATA_STATS_Q()
+{
+    // Returns two CSV lines: V then I stats
+    // Format: mean,stddev,min,max,rms,er_bits
+    auto& V = PowerSupply.Voltage.measured;
+    auto& I = PowerSupply.Current.measured;
+    double vFSR = 32.768;
+    double iFSR = PowerSupply.mA_Active ? 5.0 : 5000.0;
+    Serial.printf("V,%.6f,%.6f,%.6f,%.6f,%.6f,%.3f\n",
+        V.Mean(), V.StandardDeviation(), V.absMin, V.absMax, V.Rms(), V.ER(vFSR));
+    Serial.printf("I,%.6f,%.6f,%.6f,%.6f,%.6f,%.3f\n",
+        I.Mean(), I.StandardDeviation(), I.absMin, I.absMax, I.Rms(), I.ER(iFSR));
+}
+
+void SCPIParser::cmd_DATA_GRAPH_RST()
+{
+    graphReset();
+    sendResponse("OK");
+}
+
+void SCPIParser::cmd_DATA_GRAPH_STAT_Q()
+{
+    // Returns: pushCount,paused (0 or 1)
+    Serial.printf("%d,%d\n", g_graphPushCount, g_graphPaused ? 1 : 0);
+}
+
+void SCPIParser::cmd_DATA_STATUS_Q()
+{
+    // Return all status in one line: meas_v,meas_i,set_v,set_i,output,power,mA_active
+    double meas_v = PowerSupply.Voltage.measured.Mean();
+    double meas_i = PowerSupply.Current.measured.Mean();
+    double set_v = (PowerSupply.Voltage.adjValue - PowerSupply.Voltage.adjOffset) / PowerSupply.Voltage.adjFactor;
+    double set_i = (PowerSupply.Current.adjValue - PowerSupply.Current.adjOffset) / PowerSupply.Current.adjFactor;
+    int output = (PowerSupply.getStatus() != DEVICE::OFF) ? 1 : 0;
+    double power = meas_v * (PowerSupply.mA_Active ? meas_i * 0.001 : meas_i);
+    Serial.printf("%.6f,%.6f,%.6f,%.6f,%d,%.6f,%d\n", meas_v, meas_i, set_v, set_i, output, power, PowerSupply.mA_Active ? 1 : 0);
+}
+
+void SCPIParser::cmd_DATA_SETTINGS_Q()
+{
+    auto &s = PowerSupply.settingParameters;
+    // adcRate,adcAvgs,adcDigits,buzzer,beepPwr,beepErr,beepKey,timerEn,timerDur,
+    // ovpEn,ovpLvl,ocpEn,ocpLvl,delay,autoSave,graphTime,graphSpan,graphStop,
+    // beepVol,startup
+    Serial.printf("%d,%d,%d,%d,%d,%d,%d,%d,%u,%d,%.1f,%d,%.1f,%u,%u,%d,%u,%d,%d,%d\n",
+        s.adcRate, s.adcNumberOfAvgs, s.adcNumberOfDigits,
+        s.buzzer ? 1 : 0, s.beeperOnPowerChange ? 1 : 0,
+        s.beeperOnError ? 1 : 0, s.beeperOnKeypress ? 1 : 0,
+        s.timerEnabled ? 1 : 0, s.timerDurationSeconds,
+        s.ovpEnabled ? 1 : 0, s.voltageLimitMax,
+        s.ocpEnabled ? 1 : 0, s.currentLimitMax,
+        s.outputDelayMs, s.autoSaveIntervalMinutes,
+        s.graphXaxisTimeMode ? 1 : 0, s.graphTimeSpanSeconds,
+        s.graphAutoStop ? 1 : 0,
+        s.beeperVolume, static_cast<int>(s.startupBehavior));
+}
+
+void SCPIParser::cmd_DATA_MEM_Q()
+{
+    // Return all 10 memory slots from NVS: idx,voltage_V,current_A per line
+    MemArray mem = PowerSupply.LoadMemory("myDataKey");
+    for (int i = 0; i < 10; i++) {
+        double v = scaleVoltage(mem.memory[i].voltage);
+        double c = scaleCurrent(mem.memory[i].current);
+        Serial.printf("%d,%.6f,%.6f\n", i, v, c);
+    }
+}
+
+void SCPIParser::cmd_DATA_FGEN_Q()
+{
+    auto &f = PowerSupply.funGenMem;
+    // freq,ampl,offset,duty
+    Serial.printf("%.4f,%.4f,%.4f,%.4f\n", f.frequency, f.amplitude, f.offset, f.dutyCycle);
+}
+
+void SCPIParser::cmd_DATA_ARBT_Q(const String& param)
+{
+    // Query arbitrary waveform points: DATA:ARBT? <bank>
+    // Load from flash to get current state
+    FunGen fg = PowerSupply.LoadMemoryFgen("FunGen");
+    int bank = param.toInt();
+    if (bank < 0 || bank > 1) bank = 0;
+    for (int i = 0; i < CHART_POINTS; i++) {
+        Serial.printf("%d,%.2f\n", i, fg.arbitrary_points[i][bank]);
+    }
+}
+
+void SCPIParser::cmd_DATA_ARBT(const String& param)
+{
+    // Write arbitrary waveform point: DATA:ARBT <bank> <index> <value>
+    int bank = 0, idx = 0;
+    double val = 0;
+    int sp1 = param.indexOf(' ');
+    if (sp1 < 0) { addError(ERR_MISSING_PARAMETER); return; }
+    bank = param.substring(0, sp1).toInt();
+    String rest = param.substring(sp1 + 1);
+    int sp2 = rest.indexOf(' ');
+    if (sp2 < 0) { addError(ERR_MISSING_PARAMETER); return; }
+    idx = rest.substring(0, sp2).toInt();
+    val = rest.substring(sp2 + 1).toDouble();
+    if (bank < 0 || bank > 1 || idx < 0 || idx >= CHART_POINTS) { addError(ERR_DATA_OUT_OF_RANGE); return; }
+    // Load, modify, save back to flash
+    FunGen fg = PowerSupply.LoadMemoryFgen("FunGen");
+    fg.arbitrary_points[idx][bank] = val;
+    PowerSupply.funGenMem.arbitrary_points[idx][bank] = val; // also update live copy
+    PowerSupply.SaveMemoryFgen("FunGen", fg);
+    sendResponse("OK");
+}
+
+void SCPIParser::cmd_DATA_TABL_Q()
+{
+    // Query table points: first line is length, then index,value per line
+    Serial.printf("LEN,%d\n", PowerSupply.funGenMem.table_length);
+    for (int i = 0; i < PowerSupply.funGenMem.table_length; i++) {
+        Serial.printf("%d,%.6f\n", i, PowerSupply.funGenMem.table_points[i][0]);
+    }
+}
+
+void SCPIParser::cmd_DATA_TABL(const String& param)
+{
+    // Write table point: DATA:TABL <index> <value>
+    // Or set length: DATA:TABL LEN <value>
+    String p = param;
+    toUpperCase(p);
+    if (p.startsWith("LEN ")) {
+        int len = param.substring(4).toInt();
+        if (len >= 1 && len <= RECORDING_TABLE_SIZE) {
+            PowerSupply.funGenMem.table_length = len;
+            sendResponse("OK");
+        } else addError(ERR_DATA_OUT_OF_RANGE);
+        return;
+    }
+    int sp = param.indexOf(' ');
+    if (sp < 0) { addError(ERR_MISSING_PARAMETER); return; }
+    int idx = param.substring(0, sp).toInt();
+    double val = param.substring(sp + 1).toDouble();
+    if (idx < 0 || idx >= RECORDING_TABLE_SIZE) { addError(ERR_DATA_OUT_OF_RANGE); return; }
+    PowerSupply.funGenMem.table_points[idx][0] = val;
+    sendResponse("OK");
+}
+
+void SCPIParser::cmd_DATA_CAL_Q()
+{
+    // Dump calibration data in CSV format for PC download
+    auto& cal = PowerSupply.CalBank[PowerSupply.bankCalibId];
+    Serial.printf("MAC,%s\n", cal.macAdd.c_str());
+    Serial.printf("VCAL,%.6f,%d,%.6f,%d\n", cal.vCal.value_1, cal.vCal.code_1, cal.vCal.value_2, cal.vCal.code_2);
+    Serial.printf("ICAL0,%.6f,%d,%.6f,%d\n", cal.iCal[0].value_1, cal.iCal[0].code_1, cal.iCal[0].value_2, cal.iCal[0].code_2);
+    Serial.printf("ICAL1,%.6f,%d,%.6f,%d\n", cal.iCal[1].value_1, cal.iCal[1].code_1, cal.iCal[1].value_2, cal.iCal[1].code_2);
+    Serial.printf("LEAK,%.9f,%.9f\n", cal.internalLeakage[0], cal.internalLeakage[1]);
+    // INL measure points (36)
+    Serial.print("INLM");
+    for (int i = 0; i < 36; i++) Serial.printf(",%.6f", cal.adc_inl_measure[i]);
+    Serial.print("\n");
+    // INL ideal points (36)
+    Serial.print("INLI");
+    for (int i = 0; i < 36; i++) Serial.printf(",%.6f", cal.adc_inl_ideal[i]);
+    Serial.print("\n");
+    // Zero-current INL (commented out pending investigation):
+    // Serial.print("INLZCM");
+    // for (int i = 0; i < 36; i++) Serial.printf(",%.6f", cal.adc_inl_zc_measure[i]);
+    // Serial.print("\n");
+    // Serial.print("INLZCI");
+    // for (int i = 0; i < 36; i++) Serial.printf(",%.6f", cal.adc_inl_zc_ideal[i]);
+    // Serial.print("\n");
+    Serial.print("END\n");
+}
+
+void SCPIParser::cmd_DATA_CAL_SET(const String& param)
+{
+    // Accepts one line in the same format as DATA:CAL? output.
+    // The Python server sends these lines one by one to restore a saved calibration file.
+    // After all lines are sent, the server sends CAL:SAVE to persist.
+    if (PowerSupply.CalBank.empty() || PowerSupply.bankCalibId < 0 ||
+        PowerSupply.bankCalibId >= (int8_t)PowerSupply.CalBank.size())
+    {
+        addError(ERR_EXECUTION_ERROR); return;
+    }
+    auto& cal = PowerSupply.CalBank[PowerSupply.bankCalibId];
+
+    // Split key from rest: first token before first comma
+    int sep = param.indexOf(',');
+    if (sep < 0) { addError(ERR_MISSING_PARAMETER); return; }
+    String key = param.substring(0, sep);
+    String rest = param.substring(sep + 1);
+    key.trim(); key.toUpperCase();
+
+    // Helper: split rest into up to maxN doubles/ints
+    auto splitDoubles = [&](double *out, int maxN) -> int {
+        int n = 0; int start = 0;
+        while (n < maxN) {
+            int c = rest.indexOf(',', start);
+            String tok = (c < 0) ? rest.substring(start) : rest.substring(start, c);
+            tok.trim();
+            if (tok.length() == 0) break;
+            out[n++] = tok.toDouble();
+            if (c < 0) break;
+            start = c + 1;
+        }
+        return n;
+    };
+
+    if (key == "MAC") {
+        cal.macAdd = rest;
+        cal.macAdd.trim();
+    } else if (key == "VCAL") {
+        double v[4]; if (splitDoubles(v, 4) < 4) { addError(ERR_MISSING_PARAMETER); return; }
+        cal.vCal = { v[0], (int)v[1], v[2], (int)v[3] };
+    } else if (key == "ICAL0") {
+        double v[4]; if (splitDoubles(v, 4) < 4) { addError(ERR_MISSING_PARAMETER); return; }
+        cal.iCal[0] = { v[0], (int)v[1], v[2], (int)v[3] };
+    } else if (key == "ICAL1") {
+        double v[4]; if (splitDoubles(v, 4) < 4) { addError(ERR_MISSING_PARAMETER); return; }
+        cal.iCal[1] = { v[0], (int)v[1], v[2], (int)v[3] };
+    } else if (key == "LEAK") {
+        double v[2]; if (splitDoubles(v, 2) < 2) { addError(ERR_MISSING_PARAMETER); return; }
+        cal.internalLeakage[0] = v[0]; cal.internalLeakage[1] = v[1];
+    } else if (key == "INLM") {
+        double v[36]; int n = splitDoubles(v, 36);
+        for (int i = 0; i < n && i < 36; i++) cal.adc_inl_measure[i] = v[i];
+    } else if (key == "INLI") {
+        double v[36]; int n = splitDoubles(v, 36);
+        for (int i = 0; i < n && i < 36; i++) cal.adc_inl_ideal[i] = v[i];
+    } else {
+        addError(ERR_UNDEFINED_HEADER); return;
+    }
+    sendResponse("OK");
+}
+
+// =============================================================================
+// SETT subsystem (settings write)
+// =============================================================================
+
+void SCPIParser::cmd_SETT_BOOL(const String& param, bool &target)
+{
+    String p = param;
+    toUpperCase(p);
+    if (p == "1" || p == "ON") target = true;
+    else if (p == "0" || p == "OFF") target = false;
+    else { addError(ERR_ILLEGAL_PARAMETER_VALUE); return; }
+    sendResponse("OK");
+}
+
+void SCPIParser::cmd_SETT_ADC_RATE(const String& param)
+{
+    int val = param.toInt();
+    if (val >= 0 && val <= 4) {
+        const int rates[] = {20, 20, 90, 330, 1000};
+        PowerSupply.settingParameters.adcRate = val;
+        PowerSupply.adc.ads1219->setDataRate(rates[val]);
+        PowerSupply.adjustAdcTaskPriority();
+        PowerSupply.ResetStats();
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_SETT_ADC_AVG(const String& param)
+{
+    int val = param.toInt();
+    if (val >= 0 && val <= 5) {
+        PowerSupply.settingParameters.adcNumberOfAvgs = val;
+        int ws = (int)std::pow(2, val);
+        PowerSupply.Voltage.measured.SetWindowSize(ws);
+        PowerSupply.Current.measured.SetWindowSize(ws);
+        PowerSupply.Power.measured.SetWindowSize(ws);
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_SETT_ADC_DIG(const String& param)
+{
+    int val = param.toInt();
+    if (val >= 1 && val <= 4) {
+        PowerSupply.settingParameters.adcNumberOfDigits = val;
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_SETT_TIMER_DUR(const String& param)
+{
+    int val = param.toInt();
+    if (val >= 0 && val <= 28800) {
+        PowerSupply.settingParameters.timerDurationSeconds = val;
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_SETT_OVP_LVL(const String& param)
+{
+    double val;
+    if (parseNumeric(param, val) && val >= 0 && val <= 32) {
+        PowerSupply.settingParameters.voltageLimitMax = val;
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_SETT_OCP_LVL(const String& param)
+{
+    double val;
+    if (parseNumeric(param, val) && val >= 0 && val <= 6) {
+        PowerSupply.settingParameters.currentLimitMax = val;
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_SETT_DELAY(const String& param)
+{
+    int val = param.toInt();
+    if (val >= 0 && val <= 5000) {
+        PowerSupply.settingParameters.outputDelayMs = val;
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_SETT_AUTOSAVE(const String& param)
+{
+    int val = param.toInt();
+    if (val >= 0 && val <= 60) {
+        PowerSupply.settingParameters.autoSaveIntervalMinutes = val;
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_SETT_GRAPH_SPAN(const String& param)
+{
+    int val = param.toInt();
+    if (val >= 5 && val <= 43200) {
+        PowerSupply.settingParameters.graphTimeSpanSeconds = val;
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_SETT_BACKLIGHT(const String& param)
+{
+    int val = param.toInt();
+    if (val >= 0 && val <= 255) {
+        // ledcWrite(lcdBacklightChannel, val);  // TODO: wire when backlight PWM is connected
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_SETT_BEEP_VOL(const String& param)
+{
+    int val = param.toInt();
+    if (val >= 0 && val <= 100) {
+        PowerSupply.settingParameters.beeperVolume = val;
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_SETT_STARTUP(const String& param)
+{
+    int val = param.toInt();
+    if (val >= 0 && val <= 2) {
+        PowerSupply.settingParameters.startupBehavior = static_cast<StartupBehavior>(val);
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+// =============================================================================
+// FGEN subsystem (function generator)
+// =============================================================================
+
+void SCPIParser::cmd_FGEN_FREQ(const String& param)
+{
+    double val;
+    if (parseNumeric(param, val) && val >= 0 && val <= 10.0) {
+        PowerSupply.funGenMem.frequency = val;
+        if (Utility_objs.fun.Frequency)
+            lv_spinbox_set_value(Utility_objs.fun.Frequency, (int32_t)(val * 1000));
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_FGEN_AMPL(const String& param)
+{
+    double val;
+    if (parseNumeric(param, val) && val >= 0 && val <= 32.75) {
+        PowerSupply.funGenMem.amplitude = val;
+        if (Utility_objs.fun.Amplitude)
+            lv_spinbox_set_value(Utility_objs.fun.Amplitude, (int32_t)(val * 1000));
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_FGEN_OFFS(const String& param)
+{
+    double val;
+    if (parseNumeric(param, val) && val >= -32.0 && val <= 32.75) {
+        PowerSupply.funGenMem.offset = val;
+        if (Utility_objs.fun.Offset)
+            lv_spinbox_set_value(Utility_objs.fun.Offset, (int32_t)(val * 1000));
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_FGEN_DUTY(const String& param)
+{
+    double val;
+    if (parseNumeric(param, val) && val >= 0 && val <= 1.0) {
+        PowerSupply.funGenMem.dutyCycle = val;
+        if (Utility_objs.fun.Duty)
+            lv_spinbox_set_value(Utility_objs.fun.Duty, (int32_t)(val * 10000));
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_FGEN_WAVE(const String& param)
+{
+    int val = param.toInt();
+    if (val >= 0 && val < numWaveforms) {
+        Utility_objs.table_fun_gen_list->user_data = (void*)(intptr_t)val;
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_FGEN_WAVE_Q()
+{
+    int idx = (int)(intptr_t)Utility_objs.table_fun_gen_list->user_data;
+    if (idx >= 0 && idx < numWaveforms)
+        Serial.printf("%d,%s\n", idx, waveforms[idx].name);
+    else
+        sendResponse("0,Sine");
+}
+
+// =============================================================================
+// MEM subsystem (memory presets)
+// =============================================================================
+
+void SCPIParser::cmd_MEM_RECALL(const String& param)
+{
+    int slot = param.toInt();
+    if (slot >= 0 && slot <= 9) {
+        MemArray mem = PowerSupply.LoadMemory("myDataKey");
+        double v = scaleVoltage(mem.memory[slot].voltage);
+        double i = scaleCurrent(mem.memory[slot].current);
+        PowerSupply.Voltage.SetUpdate(mem.memory[slot].voltage);
+        PowerSupply.Current.SetUpdate(mem.memory[slot].current);
+        Serial.printf("%.4f,%.4f\n", v, i);
+    } else addError(ERR_DATA_OUT_OF_RANGE);
+}
+
+void SCPIParser::cmd_MEM_STORE(const String& param)
+{
+    // Format: "slot voltage current" (floats in V/A)
+    int slot = -1;
+    double v = 0, i = 0;
+    sscanf(param.c_str(), "%d %lf %lf", &slot, &v, &i);
+    if (slot >= 0 && slot <= 9) {
+        MemArray mem = PowerSupply.LoadMemory("myDataKey");
+        mem.memory[slot].voltage = (uint16_t)(v * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+        mem.memory[slot].current = (uint16_t)(i * PowerSupply.Current.adjFactor + PowerSupply.Current.adjOffset);
+        PowerSupply.SaveMemory("myDataKey", mem);
+        sendResponse("OK");
+    } else addError(ERR_DATA_OUT_OF_RANGE);
 }
 
 // =============================================================================

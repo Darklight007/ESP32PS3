@@ -46,7 +46,7 @@ void DispObjects::StatisticsUpdate(double value)
 {
     Statistics(value);
 
-    double er_sample = Statistics.ER(2 * adc_maxValue); // maxValue
+    double er_sample = Statistics.ER(adc_maxValue);
     if (!std::isinf(er_sample))
         effectiveResolution(er_sample);
 }
@@ -89,7 +89,8 @@ void DispObjects::statUpdate(void)
 
 void DispObjects::barUpdate(void)
 {
-    // Always update bars for maximum refresh rate (not limited by ADC rate)
+    // Guard: skip if Core 1 is rendering — lv_obj_set_x() is not safe from Core 0
+    if (blockAll || lvglIsBusy) return;
     if (!Bar.bar || !Bar.curValuePtr) return;  // Add null check for Power measurement
 
     // Pre-compute scale factors (per-instance cache in DispObject.h)
@@ -210,11 +211,13 @@ void DispObjects::SetUpdate(int value)
     // Null pointer checks to prevent crashes during calibration or when UI not initialized
     if (label_setValue && label_unit) {
         lv_label_set_text_fmt(label_setValue, "%+08.4f%s", (adjValue - adjOffset) / adjFactor, lv_label_get_text(label_unit));
+        // Invalidate parent to clean artifacts from overlapping transparent widgets
+        lv_obj_t *parent = lv_obj_get_parent(label_setValue);
+        if (parent) lv_obj_invalidate(parent);
     }
     if (Bar.bar_adjValue && Bar.bar) {
         lv_obj_set_width(Bar.bar_adjValue, ((adjValue - adjOffset)) / maxValue * lv_bar_get_max_value(Bar.bar));
     }
-    // lv_obj_invalidate(label_setValue);
 
     // Serial.printf("\nmaxValue %15.5f  ",maxValue);
 }

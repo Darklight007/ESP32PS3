@@ -107,6 +107,7 @@ void btn_close_hide_obj_cb(lv_event_t *e)
 {
     auto *btn = lv_event_get_target(e);
     lv_obj_add_flag(lv_obj_get_parent(lv_obj_get_parent(btn)), LV_OBJ_FLAG_HIDDEN);
+    lv_obj_invalidate(lv_scr_act());
 }
 
 namespace
@@ -669,7 +670,7 @@ void SettingMenu(lv_obj_t *parent)
     create_button_item(section, btn_calibration_ADC_voltage_event_cb, "ADC Voltage");
     create_button_item(section, btn_calibration_ADC_current_event_cb, "ADC Current");
     create_button_item(section, open_dac_calibration_cb, "V/I DAC");
-    create_button_item(section, internal_leakage_calibration_cb, "Inter. Current");
+    create_button_item(section, internal_leakage_calibration_cb, "Inter. Leakage");
     create_button_item(section, ADC_INL_Voltage_calibration_cb, "ADC INL V_CAL");
     // create_button_item(section, ADC_INL_ZC_calibration_cb, "ADC INL ZC_CAL");
     create_button_item(section, full_auto_calibration_cb, "Full Auto Cal");
@@ -796,15 +797,20 @@ void SettingMenu(lv_obj_t *parent)
 
 static void event_cb(lv_event_t *e)
 {
+    Serial.println("[IntRes] CB entered");
     lv_obj_t *obj = lv_event_get_current_target(e);
     if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
     {
+        Serial.println("[IntRes] VALUE_CHANGED");
         // Get button text BEFORE closing msgbox (to avoid use-after-free)
         const char *txt = lv_msgbox_get_active_btn_text(obj);
+        Serial.printf("[IntRes] btn='%s'\n", txt ? txt : "NULL");
         bool is_ok = (txt && strcmp(txt, "OK") == 0);
 
         // Now safe to close the msgbox
-        lv_msgbox_close_async(obj);
+        Serial.println("[IntRes] calling msgbox_close_deferred");
+        msgbox_close_deferred(obj);
+        Serial.println("[IntRes] msgbox_close_deferred returned");
 
         if (is_ok)
         {
@@ -828,8 +834,13 @@ static void event_cb(lv_event_t *e)
             g_calibration_in_progress = true;
             esp_task_wdt_reset();
 
+            // Hide the calibration window so the log window is visible
+            if (PowerSupply.gui.calibration.win_int_current_calibration &&
+                lv_obj_is_valid(PowerSupply.gui.calibration.win_int_current_calibration))
+                lv_obj_add_flag(PowerSupply.gui.calibration.win_int_current_calibration, LV_OBJ_FLAG_HIDDEN);
+
             // Create log window FIRST (before blocking or modifying data)
-            create_log_window("Internal Resistance");
+            create_log_window("Leakage Calibration");
             log_reset();
             log_clear();
 
@@ -844,32 +855,19 @@ static void event_cb(lv_event_t *e)
     }
 }
 
-// Create warning message box with red styling
-// Safe deferred msgbox close — use instead of lv_msgbox_close_async() inside event
-// callbacks to avoid crashing in _lv_event_mark_deleted.
-static void _msgbox_close_timer_cb(lv_timer_t *t)
-{
-    lv_obj_t *mbox = (lv_obj_t *)t->user_data;
-    if (mbox && lv_obj_is_valid(mbox))
-        lv_msgbox_close(mbox);
-    // Timer auto-deletes after this (repeat_count=1 set at creation)
-}
-
+// Safe msgbox close — hide only, never delete.
+// Calling lv_obj_del from any event callback (directly or via timer/animation)
+// corrupts LVGL internal structures. Hidden msgboxes stay in memory;
+// Warning_msgbox is called at most a handful of times per boot so the leak
+// is negligible.
 void msgbox_close_deferred(lv_obj_t *mbox)
 {
-    // 50ms delay ensures this fires in the NEXT lv_timer_handler() pass,
-    // not the current one (which would crash _lv_event_mark_deleted)
-    lv_timer_t *t = lv_timer_create(_msgbox_close_timer_cb, 50, mbox);
-    if (t) {
-        lv_timer_set_repeat_count(t, 1);  // auto-delete after firing
-    } else if (mbox && lv_obj_is_valid(mbox)) {
-        // Heap full — cannot create timer. lv_msgbox_close() calls lv_obj_del() which is
-        // UNSAFE from inside an event callback (crashes _lv_event_mark_deleted).
-        // Hide the backdrop+msgbox instead: lv_obj_add_flag never allocates.
-        lv_obj_add_flag(mbox, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_t *backdrop = lv_obj_get_parent(mbox);
-        if (backdrop) lv_obj_add_flag(backdrop, LV_OBJ_FLAG_HIDDEN);
-    }
+    if (!mbox || !lv_obj_is_valid(mbox)) return;
+
+    lv_obj_add_flag(mbox, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t *backdrop = lv_obj_get_parent(mbox);
+    if (backdrop) lv_obj_add_flag(backdrop, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_invalidate(lv_scr_act());
 }
 
 bool calib_check_current_setpoint(float min_mA)
@@ -887,7 +885,7 @@ bool calib_check_current_setpoint(float min_mA)
     static const char *btn[] = {"OK", ""};
     char msg[64];
     snprintf(msg, sizeof(msg), "Set current >= %.0f mA before calibrating!", min_mA);
-    lv_obj_t *mbox = lv_msgbox_create(NULL, "Current Too Low", msg, btn, true);
+    lv_obj_t *mbox = lv_msgbox_create(NULL, "Current Too Low", msg, btn, false);
     lv_obj_center(mbox);
     // dismiss-only: wire OK to the deferred-close helper
     lv_obj_add_event_cb(mbox, [](lv_event_t *e) {
@@ -904,7 +902,7 @@ void Warning_msgbox(const char *title, lv_event_cb_t event_cb)
     esp_task_wdt_reset();
 
     static const char *btns[] = {"OK", "Cancel", ""};
-    lv_obj_t *mbox1 = lv_msgbox_create(NULL, title, "Disconnect any load!", btns, true);
+    lv_obj_t *mbox1 = lv_msgbox_create(NULL, title, "Disconnect any load!", btns, false);
 
     // Style for red background + white text
     static lv_style_t style_warn;
@@ -958,7 +956,7 @@ void internal_leakage_calibration_cb(lv_event_t *)
 
     PowerSupply.gui.calibration.win_int_current_calibration = lv_win_create(lv_scr_act(), 36);
     lv_obj_set_size(PowerSupply.gui.calibration.win_int_current_calibration, 320, 226);
-    lv_win_add_title(PowerSupply.gui.calibration.win_int_current_calibration, "Internal Current Calibration");
+    lv_win_add_title(PowerSupply.gui.calibration.win_int_current_calibration, "Internal Leakage Calibration");
     auto *close = lv_win_add_btn(PowerSupply.gui.calibration.win_int_current_calibration, LV_SYMBOL_CLOSE, 60);
     lv_obj_add_event_cb(close, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
     auto *cont = lv_win_get_content(PowerSupply.gui.calibration.win_int_current_calibration);
@@ -969,19 +967,19 @@ void internal_leakage_calibration_cb(lv_event_t *)
     int xPos = 10, yPos = 20, yOffset = 48;
 
     // Resistor for A range
-    Calib_GUI.internalLeakage_A = spinbox_pro(cont, "#FFFFF7 Internal Resistor [A] (kOhm):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos, 150, 21, &graph_R_16);
+    Calib_GUI.internalLeakage_A = spinbox_pro(cont, "#FFFFF7 Leakage [A] (kOhm):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos, 150, 21, &graph_R_16);
     lv_spinbox_set_value(Calib_GUI.internalLeakage_A, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[0]);
     lv_obj_add_event_cb(Calib_GUI.internalLeakage_A, ADC_internalRes_A_change_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     // Resistor for mA range
-    Calib_GUI.internalLeakage_mA = spinbox_pro(cont, "#FFFFF7 Internal Resistor [mA] (kOhm):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset, 150, 22, &graph_R_16);
+    Calib_GUI.internalLeakage_mA = spinbox_pro(cont, "#FFFFF7 Leakage [mA] (kOhm):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset, 150, 22, &graph_R_16);
     lv_spinbox_set_value(Calib_GUI.internalLeakage_mA, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1]);
     lv_obj_add_event_cb(Calib_GUI.internalLeakage_mA, ADC_internalRes_mA_change_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    Serial.printf("\nInternal Resistor [A]: %f kOhm", PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[0]);
-    Serial.printf("\nInternal Resistor [mA]: %f kOhm", PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1]);
+    Serial.printf("\nLeakage [A]: %f kOhm", PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[0]);
+    Serial.printf("\nLeakage [mA]: %f kOhm", PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1]);
 
-    LVButton btnAutoMeasureTotalRes(cont, "Auto Measure", 10, yPos + yOffset * 2 - 10, 120, 30, nullptr, AutoMeasureTotalRes_cb);
+    LVButton btnAutoMeasureTotalRes(cont, "Auto Leakage", 10, yPos + yOffset * 2 - 10, 120, 30, nullptr, AutoMeasureTotalRes_cb);
 
     lv_point_t btn_pos{80, 155};
     LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 75, 30, nullptr, load_cb);

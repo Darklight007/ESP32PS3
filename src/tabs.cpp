@@ -1,5 +1,6 @@
 #include "tabs.h"
 #include "device.hpp"
+#include "config.hpp"
 
 extern Device PowerSupply;
 
@@ -71,7 +72,10 @@ void Tabs::setCurrentPage(int n)
         PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
         PowerSupply.funGenMemDirty = false;  // Clear dirty flag after save
     }
+    blockAll = true;
     lv_tabview_set_act(Tabs::tabview, n, LV_ANIM_ON);
+    blockAll = false;
+    lv_obj_invalidate(lv_scr_act());
 }
 
 void Tabs::nextPage()
@@ -85,7 +89,10 @@ void Tabs::nextPage()
             PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
             PowerSupply.funGenMemDirty = false;  // Clear dirty flag after save
         }
+        blockAll = true;
         lv_tabview_set_act(Tabs::tabview, current + 1, LV_ANIM_ON);
+        blockAll = false;
+        lv_obj_invalidate(lv_scr_act());
     }
     else
         setCurrentPage(0);
@@ -102,7 +109,10 @@ void Tabs::previousPage()
             PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
             PowerSupply.funGenMemDirty = false;  // Clear dirty flag after save
         }
+        blockAll = true;
         lv_tabview_set_act(Tabs::tabview, current - 1, LV_ANIM_ON);
+        blockAll = false;
+        lv_obj_invalidate(lv_scr_act());
     }
     else
         setCurrentPage(4);

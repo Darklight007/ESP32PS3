@@ -270,7 +270,15 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 
 
 bool g_graphPaused = false;
-static int g_graphPushCount = 0;
+int g_graphPushCount = 0;
+
+void graphReset()
+{
+    g_graphPaused = false;
+    g_graphPushCount = 0;
+    memset(graph_data_V, 0, CHART_SIZE * sizeof(graph_data_V[0]));
+    memset(graph_data_I, 0, CHART_SIZE * sizeof(graph_data_I[0]));
+}
 
 void GraphPush()
 {

@@ -173,7 +173,7 @@ void loop()
 
   // Chart refresh (Core 1 only - LVGL thread-safe)
   HistogramChartRefreshInterval(125); // Refresh histogram chart every 125ms
-  GraphChartRefreshInterval(1);     // Refresh graph chart every 125ms
+  GraphChartRefreshInterval(125);   // Refresh graph chart every 125ms
 
   // Flush measures - Slow when encoder active for immediate visual feedback
   if (encoderActive)
@@ -215,7 +215,8 @@ void loop()
   trackLoopExecution(__func__);
 }
 
-/*
+/*DATA:GRAPH? 
+//pio device monitor --log-file graph_dump.csv
 Noise analysis
 80Mhz page 2: ER:18.09
 80Mhz page 4: ER:19.64

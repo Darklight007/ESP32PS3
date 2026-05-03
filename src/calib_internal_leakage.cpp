@@ -9,6 +9,39 @@
 #include <float.h>
 #include <cmath>
 
+// ─── Timing constants ──────────────────────────────────────────────────────
+// Increase LEAKAGE_MEASURE_MS if ADC noise is high and you need more averaging.
+#define LEAKAGE_MEASURE_MS   6000   // ADC accumulation time per voltage point (ms)
+#define LEAKAGE_SETTLE_MS    1500    // Voltage settling time after setpoint change (ms)
+// ────────────────────────────────────────────────────────────────────────────
+
+// ─── Countdown timer ────────────────────────────────────────────────────────
+static lv_timer_t *s_countdown_timer = nullptr;
+static int         s_countdown_secs  = 0;
+
+static void countdown_tick_cb(lv_timer_t *)
+{
+    if (s_countdown_secs > 0) s_countdown_secs--;
+    char buf[48];
+    snprintf(buf, sizeof(buf), LV_SYMBOL_REFRESH " Measuring... %ds left", s_countdown_secs);
+    log_set_countdown(buf);
+}
+
+static void start_countdown(int total_secs)
+{
+    s_countdown_secs = total_secs;
+    if (s_countdown_timer) { lv_timer_del(s_countdown_timer); s_countdown_timer = nullptr; }
+    s_countdown_timer = lv_timer_create(countdown_tick_cb, 1000, nullptr);
+    countdown_tick_cb(nullptr); // show immediately
+}
+
+static void stop_countdown()
+{
+    if (s_countdown_timer) { lv_timer_del(s_countdown_timer); s_countdown_timer = nullptr; }
+    log_set_countdown(nullptr); // hide countdown label
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 // External references
 extern Device PowerSupply;
 extern CalibrationGui Calib_GUI;
@@ -49,27 +82,27 @@ void start_leakage_resistance_measurement(lv_event_t *)
 
     esp_task_wdt_reset();
     static const SeqStep steps[] = {
-        {"Setting voltage to 0V", 1500, 500,
+        {"Setting voltage to 0V", LEAKAGE_SETTLE_MS, 500,
          []()
          { PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); }, nullptr},
-        {"Reset statistics", 1000, 1500,
+        {"Reset statistics", 1000, LEAKAGE_SETTLE_MS,
          []()
          { PowerSupply.Current.Statistics.ResetStats(); }, nullptr},
-        {"Measuring current at 0V", 60000, 1500,
-         nullptr, []()
-         { g_leakage_i_at_0v = PowerSupply.Current.Statistics.Mean(); }},
-        {"Setting voltage to 32V", 1500, 500,
+        {"Measuring current at 0V", LEAKAGE_MEASURE_MS, LEAKAGE_SETTLE_MS,
+         []() { start_countdown(LEAKAGE_MEASURE_MS / 1000); },
+         []() { stop_countdown(); g_leakage_i_at_0v = PowerSupply.Current.Statistics.Mean(); }},
+        {"Setting voltage to 32V", LEAKAGE_SETTLE_MS, 500,
          []()
          {
              PowerSupply.Voltage.SetUpdate(32.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
          },
          nullptr},
-        {"Reset statistics", 1500, 1500,
+        {"Reset statistics", LEAKAGE_SETTLE_MS, LEAKAGE_SETTLE_MS,
          []()
          { PowerSupply.Current.Statistics.ResetStats(); }, nullptr},
-        {"Measuring current at 32V", 60000, 1000,
-         nullptr, []()
-         { g_leakage_i_at_32v = PowerSupply.Current.Statistics.Mean(); }},
+        {"Measuring current at 32V", LEAKAGE_MEASURE_MS, 1000,
+         []() { start_countdown(LEAKAGE_MEASURE_MS / 1000); },
+         []() { stop_countdown(); g_leakage_i_at_32v = PowerSupply.Current.Statistics.Mean(); }},
         {"Finalize", 100, 100, nullptr,
          []()
          {
@@ -79,12 +112,6 @@ void start_leakage_resistance_measurement(lv_event_t *)
              log_step("           i0 = %+1.6f", g_leakage_i_at_0v);
              log_step("           i1 = %+1.6f", g_leakage_i_at_32v);
              double diff = g_leakage_i_at_32v - g_leakage_i_at_0v;
-             if (fabs(diff) < 1e-9) {
-                 log_step("ERROR: Current diff too small (< 1nA), cannot compute resistance");
-                 Serial.printf("\nERROR: Leakage diff too small: %e", diff);
-                 g_calibration_in_progress = false;
-                 return;
-             }
              double Rtot = (PowerSupply.mA_Active ? 1000.0 : 1.0) * 32.0 / diff / 1000.0;
              // Clamp to valid int32 spinbox range (0..9999 kΩ)
              if (!std::isfinite(Rtot) || Rtot < 0.0) Rtot = 0.0;
@@ -203,8 +230,8 @@ void start_current_zero_calibration(lv_event_t *e)
          []()
          { PowerSupply.Current.rawValueStats.ResetStats(); }, nullptr},
         {"Measuring current at 0V", 10000, 1500,
-         nullptr, []()
-         {
+         []() { start_countdown(10); },
+         []() { stop_countdown();
              g_zero_current_code = PowerSupply.Current.rawValueStats.Mean();
              Serial.printf("\n Code 1 at zero current:%i", g_zero_current_code);
          }},
@@ -298,8 +325,8 @@ void start_voltage_zero_calibration(lv_event_t *e)
          []()
          { PowerSupply.Voltage.rawValueStats.ResetStats(); }, nullptr},
         {"Measuring voltage at 0V", 10000, 1500,
-         nullptr, []()
-         {
+         []() { start_countdown(10); },
+         []() { stop_countdown();
              g_zero_voltage_code = PowerSupply.Voltage.rawValueStats.Mean();
              Serial.printf("\n Code 1 at zero voltage:%i", g_zero_voltage_code);
          }},

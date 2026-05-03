@@ -183,6 +183,7 @@ static inline UIMode detect_mode()
         (PowerSupply.gui.calibration.win_ADC_voltage_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_voltage_calibration)) ||
         (PowerSupply.gui.calibration.win_ADC_current_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_current_calibration)) ||
         (PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration)) ||
+        // (PowerSupply.gui.calibration.win_ADC_INL_ZC_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_INL_ZC_calibration)) ||
         (PowerSupply.gui.calibration.win_int_current_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_int_current_calibration)); // NEW
 
     return (!dac && !adc) ? UIMode::Menu : (dac ? UIMode::DAC : UIMode::ADC);
@@ -830,6 +831,7 @@ void keyCheckLoop()
                  hide(PowerSupply.gui.calibration.win_ADC_current_calibration);
                  hide(PowerSupply.gui.calibration.win_int_current_calibration);
                  hide(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration);
+                 // hide(PowerSupply.gui.calibration.win_ADC_INL_ZC_calibration);
                  hide(PowerSupply.gui.calibration.win_DAC_calibration);
                  lv_obj_invalidate(lv_scr_act());
              });
@@ -1024,7 +1026,8 @@ void keyCheckLoop()
                          autoScrollY();
                          lvglChartIsBusy = false;
                      }
-                 });
+                 PowerSupply.ResetStats();
+                });
 
     keyMenusPage('j', " RELEASED.", 2, []
                  { PowerSupply.ResetStats(); });
@@ -1354,7 +1357,7 @@ void processDeferredMaToggle()
             lv_obj_t *title_lbl = lv_obj_get_child(hdr, 0);
             if (title_lbl)
                 lv_label_set_text(title_lbl, PowerSupply.mA_Active
-                    ? "Internal Current Calibration [mA]" : "Internal Current Calibration [A]");
+                    ? "Internal Leakage Calibration [mA]" : "Internal Leakage Calibration [A]");
         }
     }
 
@@ -1363,6 +1366,10 @@ void processDeferredMaToggle()
         lv_obj_clear_flag(PowerSupply.Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
     else
         lv_obj_add_flag(PowerSupply.Current.label_si_prefix, LV_OBJ_FLAG_HIDDEN);
+
+    // Ensure current measurement label is visible after range switch
+    // (mA over-range blink may have left it hidden)
+    lv_obj_clear_flag(PowerSupply.Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
 
     // Refresh calibration window spinboxes
     if (PowerSupply.gui.calibration.win_ADC_current_calibration) {

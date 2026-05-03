@@ -98,7 +98,7 @@ public:
 
 private:
     // Command buffer
-    static constexpr size_t CMD_BUFFER_SIZE = 256;
+    static constexpr size_t CMD_BUFFER_SIZE = 512;
     char cmdBuffer[CMD_BUFFER_SIZE];
     size_t cmdBufferPos;
 
@@ -178,6 +178,49 @@ private:
     void cmd_CAL_STAT_Q();                        // :CALibration:STATe?
     void cmd_CAL_SAVE();                          // :CALibration:SAVE
     void cmd_CAL_LOAD();                          // :CALibration:LOAD
+
+    // SCPI DATA subsystem
+    void cmd_DATA_GRAPH_Q();                      // :DATA:GRAPh?
+    void cmd_DATA_STATS_Q();                      // :DATA:STATS?
+    void cmd_DATA_GRAPH_RST();                    // :DATA:GRAPh:RST
+    void cmd_DATA_GRAPH_STAT_Q();                 // :DATA:GRAPh:STAT?
+    void cmd_DATA_STATUS_Q();                     // :DATA:STATus?
+    void cmd_DATA_SETTINGS_Q();                   // :DATA:SETTings?
+    void cmd_DATA_MEM_Q();                        // :DATA:MEM?
+    void cmd_DATA_FGEN_Q();                       // :DATA:FGEN?
+    void cmd_DATA_ARBT_Q(const String& param);    // :DATA:ARBT? <bank>
+    void cmd_DATA_ARBT(const String& param);      // :DATA:ARBT <bank> <idx> <val>
+    void cmd_DATA_TABL_Q();                       // :DATA:TABL?
+    void cmd_DATA_TABL(const String& param);      // :DATA:TABL <idx> <val> or LEN <n>
+    void cmd_DATA_CAL_Q();                        // :DATA:CAL?
+    void cmd_DATA_CAL_SET(const String& param);   // :DATA:CAL:SET <line>
+
+    // SCPI SETT subsystem (settings write)
+    void cmd_SETT_BOOL(const String& param, bool &target);
+    void cmd_SETT_ADC_RATE(const String& param);
+    void cmd_SETT_ADC_AVG(const String& param);
+    void cmd_SETT_ADC_DIG(const String& param);
+    void cmd_SETT_TIMER_DUR(const String& param);
+    void cmd_SETT_OVP_LVL(const String& param);
+    void cmd_SETT_OCP_LVL(const String& param);
+    void cmd_SETT_DELAY(const String& param);
+    void cmd_SETT_AUTOSAVE(const String& param);
+    void cmd_SETT_GRAPH_SPAN(const String& param);
+    void cmd_SETT_BACKLIGHT(const String& param);
+    void cmd_SETT_BEEP_VOL(const String& param);
+    void cmd_SETT_STARTUP(const String& param);
+
+    // SCPI FGEN subsystem (function generator)
+    void cmd_FGEN_FREQ(const String& param);
+    void cmd_FGEN_AMPL(const String& param);
+    void cmd_FGEN_OFFS(const String& param);
+    void cmd_FGEN_DUTY(const String& param);
+    void cmd_FGEN_WAVE(const String& param);
+    void cmd_FGEN_WAVE_Q();
+
+    // SCPI MEM subsystem
+    void cmd_MEM_RECALL(const String& param);
+    void cmd_MEM_STORE(const String& param);
 
     // Status registers (IEEE 488.2)
     uint8_t statusByte;

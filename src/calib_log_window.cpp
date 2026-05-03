@@ -15,6 +15,7 @@ static bool s_pending = false; // true after _begin(), cleared by _done()
 static lv_obj_t *log_win;
 static lv_obj_t *log_label;
 static lv_obj_t *log_title_label;
+static lv_obj_t *log_countdown_label = nullptr; // shown in content area during countdown
 
 // When true, close_log_cb is suppressed (used by full auto calibration)
 bool g_log_window_keep_open = false;
@@ -27,6 +28,7 @@ void close_log_cb(lv_timer_t *t)
     if (log_win && lv_obj_is_valid(log_win))
     {
         lv_obj_add_flag(log_win, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_invalidate(lv_scr_act());
     }
     // Timer auto-deletes after repeat count expires (callers set repeat_count=1)
 }
@@ -49,12 +51,12 @@ void log_step_begin(const char *fmt, ...)
         // replace the previous " ...\n" with " done!\n"
         // (safe even if buffer tight; see _done code)
         // You can call log_step_done(); but inline is faster.
-        const char tail[] = " ...\n";
+        const char tail[] = " [   ]\n";
         const size_t tail_len = sizeof(tail) - 1;
         if (s_len >= tail_len && std::memcmp(s_logbuf + s_len - tail_len, tail, tail_len) == 0)
         {
             s_len -= tail_len;
-            const char done[] = " done!\n";
+            const char done[] = " [" LV_SYMBOL_OK "]\n";
             size_t add = strlen(done);
             if (s_len + add >= sizeof(s_logbuf))
                 add = sizeof(s_logbuf) - s_len - 1;
@@ -71,8 +73,8 @@ void log_step_begin(const char *fmt, ...)
     const int n = vsnprintf(line, sizeof(line), fmt, args);
     va_end(args);
 
-    // append to the big buffer + " ...\n"
-    const char ell[] = " ...\n";
+    // append to the big buffer + " [   ]\n"
+    const char ell[] = " [   ]\n";
     const size_t need = (size_t)((n > 0 ? n : 0)) + sizeof(ell) - 1;
 
     // truncate if needed
@@ -102,16 +104,16 @@ void log_step_done()
     if (!s_pending)
         return;
 
-    const char tail[] = " ...\n";
+    const char tail[] = " [   ]\n";
     const size_t tail_len = sizeof(tail) - 1;
 
     if (s_len >= tail_len && std::memcmp(s_logbuf + s_len - tail_len, tail, tail_len) == 0)
     {
-        // remove " ...\n"
+        // remove " [   ]\n"
         s_len -= tail_len;
 
-        // append " done!\n"
-        const char done[] = " done!\n";
+        // append " [✓]\n"
+        const char done[] = " [" LV_SYMBOL_OK "]\n";
         size_t add = sizeof(done) - 1;
         if (s_len + add >= sizeof(s_logbuf))
             add = sizeof(s_logbuf) - s_len - 1;
@@ -165,6 +167,18 @@ void log_set_title(const char *title)
         lv_label_set_text(log_title_label, title ? title : "Calibration");
 }
 
+void log_set_countdown(const char *text)
+{
+    if (!log_countdown_label || !lv_obj_is_valid(log_countdown_label)) return;
+    if (text && text[0] != '\0') {
+        lv_label_set_text(log_countdown_label, text);
+        lv_obj_clear_flag(log_countdown_label, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_label_set_text(log_countdown_label, "");
+        lv_obj_add_flag(log_countdown_label, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 void create_log_window(const char *title)
 {
     // Reuse existing hidden window if still valid
@@ -202,4 +216,13 @@ void create_log_window(const char *title)
     lv_label_set_text(log_label, "");
     lv_label_set_long_mode(log_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(log_label, lv_pct(100));
+
+    // Countdown label — lives in the header so it never overlaps the step text
+    lv_obj_t *hdr = lv_win_get_header(log_win);
+    log_countdown_label = lv_label_create(hdr);
+    lv_label_set_text(log_countdown_label, "");
+    lv_obj_set_style_text_color(log_countdown_label, lv_color_hex(0xFFFF00), 0);
+    lv_obj_set_style_text_font(log_countdown_label, &lv_font_montserrat_10, 0);
+    lv_obj_align(log_countdown_label, LV_ALIGN_RIGHT_MID, -5, 0);
+    lv_obj_add_flag(log_countdown_label, LV_OBJ_FLAG_HIDDEN);
 }

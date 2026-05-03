@@ -180,9 +180,11 @@ struct Calibration_gui
     lv_obj_t *win_ADC_current_calibration = nullptr;
     lv_obj_t *win_int_current_calibration = nullptr;
     lv_obj_t *win_ADC_INL_Voltage_calibration = nullptr;
+    // lv_obj_t *win_ADC_INL_ZC_calibration = nullptr;
     lv_obj_t *win_DAC_calibration = nullptr;
 
     Inl_window inl;
+    // Inl_window inl_zc;
 };
 
 struct GUI
@@ -356,6 +358,8 @@ public:
     std::array<double, 2> internalLeakage;  // [0]=Amp range, [1]=mA range
     double adc_inl_measure[36];
     double adc_inl_ideal[36];
+    // double adc_inl_zc_measure[36];  // Zero-current INL: measured voltage (no load)
+    // double adc_inl_zc_ideal[36];    // Zero-current INL: commanded voltage
 
     Calibration(String t_macAdd,
                 calibPoints t_vcalib,
@@ -366,8 +370,11 @@ public:
       vCal(t_vcalib),
       iCal{ t_icalib, t_mAcalib },     // ✅ valid init
       internalLeakage{ icpv, icpv },   // Both ranges start with same default
-      adc_inl_measure{ -0.001,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,32.75 },
-      adc_inl_ideal  { -0.001,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,32.75 }
+      adc_inl_measure    { -0.001,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,32.75 },
+      adc_inl_ideal      { -0.001,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,32.75 }
+      // adc_inl_zc_measure { ... },  // Zero-current INL — commented out pending investigation
+      // adc_inl_zc_ideal   { ... }
+
     {}
     ~Calibration() = default;
 };

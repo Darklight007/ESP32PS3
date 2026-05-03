@@ -285,7 +285,7 @@ static void INL_start(lv_event_t *e)
         }
 
         // Now safe to close the msgbox
-        lv_msgbox_close_async(obj);
+        msgbox_close_deferred(obj);
         INL_dbg("[INL] Msgbox closed");
 
         // Check the COPIED string (not the freed pointer!)
@@ -336,6 +336,10 @@ void start_inl_calibration()
     inl = INL_FSM{};
     inl.ph = INL_FSM::PREPARE;
     inl.timer = lv_timer_create(INL_timer_cb, 10, nullptr);
+    if (!inl.timer) {
+        INL_dbg("[INL] ERROR: Failed to create INL timer");
+        inl.ph = INL_FSM::DONE;
+    }
 }
 
 // Check if INL calibration is currently running
@@ -423,6 +427,23 @@ static void ensure_disabled_style_once()
 // Main INL calibration window
 // =============================================================================
 
+static bool g_inl_skip_load_on_open = false;
+
+// Show the INL window without calling LoadCalibrationData().
+// Used by full auto calibration to avoid overwriting in-memory CalBank.
+void open_inl_window_no_load()
+{
+    if (PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration &&
+        lv_obj_is_valid(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration))
+    {
+        lv_obj_clear_flag(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    // Window not yet created — create it but skip LoadCalibrationData
+    g_inl_skip_load_on_open = true;
+    ADC_INL_Voltage_calibration_cb(nullptr);
+}
+
 void ADC_INL_Voltage_calibration_cb(lv_event_t *)
 {
     // Re-open existing window if already created
@@ -449,8 +470,10 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
     lv_obj_set_style_pad_all(cont, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(cont, 0, LV_PART_ITEMS);
 
-    // Load persisted calibration data
-    PowerSupply.LoadCalibrationData();
+    // Load persisted calibration data (skipped when called from full auto to preserve CalBank)
+    if (!g_inl_skip_load_on_open)
+        PowerSupply.LoadCalibrationData();
+    g_inl_skip_load_on_open = false;
 
     // Styles (init once)
     static lv_style_t style_lbl, style_val;

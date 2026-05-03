@@ -8,6 +8,8 @@
 
 extern bool g_voltINL_ready;
 extern MonotoneCubicCalibrator g_voltINL;
+// extern bool g_voltINL_ZC_ready;
+// extern MonotoneCubicCalibrator g_voltINL_ZC;
 
 extern Calibration StoreData;
 extern bool lvglIsBusy, lvglChartIsBusy, blockAll;
@@ -84,6 +86,14 @@ void Device::calibrationUpdate(void)
     Current.calib_b = CalBank[bankCalibId].iCal[mA_Active].code_1 - Current.calib_m * CalBank[bankCalibId].iCal[mA_Active].value_1;
 
     Current.calib_1m = 1.0 / Current.calib_m;
+
+    // Update current ADC full-scale range for correct ENOB calculation
+    // A mode: 6.5536A, mA mode: 0.0065536A (1000x smaller)
+    Current.adc_maxValue = mA_Active ? 0.0065536 : 6.5536;
+
+    // Reset statistics so stale A-mode samples don't corrupt mA-mode ER (and vice versa)
+    Current.Statistics.ResetStats();
+    Current.effectiveResolution.ResetStats();
 }
 
 //  std::vector<Calibration> CalBank
@@ -547,6 +557,12 @@ void Device::readVoltage()
         // Apply INL correction if calibration data is available
         if (g_voltINL_ready)
             v_corrected = g_voltINL.apply(v_corrected);
+        // Zero-current INL (commented out pending investigation):
+        // double i_meas = fabs(Current.measured.Mean());
+        // if (g_voltINL_ZC_ready && i_meas < 0.005)
+        //     v_corrected = g_voltINL_ZC.apply(v_corrected);
+        // else if (g_voltINL_ready)
+        //     v_corrected = g_voltINL.apply(v_corrected);
 
         Voltage.measureUpdate(v_corrected);
         Voltage.rawValueStats(Voltage.rawValue);

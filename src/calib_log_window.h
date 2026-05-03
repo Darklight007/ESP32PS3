@@ -26,6 +26,9 @@ void create_log_window(const char *title = nullptr);
 // Update the title of an existing log window
 void log_set_title(const char *title);
 
+// Show/update countdown text in the content area (pass nullptr or "" to hide)
+void log_set_countdown(const char *text);
+
 // Timer callback to close the log window (for use with lv_timer_create)
 void close_log_cb(lv_timer_t *t);
 

@@ -1205,10 +1205,10 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        // PowerSupply.Voltage.SetUpdate(round(strtod(txt, NULL) * 2000.0)  - 0 * PowerSupply.Voltage.adjOffset);
         PowerSupply.Voltage.SetUpdate((strtod(txt, NULL) * PowerSupply.Voltage.adjFactor) + PowerSupply.Voltage.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
+        lv_obj_invalidate(lv_scr_act());
     }
 
     else if (strcmp(txt, "mV") == 0)
@@ -1219,6 +1219,7 @@ static void btnm_event_handler(lv_event_t *e)
         PowerSupply.Voltage.SetUpdate((strtod(txt, NULL) * 2.0) + PowerSupply.Voltage.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
+        lv_obj_invalidate(lv_scr_act());
     }
 
     else if (strcmp(txt, "A") == 0)
@@ -1229,6 +1230,7 @@ static void btnm_event_handler(lv_event_t *e)
         PowerSupply.Current.SetUpdate(strtod(txt, NULL) * PowerSupply.Current.adjFactor + PowerSupply.Current.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
+        lv_obj_invalidate(lv_scr_act());
     }
 
     else if (strcmp(txt, "mA") == 0)
@@ -1239,6 +1241,7 @@ static void btnm_event_handler(lv_event_t *e)
         PowerSupply.Current.SetUpdate(strtod(txt, NULL) * 10.0 + PowerSupply.Current.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
+        lv_obj_invalidate(lv_scr_act());
     }
     else
         lv_textarea_add_text(ta, txt);
