@@ -5,6 +5,11 @@
 #include <lvgl.h>
 #include <algorithm>
 
+// Set true when a programmatic tab change needs LV_EVENT_VALUE_CHANGED fired.
+// Drained on Core 1 by the main loop (see drainPendingTabEvent()).
+extern volatile bool g_tabValueChangedPending;
+void drainPendingTabEvent();
+
 class Tabs
 {
 public:

@@ -11,6 +11,12 @@ lv_obj_t *Tabs::tabview;
 Tabs::Tabs() {};
 Tabs::~Tabs() {}
 
+// lv_tabview_set_act doesn't fire LV_EVENT_VALUE_CHANGED — only tab-button clicks do.
+// Set this flag from any thread (incl. Core 0 key handlers) when the tab changes
+// programmatically; Core 1's main loop drains it and fires the event safely.
+// Plain volatile bool avoids any LVGL allocator/timer calls from Core 0.
+volatile bool g_tabValueChangedPending = false;
+
 void Tabs::setup_(lv_obj_t *parent)
 {
     Tabs::tabview = lv_tabview_create(parent, LV_DIR_TOP, 15);
@@ -72,9 +78,11 @@ void Tabs::setCurrentPage(int n)
         PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
         PowerSupply.funGenMemDirty = false;  // Clear dirty flag after save
     }
+    bool new_tab = (getCurrentPage() != n);
     blockAll = true;
     lv_tabview_set_act(Tabs::tabview, n, LV_ANIM_ON);
     blockAll = false;
+    if (new_tab) g_tabValueChangedPending = true;
     lv_obj_invalidate(lv_scr_act());
 }
 
@@ -92,6 +100,7 @@ void Tabs::nextPage()
         blockAll = true;
         lv_tabview_set_act(Tabs::tabview, current + 1, LV_ANIM_ON);
         blockAll = false;
+        g_tabValueChangedPending = true;
         lv_obj_invalidate(lv_scr_act());
     }
     else
@@ -112,6 +121,7 @@ void Tabs::previousPage()
         blockAll = true;
         lv_tabview_set_act(Tabs::tabview, current - 1, LV_ANIM_ON);
         blockAll = false;
+        g_tabValueChangedPending = true;
         lv_obj_invalidate(lv_scr_act());
     }
     else
@@ -161,4 +171,12 @@ void Tabs::addPage(lv_obj_t *parent, lv_obj_t **tab, const char *name)
     }
 
     Tabs::numberOfPage++;
+}
+
+// Called from main loop on Core 1 — safe place to fire LVGL events.
+void drainPendingTabEvent()
+{
+    if (!g_tabValueChangedPending) return;
+    g_tabValueChangedPending = false;
+    if (Tabs::tabview) lv_event_send(Tabs::tabview, LV_EVENT_VALUE_CHANGED, NULL);
 }

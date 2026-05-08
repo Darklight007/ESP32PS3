@@ -1062,13 +1062,31 @@ void StatusBar()
 
 void StatsPositions(lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
 {
+    // Reparent and re-align stat labels to match stat_measure's original layout.
+    // x is unused (kept for ABI); xBase/space hardcoded to mirror stat_measure.
+    (void)x; (void)style_;
+    const int xBase = 2;
+    const int space = 61;
+
     lv_obj_set_parent(dObj.statLabels.label_unit, parent);
+    lv_obj_align(dObj.statLabels.label_unit, LV_ALIGN_DEFAULT, xBase - 10, y);
+
     lv_obj_set_parent(dObj.statLabels.label_setSmallFont, parent);
-    lv_obj_set_parent(dObj.statLabels.label_value, parent);
+    lv_obj_align(dObj.statLabels.label_setSmallFont, LV_ALIGN_DEFAULT, xBase + space * 0, y);
+
     lv_obj_set_parent(dObj.statLabels.label_mean, parent);
+    lv_obj_align(dObj.statLabels.label_mean, LV_ALIGN_DEFAULT, xBase + space * 1, y);
+
     lv_obj_set_parent(dObj.statLabels.label_std, parent);
+    lv_obj_align(dObj.statLabels.label_std, LV_ALIGN_DEFAULT, xBase + space * 2 + 4, y);
+
     lv_obj_set_parent(dObj.statLabels.label_max, parent);
+    lv_obj_align(dObj.statLabels.label_max, LV_ALIGN_DEFAULT, xBase + space * 3, y);
+
     lv_obj_set_parent(dObj.statLabels.label_min, parent);
+    lv_obj_align(dObj.statLabels.label_min, LV_ALIGN_DEFAULT, xBase + space * 4, y);
+
+    lv_obj_set_parent(dObj.statLabels.label_value, parent);
     lv_obj_set_parent(dObj.statLabels.label_fft, parent);
     lv_obj_set_parent(dObj.statLabels.label_legend, parent);
 };
@@ -1093,10 +1111,28 @@ void updateObjectPos_cb(lv_event_t *e)
     // updateObjectParrents();
     if (Tabs::getCurrentPage() < 2)
     {
-        StatsPositions(PowerSupply.page[Tabs::getCurrentPage()], PowerSupply.Voltage, &PowerSupply.stats.style_statsVolt, 0, 177);
-        StatsPositions(PowerSupply.page[Tabs::getCurrentPage()], PowerSupply.Current, &PowerSupply.stats.style_statsCurrent, 0, 187);
-        lv_obj_set_parent(label_legend1, PowerSupply.page[Tabs::getCurrentPage()]);
-        lv_obj_set_parent(label_legend2, PowerSupply.page[Tabs::getCurrentPage()]);
+        lv_obj_t *page = PowerSupply.page[Tabs::getCurrentPage()];
+        StatsPositions(page, PowerSupply.Voltage, &PowerSupply.stats.style_statsVolt, 0, 177);
+        StatsPositions(page, PowerSupply.Current, &PowerSupply.stats.style_statsCurrent, 0, 187);
+        // Voltage's label_legend is the "Set Mean STD Max Min" header at row Y - 10
+        lv_obj_align(PowerSupply.Voltage.statLabels.label_legend, LV_ALIGN_DEFAULT, 10, 167);
+        lv_obj_set_parent(label_legend1, page);
+        lv_obj_set_parent(label_legend2, page);
+        if (Tabs::getCurrentPage() == 0)
+        {
+            // Histogram page always enters with stats visible and chart at normal height
+            g_histExpanded = false;
+            lv_obj_set_height(PowerSupply.stats.chart, HIST_CHART_H_NORMAL);
+            applyGraphStatsVisibility(true);
+        }
+        else if (Tabs::getCurrentPage() == 1)
+        {
+            // Sync stats visibility and chart height with current toggle state
+            applyGraphStatsVisibility(g_graphStatsVisible);
+            lv_obj_set_height(PowerSupply.graph.chart,
+                g_graphStatsVisible ? GRAPH_CHART_H_NORMAL : GRAPH_CHART_H_EXPANDED);
+            lv_obj_align_to(slider_x, PowerSupply.graph.chart, LV_ALIGN_OUT_BOTTOM_MID, 0, -5);
+        }
     }
     else if (Tabs::getCurrentPage() == 3)
     {

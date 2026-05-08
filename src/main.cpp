@@ -158,6 +158,10 @@ void loop()
     return; // Skip other processing in FUN Only mode (bars already rendered above)
   }
 
+  // Drain pending tab event from k/l navigation. Past the FUN-Only gate above,
+  // so it never runs while waveform output is timing-critical.
+  drainPendingTabEvent();
+
   // Adaptive encoder response: fast when active, slower when idle
   bool encoderActive = (millis() - encoderTimeStamp) < 500; // 500ms idle threshold
 
@@ -196,6 +200,7 @@ void loop()
   // FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?
   processDeferredMaToggle();    // Handle mA/A toggle UI updates from Core 0
+  updateStatChartSize();        // Safe resize: never call lv_obj_set_size from draw callbacks
   managePageEncoderInteraction();
 
   // if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))

@@ -8,6 +8,31 @@
 // UI object definitions
 lv_obj_t *label_legend1;
 lv_obj_t *label_legend2;
+bool g_graphStatsVisible = true;
+bool g_histExpanded      = false;
+
+
+void applyGraphStatsVisibility(bool visible)
+{
+    auto set_hidden = [](lv_obj_t *obj, bool h) {
+        if (!obj) return;
+        if (h) lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+        else    lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    };
+    bool hide = !visible;
+    auto toggle_disp = [&](DispObjects &dObj) {
+        set_hidden(dObj.statLabels.label_legend,       hide);
+        set_hidden(dObj.statLabels.label_unit,         hide);
+        set_hidden(dObj.statLabels.label_setSmallFont, hide);
+        set_hidden(dObj.statLabels.label_mean,         hide);
+        set_hidden(dObj.statLabels.label_std,          hide);
+        set_hidden(dObj.statLabels.label_max,          hide);
+        set_hidden(dObj.statLabels.label_min,          hide);
+    };
+    toggle_disp(PowerSupply.Voltage);
+    toggle_disp(PowerSupply.Current);
+}
+
 
 void hide(lv_obj_t *obj)
 {
@@ -145,8 +170,8 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     PowerSupply.graph.label_pause = lv_label_create(parent);
     lv_label_set_text(PowerSupply.graph.label_pause, LV_SYMBOL_PAUSE " PAUSED");
     lv_obj_set_style_text_color(PowerSupply.graph.label_pause, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
-    lv_obj_set_style_text_font(PowerSupply.graph.label_pause, &lv_font_montserrat_14, LV_PART_MAIN);
-    lv_obj_align_to(PowerSupply.graph.label_pause, PowerSupply.graph.chart, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_text_font(PowerSupply.graph.label_pause, &lv_font_montserrat_16, LV_PART_MAIN);
+    lv_obj_align_to(PowerSupply.graph.label_pause, PowerSupply.graph.chart, LV_ALIGN_TOP_RIGHT, 0, 0);
     lv_obj_add_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
 
     legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V-Set", lv_palette_main(LV_PALETTE_AMBER), "I-set", 25, 0);
@@ -493,17 +518,14 @@ void draw_event_stat_chart_cb(lv_event_t *e)
             switch (VI_hidden)
             {
             case 1:
-                lv_obj_set_size(PowerSupply.stats.chart, 260, 150);
                 snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s", voltageStr);
                 break;
 
             case 2:
-                lv_obj_set_size(PowerSupply.stats.chart, 260, 150);
                 snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s", currentStr);
                 break;
 
             case 3:
-                lv_obj_set_size(PowerSupply.stats.chart, 260, 140);
                 snprintf(tickLabels[i], sizeof(tickLabels[i]), "%s\n%s", voltageStr, currentStr);
                 break;
 
@@ -550,6 +572,25 @@ void draw_event_stat_chart_cb(lv_event_t *e)
             }
         }
     }
+}
+
+// Safe to call from main loop only — never from a draw callback
+void updateStatChartSize()
+{
+    if (!PowerSupply.stats.chart || !lv_obj_is_valid(PowerSupply.stats.chart)) return;
+    if (!PowerSupply.stats.serV || !PowerSupply.stats.serI) return;
+
+    static int lastVI = -1;
+    int VI = 0;
+    if (!PowerSupply.stats.serV->hidden && !PowerSupply.stats.serI->hidden) VI = 3;
+    else if (!PowerSupply.stats.serV->hidden) VI = 1;
+    else if (!PowerSupply.stats.serI->hidden) VI = 2;
+
+    if (VI == lastVI) return;
+    lastVI = VI;
+
+    lv_coord_t h = (VI == 3) ? 140 : 150;
+    lv_obj_set_size(PowerSupply.stats.chart, 260, h);
 }
 
 void draw_event_cb2(lv_event_t *e)
@@ -649,12 +690,17 @@ void draw_event_cb2(lv_event_t *e)
         else if (dsc->id == LV_CHART_AXIS_PRIMARY_Y)
         {
             static int index_y = 0;
-            static char *tickLabels_y[] = {"32.0V", "28.0", "24.0", "20.0", "16.0", "12.0", "8.0", "4.0", "0.0", "-4.0"};
+            static const char *tickLabels_y[] = {"32.0V", "28.0", "24.0", "20.0", "16.0", "12.0", "8.0", "4.0", "0.0", "-4.0"};
+            constexpr int Y_LABEL_COUNT = 10;
 
             if (strcmp(dsc->text, "32000") == 0)
                 index_y = 0;
 
-            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabels_y[index_y++]);
+            if (index_y >= 0 && index_y < Y_LABEL_COUNT)
+                lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabels_y[index_y]);
+            else
+                lv_snprintf(dsc->text, dsc->text_length, "");
+            index_y++;
 
             if (dsc->label_dsc)
                 dsc->label_dsc->font = &lv_font_montserrat_10;
@@ -663,13 +709,18 @@ void draw_event_cb2(lv_event_t *e)
         else if (dsc->id == LV_CHART_AXIS_SECONDARY_Y)
         {
             static int index_sy = 0;
-            static char *tickLabels_sy[] = {nullptr, "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0", "-1.0"};
-            tickLabels_sy[0] = PowerSupply.mA_Active ? (char *)"8.0mA" : (char *)"8.0A";
+            static const char *tickLabels_sy[] = {"8.0A", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0", "-1.0"};
+            constexpr int SY_LABEL_COUNT = 10;
 
             if (strcmp(dsc->text, "8000") == 0)
                 index_sy = 0;
 
-            lv_snprintf(dsc->text, dsc->text_length, "%s", tickLabels_sy[index_sy++]);
+            const char *sy_label = (index_sy >= 0 && index_sy < SY_LABEL_COUNT) ? tickLabels_sy[index_sy] : "";
+            if (index_sy == 0)
+                lv_snprintf(dsc->text, dsc->text_length, "%s", PowerSupply.mA_Active ? "8.0mA" : "8.0A");
+            else
+                lv_snprintf(dsc->text, dsc->text_length, "%s", sy_label);
+            index_sy++;
 
             if (dsc->label_dsc)
                 dsc->label_dsc->font = &lv_font_montserrat_10;

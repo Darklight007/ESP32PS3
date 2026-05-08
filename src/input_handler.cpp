@@ -962,6 +962,13 @@ void keyCheckLoop()
                      else
                          lv_obj_add_flag(label_legend2, LV_OBJ_FLAG_HIDDEN); });
 
+    keyMenusPage('X', " RELEASED.", 0, []
+                 {
+                     g_histExpanded = !g_histExpanded;
+                     applyGraphStatsVisibility(!g_histExpanded);
+                     lv_obj_set_height(PowerSupply.stats.chart,
+                         g_histExpanded ? HIST_CHART_H_EXPANDED : HIST_CHART_H_NORMAL); });
+
     keyMenusPage('V', " RELEASED.", 1, []
                  {
                      static bool hide = false;
@@ -986,6 +993,14 @@ void keyCheckLoop()
 
                      else
                          lv_obj_add_flag(label_legend2, LV_OBJ_FLAG_HIDDEN); });
+
+    keyMenusPage('X', " RELEASED.", 1, []
+                 {
+                     g_graphStatsVisible = !g_graphStatsVisible;
+                     applyGraphStatsVisibility(g_graphStatsVisible);
+                     lv_obj_set_height(PowerSupply.graph.chart,
+                         g_graphStatsVisible ? GRAPH_CHART_H_NORMAL : GRAPH_CHART_H_EXPANDED);
+                     lv_obj_align_to(slider_x, PowerSupply.graph.chart, LV_ALIGN_OUT_BOTTOM_MID, 0, -5); });
 
     // Long press 'j' (AVG button) - Reset energy counter (mWh)
     keyMenus('j', " HOLD.", [&]
