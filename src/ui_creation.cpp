@@ -17,6 +17,7 @@
 
 // Global variable definitions
 lv_obj_t *slider_x = nullptr;
+lv_obj_t *slider_y = nullptr;
 lv_obj_t *ta = nullptr;
 lv_obj_t *unit_label = nullptr;
 lv_obj_t *btnm = nullptr;
@@ -1118,20 +1119,16 @@ void updateObjectPos_cb(lv_event_t *e)
         lv_obj_align(PowerSupply.Voltage.statLabels.label_legend, LV_ALIGN_DEFAULT, 10, 167);
         lv_obj_set_parent(label_legend1, page);
         lv_obj_set_parent(label_legend2, page);
+        // Re-apply each page's persisted view mode on every entry. This restores
+        // chart size/position, tick layout, and chrome visibility after labels/legends
+        // have been reparented above.
         if (Tabs::getCurrentPage() == 0)
         {
-            // Histogram page always enters with stats visible and chart at normal height
-            g_histExpanded = false;
-            lv_obj_set_height(PowerSupply.stats.chart, HIST_CHART_H_NORMAL);
-            applyGraphStatsVisibility(true);
+            applyHistViewMode(g_histViewMode);
         }
         else if (Tabs::getCurrentPage() == 1)
         {
-            // Sync stats visibility and chart height with current toggle state
-            applyGraphStatsVisibility(g_graphStatsVisible);
-            lv_obj_set_height(PowerSupply.graph.chart,
-                g_graphStatsVisible ? GRAPH_CHART_H_NORMAL : GRAPH_CHART_H_EXPANDED);
-            lv_obj_align_to(slider_x, PowerSupply.graph.chart, LV_ALIGN_OUT_BOTTOM_MID, 0, -5);
+            applyGraphViewMode(g_graphViewMode);
         }
     }
     else if (Tabs::getCurrentPage() == 3)

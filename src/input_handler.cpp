@@ -12,6 +12,7 @@
 #include "globalFunctions.h"
 #include "waveform_generator.h"
 #include "Key.h"  // For LIST_MAX, PRESSED, HOLD key states
+#include "freeze_trace.h"
 #include "calib_adc.h"
 
 // External references
@@ -964,10 +965,18 @@ void keyCheckLoop()
 
     keyMenusPage('X', " RELEASED.", 0, []
                  {
-                     g_histExpanded = !g_histExpanded;
-                     applyGraphStatsVisibility(!g_histExpanded);
-                     lv_obj_set_height(PowerSupply.stats.chart,
-                         g_histExpanded ? HIST_CHART_H_EXPANDED : HIST_CHART_H_NORMAL); });
+                     TRACE("X0_begin");
+                     // Cycle: NORMAL -> EXPANDED -> FULLSCREEN -> NORMAL
+                     int next = (static_cast<int>(g_histViewMode) + 1) % 3;
+                     TRACE("X0_pre_apply");
+#if DEFER_VIEW_MODE_TO_CORE1
+                     g_pendingViewMode       = static_cast<ChartViewMode>(next);
+                     g_pendingViewModePage   = 0;
+                     g_pendingViewModeChange = true;
+#else
+                     applyHistViewMode(static_cast<ChartViewMode>(next));
+#endif
+                     TRACE("X0_post_apply"); });
 
     keyMenusPage('V', " RELEASED.", 1, []
                  {
@@ -996,11 +1005,18 @@ void keyCheckLoop()
 
     keyMenusPage('X', " RELEASED.", 1, []
                  {
-                     g_graphStatsVisible = !g_graphStatsVisible;
-                     applyGraphStatsVisibility(g_graphStatsVisible);
-                     lv_obj_set_height(PowerSupply.graph.chart,
-                         g_graphStatsVisible ? GRAPH_CHART_H_NORMAL : GRAPH_CHART_H_EXPANDED);
-                     lv_obj_align_to(slider_x, PowerSupply.graph.chart, LV_ALIGN_OUT_BOTTOM_MID, 0, -5); });
+                     TRACE("X1_begin");
+                     // Cycle: NORMAL -> EXPANDED -> FULLSCREEN -> NORMAL
+                     int next = (static_cast<int>(g_graphViewMode) + 1) % 3;
+                     TRACE("X1_pre_apply");
+#if DEFER_VIEW_MODE_TO_CORE1
+                     g_pendingViewMode       = static_cast<ChartViewMode>(next);
+                     g_pendingViewModePage   = 1;
+                     g_pendingViewModeChange = true;
+#else
+                     applyGraphViewMode(static_cast<ChartViewMode>(next));
+#endif
+                     TRACE("X1_post_apply"); });
 
     // Long press 'j' (AVG button) - Reset energy counter (mWh)
     keyMenus('j', " HOLD.", [&]

@@ -8,8 +8,24 @@
 // UI object definitions
 lv_obj_t *label_legend1;
 lv_obj_t *label_legend2;
-bool g_graphStatsVisible = true;
-bool g_histExpanded      = false;
+ChartViewMode g_graphViewMode = ChartViewMode::NORMAL;
+ChartViewMode g_histViewMode  = ChartViewMode::NORMAL;
+
+// Deferred view-mode change state. Set from Core 0 X handlers; drained on Core 1.
+// apply*ViewMode() is heavy LVGL work and must not run on Core 0 (cross-core races).
+volatile bool          g_pendingViewModeChange = false;
+volatile ChartViewMode g_pendingViewMode       = ChartViewMode::NORMAL;
+volatile int           g_pendingViewModePage   = -1;
+
+void drainPendingViewModeChange()
+{
+    if (!g_pendingViewModeChange) return;
+    const int page = g_pendingViewModePage;
+    const ChartViewMode mode = g_pendingViewMode;
+    g_pendingViewModeChange = false;
+    if (page == 0)      applyHistViewMode(mode);
+    else if (page == 1) applyGraphViewMode(mode);
+}
 
 
 void applyGraphStatsVisibility(bool visible)
@@ -31,6 +47,131 @@ void applyGraphStatsVisibility(bool visible)
     };
     toggle_disp(PowerSupply.Voltage);
     toggle_disp(PowerSupply.Current);
+}
+
+static void setHidden(lv_obj_t *o, bool h)
+{
+    if (!o) return;
+    if (h) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+    else   lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
+}
+
+// In fullscreen, tick labels still draw in their reserved outside zones (so they remain visible).
+// Negative chart padding then pulls the data plot OUTWARD into those zones, so labels visually
+// overlap the data — giving the "ticks inside" effect without losing the labels.
+static void setChartScrollable(lv_obj_t *chart, bool scrollable)
+{
+    if (!chart) return;
+    if (scrollable) {
+        lv_obj_add_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_scrollbar_mode(chart, LV_SCROLLBAR_MODE_AUTO);
+    } else {
+        lv_obj_clear_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_scrollbar_mode(chart, LV_SCROLLBAR_MODE_OFF);
+        lv_obj_scroll_to(chart, 0, 0, LV_ANIM_OFF);
+    }
+}
+
+static void setPageScrollable(int pageIdx, bool scrollable)
+{
+    lv_obj_t *page = PowerSupply.page[pageIdx];
+    if (!page) return;
+    if (scrollable) {
+        lv_obj_add_flag(page, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_scrollbar_mode(page, LV_SCROLLBAR_MODE_AUTO);
+    } else {
+        lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE);
+        // Disabling the flag alone doesn't stop scrollbar DRAWING. In fullscreen,
+        // chart oversize + negative origin makes scrollbar geometry calc spin
+        // forever (lv_obj.c:636 → lv_obj_scroll.c). Force scrollbar drawing off.
+        lv_obj_set_scrollbar_mode(page, LV_SCROLLBAR_MODE_OFF);
+        lv_obj_scroll_to(page, 0, 0, LV_ANIM_OFF);
+    }
+}
+
+void applyGraphViewMode(ChartViewMode mode)
+{
+    g_graphViewMode = mode;
+    const bool fullscreen    = (mode == ChartViewMode::FULLSCREEN);
+    const bool stats_visible = (mode == ChartViewMode::NORMAL);
+
+    applyGraphStatsVisibility(stats_visible);
+    setHidden(label_legend1, fullscreen);
+    setHidden(label_legend2, fullscreen);
+    setHidden(slider_x,      fullscreen);
+    setHidden(slider_y,      fullscreen);
+
+    if (!PowerSupply.graph.chart) return;
+
+    // setChartScrollable(PowerSupply.graph.chart, !fullscreen);
+    setPageScrollable(1, !fullscreen);
+
+    if (fullscreen) {
+        lv_obj_set_size(PowerSupply.graph.chart, 318, GRAPH_CHART_H_FULLSCREEN);
+        lv_obj_align(PowerSupply.graph.chart, LV_ALIGN_DEFAULT, -12, -10);
+        // Hide outward tick lines in fullscreen (lengths = 0,0); gridlines + labels carry the visual.
+        lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_Y,   0, 0, 10, 4,  true, 40);
+        lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_X,   0, 0, 7,  10, true, 50);
+        lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_Y, 0, 0, 10, 10, true, 50);
+        // Negative pad pulls data plot outward over the label zones — labels appear inside the plot.
+        lv_obj_set_style_pad_left  (PowerSupply.graph.chart, -30, LV_PART_TICKS);
+        lv_obj_set_style_pad_right (PowerSupply.graph.chart, -25, LV_PART_TICKS);
+        lv_obj_set_style_pad_bottom(PowerSupply.graph.chart, -15, LV_PART_TICKS);
+        // Brighter tick text for contrast over data lines
+        lv_obj_set_style_text_color(PowerSupply.graph.chart, lv_palette_lighten(LV_PALETTE_GREY, 4), LV_PART_TICKS);
+    } else {
+        const int h = (mode == ChartViewMode::EXPANDED) ? GRAPH_CHART_H_EXPANDED : GRAPH_CHART_H_NORMAL;
+        lv_obj_set_size(PowerSupply.graph.chart, 242, h);
+        lv_obj_align(PowerSupply.graph.chart, LV_ALIGN_DEFAULT, 22, -6);
+        lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_Y,   5, 3, 10, 4,  true, 40);
+        lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_X,   5, 3, 7,  10, true, 50);
+        lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_Y, 5, 3, 10, 10, true, 50);
+        // Restore default chart padding
+        lv_obj_set_style_pad_left  (PowerSupply.graph.chart, 0, LV_PART_TICKS);
+        lv_obj_set_style_pad_right (PowerSupply.graph.chart, 0, LV_PART_TICKS);
+        lv_obj_set_style_pad_bottom(PowerSupply.graph.chart, 0, LV_PART_TICKS);
+        lv_obj_set_style_text_color(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_GREY), LV_PART_TICKS);
+    }
+
+    if (slider_x) lv_obj_align_to(slider_x, PowerSupply.graph.chart, LV_ALIGN_OUT_BOTTOM_MID, 0, -5);
+    if (slider_y) lv_obj_align_to(slider_y, PowerSupply.graph.chart, LV_ALIGN_OUT_RIGHT_MID, -4, +2);
+}
+
+void applyHistViewMode(ChartViewMode mode)
+{
+    g_histViewMode = mode;
+    const bool fullscreen    = (mode == ChartViewMode::FULLSCREEN);
+    const bool stats_visible = (mode == ChartViewMode::NORMAL);
+
+    applyGraphStatsVisibility(stats_visible);
+    setHidden(label_legend1, fullscreen);
+    setHidden(label_legend2, fullscreen);
+
+    if (!PowerSupply.stats.chart) return;
+
+    setChartScrollable(PowerSupply.stats.chart, !fullscreen);
+    setPageScrollable(0, !fullscreen);
+
+    if (fullscreen) {
+        lv_obj_set_size(PowerSupply.stats.chart, 318, HIST_CHART_H_FULLSCREEN);
+        lv_obj_align(PowerSupply.stats.chart, LV_ALIGN_DEFAULT, -12, -10);
+        // Hide outward tick lines in fullscreen (lengths = 0,0); gridlines + labels carry the visual.
+        lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_Y, 0, 0, 5, 4,  true, 40);
+        lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_X, 0, 0, 3, 10, true, 50);
+        // Negative pad on LV_PART_TICKS pulls the data plot over the label zones — labels appear inside.
+        lv_obj_set_style_pad_left  (PowerSupply.stats.chart, -25, LV_PART_TICKS);
+        lv_obj_set_style_pad_bottom(PowerSupply.stats.chart, -25, LV_PART_TICKS);
+        lv_obj_set_style_text_color(PowerSupply.stats.chart, lv_palette_lighten(LV_PALETTE_GREY, 4), LV_PART_TICKS);
+    } else {
+        const int h = (mode == ChartViewMode::EXPANDED) ? HIST_CHART_H_EXPANDED : HIST_CHART_H_NORMAL;
+        lv_obj_set_size(PowerSupply.stats.chart, 260, h);
+        lv_obj_align(PowerSupply.stats.chart, LV_ALIGN_DEFAULT, 22, -6);
+        lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_Y, 5, 3, 5, 4,  true, 40);
+        lv_chart_set_axis_tick(PowerSupply.stats.chart, LV_CHART_AXIS_PRIMARY_X, 5, 3, 3, 10, true, 50);
+        lv_obj_set_style_pad_left  (PowerSupply.stats.chart, 0, LV_PART_TICKS);
+        lv_obj_set_style_pad_bottom(PowerSupply.stats.chart, 0, LV_PART_TICKS);
+        lv_obj_set_style_text_color(PowerSupply.stats.chart, lv_palette_main(LV_PALETTE_GREY), LV_PART_TICKS);
+    }
 }
 
 
@@ -155,16 +296,15 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     lv_obj_add_style(slider_x, &style_slider, LV_PART_INDICATOR);
     lv_obj_add_style(slider_x, &style_slider, LV_PART_MAIN);
     lv_obj_add_style(slider_x, &style_slider, LV_PART_KNOB);
-    lv_obj_t *slider;
-    slider = lv_slider_create(parent);
-    lv_slider_set_range(slider, LV_IMG_ZOOM_NONE, LV_IMG_ZOOM_NONE * 20);
-    lv_obj_add_event_cb(slider, slider_y_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_set_size(slider, 6, 140);
-    lv_obj_align_to(slider, PowerSupply.graph.chart, LV_ALIGN_OUT_RIGHT_MID, -4, +2);
+    slider_y = lv_slider_create(parent);
+    lv_slider_set_range(slider_y, LV_IMG_ZOOM_NONE, LV_IMG_ZOOM_NONE * 20);
+    lv_obj_add_event_cb(slider_y, slider_y_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_set_size(slider_y, 6, 140);
+    lv_obj_align_to(slider_y, PowerSupply.graph.chart, LV_ALIGN_OUT_RIGHT_MID, -4, +2);
 
-    lv_obj_add_style(slider, &style_slider, LV_PART_INDICATOR);
-    lv_obj_add_style(slider, &style_slider, LV_PART_MAIN);
-    lv_obj_add_style(slider, &style_slider, LV_PART_KNOB);
+    lv_obj_add_style(slider_y, &style_slider, LV_PART_INDICATOR);
+    lv_obj_add_style(slider_y, &style_slider, LV_PART_MAIN);
+    lv_obj_add_style(slider_y, &style_slider, LV_PART_KNOB);
 
     // Pause indicator label (hidden by default)
     PowerSupply.graph.label_pause = lv_label_create(parent);
@@ -574,23 +714,34 @@ void draw_event_stat_chart_cb(lv_event_t *e)
     }
 }
 
-// Safe to call from main loop only — never from a draw callback
+// Safe to call from main loop only — never from a draw callback.
+// Only adjusts size in NORMAL mode; EXPANDED/FULLSCREEN sizes are owned by applyHistViewMode
+// and must not be clobbered when the user presses A or V to toggle a series.
 void updateStatChartSize()
 {
+#if DISABLE_STAT_CHART_SIZE_UPDATE
+    return;  // disabled — see DISABLE_STAT_CHART_SIZE_UPDATE in ui_helpers.h
+#endif
     if (!PowerSupply.stats.chart || !lv_obj_is_valid(PowerSupply.stats.chart)) return;
     if (!PowerSupply.stats.serV || !PowerSupply.stats.serI) return;
+    if (g_histViewMode != ChartViewMode::NORMAL) return;
 
-    static int lastVI = -1;
     int VI = 0;
     if (!PowerSupply.stats.serV->hidden && !PowerSupply.stats.serI->hidden) VI = 3;
     else if (!PowerSupply.stats.serV->hidden) VI = 1;
     else if (!PowerSupply.stats.serI->hidden) VI = 2;
 
-    if (VI == lastVI) return;
-    lastVI = VI;
+    // Track the last APPLIED VI ourselves. Reading lv_obj_get_height() drifts during
+    // layout passes and made set_size fire every loop iteration, which triggered
+    // LV_EVENT_SIZE_CHANGED → lv_tabview_event → lv_tabview_set_act → SIZE_CHANGED
+    // again, eventually wedging Core 1 (see decoded backtrace, lv_tabview.c:300-302).
+    static int s_lastAppliedVI = -1;
+    if (VI == s_lastAppliedVI) return;
+    s_lastAppliedVI = VI;
 
-    lv_coord_t h = (VI == 3) ? 140 : 150;
-    lv_obj_set_size(PowerSupply.stats.chart, 260, h);
+    // Single-series view gets a +10px bump for vertical breathing room.
+    lv_coord_t expected_h = (VI == 3) ? HIST_CHART_H_NORMAL : (HIST_CHART_H_NORMAL + 10);
+    lv_obj_set_size(PowerSupply.stats.chart, 260, expected_h);
 }
 
 void draw_event_cb2(lv_event_t *e)
@@ -690,7 +841,7 @@ void draw_event_cb2(lv_event_t *e)
         else if (dsc->id == LV_CHART_AXIS_PRIMARY_Y)
         {
             static int index_y = 0;
-            static const char *tickLabels_y[] = {"32.0V", "28.0", "24.0", "20.0", "16.0", "12.0", "8.0", "4.0", "0.0", "-4.0"};
+            static const char *tickLabels_y[] = {"32V", "28.0", "24.0", "20.0", "16.0", "12.0", "8.0", "4.0", "0.0", "-4.0"};
             constexpr int Y_LABEL_COUNT = 10;
 
             if (strcmp(dsc->text, "32000") == 0)
@@ -709,7 +860,7 @@ void draw_event_cb2(lv_event_t *e)
         else if (dsc->id == LV_CHART_AXIS_SECONDARY_Y)
         {
             static int index_sy = 0;
-            static const char *tickLabels_sy[] = {"8.0A", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0", "-1.0"};
+            static const char *tickLabels_sy[] = {"8A", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0", "-1.0"};
             constexpr int SY_LABEL_COUNT = 10;
 
             if (strcmp(dsc->text, "8000") == 0)
@@ -717,7 +868,7 @@ void draw_event_cb2(lv_event_t *e)
 
             const char *sy_label = (index_sy >= 0 && index_sy < SY_LABEL_COUNT) ? tickLabels_sy[index_sy] : "";
             if (index_sy == 0)
-                lv_snprintf(dsc->text, dsc->text_length, "%s", PowerSupply.mA_Active ? "8.0mA" : "8.0A");
+                lv_snprintf(dsc->text, dsc->text_length, "%s", PowerSupply.mA_Active ? "8 mA" : "8A");
             else
                 lv_snprintf(dsc->text, dsc->text_length, "%s", sy_label);
             index_sy++;

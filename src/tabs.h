@@ -10,6 +10,12 @@
 extern volatile bool g_tabValueChangedPending;
 void drainPendingTabEvent();
 
+// Page-change deferral (Core 0 → Core 1).
+// Set from any thread; drained on Core 1 by drainPendingPageChange().
+extern volatile bool g_pageChangePending;
+extern volatile int  g_pageChangeTarget;
+void drainPendingPageChange();
+
 class Tabs
 {
 public:

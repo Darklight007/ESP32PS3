@@ -27,3 +27,4 @@ void autoScrollY();
 extern lv_obj_t *label_legend1;
 extern lv_obj_t *label_legend2;
 extern lv_obj_t *slider_x;
+extern lv_obj_t *slider_y;

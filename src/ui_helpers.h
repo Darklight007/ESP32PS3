@@ -63,17 +63,58 @@ void updateStatChartSize();
 void btn_function_gen_event_cb(lv_event_t *e);
 void switch_fun_only_event_cb(lv_event_t *e);
 
-// Graph stats toggle (page 1)
-constexpr int GRAPH_CHART_H_NORMAL   = 154;
-constexpr int GRAPH_CHART_H_EXPANDED = 185;
-extern bool g_graphStatsVisible;
+// Three-state X-key view mode for chart pages.
+// Each page (page 0 histogram, page 1 graph) keeps its own state and persists across nav.
+enum class ChartViewMode : uint8_t {
+    NORMAL     = 0,  // chart at normal height, stats labels visible
+    EXPANDED   = 1,  // chart taller, stats hidden
+    FULLSCREEN = 2,  // chart fills page, all chrome hidden, tick labels drawn inside
+};
 
-// Histogram stats toggle (page 0)
-constexpr int HIST_CHART_H_NORMAL   = 140;
-constexpr int HIST_CHART_H_EXPANDED = 170;
-extern bool g_histExpanded;
+// Graph page (page 1) chart heights
+constexpr int GRAPH_CHART_H_NORMAL     = 154;
+constexpr int GRAPH_CHART_H_EXPANDED   = 185;
+constexpr int GRAPH_CHART_H_FULLSCREEN = 206;
+
+// Histogram page (page 0) chart heights
+constexpr int HIST_CHART_H_NORMAL      = 140;
+constexpr int HIST_CHART_H_EXPANDED    = 170;
+constexpr int HIST_CHART_H_FULLSCREEN  = 206;
+
+extern ChartViewMode g_graphViewMode;
+extern ChartViewMode g_histViewMode;
 
 void applyGraphStatsVisibility(bool visible);
+void applyGraphViewMode(ChartViewMode mode);
+void applyHistViewMode(ChartViewMode mode);
+
+// =====================================================================
+// REVERT SWITCH for X-key view-mode change deferral:
+//   1 → X-key handlers (Core 0) stash the target mode in volatile globals;
+//        Core 1 drainPendingViewModeChange() runs apply*ViewMode() safely.
+//   0 → X handlers call apply*ViewMode() directly from Core 0 (original,
+//        unsafe — keeps the freeze; flip to compare/revert quickly).
+// =====================================================================
+#ifndef DEFER_VIEW_MODE_TO_CORE1
+#define DEFER_VIEW_MODE_TO_CORE1 1
+#endif
+
+extern volatile bool          g_pendingViewModeChange;
+extern volatile ChartViewMode g_pendingViewMode;
+extern volatile int           g_pendingViewModePage;  // 0 = histogram, 1 = graph
+
+void drainPendingViewModeChange();
+
+// =====================================================================
+// SAFETY SWITCH for updateStatChartSize():
+//   0 → fixed version runs: only calls lv_obj_set_size when VI series-state
+//        actually transitions (tracked by static cache, no LVGL readback).
+//   1 → function returns immediately (no-op). Use only if a regression
+//        re-introduces the SIZE_CHANGED recursion freeze.
+// =====================================================================
+#ifndef DISABLE_STAT_CHART_SIZE_UPDATE
+#define DISABLE_STAT_CHART_SIZE_UPDATE 0
+#endif
 
 // External UI objects
 extern lv_obj_t *label_legend1;

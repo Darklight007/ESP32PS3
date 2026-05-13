@@ -4,6 +4,7 @@
 #include "functions.h"
 #include "globals.h"
 #include "buzzer.h"
+#include "freeze_trace.h"
 
 // Task timing constants
 namespace TaskTiming
@@ -30,9 +31,9 @@ namespace Pages
 
 // External variables
 extern Device PowerSupply;
-extern bool lvglIsBusy;
-extern bool lvglChartIsBusy;
-extern bool blockAll;
+extern volatile bool lvglIsBusy;
+extern volatile bool lvglChartIsBusy;
+extern volatile bool blockAll;
 extern bool wireConnected;
 extern lv_obj_t *btn_function_gen;
 
@@ -75,10 +76,6 @@ void Task_BarGraph(void *pvParameters)
         {
             PowerSupply.Voltage.barUpdate();
             PowerSupply.Current.barUpdate();
-
-            // lv_obj_invalidate(PowerSupply.Current.Bar.bar);
-            // lv_obj_invalidate(PowerSupply.Voltage.Bar.bar);
-            continue;
         }
 
         vTaskDelay(TaskTiming::BARGRAPH_DELAY_ACTIVE_MS);
@@ -106,6 +103,7 @@ void Task_ADC(void *pvParameters)
 
     for (;;)
     {
+        TRACE("adc_loop_top");
         toneOff();
 
         // Check if FUN Only mode is active (minimal processing for clean waveforms)
@@ -147,7 +145,9 @@ void Task_ADC(void *pvParameters)
             else
                 keyInterval = TaskTiming::KEY_CHECK_INTERVAL_SLOW_MS;
 
+            TRACE("adc_pre_keys");
             KeyCheckInterval(keyInterval);
+            TRACE("adc_post_keys");
         }
         if (!funOnlyMode)
             getSettingEncoder(NULL, NULL);

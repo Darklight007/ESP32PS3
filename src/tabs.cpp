@@ -1,6 +1,21 @@
 #include "tabs.h"
 #include "device.hpp"
 #include "config.hpp"
+#include "freeze_trace.h"
+#include <esp32-hal.h>  // xPortGetCoreID
+
+// =====================================================================
+// REVERT SWITCH:
+//   1  → defer LVGL writes in setCurrentPage()/nextPage()/previousPage()
+//         to Core 1 when called from Core 0 (fix for the freeze caused by
+//         lv_tabview_set_act() running on Core 0).
+//   0  → original behavior: lv_tabview_set_act() runs on whichever core
+//         called the function (unsafe from Core 0 key handlers — keeps
+//         the freeze bug; flip back here to compare/revert quickly).
+// =====================================================================
+#ifndef DEFER_PAGE_CHANGE_TO_CORE1
+#define DEFER_PAGE_CHANGE_TO_CORE1 1
+#endif
 
 extern Device PowerSupply;
 
@@ -16,6 +31,11 @@ Tabs::~Tabs() {}
 // programmatically; Core 1's main loop drains it and fires the event safely.
 // Plain volatile bool avoids any LVGL allocator/timer calls from Core 0.
 volatile bool g_tabValueChangedPending = false;
+
+// Page-change deferral state. nextPage/previousPage/setCurrentPage from Core 0
+// stash the target here; drainPendingPageChange() on Core 1 does the real LVGL work.
+volatile bool g_pageChangePending = false;
+volatile int  g_pageChangeTarget  = -1;
 
 void Tabs::setup_(lv_obj_t *parent)
 {
@@ -72,60 +92,64 @@ int Tabs::getCurrentPage()
 }
 void Tabs::setCurrentPage(int n)
 {
-    // Save FGen settings when leaving Utility page (page 3) - only if changed
+    // Save FGen settings when leaving Utility page (page 3) - only if changed.
+    // This is preferences/SPIFFS I/O, NOT an LVGL call — safe on either core.
     if (getCurrentPage() == 3 && n != 3 && PowerSupply.funGenMemDirty)
     {
         PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
         PowerSupply.funGenMemDirty = false;  // Clear dirty flag after save
     }
+
+#if DEFER_PAGE_CHANGE_TO_CORE1
+    // If called from anywhere other than Core 1 (main loop / setup), defer the LVGL
+    // work to Core 1 to avoid cross-core lv_tabview_set_act races. Core 1 picks this
+    // up via drainPendingPageChange() and re-enters setCurrentPage where this guard
+    // becomes false, so the work happens directly below.
+    if (xPortGetCoreID() != 1)
+    {
+        TRACE("setPage_defer_to_c1");
+        g_pageChangeTarget = n;
+        g_pageChangePending = true;
+        return;
+    }
+#endif
+
+    TRACE("setPage_pre_setact");
     bool new_tab = (getCurrentPage() != n);
     blockAll = true;
     lv_tabview_set_act(Tabs::tabview, n, LV_ANIM_ON);
     blockAll = false;
+    TRACE("setPage_post_setact");
     if (new_tab) g_tabValueChangedPending = true;
     lv_obj_invalidate(lv_scr_act());
+    TRACE("setPage_done");
 }
 
 void Tabs::nextPage()
 {
     int current = getCurrentPage();
-    if (current < 4)
-    {
-        // Save FGen settings when leaving Utility page (page 3) - only if changed
-        if (current == 3 && PowerSupply.funGenMemDirty)
-        {
-            PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
-            PowerSupply.funGenMemDirty = false;  // Clear dirty flag after save
-        }
-        blockAll = true;
-        lv_tabview_set_act(Tabs::tabview, current + 1, LV_ANIM_ON);
-        blockAll = false;
-        g_tabValueChangedPending = true;
-        lv_obj_invalidate(lv_scr_act());
-    }
-    else
-        setCurrentPage(0);
+    int target  = (current < 4) ? (current + 1) : 0;
+    // setCurrentPage handles the FGen save, the Core 0 deferral, and tab-event flagging.
+    setCurrentPage(target);
 }
 
 void Tabs::previousPage()
 {
     int current = getCurrentPage();
-    if (current > 0)
-    {
-        // Save FGen settings when leaving Utility page (page 3) - only if changed
-        if (current == 3 && PowerSupply.funGenMemDirty)
-        {
-            PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
-            PowerSupply.funGenMemDirty = false;  // Clear dirty flag after save
-        }
-        blockAll = true;
-        lv_tabview_set_act(Tabs::tabview, current - 1, LV_ANIM_ON);
-        blockAll = false;
-        g_tabValueChangedPending = true;
-        lv_obj_invalidate(lv_scr_act());
-    }
-    else
-        setCurrentPage(4);
+    int target  = (current > 0) ? (current - 1) : 4;
+    setCurrentPage(target);
+}
+
+// Called from Core 1 main loop — picks up a Core 0-deferred page change and
+// runs setCurrentPage() on Core 1 (where the LVGL writes are safe).
+void drainPendingPageChange()
+{
+    if (!g_pageChangePending) return;
+    TRACE("drainPage_begin");
+    int target = g_pageChangeTarget;
+    g_pageChangePending = false;
+    Tabs::setCurrentPage(target);
+    TRACE("drainPage_end");
 }
 
 int Tabs::getNumberOfPage()
@@ -177,6 +201,8 @@ void Tabs::addPage(lv_obj_t *parent, lv_obj_t **tab, const char *name)
 void drainPendingTabEvent()
 {
     if (!g_tabValueChangedPending) return;
+    TRACE("drain_event_begin");
     g_tabValueChangedPending = false;
     if (Tabs::tabview) lv_event_send(Tabs::tabview, LV_EVENT_VALUE_CHANGED, NULL);
+    TRACE("drain_event_end");
 }

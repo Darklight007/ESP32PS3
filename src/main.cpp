@@ -31,6 +31,7 @@
 #include "buzzer.h"
 #include "config.hpp"
 #include "tabs.h"
+#include "freeze_trace.h"
 #include "DispObject.h"
 #include "globalFunctions.h"
 #include "device.hpp"
@@ -142,25 +143,37 @@ void loop()
   //   PowerSupply.Current.barUpdate();
 
   //   // Render bars immediately (throttled to ~60 FPS to avoid DMA issues)
+  TRACE("loop_top");
   static unsigned long lastBarRender = 0;
   if (millis() - lastBarRender >= 100)
   {
     // lvglIsBusy = true;
+    TRACE("loop_pre_lvgl");
     lv_timer_handler();
+    TRACE("loop_post_lvgl");
     // lvglIsBusy = false;
     lastBarRender = millis();
   }
   // }
 
+  freeze_trace_periodic_print();
+
   // FUN Only mode: skip most processing for cleanest waveforms
   if (lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
   {
+    TRACE("loop_fun_return");
     return; // Skip other processing in FUN Only mode (bars already rendered above)
   }
 
-  // Drain pending tab event from k/l navigation. Past the FUN-Only gate above,
-  // so it never runs while waveform output is timing-critical.
+  TRACE("loop_pre_drain");
+  // Drain order matters:
+  //   1. Page change → does lv_tabview_set_act on Core 1; may set tab-event-pending.
+  //   2. View-mode change → runs apply*ViewMode on Core 1 (heavy LVGL work).
+  //   3. Tab event → fires LV_EVENT_VALUE_CHANGED → updateObjectPos_cb.
+  drainPendingPageChange();
+  drainPendingViewModeChange();
   drainPendingTabEvent();
+  TRACE("loop_post_drain");
 
   // Adaptive encoder response: fast when active, slower when idle
   bool encoderActive = (millis() - encoderTimeStamp) < 500; // 500ms idle threshold
@@ -217,7 +230,7 @@ void loop()
   //  Serial.printf("\nADC_loopCounter %l",PowerSupply.adc.ADC_loopCounter);
   //  Serial.printf("\n Current utiltap%i", lv_tabview_get_tab_act(tabview_utility));
 
-  trackLoopExecution(__func__);
+  // trackLoopExecution(__func__);
 }
 
 /*DATA:GRAPH? 

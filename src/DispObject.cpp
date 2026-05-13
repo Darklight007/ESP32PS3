@@ -1,6 +1,23 @@
 #include "DispObject.h"
+#include <esp32-hal.h>  // xPortGetCoreID
 
-extern bool lvglIsBusy, blockAll;
+extern volatile bool lvglIsBusy, blockAll;
+
+// =====================================================================
+// REVERT SWITCH for SetUpdate() LVGL writes from Core 0:
+//   1 → Skip LVGL writes inside SetUpdate when running on Core 0. The
+//        function generator (waveform_generator.cpp:212) calls SetUpdate
+//        from Task_ADC at 200-500 Hz; direct LVGL writes from Core 0
+//        race with Core 1 rendering and corrupt the LVGL object tree,
+//        which eventually wedges Core 1 in draw_scrollbar / refr_obj.
+//        Flush() runs on Core 1 and picks up adjValueChanged to update
+//        the label and bar at its own pace.
+//   0 → Original behavior: SetUpdate always writes LVGL (unsafe from
+//        Core 0).
+// =====================================================================
+#ifndef DEFER_DISPOBJ_LVGL_TO_CORE1
+#define DEFER_DISPOBJ_LVGL_TO_CORE1 1
+#endif
 void DispObjects::SetEncoderPins(int aPintNumber, int bPinNumber, enc_isr_cb_t enc_isr_cb = nullptr)
 {
     // NOTE: encoder is a member variable (not a pointer), so no memory leak
@@ -46,7 +63,7 @@ void DispObjects::StatisticsUpdate(double value)
 {
     Statistics(value);
 
-    double er_sample = Statistics.ER(adc_maxValue);
+    double er_sample = Statistics.ER(2 * adc_maxValue); // maxValue
     if (!std::isinf(er_sample))
         effectiveResolution(er_sample);
 }
@@ -203,6 +220,13 @@ void DispObjects::SetUpdate(int value)
         adjValueOld = adjValue;
         myTone(NOTE_A4, 3);
     }
+
+#if DEFER_DISPOBJ_LVGL_TO_CORE1
+    // Function generator on Core 0 (Task_ADC) calls SetUpdate at 200-500 Hz.
+    // Skip the LVGL writes here when not on Core 1; Flush() runs on Core 1
+    // (via FlushMeasuresInterval) and updates the label/bar from adjValueChanged.
+    if (xPortGetCoreID() != 1) return;
+#endif
 
     // LV_LOG_USER("LOG: %s", "Beep!");
     // lv_disp_enable_invalidation( lv_disp_get_default(), false);

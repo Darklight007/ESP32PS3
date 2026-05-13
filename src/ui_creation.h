@@ -41,6 +41,7 @@ static void dropdownEventCb(lv_event_t *e);
 
 // External declarations for global variables
 extern lv_obj_t *slider_x;
+extern lv_obj_t *slider_y;
 extern lv_obj_t *ta;
 extern lv_obj_t *unit_label;
 extern lv_obj_t *btnm;
