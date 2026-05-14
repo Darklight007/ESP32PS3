@@ -8,7 +8,7 @@
 //        Zero runtime cost; no symbols left in the binary.
 // ============================================================================
 #ifndef FREEZE_TRACE_ENABLED
-#define FREEZE_TRACE_ENABLED 1
+#define FREEZE_TRACE_ENABLED 0
 #endif
 
 #if FREEZE_TRACE_ENABLED

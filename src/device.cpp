@@ -12,7 +12,7 @@ extern MonotoneCubicCalibrator g_voltINL;
 // extern MonotoneCubicCalibrator g_voltINL_ZC;
 
 extern Calibration StoreData;
-extern bool lvglIsBusy, lvglChartIsBusy, blockAll;
+extern volatile bool lvglIsBusy, lvglChartIsBusy, blockAll;
 
 extern lv_obj_t *btn_function_gen;
 extern CalibrationGui Calib_GUI;
@@ -90,10 +90,6 @@ void Device::calibrationUpdate(void)
     // Update current ADC full-scale range for correct ENOB calculation
     // A mode: 6.5536A, mA mode: 0.0065536A (1000x smaller)
     Current.adc_maxValue = mA_Active ? 0.0065536 : 6.5536;
-
-    // Reset statistics so stale A-mode samples don't corrupt mA-mode ER (and vice versa)
-    Current.Statistics.ResetStats();
-    Current.effectiveResolution.ResetStats();
 }
 
 //  std::vector<Calibration> CalBank
@@ -898,8 +894,7 @@ void Device::setupPages(const char *page0, const char *page1, const char *page2,
 
 void Device::setPagesCallback(lv_event_cb_t event_cb)
 {
-    // lv_obj_add_event_cb(tab.tabview, event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_add_event_cb(tab.tabview, event_cb, LV_EVENT_DRAW_POST_END, NULL);
+    lv_obj_add_event_cb(tab.tabview, event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 }
 
 void Device::setupSwitch(lv_obj_t *parent, lv_align_t align, lv_coord_t x_ofs, lv_coord_t y_ofs, lv_event_cb_t event_cb)
@@ -1094,24 +1089,34 @@ void Device::FlushMeasures(void)
         Current.displayUpdate();
         Power.displayUpdate();
 
-        // OPTIMIZATION: Over-range indicator - only execute when actually needed
-        // Check mA_Active first to avoid unnecessary Mean() call and comparisons
+        // Over-range indicator with HYSTERESIS to handle op-amp phase reversal.
+        // When actual current is well past the mA range (1 A+), the analog front-end's
+        // op-amp common-mode is exceeded; its output PHASE-REVERSES and the displayed
+        // current DROPS (e.g., 4.8 mA peak at ~500 mA, then 3.8 / 3.6 / 3.4 at 6 A).
+        // A single-threshold check misses this because the value passes through the
+        // threshold briefly and then settles below it. Hysteresis: trigger at 3.000,
+        // release only when value drops below 1.000 — so once we latch overrange we
+        // keep blinking through the phase-reversed regime no matter how low the
+        // calibration math projects the saturated code.
         if (mA_Active)
         {
             static bool wasOverRange = false;
-            bool isOverRange = Current.measured.Mean() >= 3.900;
+            const double curMean = Current.measured.Mean();
+            const double TRIG_ON  = 3.000;  // mA — start blinking
+            const double TRIG_OFF = 1.000;  // mA — stop blinking (hysteresis)
+            const bool isOverRange = wasOverRange ? (curMean > TRIG_OFF)
+                                                  : (curMean >= TRIG_ON);
 
             if (isOverRange)
             {
-                // Over-range blink logic (>= 3.900 mA) - blink like multimeter OL
+                // 4 Hz blink like multimeter "OL"
                 static bool blinkState = false;
                 static unsigned long lastBlink = 0;
-                if (millis() - lastBlink >= 250)  // 4Hz blink
+                if (millis() - lastBlink >= 250)
                 {
                     blinkState = !blinkState;
                     lastBlink = millis();
                 }
-                // OPTIMIZATION: Only update flag if state changed
                 if (blinkState)
                     lv_obj_add_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
                 else
@@ -1120,7 +1125,7 @@ void Device::FlushMeasures(void)
             }
             else if (wasOverRange)
             {
-                // OPTIMIZATION: Only clear flag once when exiting over-range
+                // Clear once on transition back to in-range
                 lv_obj_clear_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
                 wasOverRange = false;
             }
