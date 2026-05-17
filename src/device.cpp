@@ -791,12 +791,36 @@ void Device::VCCCStatusUpdate(void)
 
 void Device::DACUpdate(void)
 {
+    // Leakage compensation for SETPOINT: add V/R to the DAC code so the
+    // load receives the user's setpoint after the leakage path takes its share.
+    // Hidden from UI (adjValue itself unchanged). Mirror of measurement comp.
+    uint16_t cur_comp_dac = 0;
+    if (!CalBank.empty() && bankCalibId >= 0 && bankCalibId < (int8_t)CalBank.size() &&
+        mA_Active >= 0 && mA_Active <= 1)
+    {
+        double leakage_R = CalBank[bankCalibId].internalLeakage[mA_Active];
+        if (std::isfinite(leakage_R) && leakage_R > 0.001 && leakage_R < 1e9)
+        {
+            // double comp = (mA_Active ? 1000.0 : 1.0) * (Voltage.measured.Mean() / (leakage_R * 1000.0));
+            double comp = 0.8*(Voltage.measured.Mean() / (leakage_R * 1000.0));
+            int32_t d = (int32_t)(comp * Current.adjFactor);
+            if (d < 0) d = 0;
+            if (d > 0xFFFF) d = 0xFFFF;
+            cur_comp_dac = (uint16_t)d;
+        }
+    }
+    auto clamp16 = [](int32_t v) -> uint16_t {
+        if (v < 0) return 0;
+        if (v > 0xFFFF) return 0xFFFF;
+        return (uint16_t)v;
+    };
+
     if (getStatus() == DEVICE::OFF)
     {
         DAC.writeAndPowerAll(DAC_VOLTAGE, Voltage.adjOffset);
 
         //  DAC.writeAndPowerAll(DAC_CURRENT, (-Current.adjOffset - 0.001) * 10000);
-        DAC.writeAndPowerAll(DAC_CURRENT, Current.adjOffset);
+        DAC.writeAndPowerAll(DAC_CURRENT, clamp16((int32_t)Current.adjOffset + cur_comp_dac));
 
         return;
     }
@@ -811,7 +835,7 @@ void Device::DACUpdate(void)
     {
         // Always write to DAC - no change detection, it was causing missed updates
         DAC.writeAndPowerAll(DAC_VOLTAGE, Voltage.adjValue);
-        DAC.writeAndPowerAll(DAC_CURRENT, Current.adjValue);
+        DAC.writeAndPowerAll(DAC_CURRENT, clamp16((int32_t)Current.adjValue + cur_comp_dac));
         // Serial.printf("\n v_uint16_t: %i v:%f ", Voltage.adjValue, double((Voltage.adjValue - Voltage.adjOffset) / 2000.0));
         // Serial.printf(" c_uint16_t: %i c:%f ", Current.adjValue, double((Current.adjValue - Current.adjOffset) / 10000.0));
     }
@@ -1102,8 +1126,8 @@ void Device::FlushMeasures(void)
         {
             static bool wasOverRange = false;
             const double curMean = Current.measured.Mean();
-            const double TRIG_ON  = 3.000;  // mA — start blinking
-            const double TRIG_OFF = 1.000;  // mA — stop blinking (hysteresis)
+            const double TRIG_ON  = 6.500;  // mA — start blinking
+            const double TRIG_OFF = 5.000;  // mA — stop blinking (hysteresis)
             const bool isOverRange = wasOverRange ? (curMean > TRIG_OFF)
                                                   : (curMean >= TRIG_ON);
 
