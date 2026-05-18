@@ -198,6 +198,13 @@ void loop()
   else
     FlushMeasuresInterval(100 /**PowerSupply.Voltage.measured.NofAvgs*/); // Slow update even when idle for responsive display
 
+  // Settings flush: SetUpdate runs on Core 0 (function generator, encoder) and only
+  // updates adjValue + adjValueChanged. The actual LVGL writes (setpoint label, bar)
+  // must happen on Core 1 — this picks up adjValueChanged every loop and is cheap
+  // when there's no change (early return inside Flush()).
+  PowerSupply.Voltage.Flush();
+  PowerSupply.Current.Flush();
+
   // Adaptive statistics update: Slow when encoder active for responsive display
   if (encoderActive)
     statisticUpdateInterval(500); // Slow update during encoder activity
@@ -212,6 +219,20 @@ void loop()
 
   // FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?
+
+  // Auto-save FGen settings on Core 1 — covers the case where user changes
+  // spinbox values and resets/power-cycles without leaving page 3 (the
+  // tab-leave save in tabs.cpp never fires in that path). Debounced: only
+  // writes NVS/SPIFFS every 2 s while dirty, idempotent when clean.
+  {
+    static unsigned long fgenSaveTimer = 0;
+    schedule([] {
+      if (PowerSupply.funGenMemDirty) {
+        PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
+        PowerSupply.funGenMemDirty = false;
+      }
+    }, 2000, fgenSaveTimer);
+  }
   processDeferredMaToggle();    // Handle mA/A toggle UI updates from Core 0
   updateStatChartSize();        // Safe resize: never call lv_obj_set_size from draw callbacks
   managePageEncoderInteraction();
