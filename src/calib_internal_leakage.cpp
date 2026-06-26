@@ -11,7 +11,7 @@
 
 // ─── Timing constants ──────────────────────────────────────────────────────
 // Increase LEAKAGE_MEASURE_MS if ADC noise is high and you need more averaging.
-#define LEAKAGE_MEASURE_MS   6000   // ADC accumulation time per voltage point (ms)
+#define LEAKAGE_MEASURE_MS   60000   // ADC accumulation time per voltage point (ms)
 #define LEAKAGE_SETTLE_MS    1500    // Voltage settling time after setpoint change (ms)
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ static void stop_countdown()
 // External references
 extern Device PowerSupply;
 extern CalibrationGui Calib_GUI;
-extern bool blockAll;
+extern volatile bool blockAll;
 
 // Global storage for leakage resistance measurement (avoids lambda capture issues with static arrays)
 static double g_leakage_i_at_0v = 0;
@@ -113,9 +113,13 @@ void start_leakage_resistance_measurement(lv_event_t *)
              log_step("           i1 = %+1.6f", g_leakage_i_at_32v);
              double diff = g_leakage_i_at_32v - g_leakage_i_at_0v;
              double Rtot = (PowerSupply.mA_Active ? 1000.0 : 1.0) * 32.0 / diff / 1000.0;
-             // Clamp to valid int32 spinbox range (0..9999 kΩ)
-             if (!std::isfinite(Rtot) || Rtot < 0.0) Rtot = 0.0;
-             if (Rtot > 9999.0) Rtot = 9999.0;
+             // Allow negative R: at high V some hardware exhibits an inverse
+             // bias (current sourced INTO the sense path) that scales linearly
+             // with output voltage. Same I = V/R model handles it with R<0.
+             // Clamp magnitude to spinbox range (±9999 kΩ).
+             if (!std::isfinite(Rtot)) Rtot = 0.0;
+             if (Rtot >  9999.0) Rtot =  9999.0;
+             if (Rtot < -9999.0) Rtot = -9999.0;
              log_step("Measured Res: %4.3fk", Rtot);
 
              esp_task_wdt_reset();

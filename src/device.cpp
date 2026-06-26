@@ -603,8 +603,10 @@ void Device::readCurrent()
             mA_Active >= 0 && mA_Active <= 1)
         {
             double leakage_R = CalBank[bankCalibId].internalLeakage[mA_Active];
-            // Only apply leakage compensation if resistance is valid (not zero, not FLT_MAX, not NaN)
-            if (std::isfinite(leakage_R) && leakage_R > 0.001 && leakage_R < 1e9)
+            // Accept signed R: negative = inverse hardware bias (current sourced INTO
+            // sense path at high V). Same I = V/R model handles it; c -= V/R with R<0
+            // adds the bias magnitude, which is correct.
+            if (std::isfinite(leakage_R) && std::abs(leakage_R) > 0.001 && std::abs(leakage_R) < 1e9)
             {
                 c -= ((mA_Active ? 1000.0 : 1.0) * (Voltage.measured.Mean() / (leakage_R * 1000.0)));
             }
@@ -794,19 +796,18 @@ void Device::DACUpdate(void)
     // Leakage compensation for SETPOINT: add V/R to the DAC code so the
     // load receives the user's setpoint after the leakage path takes its share.
     // Hidden from UI (adjValue itself unchanged). Mirror of measurement comp.
-    uint16_t cur_comp_dac = 0;
+    // Signed: negative R produces a negative delta (DAC pulled DOWN) to cancel
+    // an inverse hardware bias that sources current INTO the sense path at high V.
+    int32_t cur_comp_dac = 0;
     if (!CalBank.empty() && bankCalibId >= 0 && bankCalibId < (int8_t)CalBank.size() &&
         mA_Active >= 0 && mA_Active <= 1)
     {
         double leakage_R = CalBank[bankCalibId].internalLeakage[mA_Active];
-        if (std::isfinite(leakage_R) && leakage_R > 0.001 && leakage_R < 1e9)
+        if (std::isfinite(leakage_R) && std::abs(leakage_R) > 0.001 && std::abs(leakage_R) < 1e9)
         {
             // double comp = (mA_Active ? 1000.0 : 1.0) * (Voltage.measured.Mean() / (leakage_R * 1000.0));
             double comp = 0.8*(Voltage.measured.Mean() / (leakage_R * 1000.0));
-            int32_t d = (int32_t)(comp * Current.adjFactor);
-            if (d < 0) d = 0;
-            if (d > 0xFFFF) d = 0xFFFF;
-            cur_comp_dac = (uint16_t)d;
+            cur_comp_dac = (int32_t)(comp * Current.adjFactor);
         }
     }
     auto clamp16 = [](int32_t v) -> uint16_t {
