@@ -627,7 +627,7 @@ public:
     uint16_t adjOffset;
     double adjFactor;
     uint16_t adjValueOld;
-    double adjValueChanged = {true};
+    volatile bool adjValueChanged = true;  // set on Core 0 (SetUpdate), read/cleared on Core 1 (Flush)
     uint16_t adjEEPROMAddress = 0;
 
     double oldValue;
