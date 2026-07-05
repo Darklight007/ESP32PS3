@@ -5,7 +5,7 @@
 #include <cstdarg>
 
 // External references
-extern bool lvglIsBusy;
+extern volatile bool lvglIsBusy;
 
 // Logging state
 static char s_logbuf[2048];
@@ -185,6 +185,9 @@ void create_log_window(const char *title)
     if (log_win && lv_obj_is_valid(log_win))
     {
         lv_obj_clear_flag(log_win, LV_OBJ_FLAG_HIDDEN);
+        // Bring forward: windows are hidden (not deleted) so z-order is frozen
+        // at creation order; without this an older log window can stay buried.
+        lv_obj_move_foreground(log_win);
         if (title)
             log_set_title(title);
         return;

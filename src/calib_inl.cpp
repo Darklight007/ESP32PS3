@@ -437,6 +437,10 @@ void open_inl_window_no_load()
         lv_obj_is_valid(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration))
     {
         lv_obj_clear_flag(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration, LV_OBJ_FLAG_HIDDEN);
+        // Windows are never deleted, only hidden — z-order is frozen at creation
+        // order. Bring to front so an older INL window isn't buried under the
+        // (newer) calibration log window when re-shown.
+        lv_obj_move_foreground(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration);
         return;
     }
     // Window not yet created — create it but skip LoadCalibrationData
@@ -450,6 +454,7 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
     if (PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration)
     {
         lv_obj_clear_flag(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration);
         return;
     }
 
