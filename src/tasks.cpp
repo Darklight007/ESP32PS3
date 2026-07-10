@@ -11,7 +11,7 @@ namespace TaskTiming
 {
     constexpr unsigned long BARGRAPH_DELAY_OFF_PAGE_MS = 500;
     constexpr unsigned long BARGRAPH_DELAY_ACTIVE_MS = 1; // Fast updates
-    constexpr unsigned long DAC_UPDATE_INTERVAL_NORMAL_MS = 100;
+    constexpr unsigned long DAC_UPDATE_INTERVAL_NORMAL_MS = 20; // was 100: 10Hz made the measured V/I bars step visibly while turning the encoder; 50Hz output updates make them track smoothly. DAC is on Wire, ADC on Wire1 — no bus contention.
     constexpr unsigned long DAC_UPDATE_INTERVAL_FUNGEN_MS = 5;   // Back to 5ms - 0ms was too fast
     constexpr unsigned long KEY_CHECK_INTERVAL_ULTRAFAST_MS = 2; // Ultra-fast when actively typing
     constexpr unsigned long KEY_CHECK_INTERVAL_FAST_MS = 10;
