@@ -28,5 +28,9 @@ void keyCheckLoop();
 // Deferred mA toggle UI update (must be called from Core 1 main loop)
 void processDeferredMaToggle();
 
+// Deferred power on/off toggle from 'O' key (must be called from Core 1 main loop)
+void drainPendingPowerToggle();
+extern volatile bool g_powerTogglePending;
+
 // Waveform selection helper
 void updateDutySpinboxState();

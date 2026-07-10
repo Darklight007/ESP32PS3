@@ -170,9 +170,11 @@ void loop()
   //   1. Page change → does lv_tabview_set_act on Core 1; may set tab-event-pending.
   //   2. View-mode change → runs apply*ViewMode on Core 1 (heavy LVGL work).
   //   3. Tab event → fires LV_EVENT_VALUE_CHANGED → updateObjectPos_cb.
+  //   4. Power toggle ('O' key) → Switch::turn → btn_event_cb → setStatus (heavy LVGL).
   drainPendingPageChange();
   drainPendingViewModeChange();
   drainPendingTabEvent();
+  drainPendingPowerToggle();
   TRACE("loop_post_drain");
 
   // Adaptive encoder response: fast when active, slower when idle

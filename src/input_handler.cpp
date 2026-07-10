@@ -28,6 +28,9 @@ extern Keypad_MC17 kpd;
 static volatile bool mA_toggle_pending = false;
 static volatile int mA_toggle_source_page = -1; // which page triggered the toggle
 
+// Power on/off deferral: set by the 'O' key handler (Core 0), drained on Core 1.
+volatile bool g_powerTogglePending = false;
+
 // Touch attribute structure
 struct TouchAttr_
 {
@@ -791,9 +794,12 @@ void keyCheckLoop()
 
     keyMenus('O', " RELEASED.", []
              {
-                blockAll = true;
-                PowerSupply.toggle();
-                blockAll = false;
+                // Defer to Core 1: toggle() -> Switch::turn() -> lv_event_send ->
+                // btn_event_cb -> setStatus() is a huge LVGL chain; running it here
+                // (Core 0) races Core 1's lv_timer_handler and intermittently froze
+                // the PS right as the on/off beep sounded. Drained on Core 1 by
+                // drainPendingPowerToggle() in the main loop.
+                g_powerTogglePending = true;
              });
 
     keyMenus('O', " HOLD.", [] // Output button
@@ -904,6 +910,11 @@ void keyCheckLoop()
                      PowerSupply.mA_Active = digitalRead(PowerSupply.AmA_Pin) ^ 1;
                      digitalWrite(PowerSupply.AmA_Pin, PowerSupply.mA_Active);
                      PowerSupply.calibrationUpdate();
+                     // NAN-bust the oldValue equality gate so the next displayUpdate always
+                     // rewrites the label (fixes display stuck at stale value after switch).
+                     // NOTE: do NOT ResetStats() here — it sets absMin/absMax to +/-inf,
+                     // which barUpdate() (Task_BarGraph) casts to int for pixel coords -> UB.
+                     PowerSupply.Current.oldValue = NAN;
                      mA_toggle_source_page = 2;
                      mA_toggle_pending = true; });
 
@@ -915,6 +926,8 @@ void keyCheckLoop()
                      PowerSupply.mA_Active = digitalRead(PowerSupply.AmA_Pin) ^ 1;
                      digitalWrite(PowerSupply.AmA_Pin, PowerSupply.mA_Active);
                      PowerSupply.calibrationUpdate();
+                     // NAN-bust oldValue only — no ResetStats (see page-2 'T' handler note)
+                     PowerSupply.Current.oldValue = NAN;
                      mA_toggle_source_page = 4;
                      mA_toggle_pending = true; });
 
@@ -1363,6 +1376,16 @@ void keyCheckLoop()
 }
 
 // Called from Core 1 main loop to safely perform LVGL updates after mA toggle
+// Called from Core 1 main loop — runs the full power-toggle LVGL chain
+// (Switch::turn -> lv_event_send -> btn_event_cb -> setStatus) where it's safe.
+void drainPendingPowerToggle()
+{
+    if (!g_powerTogglePending)
+        return;
+    g_powerTogglePending = false;
+    PowerSupply.toggle();
+}
+
 void processDeferredMaToggle()
 {
     if (!mA_toggle_pending)
