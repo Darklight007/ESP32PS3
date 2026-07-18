@@ -11,6 +11,7 @@
 #include "intervals.h"
 #include "memory.h"
 #include "power_management.h"
+#include "battery_charger.h"
 #include <WiFi.h>
 #include <string>
 #include <math.h>
@@ -342,6 +343,8 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_t *tab2 = lv_tabview_add_tab(tabview_utility, "FGen");
     lv_obj_t *tab3 = lv_tabview_add_tab(tabview_utility, "Arbt");
     lv_obj_t *tab4 = lv_tabview_add_tab(tabview_utility, "Tabl");
+    lv_obj_t *tab5 = lv_tabview_add_tab(tabview_utility, "Batt");
+    createBatteryTab(tab5);
 
     // Utility page Tab 1 ****************************************************************************************************************************
     /*Add content to the tabs*/

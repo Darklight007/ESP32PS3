@@ -46,6 +46,7 @@
 #include "scpi_parser.h"
 #include "error_handler.h"
 #include "input_handler.h"
+#include "battery_charger.h"
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -235,6 +236,7 @@ void loop()
       }
     }, 2000, fgenSaveTimer);
   }
+  BatteryChargerInterval(250);  // Li-ion charge/test state machine (Core 1)
   processDeferredMaToggle();    // Handle mA/A toggle UI updates from Core 0
   updateStatChartSize();        // Safe resize: never call lv_obj_set_size from draw callbacks
   managePageEncoderInteraction();
