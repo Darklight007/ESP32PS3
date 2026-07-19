@@ -4,6 +4,7 @@
 #include "buzzer.h"
 #include "tabs.h"
 #include "spinbox_pro.h"
+#include <SPIFFS.h>
 
 // UI object definitions
 lv_obj_t *label_legend1;
@@ -437,12 +438,51 @@ void StatsChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
 bool g_graphPaused = false;
 int g_graphPushCount = 0;
 
+// Snapshot persistence for the sliding 1200-point graph window: on boot the
+// last-saved trace is restored so the chart doesn't start blank. Saving is
+// debounced (SaveGraphDataIfDirty, called from Core 1) since GraphPush() runs
+// on Core 0 at ADC rate — writing flash that often would wear it out fast.
+volatile bool g_graphDataDirty = false;
+
 void graphReset()
 {
     g_graphPaused = false;
     g_graphPushCount = 0;
     memset(graph_data_V, 0, CHART_SIZE * sizeof(graph_data_V[0]));
     memset(graph_data_I, 0, CHART_SIZE * sizeof(graph_data_I[0]));
+    g_graphDataDirty = true; // persist the cleared trace too
+}
+
+void LoadGraphData()
+{
+    if (!SPIFFS.begin(true)) {
+        Serial.println("SPIFFS Mount Failed (graph data)");
+        return;
+    }
+    fs::File f = SPIFFS.open("/graph_data.dat", "r");
+    if (f && f.size() == sizeof(graph_data_V) + sizeof(graph_data_I)) {
+        f.read((uint8_t *)graph_data_V, sizeof(graph_data_V));
+        f.read((uint8_t *)graph_data_I, sizeof(graph_data_I));
+        Serial.println("Graph data restored from SPIFFS");
+    } else {
+        Serial.println("No saved graph data (or size mismatch) - starting blank");
+    }
+    if (f) f.close();
+    SPIFFS.end();
+}
+
+void SaveGraphDataIfDirty()
+{
+    if (!g_graphDataDirty) return;
+    g_graphDataDirty = false;
+    if (!SPIFFS.begin(true)) return;
+    fs::File f = SPIFFS.open("/graph_data.dat", "w");
+    if (f) {
+        f.write((uint8_t *)graph_data_V, sizeof(graph_data_V));
+        f.write((uint8_t *)graph_data_I, sizeof(graph_data_I));
+        f.close();
+    }
+    SPIFFS.end();
 }
 
 void GraphPush()
@@ -475,6 +515,7 @@ void GraphPush()
             graph_data_I[i] = iVal;
         }
         lastPushTime += (unsigned long)count * msPerPoint;
+        g_graphDataDirty = true;
 
         // Auto-stop after one full chart fill
         if (PowerSupply.settingParameters.graphAutoStop) {
@@ -494,6 +535,7 @@ void GraphPush()
     memcpy(&graph_data_I[0], &graph_data_I[1], (CHART_SIZE - 1) * sizeof(graph_data_I[0]));
     graph_data_V[CHART_SIZE - 1] = PowerSupply.Voltage.measured.value * 1000.0;
     graph_data_I[CHART_SIZE - 1] = PowerSupply.Current.measured.value * 1000.0;
+    g_graphDataDirty = true;
 
     // Auto-stop after one full chart fill
     if (PowerSupply.settingParameters.graphAutoStop) {
@@ -868,7 +910,7 @@ void draw_event_cb2(lv_event_t *e)
 
             const char *sy_label = (index_sy >= 0 && index_sy < SY_LABEL_COUNT) ? tickLabels_sy[index_sy] : "";
             if (index_sy == 0)
-                lv_snprintf(dsc->text, dsc->text_length, "%s", PowerSupply.mA_Active ? "8 mA" : "8A");
+                lv_snprintf(dsc->text, dsc->text_length, "%s", PowerSupply.mA_Active ? "8mA" : "8A");
             else
                 lv_snprintf(dsc->text, dsc->text_length, "%s", sy_label);
             index_sy++;
@@ -878,7 +920,7 @@ void draw_event_cb2(lv_event_t *e)
         }
     }
 }
-
+ 
 void btn_function_gen_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);

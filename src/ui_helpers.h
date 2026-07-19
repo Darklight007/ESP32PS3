@@ -52,6 +52,14 @@ void graphReset();
 extern bool g_graphPaused;
 extern int g_graphPushCount;
 
+// Graph snapshot persistence (SPIFFS): restores the 1200-point sliding
+// window on boot so the trace doesn't start blank. LoadGraphData() — call
+// once early in setup(). SaveGraphDataIfDirty() — debounced, call from the
+// Core 1 main loop; writes are throttled since GraphPush() runs at ADC rate.
+void LoadGraphData();
+void SaveGraphDataIfDirty();
+extern volatile bool g_graphDataDirty;
+
 // UI styling helper functions
 void legend(lv_obj_t *parent, lv_color16_t c1, const char *ser1, lv_color16_t c2, const char *ser2, int x, int y);
 void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_color16_t c1, int x, int y);

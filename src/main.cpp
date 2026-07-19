@@ -47,6 +47,7 @@
 #include "error_handler.h"
 #include "input_handler.h"
 #include "battery_charger.h"
+#include "ui_helpers.h"
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -90,6 +91,7 @@ void setup()
 
   /**************************************************************************/
   setupPowerSupply();
+  LoadGraphData(); // restore the graph trace before Task_ADC starts pushing new points
   setupPreferences();
   setupADC();
   setupDAC();
@@ -176,6 +178,7 @@ void loop()
   drainPendingViewModeChange();
   drainPendingTabEvent();
   drainPendingPowerToggle();
+  drainBattChemDropdownClose(); // '>' key on Utility page: close the chem dropdown
   TRACE("loop_post_drain");
 
   // Adaptive encoder response: fast when active, slower when idle
@@ -235,6 +238,14 @@ void loop()
         PowerSupply.funGenMemDirty = false;
       }
     }, 2000, fgenSaveTimer);
+  }
+
+  // Auto-save the graph trace snapshot (Core 1). GraphPush() runs at ADC rate
+  // on Core 0, so this is throttled hard (30s) to protect flash — a power
+  // loss can cost up to the last 30s of trace, not more.
+  {
+    static unsigned long graphSaveTimer = 0;
+    schedule([] { SaveGraphDataIfDirty(); }, 30000, graphSaveTimer);
   }
   BatteryChargerInterval(250);  // Li-ion charge/test state machine (Core 1)
   processDeferredMaToggle();    // Handle mA/A toggle UI updates from Core 0

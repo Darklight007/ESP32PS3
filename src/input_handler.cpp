@@ -14,6 +14,7 @@
 #include "Key.h"  // For LIST_MAX, PRESSED, HOLD key states
 #include "freeze_trace.h"
 #include "calib_adc.h"
+#include "battery_charger.h"
 
 // External references
 extern TFT_eSPI tft;
@@ -617,6 +618,17 @@ void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
 
 void handleUtility_function_Page(int32_t encoder1_last_value, int32_t encoder2_last_value)
 {
+    // Battery-chemistry dropdown (Batt tab): while its list is open, this
+    // project has no native encoder/group support for dropdowns (touch only)
+    // — route the Current encoder's rotation to step through the list.
+    if (batteryChemDropdownOpen())
+    {
+        if (encoder2_last_value == encoder2_value)
+            return;
+        batteryChemDropdownStep(encoder2_last_value < encoder2_value ? +1 : -1);
+        return;
+    }
+
     if (!get_selected_spinbox())
     {
         handleUtilityPage(encoder1_last_value, encoder2_last_value);
@@ -1203,6 +1215,10 @@ void keyCheckLoop()
                  { PowerSupply.Voltage.setLock(!PowerSupply.Voltage.getLock()); });
     keyMenusPage('>', " RELEASED.", 2, []
                  { PowerSupply.Current.setLock(!PowerSupply.Current.getLock()); });
+    // Same physical switch (Current-encoder push button) confirms/closes the
+    // battery-chemistry dropdown on the Utility page (page 3).
+    keyMenusPage('>', " RELEASED.", 3, []
+                 { if (batteryChemDropdownOpen()) requestBattChemDropdownClose(); });
 
     // '+' button: Increase voltage/current by 0.1V/0.1A on page 2
     keyMenusPage('+', " RELEASED.", 2, []

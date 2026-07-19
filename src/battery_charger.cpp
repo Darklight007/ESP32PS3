@@ -1,7 +1,8 @@
 // Li-ion battery CC/CV charger + tester
 // - CC/CV charge with pre-charge (trickle) for deep-discharged cells
 // - Charge counter (mAh / Wh) and elapsed time
-// - Internal resistance (IR) test: two current levels, IR = dV/dI
+// - Internal resistance (IR): 5-point current sweep + least-squares fit,
+//   both as a standalone test and as a periodic dip during charging
 // - Termination on taper current, over-voltage fault, safety timeout
 //
 // The PSU itself is the CC/CV loop: we set V = cells*V/cell and I = charge
@@ -30,7 +31,7 @@ static int32_t s_term_mA = 50;   // termination (taper) current [mA]
 static int32_t s_timeout_min = 300; // safety timeout [min]
 
 // ---------- State machine ----------
-enum class BatState { IDLE, TRICKLE, CC_CV, IR_LOW, IR_HIGH, DONE, FAULT };
+enum class BatState { IDLE, TRICKLE, CC_CV, IR_SWEEP, DONE, FAULT };
 static BatState s_state = BatState::IDLE;
 static const char *stateName(BatState s)
 {
@@ -38,8 +39,7 @@ static const char *stateName(BatState s)
     case BatState::IDLE: return "IDLE";
     case BatState::TRICKLE: return "PRE-CHG";
     case BatState::CC_CV: return "CC/CV";
-    case BatState::IR_LOW: return "IR lo";
-    case BatState::IR_HIGH: return "IR hi";
+    case BatState::IR_SWEEP: return "IR";
     case BatState::DONE: return "DONE";
     default: return "FAULT";
     }
@@ -48,17 +48,34 @@ static const char *stateName(BatState s)
 static double s_mAh = 0, s_Wh = 0;
 static unsigned long s_startMs = 0, s_lastIntMs = 0, s_phaseMs = 0;
 static int s_termCount = 0;
-static double s_ir_V1 = 0, s_ir_I1 = 0, s_ir_mOhm = NAN;
+static double s_ir_mOhm = NAN;
 static const char *s_faultMsg = "";
+
+// Standalone IR test: sweep several current levels (not just 2), then fit a
+// line to all the (I,V) points. Least-squares slope is far less sensitive to
+// noise at any single point than a bare two-point secant.
+static const double kIrFracs[] = {0.15, 0.35, 0.6, 0.85, 1.0}; // fractions of Charge [A]
+static const int kIrPoints = sizeof(kIrFracs) / sizeof(kIrFracs[0]);
+static double s_irStepI[kIrPoints], s_irStepV[kIrPoints];
+static int s_irStepIdx = 0;
+// Settle time per point: with #Avgs=1 (confirmed on the status bar — no
+// rolling multi-sample window to refill), a reading is fresh as soon as the
+// CC/CV loop restabilizes and one new ADC sample lands. 250ms covers both
+// with margin. Raise this back up if SPS/#Avgs ever changes to something
+// with real averaging.
+static const unsigned long kIrDwellMs = 250;
 
 // Live IR during charge: every 10 s dip the current setpoint to the low level
 // for ~1.2 s and compute IR from the two (V, I) points.
 static unsigned long s_liveIrNextMs = 0, s_liveIrPhaseMs = 0, s_liveIrCooldownMs = 0;
-static int s_liveIrPhase = 0; // 0 = normal charging, 1 = low-current dip active
-static double s_liveIrV1 = 0, s_liveIrI1 = 0;
+static int s_liveIrPhase = 0;  // 0 = normal charging, 1 = mid-sweep
+static double s_liveIrAmps0 = 0; // actual operating current at the moment the sweep started
 
 // ---------- UI ----------
-static lv_obj_t *s_status_label = nullptr; // details line (mono)
+static lv_obj_t *s_mah_label = nullptr;   // details line, left: charge counter
+static lv_obj_t *s_timer_label = nullptr; // details line, middle: elapsed time
+static lv_obj_t *s_ir_label = nullptr;    // details line, right: internal resistance
+static lv_obj_t *s_fault_label = nullptr; // full-width, replaces the details line when s_faultMsg is set
 static lv_obj_t *s_big_label = nullptr;    // large V/A readout
 static lv_obj_t *s_chip = nullptr;         // colored state badge
 static lv_obj_t *s_chip_label = nullptr;
@@ -68,6 +85,29 @@ static lv_obj_t *s_chg_btn = nullptr;
 static lv_obj_t *s_chg_btn_label = nullptr;
 static lv_obj_t *s_ir_btn = nullptr;
 static lv_obj_t *s_tab = nullptr;
+static lv_obj_t *s_wh_label = nullptr;  // panel, replaces the timer's old spot
+static lv_obj_t *s_chem_dd = nullptr;   // battery chemistry preset dropdown
+static lv_obj_t *s_target_sb = nullptr; // Target [V] spinbox (chem presets write to this)
+
+// Chemistry presets: name shown in the dropdown -> V/cell target in mV.
+// mv < 0 ("Custom") leaves whatever the user already dialed into Target [V].
+// Values are full-charge/CV targets per cell (sourced 2026-07: manufacturer
+// datasheets + battery-university.com):
+//   Li-ion 4.20V, Li-HV 4.35V, LiFePO4 3.65V — standard CC/CV tops.
+//   NiMH/NiCd don't really use CV (they terminate on -dV/dt); 1.45V is a
+//   safe peak-voltage cap for a CV-only charger like this one, not a "nominal"
+//   voltage (nominal NiMH/NiCd is 1.2V — that's what's printed on the cell).
+struct ChemPreset { const char *name; int mv; };
+static const ChemPreset s_chemPresets[] = {
+    {"Li-ion",   4200},
+    {"Li-HV",    4350},
+    {"LiFePO4",  3650},
+    {"LTO",      2400},
+    {"NiMH",     1450},
+    {"NiCd",     1450},
+    {"Custom",     -1},
+};
+static const int s_numChemPresets = sizeof(s_chemPresets) / sizeof(s_chemPresets[0]);
 
 static lv_color_t stateColor(const char *nm)
 {
@@ -88,9 +128,9 @@ static double chargeAmps();
 
 // Charge % estimate: CC phase maps Vbat 3.0V->target as 0..80%,
 // CV phase maps current taper Ichg->cutoff as 80..100%.
-static int chargePct(double vbat, double amps)
+static double chargePct(double vbat, double amps)
 {
-    if (s_state == BatState::DONE) return 100;
+    if (s_state == BatState::DONE) return 100.0;
     double vt = targetVolts();
     double pct;
     if (vbat < vt * 0.985)
@@ -99,7 +139,7 @@ static int chargePct(double vbat, double amps)
         double hi = chargeAmps(), lo = s_term_mA / 1000.0;
         pct = 80.0 + 20.0 * (1.0 - (amps - lo) / fmax(0.001, hi - lo));
     }
-    return (int)fmin(100.0, fmax(0.0, pct));
+    return fmin(100.0, fmax(0.0, pct));
 }
 
 // Spinbox ids inside the Batt tab (searched per-parent, keep unique here)
@@ -202,7 +242,7 @@ static bool prechecksOk()
 bool batteryChargerActive()
 {
     return s_state == BatState::TRICKLE || s_state == BatState::CC_CV ||
-           s_state == BatState::IR_LOW || s_state == BatState::IR_HIGH;
+           s_state == BatState::IR_SWEEP;
 }
 
 // ---------- Start actions ----------
@@ -244,10 +284,11 @@ static void startIrTest()
 
     s_ir_mOhm = NAN;
     s_faultMsg = "";
-    setSetpoints(targetVolts(), fmax(0.05, chargeAmps() * 0.2)); // low level: 20% of Ichg
+    s_irStepIdx = 0;
+    setSetpoints(targetVolts(), fmax(0.05, chargeAmps() * kIrFracs[0]));
     ensureOutput(true);
     s_phaseMs = millis();
-    s_state = BatState::IR_LOW;
+    s_state = BatState::IR_SWEEP;
 }
 
 // ---------- Periodic tick (Core 1) ----------
@@ -291,27 +332,47 @@ static void batteryTick()
             break;
         }
 
-        // Live IR: periodic low-current dip while still in real CC (skip when
-        // the taper current is already near the dip level — no usable dI).
-        // Dip to half the ACTUAL current (not the charge setting) so IR still
-        // works deep into CV taper; below ~60 mA there is too little dI.
-        double dipAmps = fmax(0.02, amps * 0.5);
+        // Live IR: periodic 5-point sweep while still charging (same
+        // least-squares fit as the standalone IR TEST). Levels scale off the
+        // ACTUAL operating current (not the charge setting) and only ever
+        // dip below what's already flowing, so it works throughout the CV
+        // taper without asking for more current than the loop is already
+        // giving. Skipped below ~60mA — too little current to get usable dI.
         if (s_liveIrPhase == 0 && now >= s_liveIrNextMs && amps > 0.06) {
-            s_liveIrV1 = vbat; s_liveIrI1 = amps;
-            setSetpoints(vt, dipAmps);
             s_liveIrPhase = 1;
+            s_irStepIdx = 0;
+            s_liveIrAmps0 = amps;
+            setSetpoints(vt, fmax(0.02, s_liveIrAmps0 * kIrFracs[0]));
             s_liveIrPhaseMs = now;
-        } else if (s_liveIrPhase == 1 && now - s_liveIrPhaseMs >= 1200) {
-            double dI = s_liveIrI1 - amps;
-            if (fabs(dI) > 0.02)
-                s_ir_mOhm = (s_liveIrV1 - vbat) / dI * 1000.0;
-            setSetpoints(vt, chargeAmps()); // restore full current
-            s_liveIrPhase = 0;
-            s_liveIrCooldownMs = now + 300; // let the setpoint settle before the bar reacts again
-            // Space dips out as the pack fills: frequent early on, rare near full
-            // (avoids interrupting the charge every 10 s once it barely matters).
-            int pct = chargePct(vbat, amps);
-            s_liveIrNextMs = now + (pct < 50 ? 10000 : 60000);
+        } else if (s_liveIrPhase == 1 && now - s_liveIrPhaseMs >= kIrDwellMs) {
+            s_irStepI[s_irStepIdx] = amps;
+            s_irStepV[s_irStepIdx] = vbat;
+            s_irStepIdx++;
+            if (s_irStepIdx >= kIrPoints) {
+                double sumI = 0, sumV = 0, sumII = 0, sumIV = 0;
+                for (int i = 0; i < kIrPoints; i++) {
+                    sumI += s_irStepI[i]; sumV += s_irStepV[i];
+                    sumII += s_irStepI[i] * s_irStepI[i];
+                    sumIV += s_irStepI[i] * s_irStepV[i];
+                }
+                double n = kIrPoints;
+                double denom = n * sumII - sumI * sumI;
+                // R = +slope, not -slope: this is a CHARGER (current flows into
+                // the battery), so terminal V rises with I (V = Voc_chg + I*R) —
+                // opposite of the textbook discharge convention (V = Voc - I*R).
+                if (fabs(denom) > 1e-9)
+                    s_ir_mOhm = (n * sumIV - sumI * sumV) / denom * 1000.0;
+                setSetpoints(vt, chargeAmps()); // restore full charge-current ceiling
+                s_liveIrPhase = 0;
+                s_liveIrCooldownMs = now + 300; // let the setpoint settle before the bar reacts again
+                // Space sweeps out as the pack fills: frequent early on, rare near full
+                // (avoids interrupting the charge every 10s once it barely matters).
+                int pct = chargePct(vbat, amps);
+                s_liveIrNextMs = now + (pct < 50 ? 10000 : 60000);
+            } else {
+                setSetpoints(vt, fmax(0.02, s_liveIrAmps0 * kIrFracs[s_irStepIdx]));
+                s_liveIrPhaseMs = now;
+            }
         }
 
         // Termination: in CV (voltage reached) and current tapered below limit.
@@ -326,22 +387,34 @@ static void batteryTick()
         break;
     }
 
-    case BatState::IR_LOW:
-        if (now - s_phaseMs >= 2500) { // settled
-            s_ir_V1 = vbat; s_ir_I1 = amps;
-            setSetpoints(vt, chargeAmps()); // high level
-            s_phaseMs = now;
-            s_state = BatState::IR_HIGH;
-        }
-        break;
-
-    case BatState::IR_HIGH:
-        if (now - s_phaseMs >= 2500) {
-            double dI = amps - s_ir_I1;
-            s_ir_mOhm = (fabs(dI) > 0.010) ? (vbat - s_ir_V1) / dI * 1000.0 : NAN;
-            ensureOutput(false);
-            s_state = BatState::IDLE;
-            myTone(NOTE_A3, 100, true);
+    case BatState::IR_SWEEP:
+        if (now - s_phaseMs >= kIrDwellMs) { // this point settled
+            s_irStepI[s_irStepIdx] = amps;
+            s_irStepV[s_irStepIdx] = vbat;
+            s_irStepIdx++;
+            if (s_irStepIdx >= kIrPoints) {
+                // Least-squares line V = a + b*I over all points; R = +b for a
+                // CHARGER (current into the battery raises terminal V, unlike
+                // the textbook discharge convention V = Voc - I*R).
+                // Far more noise-resistant than a single two-point secant.
+                double sumI = 0, sumV = 0, sumII = 0, sumIV = 0;
+                for (int i = 0; i < kIrPoints; i++) {
+                    sumI += s_irStepI[i]; sumV += s_irStepV[i];
+                    sumII += s_irStepI[i] * s_irStepI[i];
+                    sumIV += s_irStepI[i] * s_irStepV[i];
+                }
+                double n = kIrPoints;
+                double denom = n * sumII - sumI * sumI;
+                s_ir_mOhm = (fabs(denom) > 1e-9)
+                                ? (n * sumIV - sumI * sumV) / denom * 1000.0
+                                : NAN;
+                ensureOutput(false);
+                s_state = BatState::IDLE;
+                myTone(NOTE_A3, 100, true);
+            } else {
+                setSetpoints(vt, fmax(0.05, chargeAmps() * kIrFracs[s_irStepIdx]));
+                s_phaseMs = now;
+            }
         }
         break;
 
@@ -349,8 +422,8 @@ static void batteryTick()
         break;
     }
 
-    // Status label (only when the Utility page objects exist)
-    if (s_status_label && lv_obj_is_valid(s_status_label) && !blockAll) {
+    // Status labels (only when the Utility page objects exist)
+    if (s_mah_label && lv_obj_is_valid(s_mah_label) && !blockAll) {
         char tstr[16] = "0:00:00";
         if (batteryChargerActive() || s_state == BatState::DONE) {
             unsigned long secs = (now - s_startMs) / 1000;
@@ -361,9 +434,9 @@ static void batteryTick()
         else snprintf(mah, sizeof(mah), "%03.0fmAh", s_mAh);
 
         char ir[16]; // "---mΩ" or e.g. "1.2Ω" — collapses to Ω once IR exceeds 999 mΩ
-        if (std::isnan(s_ir_mOhm)) snprintf(ir, sizeof(ir), "---mΩ");
+        if (std::isnan(s_ir_mOhm)) snprintf(ir, sizeof(ir), "---.-mΩ");
         else if (s_ir_mOhm > 999.0) snprintf(ir, sizeof(ir), "%.1fΩ", s_ir_mOhm / 1000.0);
-        else snprintf(ir, sizeof(ir), "%03.0fmΩ", s_ir_mOhm);
+        else snprintf(ir, sizeof(ir), "%.1fmΩ", s_ir_mOhm);
 
         // Show the actual regulation mode while charging (device knows:
         // CC = current loop active, VC = voltage loop active → CV)
@@ -382,27 +455,54 @@ static void batteryTick()
         }
         if (s_state == BatState::CC_CV) {
             DEVICE st = PowerSupply.getStatus();
-            if (st == DEVICE::CC) nm = s_liveIrPhase ? "IR" : "CC";
+            if (st == DEVICE::CC) nm = "CC";
             else if (st == DEVICE::VC || st == DEVICE::ON) nm = "CV";
         }
 
+        // Visible proof the sweep is really stepping through each current
+        // level, not just one blurred "IR" the whole time — same progress
+        // readout for both the live in-charge dip and the standalone test.
+        char chipBuf[12];
+        bool isIrChip = s_state == BatState::IR_SWEEP || s_liveIrPhase != 0;
+        if (isIrChip) {
+            snprintf(chipBuf, sizeof(chipBuf), "IR %d/%d", s_irStepIdx + 1, kIrPoints);
+            nm = chipBuf;
+        }
         lv_label_set_text(s_chip_label, nm);
-        lv_obj_set_style_bg_color(s_chip, stateColor(nm), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(s_chip, stateColor(isIrChip ? "IR" : nm), LV_PART_MAIN);
         lv_label_set_text_fmt(s_big_label, "%6.3fV %6.3fA", vbat, amps); // %6.3f reserves the minus-sign slot: width constant, V never shifts
         // Progress bar + % — only meaningful while supervising (or done)
         // Progress bar + % — only updated while supervising (or done) AND NOT during live IR measurement dips
         if ((batteryChargerActive() || s_state == BatState::DONE) &&
             s_liveIrPhase == 0 && now >= s_liveIrCooldownMs) {
-            int pct = chargePct(vbat, amps);
-            lv_bar_set_value(s_bar, pct, LV_ANIM_OFF);
+            double pct = chargePct(vbat, amps);
+            lv_bar_set_value(s_bar, (int)lround(pct), LV_ANIM_OFF); // bar itself is integer-resolution
             lv_obj_set_style_bg_color(s_bar, stateColor(nm), LV_PART_INDICATOR);
-            lv_label_set_text_fmt(s_pct_label, "%d%%", pct);
+            lv_label_set_text_fmt(s_pct_label, "%.1f%%", pct);
         }
-        lv_label_set_text_fmt(s_status_label,
-            "%s  %s  IR:%s%s",
-            mah, tstr, ir, s_faultMsg);
+        lv_label_set_text(s_timer_label, tstr);
+
+        // A long fault string appended to the right-anchored IR label would grow
+        // leftward over the mAh/Wh labels and turn into an unreadable pile-up
+        // (this is what "messy" looked like). Instead, swap the whole details
+        // line for one full-width message while a fault is set.
+        bool fault = s_faultMsg[0] != '\0';
+        if (fault) {
+            lv_obj_add_flag(s_mah_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(s_wh_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(s_ir_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(s_fault_label, LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_text_fmt(s_fault_label, "FAULT: %s", s_faultMsg);
+        } else {
+            lv_obj_add_flag(s_fault_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(s_mah_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(s_wh_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(s_ir_label, LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_text(s_mah_label, mah);
+            lv_label_set_text_fmt(s_wh_label, "%.2fWh", s_Wh);
+            lv_label_set_text_fmt(s_ir_label, "IR:%s", ir);
+        }
     }
-    
 }
 
 void BatteryChargerInterval(unsigned long interval)
@@ -442,6 +542,24 @@ static void sb_changed_cb(lv_event_t *e)
         setSetpoints(targetVolts(), s_state == BatState::TRICKLE ? trickleAmps() : chargeAmps());
 }
 
+// Writes the preset's V/cell into Target [V] and applies it the same way a
+// manual spinbox edit would. Shared by touch selection and encoder stepping.
+static void applyChemPreset(uint16_t sel)
+{
+    if (sel >= (uint16_t)s_numChemPresets || s_chemPresets[sel].mv < 0) return; // Custom: leave as-is
+    lv_spinbox_set_value(s_target_sb, s_chemPresets[sel].mv);
+    readSettings();
+    if ((s_state == BatState::CC_CV || s_state == BatState::TRICKLE) && s_liveIrPhase == 0)
+        setSetpoints(targetVolts(), s_state == BatState::TRICKLE ? trickleAmps() : chargeAmps());
+}
+
+// Chemistry preset selection via touch (list click)
+static void chem_dd_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    applyChemPreset(lv_dropdown_get_selected(s_chem_dd));
+}
+
 void createBatteryTab(lv_obj_t *parent)
 {
     s_tab = parent;
@@ -454,16 +572,62 @@ void createBatteryTab(lv_obj_t *parent)
     // above-left of the box, so each column needs clear space to its left:
     //   col A boxes at x=60 (labels in 0..58), col B at x=215 (labels in 158..213).
     // Settings grid: 2 cols x 2 rows (single-cell: no Cells spinbox)
-    const int colA = 30, colB = 185, rowY[3] = {16, 58, 90}; // rows 0-1: spinboxes, row 2: buttons
+    const int colX[3]= {8, 112, 216}, rowY[3] = {16, 58, 90}, width=96; // rows 0-1: grid, row 2: buttons
+    // Row 0: [chemistry preset] [Target V] [Charge A]
+    // Row 1: [Cutoff A] [Timeout min] [Timer — live label, not editable]
+    s_chem_dd = lv_dropdown_create(parent);
+    lv_obj_set_size(s_chem_dd, width, 28); // graph_R_16 glyphs were clipped at the top in a 24px box
+    lv_obj_set_style_pad_top(s_chem_dd, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(s_chem_dd, 2, LV_PART_MAIN);
+    lv_obj_align(s_chem_dd, LV_ALIGN_TOP_LEFT, colX[0], rowY[0]);
+    {
+        static char opts[96];
+        opts[0] = '\0';
+        for (int i = 0; i < s_numChemPresets; i++) {
+            strcat(opts, s_chemPresets[i].name);
+            if (i < s_numChemPresets - 1) strcat(opts, "\n");
+        }
+        lv_dropdown_set_options(s_chem_dd, opts);
+    }
+    lv_dropdown_set_selected(s_chem_dd, s_numChemPresets - 1); // "Custom" — don't clobber a loaded Target on boot
+    lv_dropdown_set_symbol(s_chem_dd, NULL); // no arrow glyph: was overlapping the name in a 96px-wide box
+    // Keep the selected-item highlight (default true): it only affects the
+    // open list, not the closed box, and it's the only visual feedback while
+    // stepping through the list with the encoder.
+    lv_obj_set_style_text_font(s_chem_dd, &graph_R_16, LV_PART_MAIN);
+    lv_obj_add_event_cb(s_chem_dd, chem_dd_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    {
+        lv_obj_t *lbl = lv_label_create(parent);
+        lv_label_set_recolor(lbl, true);
+        lv_label_set_text(lbl, "#FFC107 Battery:#");
+        lv_obj_set_style_text_font(lbl, &montserrat_b_12, 0); // matches spinbox_pro's own label style (s_style_spinbox_lbl)
+        lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, colX[0], rowY[0] - 18);
+    }
+
     lv_obj_t *sbs[4];
-    sbs[0] = spinbox_pro(parent, "#FFC107 Target [V]:#", 3000, 4400, 4, 1, LV_ALIGN_TOP_LEFT, colA, rowY[0], 98, ID_VCELL, &graph_R_16);
+    sbs[0] = spinbox_pro(parent, "#FFC107 Target [V]:#", 1000, 4400, 4, 1, LV_ALIGN_TOP_LEFT, colX[1], rowY[0], width, ID_VCELL, &graph_R_16); // 1.000V floor: room for NiMH/NiCd/LTO presets, not just Li chemistries
     lv_spinbox_set_value(sbs[0], s_mv_cell);
-    sbs[1] = spinbox_pro(parent, "#FFC107 Charge [A]:#", 10, 5000, 4, 1, LV_ALIGN_TOP_LEFT, colB, rowY[0], 98, ID_ICHG, &graph_R_16);
+    s_target_sb = sbs[0];
+    sbs[1] = spinbox_pro(parent, "#FFC107 Charge [A]:#", 10, 5000, 4, 1, LV_ALIGN_TOP_LEFT, colX[2], rowY[0], width, ID_ICHG, &graph_R_16);
     lv_spinbox_set_value(sbs[1], s_chg_mA);
-    sbs[2] = spinbox_pro(parent, "#FFC107 Cutoff [A]:#", 5, 1000, 4, 1, LV_ALIGN_TOP_LEFT, colA, rowY[1], 98, ID_ITERM, &graph_R_16);
+    sbs[2] = spinbox_pro(parent, "#FFC107 Cutoff [A]:#", 5, 1000, 4, 1, LV_ALIGN_TOP_LEFT, colX[0], rowY[1], width, ID_ITERM, &graph_R_16);
     lv_spinbox_set_value(sbs[2], s_term_mA);
-    sbs[3] = spinbox_pro(parent, "#FFC107 Timeout [min]:#", 0, 999, 3, 0, LV_ALIGN_TOP_LEFT, colB, rowY[1], 98, ID_TMOUT, &graph_R_16);
+    sbs[3] = spinbox_pro(parent, "#FFC107 Timeout [min]:#", 0, 999, 3, 0, LV_ALIGN_TOP_LEFT, colX[1], rowY[1], width, ID_TMOUT, &graph_R_16);
     lv_spinbox_set_value(sbs[3], s_timeout_min);
+
+    // Row 1, col 3: live elapsed-time readout (moved out of the bottom panel)
+    {
+        lv_obj_t *lbl = lv_label_create(parent);
+        lv_label_set_recolor(lbl, true);
+        lv_label_set_text(lbl, "#FFC107 Timer:#");
+        lv_obj_set_style_text_font(lbl, &montserrat_b_12, 0); // matches spinbox_pro's own label style (s_style_spinbox_lbl)
+        lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, colX[2], rowY[1] - 18);
+    }
+    s_timer_label = lv_label_create(parent);
+    lv_obj_set_style_text_font(s_timer_label, &graph_R_16, 0);
+    lv_obj_set_style_text_color(s_timer_label, lv_color_hex(0xE0F0FF), 0);
+    lv_label_set_text(s_timer_label, "0:00:00");
+    lv_obj_align(s_timer_label, LV_ALIGN_TOP_LEFT, colX[2], rowY[1]);
 
     for (int i = 0; i < 4; i++) {
         lv_obj_add_event_cb(sbs[i], sb_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -487,29 +651,35 @@ void createBatteryTab(lv_obj_t *parent)
     lv_style_set_bg_color(&style_ir, lv_palette_darken(LV_PALETTE_INDIGO, 2));
     lv_style_set_text_color(&style_ir, lv_palette_main(LV_PALETTE_AMBER));
 
+    // Span the full grid width (colX[0] .. colX[2]+width) with a small gap
+    // between the two buttons, instead of leaving column 3's width empty.
+    const int rowSpan = colX[2] + width - colX[0], btnGap = 8;
+    const int btnW = (rowSpan - btnGap) / 2;
+    const int btnBx = colX[0] + btnW + btnGap;
+
     s_chg_btn = lv_btn_create(parent);
     lv_obj_add_flag(s_chg_btn, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_size(s_chg_btn, 98, 26); // same width as spinboxes, aligned under col A
+    lv_obj_set_size(s_chg_btn, btnW, 26);
     lv_obj_set_style_radius(s_chg_btn, 3, LV_PART_MAIN);
     lv_obj_set_style_border_color(s_chg_btn, lv_color_hex(0x405060), LV_PART_MAIN);
     // lv_obj_set_style_border_width(s_chg_btn, 1, LV_PART_MAIN);
     lv_obj_add_style(s_chg_btn, &style_chg, LV_STATE_DEFAULT);
     lv_obj_add_style(s_chg_btn, &style_chg_checked, LV_STATE_CHECKED);
-    lv_obj_align(s_chg_btn, LV_ALIGN_TOP_LEFT, colA, rowY[2]);
+    lv_obj_align(s_chg_btn, LV_ALIGN_TOP_LEFT, colX[0], rowY[2]);
     s_chg_btn_label = lv_label_create(s_chg_btn);
     lv_label_set_text(s_chg_btn_label, "CHARGE");
     lv_obj_center(s_chg_btn_label);
     lv_obj_add_event_cb(s_chg_btn, chg_btn_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     s_ir_btn = lv_btn_create(parent);
-    lv_obj_set_size(s_ir_btn, 98, 26); // aligned under col B
+    lv_obj_set_size(s_ir_btn, btnW, 26);
     lv_obj_set_style_radius(s_ir_btn, 3, LV_PART_MAIN);
     lv_obj_set_style_border_color(s_ir_btn, lv_color_hex(0x405060), LV_PART_MAIN);
     // lv_obj_set_style_border_width(s_ir_btn, 1, LV_PART_MAIN);
     lv_obj_add_style(s_ir_btn, &style_ir, LV_STATE_DEFAULT);
-    lv_obj_align(s_ir_btn, LV_ALIGN_TOP_LEFT, colB, rowY[2]);
+    lv_obj_align(s_ir_btn, LV_ALIGN_TOP_LEFT, btnBx, rowY[2]);
     lv_obj_t *l = lv_label_create(s_ir_btn);
-    lv_label_set_text(l, "IR");
+    lv_label_set_text(l, "IR TEST");
     lv_obj_center(l);
     lv_obj_add_event_cb(s_ir_btn, ir_btn_event_cb, LV_EVENT_SHORT_CLICKED, NULL);
 
@@ -564,9 +734,67 @@ void createBatteryTab(lv_obj_t *parent)
     lv_label_set_text(s_pct_label, "--%");
     lv_obj_align(s_pct_label, LV_ALIGN_TOP_RIGHT, 2, 18);
 
-    s_status_label = lv_label_create(panel);
-    lv_obj_set_style_text_font(s_status_label, &graph_R_16, 0); // clearer glyphs than monofont, still monospace
-    lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xB0B8C0), 0);
-    lv_label_set_text(s_status_label, "connect battery, A range, out off");
-    lv_obj_align(s_status_label, LV_ALIGN_BOTTOM_LEFT, -6, 1);
+    // Details line split into 3 independent labels so each can be nudged by
+    // exact pixels via its own lv_obj_align offset (a single label with a
+    // format string can only be spaced in whole-glyph steps).
+    s_mah_label = lv_label_create(panel);
+    lv_obj_set_style_text_font(s_mah_label, &graph_R_16, 0);
+    lv_obj_set_style_text_color(s_mah_label, lv_color_hex(0xB0B8C0), 0);
+    lv_label_set_text(s_mah_label, "connect battery");
+    lv_obj_align(s_mah_label, LV_ALIGN_BOTTOM_LEFT, 0, 1);
+
+    s_wh_label = lv_label_create(panel);
+    lv_obj_set_style_text_font(s_wh_label, &graph_R_16, 0);
+    lv_obj_set_style_text_color(s_wh_label, lv_color_hex(0xB0B8C0), 0);
+    lv_label_set_text(s_wh_label, "");
+    lv_obj_align(s_wh_label, LV_ALIGN_BOTTOM_MID, -24, 1);
+
+    s_ir_label = lv_label_create(panel);
+    lv_obj_set_style_text_font(s_ir_label, &graph_R_16, 0);
+    lv_obj_set_style_text_color(s_ir_label, lv_color_hex(0xB0B8C0), 0);
+    lv_label_set_text(s_ir_label, "");
+    lv_obj_align(s_ir_label, LV_ALIGN_BOTTOM_RIGHT, 4, 1);
+
+    s_fault_label = lv_label_create(panel);
+    lv_obj_set_style_text_font(s_fault_label, &graph_R_16, 0);
+    lv_obj_set_style_text_color(s_fault_label, lv_color_hex(0xFF6060), 0);
+    lv_label_set_long_mode(s_fault_label, LV_LABEL_LONG_CLIP); // never wraps and grows the panel
+    lv_obj_set_width(s_fault_label, 296);
+    lv_label_set_text(s_fault_label, "");
+    lv_obj_align(s_fault_label, LV_ALIGN_BOTTOM_LEFT, 0, 1);
+    lv_obj_add_flag(s_fault_label, LV_OBJ_FLAG_HIDDEN);
+}
+
+bool batteryChemDropdownOpen()
+{
+    return s_chem_dd && lv_dropdown_is_open(s_chem_dd);
+}
+
+void batteryChemDropdownStep(int dir)
+{
+    if (!batteryChemDropdownOpen()) return;
+    int sel = (int)lv_dropdown_get_selected(s_chem_dd) + (dir > 0 ? 1 : -1);
+    sel = constrain(sel, 0, s_numChemPresets - 1);
+    lv_dropdown_set_selected(s_chem_dd, sel); // does not fire VALUE_CHANGED — apply explicitly
+    lv_obj_t *list = lv_dropdown_get_list(s_chem_dd);
+    if (list) {
+        lv_obj_t *item = lv_obj_get_child(list, sel);
+        if (item) lv_obj_scroll_to_view(item, LV_ANIM_OFF);
+    }
+    applyChemPreset((uint16_t)sel);
+}
+
+static volatile bool s_battChemClosePending = false;
+
+void requestBattChemDropdownClose()
+{
+    s_battChemClosePending = true;
+}
+
+void drainBattChemDropdownClose()
+{
+    if (!s_battChemClosePending) return;
+    s_battChemClosePending = false;
+    if (batteryChemDropdownOpen())
+        lv_dropdown_close(s_chem_dd);
 }
