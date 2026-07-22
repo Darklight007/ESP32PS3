@@ -109,6 +109,10 @@ void loadFromBank(int bank)
     LV_LOG_USER("Loading from Bank %d", bank);
     Serial.printf("\n========== LOAD FROM BANK %d ==========\n", bank);
 
+    // Loading a bank into the chart makes it the active editing page — touch-drag,
+    // "Clear", and waveform-preset selection all target whichever bank was last loaded.
+    g_arbtActiveBank = bank;
+
     // Load the entire FunGen memory structure
     PowerSupply.funGenMem = PowerSupply.LoadMemoryFgen("FunGen");
 

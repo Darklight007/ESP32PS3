@@ -7,6 +7,7 @@
 #include "calib_inl.h"
 // #include "calib_inl_zc.h"
 #include "calib_full_auto.h"
+#include "battery_charger.h" // battLeadCalMenu_cb()
 
 // heavy/private includes live ONLY in the .cpp
 #include "spinbox_pro.h"
@@ -67,7 +68,7 @@ namespace
 // ---------- public objects (one definition) ----------
 
 // extern bool lvglChartIsBusy;
-extern bool lvglIsBusy;
+extern volatile bool lvglIsBusy;
 // Global (or static) residual spline
 
 CalibrationGui Calib_GUI{};
@@ -674,6 +675,7 @@ void SettingMenu(lv_obj_t *parent)
     create_button_item(section, ADC_INL_Voltage_calibration_cb, "ADC INL V_CAL");
     // create_button_item(section, ADC_INL_ZC_calibration_cb, "ADC INL ZC_CAL");
     create_button_item(section, full_auto_calibration_cb, "Full Auto Cal");
+    create_button_item(section, battLeadCalMenu_cb, "PS Lead Resistance");
 
     create_button_item(section, nullptr /* Stats reset wiring */, "Reset Stats");
     create_button_item(section, LCD_Calibration_cb, "LCD Touch");

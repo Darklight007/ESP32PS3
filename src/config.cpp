@@ -61,10 +61,10 @@ TaskHandle_t Task_adc = nullptr, Task_bargraph = nullptr;
 
 bool ismyTextHiddenChange = false;
 
-bool lvglIsBusy = false;
-bool lvglChartIsBusy = false;
-bool emergencyRefresh = false;
-bool blockAll = false;
+volatile bool lvglIsBusy = false;
+volatile bool lvglChartIsBusy = false;
+volatile bool emergencyRefresh = false;
+volatile bool blockAll = false;
 
 bool wireConnected  = false;
 bool wire1Connected = false;

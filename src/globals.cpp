@@ -23,6 +23,7 @@ bool manualTabSelection = false;
 // Utility charts
 lv_obj_t *util_Arbit_chart;
 lv_chart_series_t *util_Arbit_chart_series;
+int g_arbtActiveBank = 0;
 
 // Bucket and label data definitions
 uint16_t dataBuckets[BUCKET_COUNT];

@@ -20,3 +20,10 @@ void batteryChemDropdownStep(int dir); // dir: +1 next item, -1 previous item
 // directly — request sets a flag only; the main loop (Core 1) drains it.
 void requestBattChemDropdownClose(); // Core 0-safe: just sets a volatile flag
 void drainBattChemDropdownClose();   // Core 1 only: call from main loop
+
+// Lead-resistance calibration (Settings > Calibration menu entry, "Batt Lead R").
+// Short the PS output leads together first — battLeadCalMenu_cb() shows the
+// confirm dialog, startBattLeadCal() runs the actual sweep. The measured value
+// is persisted and subtracted from every future battery IR reading.
+void battLeadCalMenu_cb(lv_event_t *e); // wire this into the Calibration menu
+void startBattLeadCal();                // begins the sweep (Core 1 only)

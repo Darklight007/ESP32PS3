@@ -243,7 +243,7 @@ void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *se
         if (point_x >= 0 && point_x < lv_chart_get_point_count(chart))
         {
             lv_chart_set_value_by_id(chart, series, point_x, point_y);
-            PowerSupply.funGenMem.arbitrary_points[point_x][0] = point_y;
+            PowerSupply.funGenMem.arbitrary_points[point_x][g_arbtActiveBank] = point_y;
             lv_chart_refresh(chart);
         }
     }

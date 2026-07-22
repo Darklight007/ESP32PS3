@@ -514,7 +514,7 @@ void Utility_tabview(lv_obj_t *parent)
     // Fill with zero data initially
     for (int i = 0; i < CHART_POINTS; i++)
     {
-        lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, PowerSupply.funGenMem.arbitrary_points[i][0]);
+        lv_chart_set_next_value(util_Arbit_chart, util_Arbit_chart_series, PowerSupply.funGenMem.arbitrary_points[i][g_arbtActiveBank]);
     }
 
     lv_obj_add_event_cb(util_Arbit_chart, draw_event_util_Arbit_chart_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
@@ -539,9 +539,13 @@ void Utility_tabview(lv_obj_t *parent)
         } else if (strncmp(buf, "Load from Bank", 14) == 0) {
             int bank = atoi(buf + 15);  // "Load from Bank 0" → position 15 = '0'
             loadFromBank(bank);
+            // Show the active editing page on the dropdown itself instead of
+            // the static "Load" label, since loading a bank now makes it the
+            // live-editing target for touch-drag/Clear/waveform presets.
+            lv_dropdown_set_text(dropdown, bank == 0 ? "Page 0" : "Page 1");
         } else if (strcmp(buf, "Clear") == 0) {
             for (int i = 0; i < CHART_POINTS; i++) {
-                PowerSupply.funGenMem.arbitrary_points[i][0] = 0;
+                PowerSupply.funGenMem.arbitrary_points[i][g_arbtActiveBank] = 0;
                 lv_chart_set_value_by_id(util_Arbit_chart, util_Arbit_chart_series, i, 0);
             }
             lv_chart_refresh(util_Arbit_chart);
@@ -552,7 +556,7 @@ void Utility_tabview(lv_obj_t *parent)
                     for (int j = 0; j < CHART_POINTS; ++j) {
                         double value = waveforms[i].function((double)j / CHART_POINTS);
                         int chart_val = (int)(value * 140.0); // Scale from [0, 1] to [0, 140]
-                        PowerSupply.funGenMem.arbitrary_points[j][0] = chart_val;
+                        PowerSupply.funGenMem.arbitrary_points[j][g_arbtActiveBank] = chart_val;
                         lv_chart_set_value_by_id(util_Arbit_chart, util_Arbit_chart_series, j, chart_val);
                     }
                     lv_chart_refresh(util_Arbit_chart);
@@ -608,7 +612,7 @@ void Utility_tabview(lv_obj_t *parent)
 
     // Create save and load dropdowns
     createDropdown(tab3, -10, 0, saveOptions, "Save");
-    createDropdown(tab3, 65, 0, loadOptions, "Load");
+    createDropdown(tab3, 65, 0, loadOptions, "Page 0"); // matches g_arbtActiveBank's default (0)
 
     // Buffer to hold waveform dropdown options
     constexpr size_t numWaveforms = 17; // Ensure it matches actual count
@@ -1241,7 +1245,8 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Voltage.SetUpdate((strtod(txt, NULL) * PowerSupply.Voltage.adjFactor) + PowerSupply.Voltage.adjOffset);
+        if (!PowerSupply.Voltage.getLock())
+            PowerSupply.Voltage.SetUpdate((strtod(txt, NULL) * PowerSupply.Voltage.adjFactor) + PowerSupply.Voltage.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
         lv_obj_invalidate(lv_scr_act());
@@ -1252,7 +1257,8 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Voltage.SetUpdate((strtod(txt, NULL) * 2.0) + PowerSupply.Voltage.adjOffset);
+        if (!PowerSupply.Voltage.getLock())
+            PowerSupply.Voltage.SetUpdate((strtod(txt, NULL) * 2.0) + PowerSupply.Voltage.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
         lv_obj_invalidate(lv_scr_act());
@@ -1263,7 +1269,8 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Current.SetUpdate(strtod(txt, NULL) * PowerSupply.Current.adjFactor + PowerSupply.Current.adjOffset);
+        if (!PowerSupply.Current.getLock())
+            PowerSupply.Current.SetUpdate(strtod(txt, NULL) * PowerSupply.Current.adjFactor + PowerSupply.Current.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
         lv_obj_invalidate(lv_scr_act());
@@ -1274,7 +1281,8 @@ static void btnm_event_handler(lv_event_t *e)
         lv_obj_add_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
         myTone(NOTE_A5, 100);
         const char *txt = lv_textarea_get_text(ta);
-        PowerSupply.Current.SetUpdate(strtod(txt, NULL) * 10.0 + PowerSupply.Current.adjOffset);
+        if (!PowerSupply.Current.getLock())
+            PowerSupply.Current.SetUpdate(strtod(txt, NULL) * 10.0 + PowerSupply.Current.adjOffset);
         lv_textarea_set_text(ta, "");
         ismyTextHiddenChange = true;
         lv_obj_invalidate(lv_scr_act());

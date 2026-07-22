@@ -54,7 +54,7 @@ extern bool buzzerSound;               // defined elsewhere
 extern TaskHandle_t Task_adc, Task_bargraph;
 
 extern bool ismyTextHiddenChange;
-extern bool lvglIsBusy, lvglChartIsBusy, emergencyRefresh, blockAll;
+extern volatile bool lvglIsBusy, lvglChartIsBusy, emergencyRefresh, blockAll;
 
 extern bool wireConnected;
 extern bool wire1Connected;

@@ -681,7 +681,11 @@ public:
     void enableSetting(bool onOff);
     char *getValue();
     void SetRotaryStep(double val);
-    void SetUpdate(int value);
+    // bypassLock: for internal/programmatic control (e.g. the battery
+    // charger's own CC/CV setpoint stepping) that must keep working while
+    // the lock icon is engaged to block *user* input. Defaults to false so
+    // every existing call site (encoder, keypad, direct entry) is unaffected.
+    void SetUpdate(int value, bool bypassLock = false);
     void Flush(void);
     void SetEncoderUpdate(void);
     void setLock(bool lck);

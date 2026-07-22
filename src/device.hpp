@@ -88,7 +88,7 @@ struct DAC_codes
 extern lv_disp_t *lv_disp;
 extern volatile bool adcDataReady;
 
-extern bool blockAll;
+extern volatile bool blockAll;
 // extern volatile bool dataReady;
 
 // Task handle for ADC task (needed for notifications)

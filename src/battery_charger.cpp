@@ -17,6 +17,7 @@
 #include "spinbox_pro.h"
 #include "buzzer.h"
 #include "intervals.h"
+#include "setting_menu.h" // msgbox_close_deferred(), for the lead-R calibration confirm dialog
 #include <Preferences.h>
 #include <Arduino.h>
 #include <cmath>
@@ -31,7 +32,7 @@ static int32_t s_term_mA = 50;   // termination (taper) current [mA]
 static int32_t s_timeout_min = 300; // safety timeout [min]
 
 // ---------- State machine ----------
-enum class BatState { IDLE, TRICKLE, CC_CV, IR_SWEEP, DONE, FAULT };
+enum class BatState { IDLE, TRICKLE, CC_CV, IR_SWEEP, DONE, FAULT, LEAD_CAL };
 static BatState s_state = BatState::IDLE;
 static const char *stateName(BatState s)
 {
@@ -41,6 +42,7 @@ static const char *stateName(BatState s)
     case BatState::CC_CV: return "CC/CV";
     case BatState::IR_SWEEP: return "IR";
     case BatState::DONE: return "DONE";
+    case BatState::LEAD_CAL: return "LEADCAL";
     default: return "FAULT";
     }
 }
@@ -50,6 +52,45 @@ static unsigned long s_startMs = 0, s_lastIntMs = 0, s_phaseMs = 0;
 static int s_termCount = 0;
 static double s_ir_mOhm = NAN;
 static const char *s_faultMsg = "";
+
+// This test is deliberately battery-agnostic — it's also used as a smoke test
+// against a plain resistive load. Two regimes:
+//  - Current actually swept by a useful amount: least-squares slope R = dV/dI,
+//    same as before — this is the precise path, used for real battery IR.
+//  - Current barely moved (compliance-limited: high-resistance load, or nothing
+//    at all on the terminals): the slope's denominator is near-zero and noise-
+//    dominated, so fall back to a plain Ohm's-law point estimate R = V/I on the
+//    settled readings instead. For a big resistor or an open circuit this
+//    naturally comes out large (hundreds of ohms to kOhm+) rather than being
+//    rejected — a very high result IS the correct answer in that case, not an
+//    error state.
+static double computeIrMOhm(const double *I, const double *V, int nPts)
+{
+    double iMin = I[0], iMax = I[0];
+    for (int i = 1; i < nPts; i++) { if (I[i] < iMin) iMin = I[i]; if (I[i] > iMax) iMax = I[i]; }
+
+    if ((iMax - iMin) >= 0.02) { // >=20mA spread: enough dynamic range for the precise slope fit
+        double sumI = 0, sumV = 0, sumII = 0, sumIV = 0;
+        for (int i = 0; i < nPts; i++) {
+            sumI += I[i]; sumV += V[i];
+            sumII += I[i] * I[i]; sumIV += I[i] * V[i];
+        }
+        double n = nPts;
+        double denom = n * sumII - sumI * sumI;
+        if (fabs(denom) > 1e-9) {
+            double mOhm = (n * sumIV - sumI * sumV) / denom * 1000.0;
+            if (std::isfinite(mOhm) && mOhm >= 0.0) return mOhm;
+        }
+        // Slope came out unusable despite the spread check — fall through.
+    }
+
+    // Point estimate: average of the settled (I, V) readings.
+    double sumI = 0, sumV = 0;
+    for (int i = 0; i < nPts; i++) { sumI += I[i]; sumV += V[i]; }
+    double iAvg = sumI / nPts, vAvg = sumV / nPts;
+    if (iAvg < 1e-5) return 9.9e6; // no measurable current at all -> essentially open
+    return (vAvg / iAvg) * 1000.0;
+}
 
 // Standalone IR test: sweep several current levels (not just 2), then fit a
 // line to all the (I,V) points. Least-squares slope is far less sensitive to
@@ -63,7 +104,7 @@ static int s_irStepIdx = 0;
 // CC/CV loop restabilizes and one new ADC sample lands. 250ms covers both
 // with margin. Raise this back up if SPS/#Avgs ever changes to something
 // with real averaging.
-static const unsigned long kIrDwellMs = 250;
+static const unsigned long kIrDwellMs = 500;
 
 // Live IR during charge: every 10 s dip the current setpoint to the low level
 // for ~1.2 s and compute IR from the two (V, I) points.
@@ -114,6 +155,7 @@ static lv_color_t stateColor(const char *nm)
     if (!strcmp(nm, "CC")) return lv_color_hex(0xFFA000);      // amber
     if (!strcmp(nm, "CV")) return lv_color_hex(0x0090B0);      // cyan
     if (!strcmp(nm, "IR")) return lv_color_hex(0x7040C0);      // purple dip
+    if (!strcmp(nm, "LEADCAL")) return lv_color_hex(0x7040C0); // same purple as IR
     if (!strcmp(nm, "PRE-CHG")) return lv_color_hex(0xE06000); // orange
     if (!strcmp(nm, "CC/CV")) return lv_color_hex(0xFFA000);
     if (!strcmp(nm, "DONE")) return lv_color_hex(0x00A048);    // green
@@ -164,8 +206,13 @@ static void setSetpoints(double volts, double amps)
     int32_t ic = (int32_t)lround(amps * PowerSupply.Current.adjFactor + PowerSupply.Current.adjOffset);
     vc = constrain(vc, 0, 65535);
     ic = constrain(ic, 0, 65535);
-    PowerSupply.Voltage.SetUpdate(vc);
-    PowerSupply.Current.SetUpdate(ic);
+    // bypassLock=true: this is the charger's own CC/CV control, not user
+    // input. SetUpdate() has its own built-in lock check (blocks all callers
+    // by default) — the auto-lock engaged for THIS exact charge/test would
+    // otherwise silently block the charger from ever changing its own
+    // setpoint, freezing the IR sweep's current steps and any CC/CV action.
+    PowerSupply.Voltage.SetUpdate(vc, true);
+    PowerSupply.Current.SetUpdate(ic, true);
 }
 
 static double measuredAmps()
@@ -242,7 +289,7 @@ static bool prechecksOk()
 bool batteryChargerActive()
 {
     return s_state == BatState::TRICKLE || s_state == BatState::CC_CV ||
-           s_state == BatState::IR_SWEEP;
+           s_state == BatState::IR_SWEEP || s_state == BatState::LEAD_CAL;
 }
 
 // ---------- Start actions ----------
@@ -275,6 +322,155 @@ static void startCharge()
     syncChargeBtn(true);
 }
 
+// ---------- Lead-resistance calibration (Settings > Calibration menu) ----------
+// Short the PS output leads together and measure the residual lead+contact
+// resistance, then persist it so it can be subtracted from every future
+// battery IR reading. Runs as its own dedicated state (not reusing IR_SWEEP)
+// so it can be tuned purely for calibration accuracy without touching the
+// battery IR test at all:
+//   - Higher test current (2A vs the battery test's fractions of Charge[A]):
+//     V = I*R, so more current directly multiplies the tiny voltage signal
+//     from a few-mOhm short against the ADC's roughly fixed noise floor —
+//     the single biggest lever on precision here.
+//   - More sweep points (10) across a wider current range: the standard
+//     error of a least-squares slope shrinks as the spread of the x-values
+//     (current, here) grows, for a given noise level.
+//   - Each recorded point is the average of every raw sample taken during
+//     its whole dwell window, not just one instantaneous reading at the end.
+//   - The entire sweep runs 3 times and the resulting R values are averaged
+//     (further sqrt(N) noise reduction) — and if the 3 runs disagree by more
+//     than a loose tolerance, the result says so instead of quietly trusting
+//     a possibly-bad measurement (loose short, flaky contact, etc).
+static float s_leadR_mOhm = 0.0f;
+static const double kLeadCalTargetV = 2.0; // safe headroom for a near-zero-ohm short
+static const double kLeadCalMaxA = 2.0;    // raised from 0.3A: ~6.7x more signal for the same lead R
+static const double kLeadCalFracs[] = {0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.875, 1.0};
+static const int kLeadCalPoints = sizeof(kLeadCalFracs) / sizeof(kLeadCalFracs[0]);
+static double s_leadCalI[kLeadCalPoints], s_leadCalV[kLeadCalPoints];
+static int s_leadCalStepIdx = 0;
+static const unsigned long kLeadCalDwellMs = 600; // ~2-3 raw samples averaged per point at the 250ms tick rate
+static double s_leadCalSumI = 0, s_leadCalSumV = 0;
+static int s_leadCalSampleCount = 0;
+static const int kLeadCalRepeats = 3;
+static int s_leadCalRepeatIdx = 0;
+static double s_leadCalRepeatMOhm[kLeadCalRepeats];
+static lv_obj_t *s_leadCalMbox = nullptr;  // progress window shown while the sweep runs
+static lv_obj_t *s_leadCalWin = nullptr;   // persistent "current value + recalibrate" window
+static lv_obj_t *s_leadCalValueLabel = nullptr;
+
+static void updateLeadCalValueLabel()
+{
+    if (!s_leadCalValueLabel || !lv_obj_is_valid(s_leadCalValueLabel)) return;
+    lv_label_set_text_fmt(s_leadCalValueLabel, "%.1f mΩ", (double)s_leadR_mOhm); // graph_R_16 has the Ω glyph
+}
+
+static void loadLeadR()
+{
+    Preferences p;
+    p.begin("batt", true);
+    s_leadR_mOhm = p.getFloat("lr", 0.0f);
+    p.end();
+}
+
+static void saveLeadR()
+{
+    Preferences p;
+    p.begin("batt", false);
+    p.putFloat("lr", s_leadR_mOhm);
+    p.end();
+}
+
+void startBattLeadCal()
+{
+    if (batteryChargerActive()) return; // don't interrupt an active charge/IR test
+    s_leadCalStepIdx = 0;
+    s_leadCalRepeatIdx = 0;
+    s_leadCalSumI = 0; s_leadCalSumV = 0; s_leadCalSampleCount = 0;
+
+    // Progress window (no buttons — the sweep is short and self-terminating).
+    // Updated each tick from batteryTick(); replaced by the result box at the end.
+    // No title: the "PS Lead Resistance" window is still open behind this.
+    s_leadCalMbox = lv_msgbox_create(NULL, "", "Measuring...  sweep 1/3, step 1/10", NULL, false);
+    lv_obj_set_width(s_leadCalMbox, 240);
+    lv_obj_center(s_leadCalMbox);
+
+    setSetpoints(kLeadCalTargetV, fmax(0.02, kLeadCalMaxA * kLeadCalFracs[0]));
+    ensureOutput(true);
+    s_phaseMs = millis();
+    s_state = BatState::LEAD_CAL;
+}
+
+static void leadCalConfirm_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    lv_obj_t *obj = lv_event_get_current_target(e);
+    if (!obj) return;
+    const char *btn_txt = lv_msgbox_get_active_btn_text(obj);
+    bool is_ok = (btn_txt && strcmp(btn_txt, "OK") == 0);
+    msgbox_close_deferred(obj);
+    if (is_ok) startBattLeadCal();
+}
+
+static void leadCalRecalibrate_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    // Title left off — the window open behind this dialog already says
+    // "PS Lead Resistance" in its own title bar; repeating it here just reads
+    // as a rendering glitch. Text kept short and given an explicit width so
+    // it wraps at word boundaries instead of splitting mid-word.
+    static const char *btns[] = {"OK", "Cancel", ""};
+    lv_obj_t *mbox = lv_msgbox_create(NULL, "", "Short the leads together,\nthen press OK.", btns, false);
+    lv_obj_set_width(mbox, 240);
+    lv_obj_add_event_cb(mbox, leadCalConfirm_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_center(mbox);
+}
+
+// Settings > Calibration entry point: a persistent window showing the current
+// calibrated lead resistance plus a button to remeasure it, instead of jumping
+// straight into a one-shot confirm dialog with nothing to look at afterward.
+void battLeadCalMenu_cb(lv_event_t *)
+{
+    if (s_leadCalWin && lv_obj_is_valid(s_leadCalWin)) {
+        updateLeadCalValueLabel();
+        lv_obj_clear_flag(s_leadCalWin, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+
+    // Match the other calibration windows' near-full-screen size (320x226) —
+    // anything smaller lets the Settings menu behind it show through the gaps.
+    s_leadCalWin = lv_win_create(lv_scr_act(), 36);
+    lv_obj_set_size(s_leadCalWin, 320, 226);
+    lv_win_add_title(s_leadCalWin, "PS Lead Resistance");
+    auto *close = lv_win_add_btn(s_leadCalWin, LV_SYMBOL_CLOSE, 60);
+    lv_obj_add_event_cb(close, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
+    auto *cont = lv_win_get_content(s_leadCalWin);
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *caption = lv_label_create(cont);
+    lv_label_set_text(caption, "Current calibrated value:");
+    lv_obj_align(caption, LV_ALIGN_TOP_MID, 0, 16);
+
+    s_leadCalValueLabel = lv_label_create(cont);
+    lv_obj_set_style_text_font(s_leadCalValueLabel, &graph_R_16, 0);
+    lv_obj_align(s_leadCalValueLabel, LV_ALIGN_TOP_MID, 0, 40);
+    updateLeadCalValueLabel();
+
+    lv_obj_t *hint = lv_label_create(cont);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(hint, 280);
+    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(hint, "Subtracted from every \nbattery IR reading.");
+    lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, 78);
+
+    lv_obj_t *btn = lv_btn_create(cont);
+    lv_obj_set_size(btn, 180, 40);
+    lv_obj_align(btn, LV_ALIGN_TOP_MID, 0, 120);
+    lv_obj_t *btnLbl = lv_label_create(btn);
+    lv_label_set_text(btnLbl, "Recalibrate");
+    lv_obj_center(btnLbl);
+    lv_obj_add_event_cb(btn, leadCalRecalibrate_cb, LV_EVENT_CLICKED, nullptr);
+}
+
 static void startIrTest()
 {
     readSettings();
@@ -282,6 +478,10 @@ static void startIrTest()
     if (!prechecksOk()) { s_state = BatState::FAULT; return; }
     if (batteryChargerActive()) return; // not while charging
 
+    // Deliberately no "is a battery attached" gate here — this test doubles as a
+    // smoke test against a plain resistive load (or nothing at all), and
+    // computeIrMOhm() already reports a correctly large value for either case
+    // instead of needing to detect/reject them up front.
     s_ir_mOhm = NAN;
     s_faultMsg = "";
     s_irStepIdx = 0;
@@ -349,22 +549,19 @@ static void batteryTick()
             s_irStepV[s_irStepIdx] = vbat;
             s_irStepIdx++;
             if (s_irStepIdx >= kIrPoints) {
-                double sumI = 0, sumV = 0, sumII = 0, sumIV = 0;
-                for (int i = 0; i < kIrPoints; i++) {
-                    sumI += s_irStepI[i]; sumV += s_irStepV[i];
-                    sumII += s_irStepI[i] * s_irStepI[i];
-                    sumIV += s_irStepI[i] * s_irStepV[i];
-                }
-                double n = kIrPoints;
-                double denom = n * sumII - sumI * sumI;
                 // R = +slope, not -slope: this is a CHARGER (current flows into
                 // the battery), so terminal V rises with I (V = Voc_chg + I*R) —
                 // opposite of the textbook discharge convention (V = Voc - I*R).
-                if (fabs(denom) > 1e-9)
-                    s_ir_mOhm = (n * sumIV - sumI * sumV) / denom * 1000.0;
+                s_ir_mOhm = computeIrMOhm(s_irStepI, s_irStepV, kIrPoints);
                 setSetpoints(vt, chargeAmps()); // restore full charge-current ceiling
                 s_liveIrPhase = 0;
-                s_liveIrCooldownMs = now + 300; // let the setpoint settle before the bar reacts again
+                // Let the setpoint settle before the bar reacts again. 300ms wasn't
+                // quite enough margin beyond the loop's own restabilize time (the
+                // per-step dwell during the sweep itself is 500ms) — the first
+                // reading right at the edge of the old cooldown could still catch
+                // amps mid-transition back to the real taper current, showing up
+                // as a visible jump/jitter right after each dip.
+                s_liveIrCooldownMs = now + 600;
                 // Space sweeps out as the pack fills: frequent early on, rare near full
                 // (avoids interrupting the charge every 10s once it barely matters).
                 int pct = chargePct(vbat, amps);
@@ -395,24 +592,109 @@ static void batteryTick()
             if (s_irStepIdx >= kIrPoints) {
                 // Least-squares line V = a + b*I over all points; R = +b for a
                 // CHARGER (current into the battery raises terminal V, unlike
-                // the textbook discharge convention V = Voc - I*R).
-                // Far more noise-resistant than a single two-point secant.
-                double sumI = 0, sumV = 0, sumII = 0, sumIV = 0;
-                for (int i = 0; i < kIrPoints; i++) {
-                    sumI += s_irStepI[i]; sumV += s_irStepV[i];
-                    sumII += s_irStepI[i] * s_irStepI[i];
-                    sumIV += s_irStepI[i] * s_irStepV[i];
-                }
-                double n = kIrPoints;
-                double denom = n * sumII - sumI * sumI;
-                s_ir_mOhm = (fabs(denom) > 1e-9)
-                                ? (n * sumIV - sumI * sumV) / denom * 1000.0
-                                : NAN;
+                // the textbook discharge convention V = Voc - I*R). Falls back to
+                // a V/I point estimate when current couldn't be swept — see
+                // computeIrMOhm(): that's the resistor/no-load smoke-test path,
+                // and correctly reports a large value there rather than an error.
+                s_ir_mOhm = computeIrMOhm(s_irStepI, s_irStepV, kIrPoints);
                 ensureOutput(false);
                 s_state = BatState::IDLE;
                 myTone(NOTE_A3, 100, true);
             } else {
                 setSetpoints(vt, fmax(0.05, chargeAmps() * kIrFracs[s_irStepIdx]));
+                s_phaseMs = now;
+            }
+        }
+        break;
+
+    case BatState::LEAD_CAL:
+        // Accumulate every tick (not just at dwell-end) so each recorded point
+        // is the average of several raw samples instead of one noisy read.
+        s_leadCalSumI += amps;
+        s_leadCalSumV += vbat;
+        s_leadCalSampleCount++;
+
+        if (s_leadCalMbox && lv_obj_is_valid(s_leadCalMbox)) {
+            lv_obj_t *txt = lv_msgbox_get_text(s_leadCalMbox);
+            if (txt) lv_label_set_text_fmt(txt, "Measuring...  sweep %d/%d, step %d/%d",
+                                           s_leadCalRepeatIdx + 1, kLeadCalRepeats,
+                                           s_leadCalStepIdx + 1, kLeadCalPoints);
+        }
+
+        if (now - s_phaseMs >= kLeadCalDwellMs) { // this point settled
+            s_leadCalI[s_leadCalStepIdx] = s_leadCalSumI / s_leadCalSampleCount;
+            s_leadCalV[s_leadCalStepIdx] = s_leadCalSumV / s_leadCalSampleCount;
+            s_leadCalStepIdx++;
+            s_leadCalSumI = 0; s_leadCalSumV = 0; s_leadCalSampleCount = 0;
+
+            if (s_leadCalStepIdx >= kLeadCalPoints) {
+                // One full sweep done. Either kick off the next repeat, or —
+                // if that was the last one — average all repeats and finish.
+                s_leadCalRepeatMOhm[s_leadCalRepeatIdx] = computeIrMOhm(s_leadCalI, s_leadCalV, kLeadCalPoints);
+                s_leadCalRepeatIdx++;
+
+                if (s_leadCalRepeatIdx < kLeadCalRepeats) {
+                    s_leadCalStepIdx = 0;
+                    setSetpoints(kLeadCalTargetV, fmax(0.02, kLeadCalMaxA * kLeadCalFracs[0]));
+                    s_phaseMs = now;
+                } else {
+                    double sum = 0;
+                    for (int i = 0; i < kLeadCalRepeats; i++) sum += s_leadCalRepeatMOhm[i];
+                    double mOhm = sum / kLeadCalRepeats;
+
+                    // Repeatability check: how much do the individual sweeps
+                    // disagree with each other? Flags a loose short, flaky
+                    // contact, or a genuinely noisy measurement instead of
+                    // silently trusting an average that hides real spread.
+                    double maxDev = 0;
+                    for (int i = 0; i < kLeadCalRepeats; i++)
+                        maxDev = fmax(maxDev, fabs(s_leadCalRepeatMOhm[i] - mOhm));
+                    bool noisy = maxDev > fmax(0.5, mOhm * 0.15);
+
+                    float oldLeadR = s_leadR_mOhm;
+                    s_leadR_mOhm = (float)mOhm;
+                    saveLeadR();
+                    updateLeadCalValueLabel(); // refresh if the window is still open behind the result box
+
+                    if (s_leadCalMbox && lv_obj_is_valid(s_leadCalMbox)) {
+                        msgbox_close_deferred(s_leadCalMbox);
+                        s_leadCalMbox = nullptr;
+                    }
+                    // Short, one-thought-per-line — graph_R_16 has almost no
+                    // line-height of its own, so more than a few short lines
+                    // reads as a solid, cramped block without extra spacing below.
+                    char resBuf[96];
+                    if (mOhm > 2000.0)
+                        snprintf(resBuf, sizeof(resBuf),
+                                 "Measured: %.0f mΩ\nToo high - retry", mOhm);
+                    else if (noisy)
+                        snprintf(resBuf, sizeof(resBuf),
+                                 "Measured: %.1f mΩ\nNoisy - retry?", mOhm);
+                    else
+                        snprintf(resBuf, sizeof(resBuf),
+                                 "Measured: %.1f mΩ\nWas:    %.1f mΩ", mOhm, oldLeadR);
+                    // No title (the window behind already says "PS Lead Resistance"),
+                    // explicit width so text wraps at word boundaries, and the
+                    // graph_R_16 font so the Ω glyph above actually renders instead
+                    // of showing up as an empty box (the default msgbox font lacks it).
+                    static const char *okBtn[] = {"OK", ""};
+                    lv_obj_t *res = lv_msgbox_create(NULL, "", resBuf, okBtn, false);
+                    lv_obj_set_width(res, 260);
+                    lv_obj_t *resTxt = lv_msgbox_get_text(res);
+                    lv_obj_set_style_text_font(resTxt, &graph_R_16, 0);
+                    lv_obj_set_style_text_line_space(resTxt, 8, 0);
+                    lv_obj_add_event_cb(res, [](lv_event_t *e) {
+                        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+                            msgbox_close_deferred(lv_event_get_current_target(e));
+                    }, LV_EVENT_VALUE_CHANGED, nullptr);
+                    lv_obj_center(res);
+
+                    ensureOutput(false);
+                    s_state = BatState::IDLE;
+                    myTone(NOTE_A3, 100, true);
+                }
+            } else {
+                setSetpoints(kLeadCalTargetV, fmax(0.02, kLeadCalMaxA * kLeadCalFracs[s_leadCalStepIdx]));
                 s_phaseMs = now;
             }
         }
@@ -433,10 +715,22 @@ static void batteryTick()
         if (s_mAh > 999.0) snprintf(mah, sizeof(mah), "%.1fAh", s_mAh / 1000.0);
         else snprintf(mah, sizeof(mah), "%03.0fmAh", s_mAh);
 
-        char ir[16]; // "---mΩ" or e.g. "1.2Ω" — collapses to Ω once IR exceeds 999 mΩ
-        if (std::isnan(s_ir_mOhm)) snprintf(ir, sizeof(ir), "---.-mΩ");
-        else if (s_ir_mOhm > 999.0) snprintf(ir, sizeof(ir), "%.1fΩ", s_ir_mOhm / 1000.0);
-        else snprintf(ir, sizeof(ir), "%.1fmΩ", s_ir_mOhm);
+        char ir[16]; // "---mΩ" (not tested yet), else scales mΩ -> Ω -> kΩ as it grows.
+                     // A resistor or open-terminal smoke test lands in the kΩ range —
+                     // that's the correct answer here, not an error state.
+        // Subtract the calibrated lead+contact resistance (Settings > Calibration >
+        // "Batt Lead R") so the displayed number is the battery's own IR, not the
+        // test leads'. Kept as a display-time correction (raw s_ir_mOhm untouched)
+        // so re-calibrating the leads doesn't require re-measuring the battery.
+        double irShown = std::isnan(s_ir_mOhm) ? NAN : fmax(0.0, s_ir_mOhm - s_leadR_mOhm);
+        if (std::isnan(irShown)) snprintf(ir, sizeof(ir), "---.-mΩ");
+        else if (irShown > 999999.0) snprintf(ir, sizeof(ir), ">999kΩ");
+        else if (irShown > 999.0) {
+            double ohms = irShown / 1000.0;
+            if (ohms > 999.0) snprintf(ir, sizeof(ir), "%.1fkΩ", ohms / 1000.0);
+            else snprintf(ir, sizeof(ir), "%.1fΩ", ohms);
+        }
+        else snprintf(ir, sizeof(ir), "%.1fmΩ", irShown);
 
         // Show the actual regulation mode while charging (device knows:
         // CC = current loop active, VC = voltage loop active → CV)
@@ -505,10 +799,50 @@ static void batteryTick()
     }
 }
 
+// Auto-save Target V / Charge / Cutoff / Timeout even if the user never
+// starts a charge or IR test (those are the only two places that used to
+// call saveSettings()) — same reasoning as the FunGen auto-save in main.cpp:
+// covers dialing in new values and power-cycling without an explicit save.
+static void autoSaveSettingsIfDirty()
+{
+    if (!s_tab) return;
+    int32_t vc = get_spinbox_data_by_id(s_tab, ID_VCELL);
+    int32_t ic = get_spinbox_data_by_id(s_tab, ID_ICHG);
+    int32_t it = get_spinbox_data_by_id(s_tab, ID_ITERM);
+    int32_t to = get_spinbox_data_by_id(s_tab, ID_TMOUT);
+    if (vc != s_mv_cell || ic != s_chg_mA || it != s_term_mA || to != s_timeout_min) {
+        s_mv_cell = vc; s_chg_mA = ic; s_term_mA = it; s_timeout_min = to;
+        saveSettings();
+    }
+}
+
+// Auto-lock V/I while a charge, IR test, or lead calibration is actively
+// driving the output — an accidental encoder turn or keypad entry on the
+// Main page shouldn't be able to step on a running test. Only unlocks again
+// whatever WE locked: a lock the user had already set manually before
+// starting is left alone when the test finishes.
+static bool s_autoLockedV = false, s_autoLockedI = false;
+
+static void updateAutoLock()
+{
+    if (batteryChargerActive()) {
+        if (!PowerSupply.Voltage.getLock()) { PowerSupply.Voltage.setLock(true); s_autoLockedV = true; }
+        if (!PowerSupply.Current.getLock()) { PowerSupply.Current.setLock(true); s_autoLockedI = true; }
+    } else {
+        if (s_autoLockedV) { PowerSupply.Voltage.setLock(false); s_autoLockedV = false; }
+        if (s_autoLockedI) { PowerSupply.Current.setLock(false); s_autoLockedI = false; }
+    }
+}
+
 void BatteryChargerInterval(unsigned long interval)
 {
     static unsigned long timer_ = {0};
     schedule(&batteryTick, interval, timer_);
+    updateAutoLock();
+
+    // Debounced: only touches flash every 2s while dirty, idempotent when clean.
+    static unsigned long saveTimer_ = {0};
+    schedule(&autoSaveSettingsIfDirty, 2000, saveTimer_);
 }
 
 // ---------- UI creation ----------
@@ -567,6 +901,7 @@ void createBatteryTab(lv_obj_t *parent)
     lv_obj_set_style_pad_all(parent, 0, LV_PART_MAIN);
 
     loadSettings();
+    loadLeadR();
 
     // Spinboxes in a 2-column x 3-row grid. spinbox_pro puts its label
     // above-left of the box, so each column needs clear space to its left:

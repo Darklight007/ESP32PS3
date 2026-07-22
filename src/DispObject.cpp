@@ -200,11 +200,11 @@ void DispObjects::SetRotaryStep(double val)
     rotaryEncoderStep = val;
 }
 
-void DispObjects::SetUpdate(int value)
+void DispObjects::SetUpdate(int value, bool bypassLock)
 {
     // value-= adjOffset;
     // if (lock || value / adjFactor < minValue || value / adjFactor > maxValue)
-    if (lock || (value) < 0 || (value - adjOffset) > maxValue)
+    if ((lock && !bypassLock) || (value) < 0 || (value - adjOffset) > maxValue)
     {
         myTone(NOTE_A5, 50);
         return;
@@ -273,8 +273,6 @@ void DispObjects::Flush(void)
 
 void DispObjects::SetEncoderUpdate(void)
 {
-    // if (lock)
-    // return;
     // static int counter = 0;
     // if ((counter++ % 4) == 3)
 
@@ -283,11 +281,16 @@ void DispObjects::SetEncoderUpdate(void)
     if (rotaryOldValue == count)
         return;
 
-    if (count > rotaryOldValue)
-        SetUpdate(adjValue + rotaryEncoderStep);
+    // Locked: still track the encoder position (so unlocking later doesn't
+    // suddenly jump by however far it turned while locked), just don't act on it.
+    if (!lock)
+    {
+        if (count > rotaryOldValue)
+            SetUpdate(adjValue + rotaryEncoderStep);
 
-    else if (count < rotaryOldValue)
-        SetUpdate(adjValue - rotaryEncoderStep);
+        else if (count < rotaryOldValue)
+            SetUpdate(adjValue - rotaryEncoderStep);
+    }
 
     rotaryOldValue = count;
     // adjValueChanged=true;

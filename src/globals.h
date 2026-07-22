@@ -25,7 +25,7 @@ extern int globalSliderXValue;
 extern int32_t encoder1_value, encoder2_value;
 
 // Waveform data
-extern bool blockAll;
+extern volatile bool blockAll;
 
 // Input state
 extern bool dropdown_active;
@@ -35,6 +35,11 @@ extern bool manualTabSelection;   // Tracks if user manually clicked a tab (disa
 // Utility charts
 extern lv_obj_t *util_Arbit_chart;
 extern lv_chart_series_t *util_Arbit_chart_series;
+
+// Which arbitrary-waveform bank (0 or 1) the ARBT chart editor is currently
+// drawing/editing on. Set by loadFromBank() when the user picks a page;
+// touch-drag editing, "Clear", and waveform presets all target this bank.
+extern int g_arbtActiveBank;
 
 // Bucket and label data
 extern uint16_t dataBuckets[BUCKET_COUNT];

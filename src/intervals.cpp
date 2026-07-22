@@ -11,10 +11,10 @@
 
 // External references
 extern Device PowerSupply;
-extern bool lvglChartIsBusy;
-extern bool blockAll;
+extern volatile bool lvglChartIsBusy;
+extern volatile bool blockAll;
 extern volatile bool adcDataReady;
-extern bool lvglIsBusy;
+extern volatile bool lvglIsBusy;
 extern FFTHandler V;
 extern FFTHandler I;
 
