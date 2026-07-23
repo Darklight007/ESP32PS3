@@ -92,17 +92,9 @@ int Tabs::getCurrentPage()
 }
 void Tabs::setCurrentPage(int n)
 {
-    // Save FGen settings when leaving Utility page (page 3) - only if changed.
-    // This is preferences/SPIFFS I/O, NOT an LVGL call — safe on either core.
-    if (getCurrentPage() == 3 && n != 3 && PowerSupply.funGenMemDirty)
-    {
-        PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
-        PowerSupply.funGenMemDirty = false;  // Clear dirty flag after save
-    }
-
 #if DEFER_PAGE_CHANGE_TO_CORE1
     // If called from anywhere other than Core 1 (main loop / setup), defer the LVGL
-    // work to Core 1 to avoid cross-core lv_tabview_set_act races. Core 1 picks this
+    // work — and the FunGen tab-leave save below — to Core 1. Core 1 picks this
     // up via drainPendingPageChange() and re-enters setCurrentPage where this guard
     // becomes false, so the work happens directly below.
     if (xPortGetCoreID() != 1)
@@ -113,6 +105,21 @@ void Tabs::setCurrentPage(int n)
         return;
     }
 #endif
+
+    // Save FGen settings when leaving Utility page (page 3) - only if changed.
+    // MOVED here (Core-1-only, past the deferral above) 2026-07: this is SPIFFS
+    // I/O, and a prior comment claimed that made it "safe on either core" — it
+    // doesn't. SPIFFS.begin()/end() and its mount table are not safe to touch
+    // from two cores at once. This used to run unconditionally on whichever
+    // core called setCurrentPage(), including Core 0 (Task_ADC, via
+    // keyCheckLoop's page-nav keys) — racing against main.cpp's own periodic
+    // FunGen auto-save (Core 1), corrupting SPIFFS's heap structures and
+    // crashing with "CORRUPT HEAP" / multi_heap_free assert.
+    if (getCurrentPage() == 3 && n != 3 && PowerSupply.funGenMemDirty)
+    {
+        PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
+        PowerSupply.funGenMemDirty = false;  // Clear dirty flag after save
+    }
 
     TRACE("setPage_pre_setact");
     bool new_tab = (getCurrentPage() != n);

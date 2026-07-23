@@ -14,6 +14,7 @@
 #include "battery_charger.h"
 #include "device.hpp"
 #include "globals.h"
+#include "tabs.h" // Tabs::getCurrentPage(), for battTabVisible()
 #include "spinbox_pro.h"
 #include "buzzer.h"
 #include "intervals.h"
@@ -237,6 +238,17 @@ static double measuredAmps()
     if (PowerSupply.mA_Active)
         i /= 1000.0;
     return i;
+}
+
+// Is the Batt sub-tab actually the one on screen right now? Utility is main
+// page index 3; "Batt" is sub-tab index 4 within tabview_utility (Mem=0,
+// FGen=1, Arbt=2, Tabl=3, Batt=4 — see ui_creation.cpp's Utility_tabview()).
+// Used to skip the status-label LVGL updates below when nobody can see them —
+// they ran unconditionally every 250ms regardless of which tab was open,
+// competing with the rest of Core 1 (rendering/SCPI/input) for no reason.
+static bool battTabVisible()
+{
+    return Tabs::getCurrentPage() == 3 && lv_tabview_get_tab_act(tabview_utility) == 4;
 }
 
 static void readSettings()
@@ -899,8 +911,13 @@ static void batteryTick()
         break;
     }
 
-    // Status labels (only when the Utility page objects exist)
-    if (s_mah_label && lv_obj_is_valid(s_mah_label) && !blockAll) {
+    // Status labels — only touched when the Batt tab is actually visible.
+    // The charge/test state machine above always keeps running regardless
+    // (a charge in progress must stay correct even if you switch tabs); this
+    // part is purely cosmetic and was previously running unconditionally
+    // every 250ms whether or not anyone could see it, competing with LVGL
+    // rendering/SCPI/input on Core 1 for no reason.
+    if (s_mah_label && lv_obj_is_valid(s_mah_label) && !blockAll && battTabVisible()) {
         char tstr[16] = "0:00:00";
         if (batteryChargerActive() || s_state == BatState::DONE) {
             unsigned long secs = (now - s_startMs) / 1000;
@@ -935,10 +952,19 @@ static void batteryTick()
             nm = "EXT ON"; // output running from another page — press CHARGE to adopt/supervise
             // Safety: setpoint left high from another test (e.g. 32 V) with a
             // battery on the terminals — flash red HIGH V! and beep until fixed.
+            // DISABLED 2026-07: fires any time the PSU is used normally for
+            // anything else (this only checks "IDLE on this tab + output ON",
+            // which is true almost always outside an active charge) and the
+            // two myTone(..., true) calls are BLOCKING (delay() inside
+            // buzzer.cpp) — 600ms of frozen Core 1 (LVGL/SCPI/input) every
+            // time the user's actual working voltage happened to exceed this
+            // tab's leftover Target V by >0.3V. That's the "random long beep
+            // with a blocking delay" reported during ordinary use.
             static bool warnedHighV = false;
             if (vbat > vt + 0.3) {
                 nm = "HIGH V!";
-                if (!warnedHighV) { myTone(NOTE_C5, 300, true); myTone(NOTE_C5, 300, true); warnedHighV = true; }
+                // if (!warnedHighV) { myTone(NOTE_C5, 300, true); myTone(NOTE_C5, 300, true); warnedHighV = true; }
+                warnedHighV = true;
             } else
                 warnedHighV = false;
         }
@@ -1094,9 +1120,20 @@ static void sb_changed_cb(lv_event_t *e)
 
 // Writes the preset's V/cell into Target [V] and applies it the same way a
 // manual spinbox edit would. Shared by touch selection and encoder stepping.
+static void saveChemIndex(uint16_t sel)
+{
+    Preferences p;
+    p.begin("batt", false);
+    p.putInt("ci", sel);
+    p.end();
+}
+
 static void applyChemPreset(uint16_t sel)
 {
-    if (sel >= (uint16_t)s_numChemPresets || s_chemPresets[sel].mv < 0) return; // Custom: leave as-is
+    saveChemIndex(sel); // persist the selection itself, not just the resulting Target V,
+                        // so the dropdown shows the real chemistry again after a restart
+                        // instead of always falling back to "Custom".
+    if (sel >= (uint16_t)s_numChemPresets || s_chemPresets[sel].mv < 0) return; // Custom: leave Target as-is
     lv_spinbox_set_value(s_target_sb, s_chemPresets[sel].mv);
     readSettings();
     if ((s_state == BatState::CC_CV || s_state == BatState::TRICKLE) && s_liveIrPhase == 0)
@@ -1141,7 +1178,18 @@ void createBatteryTab(lv_obj_t *parent)
         }
         lv_dropdown_set_options(s_chem_dd, opts);
     }
-    lv_dropdown_set_selected(s_chem_dd, s_numChemPresets - 1); // "Custom" — don't clobber a loaded Target on boot
+    // Restore whichever preset was last selected, instead of always forcing
+    // "Custom". Just moves the dropdown's own selection — deliberately does
+    // NOT go through applyChemPreset() (that would re-apply/overwrite Target V
+    // and setSetpoints() a value that loadSettings() already restored above).
+    {
+        Preferences p;
+        p.begin("batt", true);
+        int32_t savedChem = p.getInt("ci", s_numChemPresets - 1);
+        p.end();
+        savedChem = constrain(savedChem, 0, s_numChemPresets - 1);
+        lv_dropdown_set_selected(s_chem_dd, (uint16_t)savedChem);
+    }
     lv_dropdown_set_symbol(s_chem_dd, NULL); // no arrow glyph: was overlapping the name in a 96px-wide box
     // Keep the selected-item highlight (default true): it only affects the
     // open list, not the closed box, and it's the only visual feedback while
@@ -1160,7 +1208,15 @@ void createBatteryTab(lv_obj_t *parent)
     sbs[0] = spinbox_pro(parent, "#FFC107 Target [V]:#", 1000, 4400, 4, 1, LV_ALIGN_TOP_LEFT, colX[1], rowY[0], width, ID_VCELL, &graph_R_16); // 1.000V floor: room for NiMH/NiCd/LTO presets, not just Li chemistries
     lv_spinbox_set_value(sbs[0], s_mv_cell);
     s_target_sb = sbs[0];
-    sbs[1] = spinbox_pro(parent, "#FFC107 Charge [A]:#", 10, 5000, 4, 1, LV_ALIGN_TOP_LEFT, colX[2], rowY[0], width, ID_ICHG, &graph_R_16);
+    // Charge current ceiling: use the PSU's own calibrated max instead of a
+    // hardcoded 5000mA guess — matches whatever this specific unit's DAC
+    // calibration actually allows (Current.maxValue/adjFactor is the same
+    // expression scpi_parser.cpp uses to report the real max current).
+    // Current.maxValue is set earlier in this same setupPowerSupply() call
+    // (SetupHandlers.cpp), before tabs are built, so it's already valid here.
+    int32_t chgMaxMA = (int32_t)lround(PowerSupply.Current.maxValue / PowerSupply.Current.adjFactor * 1000.0);
+    if (chgMaxMA < 100 || chgMaxMA > 9999) chgMaxMA = 5000; // sane fallback if maxValue isn't set up yet
+    sbs[1] = spinbox_pro(parent, "#FFC107 Charge [A]:#", 10, chgMaxMA, 4, 1, LV_ALIGN_TOP_LEFT, colX[2], rowY[0], width, ID_ICHG, &graph_R_16);
     lv_spinbox_set_value(sbs[1], s_chg_mA);
     sbs[2] = spinbox_pro(parent, "#FFC107 Cutoff [A]:#", 5, 1000, 4, 1, LV_ALIGN_TOP_LEFT, colX[0], rowY[1], width, ID_ITERM, &graph_R_16);
     lv_spinbox_set_value(sbs[2], s_term_mA);
