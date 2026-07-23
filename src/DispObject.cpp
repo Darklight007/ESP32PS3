@@ -63,9 +63,17 @@ void DispObjects::StatisticsUpdate(double value)
 {
     Statistics(value);
 
-    double er_sample = Statistics.ER(2 * adc_maxValue); // maxValue
-    if (!std::isinf(er_sample))
-        effectiveResolution(er_sample);
+    // EXPERIMENTAL: ER() returns a 0.0 sentinel (not NaN/inf) whenever the
+    // window doesn't have enough samples yet for a real variance (e.g. right
+    // after ResetStats()). Pushing that placeholder into effectiveResolution
+    // as if it were a real "0-bit" reading briefly drags the moving average
+    // down for no physical reason. Skip it until Statistics has >= 2 samples.
+    if (Statistics.windowSizeIndex_ >= 2)
+    {
+        double er_sample = Statistics.ER(2 * adc_maxValue); // maxValue
+        if (!std::isinf(er_sample))
+            effectiveResolution(er_sample);
+    }
 }
 
 void DispObjects::displayUpdate(void)

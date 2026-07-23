@@ -292,6 +292,18 @@ public:
     mutable double cachedMean_{0.0}; // OPTIMIZATION: Cached mean to avoid repeated divisions
     mutable bool meanDirty_{true};   // Flag to track if mean needs recalculation
 
+    // EXPERIMENTAL (see experimental-er-fix branch): Welford running mean/M2,
+    // tracked in parallel with sum_/sum_sq_ purely to compute a numerically
+    // stable Variance()/StandardDeviation(). The old "sum_sq_ - sum_*mean"
+    // formula suffers catastrophic cancellation when the signal's mean is
+    // large relative to its noise (e.g. Voltage's ~32V range vs mV-scale
+    // ripple), causing Effective Resolution to drift until ResetStats() is
+    // called. Welford's incremental deviation-from-mean formula doesn't
+    // difference two large near-equal numbers, so it doesn't drift the same
+    // way. sum_/sum_sq_ are kept untouched for Mean()/Rms()/Sum().
+    double welfordMean_{0.0};
+    double M2_{0.0};
+
     // Constructor with explicit keyword to prevent implicit conversions
     explicit MovingStatistics(uint16_t n = 64)
         : NofAvgs(n), samples_(n, 0.0)
@@ -319,6 +331,12 @@ public:
             size_t index = windowSizeIndex_++;
             samples_[index] = sample;
             sum_sq_ += sample * sample;
+
+            // Welford add-only (window not yet full): count goes from index to index+1
+            double delta = sample - welfordMean_;
+            welfordMean_ += delta / static_cast<double>(index + 1);
+            double delta2 = sample - welfordMean_;
+            M2_ += delta * delta2;
         }
         else
         {
@@ -329,6 +347,21 @@ public:
             sum_ += -oldest;
             sum_sq_ += sample * sample - oldest * oldest;
             windowSizeIndex_++;
+
+            if (NofAvgs > 1)
+            {
+                // Welford removal of `oldest` (count NofAvgs -> NofAvgs-1)
+                double deltaR = oldest - welfordMean_;
+                double meanAfterRemove = welfordMean_ - deltaR / static_cast<double>(NofAvgs - 1);
+                M2_ -= deltaR * (oldest - meanAfterRemove);
+                welfordMean_ = meanAfterRemove;
+
+                // Welford add of `sample` (count NofAvgs-1 -> NofAvgs)
+                double deltaA = sample - welfordMean_;
+                welfordMean_ += deltaA / static_cast<double>(NofAvgs);
+                double delta2A = sample - welfordMean_;
+                M2_ += deltaA * delta2A;
+            }
         }
 
         // OPTIMIZATION: Mark mean as dirty so it will be recalculated on next access
@@ -376,14 +409,16 @@ public:
         return std::sqrt(sum_sq_ / static_cast<double>(currentSize));
     }
 
-    // Calculate the variance of the samples
+    // Calculate the variance of the samples.
+    // EXPERIMENTAL: uses the Welford running M2 (see operator() above) instead
+    // of sum_sq_ - sum_*mean, which loses precision when the mean is large
+    // relative to the noise (Voltage's ER drift). Same result, stable long-term.
     double Variance() const
     {
         size_t n = std::min(windowSizeIndex_, static_cast<uint64_t>(NofAvgs));
         if (n < 2)
             return 0.0;
-        double mean = sum_ / static_cast<double>(n);
-        double variance = (sum_sq_ - (sum_ * mean)) / static_cast<double>(n - 1);
+        double variance = M2_ / static_cast<double>(n - 1);
         return (variance >= 0.0) ? variance : 0.0;
     }
 
@@ -412,6 +447,8 @@ public:
         absMax = -std::numeric_limits<double>::infinity();
         cachedMean_ = 0.0;
         meanDirty_ = true;  // OPTIMIZATION: Mark mean for recalculation
+        welfordMean_ = 0.0;
+        M2_ = 0.0;
     }
 };
 
