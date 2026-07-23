@@ -53,6 +53,19 @@ static int s_termCount = 0;
 static double s_ir_mOhm = NAN;
 static const char *s_faultMsg = "";
 
+// Pulse-charging state (declared here, ahead of chargeAmps()/startCharge(),
+// so enterCcCvSetpoint() below can see it; full explanation + UI/persistence
+// code lives further down next to startIrTest()).
+static bool s_pulseEnabled = false;
+static int32_t s_pulseFreqHz_x10 = 10; // tenths of Hz: 10 = 1.0Hz (range 5-100 = 0.5-10Hz)
+static int32_t s_pulseDutyPct = 25;    // 10-50%
+static const double kPulseVoltageMarginV = 0.05; // 50mV below Target V while pulsing
+static const double kPulseRestA = 0.02;          // near-open-circuit "rest" floor
+static int s_pulsePhase = 0;             // 0 = ON (peak), 1 = REST
+static unsigned long s_pulsePhaseMs = 0;
+static double s_pulseLastOnAmps = 0;     // settled ON-phase current — used for taper/termination instead of raw amps, which swings wildly between phases
+static double s_pulseLastOnVolts = 0;    // settled ON-phase voltage — same reasoning, for the progress bar/percentage
+
 // This test is deliberately battery-agnostic — it's also used as a smoke test
 // against a plain resistive load. Two regimes:
 //  - Current actually swept by a useful amount: least-squares slope R = dV/dI,
@@ -156,6 +169,8 @@ static lv_color_t stateColor(const char *nm)
     if (!strcmp(nm, "CV")) return lv_color_hex(0x0090B0);      // cyan
     if (!strcmp(nm, "IR")) return lv_color_hex(0x7040C0);      // purple dip
     if (!strcmp(nm, "LEADCAL")) return lv_color_hex(0x7040C0); // same purple as IR
+    if (!strcmp(nm, "PLS ON")) return lv_color_hex(0x9040D0);  // pulse charging: brighter purple while sourcing peak current
+    if (!strcmp(nm, "PLS OFF")) return lv_color_hex(0x4A2870); // pulse charging: dim purple during rest phase
     if (!strcmp(nm, "PRE-CHG")) return lv_color_hex(0xE06000); // orange
     if (!strcmp(nm, "CC/CV")) return lv_color_hex(0xFFA000);
     if (!strcmp(nm, "DONE")) return lv_color_hex(0x00A048);    // green
@@ -186,6 +201,7 @@ static double chargePct(double vbat, double amps)
 
 // Spinbox ids inside the Batt tab (searched per-parent, keep unique here)
 enum { ID_CELLS = 10, ID_VCELL, ID_ICHG, ID_ITERM, ID_TMOUT };
+enum { ID_PFREQ = 20, ID_PDUTY }; // Pulse Charge window spinboxes (own parent, no collision risk)
 
 // ---------- Helpers ----------
 static bool outputIsOn()
@@ -260,6 +276,20 @@ static double targetVolts() { return s_cells * (s_mv_cell / 1000.0); }
 static double chargeAmps() { return s_chg_mA / 1000.0; }
 static double trickleAmps() { return fmax(0.05, chargeAmps() / 10.0); }
 
+// Entry point into the main (non-trickle) charge setpoint, from either
+// startCharge() or the TRICKLE->CC_CV handoff — picks steady CC/CV or starts
+// pulse mode's ON phase, whichever is currently enabled.
+static void enterCcCvSetpoint(double vt)
+{
+    if (s_pulseEnabled) {
+        s_pulsePhase = 0;
+        s_pulsePhaseMs = millis();
+        setSetpoints(vt - kPulseVoltageMarginV, chargeAmps()); // peak current = the same Charge [A] as steady CC/CV
+    } else {
+        setSetpoints(vt, chargeAmps());
+    }
+}
+
 static void syncChargeBtn(bool checked)
 {
     if (!s_chg_btn) return;
@@ -312,10 +342,10 @@ static void startCharge()
     s_liveIrNextMs = millis() + 10000;
 
     if (vbat < 2.5 * s_cells && vbat > 0.5) {
-        setSetpoints(vt, trickleAmps()); // deep discharged → gentle pre-charge
+        setSetpoints(vt, trickleAmps()); // deep discharged → gentle pre-charge (never pulsed)
         s_state = BatState::TRICKLE;
     } else {
-        setSetpoints(vt, chargeAmps());
+        enterCcCvSetpoint(vt);
         s_state = BatState::CC_CV;
     }
     ensureOutput(true);
@@ -471,6 +501,121 @@ void battLeadCalMenu_cb(lv_event_t *)
     lv_obj_add_event_cb(btn, leadCalRecalibrate_cb, LV_EVENT_CLICKED, nullptr);
 }
 
+// ---------- Pulse charging (optional alternative to steady CC/CV) ----------
+// Unipolar (positive-only) pulse charging: alternates a peak-current ON phase
+// with a low-current "rest" phase at a configurable frequency/duty cycle.
+// Based on published pulse-charging research (e.g. Journal of Power Sources /
+// IEEE Trans. Industrial Electronics-style studies): can reduce polarization
+// and heat build-up vs. steady CC/CV, and may give a modest, *temporary*
+// capacity recovery on a degraded cell by lowering effective internal
+// impedance — it does NOT reverse chemical degradation (dried electrolyte,
+// cracked active material, heavy SEI growth).
+//
+// SAFETY: this firmware has no temperature sensor anywhere — there is no
+// automatic thermal cutoff. Monitor cell temperature externally. The 50mV
+// voltage-ceiling margin below Target V (matching the "don't command 4.20V
+// during a pulse — the instantaneous IR-drop overshoot can push the real
+// interface potential past 4.20V" reasoning) is applied automatically
+// whenever pulse mode is enabled. Only unipolar pulses are implemented —
+// no negative/"reflex" discharge pulses, which need much more care than a
+// simple bench supply can safely provide.
+// (State variables declared earlier in the file, next to s_ir_mOhm, so
+// enterCcCvSetpoint() can see them before this point.)
+static lv_obj_t *s_pulseWin = nullptr;
+static lv_obj_t *s_pulseEnableSw = nullptr;
+
+static void loadPulseSettings()
+{
+    Preferences p;
+    p.begin("batt", true);
+    s_pulseEnabled    = p.getBool("pe", false);
+    s_pulseFreqHz_x10 = p.getInt("pf", 10);
+    s_pulseDutyPct    = p.getInt("pd", 25);
+    p.end();
+}
+
+static void savePulseSettings()
+{
+    Preferences p;
+    p.begin("batt", false);
+    p.putBool("pe", s_pulseEnabled);
+    p.putInt("pf", s_pulseFreqHz_x10);
+    p.putInt("pd", s_pulseDutyPct);
+    p.end();
+}
+
+static void pulseEnableSw_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    s_pulseEnabled = lv_obj_has_state(s_pulseEnableSw, LV_STATE_CHECKED);
+    savePulseSettings();
+}
+
+static void pulseSpinbox_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    lv_obj_t *sb = lv_event_get_target(e);
+    lv_obj_t *cont = lv_obj_get_parent(sb);
+    s_pulseFreqHz_x10 = get_spinbox_data_by_id(cont, ID_PFREQ);
+    s_pulseDutyPct    = get_spinbox_data_by_id(cont, ID_PDUTY);
+    savePulseSettings();
+}
+
+// Settings > Batt tab entry point: a small window (the main Batt tab has no
+// free space at all) with an enable switch and the three pulse parameters,
+// plus the mandatory safety caveats spelled out instead of implied.
+static void battPulseMenu_cb(lv_event_t *)
+{
+    if (s_pulseWin && lv_obj_is_valid(s_pulseWin)) {
+        lv_obj_clear_flag(s_pulseWin, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+
+    s_pulseWin = lv_win_create(lv_scr_act(), 36);
+    lv_obj_set_size(s_pulseWin, 320, 226);
+    lv_win_add_title(s_pulseWin, "Pulse Charge (Experimental)");
+    auto *close = lv_win_add_btn(s_pulseWin, LV_SYMBOL_CLOSE, 60);
+    lv_obj_add_event_cb(close, btn_close_hide_obj_cb, LV_EVENT_CLICKED, nullptr);
+    auto *cont = lv_win_get_content(s_pulseWin);
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *warn = lv_label_create(cont);
+    lv_label_set_long_mode(warn, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(warn, 290);
+    lv_label_set_recolor(warn, true);
+    lv_label_set_text(warn, "#FF6060 No temp sensor - monitor heat yourself.#\n"
+                            "#FF6060 Does not reverse cell degradation.#");
+    lv_obj_align(warn, LV_ALIGN_TOP_LEFT, 4, 4);
+
+    lv_obj_t *enLbl = lv_label_create(cont);
+    lv_label_set_text(enLbl, "Enable pulse charging:");
+    lv_obj_align(enLbl, LV_ALIGN_TOP_LEFT, 4, 48);
+    s_pulseEnableSw = lv_switch_create(cont);
+    lv_obj_align(s_pulseEnableSw, LV_ALIGN_TOP_LEFT, 230, 44);
+    if (s_pulseEnabled) lv_obj_add_state(s_pulseEnableSw, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(s_pulseEnableSw, pulseEnableSw_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    const int y0 = 82, yStep = 42, x0 = 8, sbW = 100;
+    lv_obj_t *sbF = spinbox_pro(cont, "#FFC107 Freq [x0.1Hz]:#", 5, 100, 3, 0, LV_ALIGN_TOP_LEFT, x0, y0, sbW, ID_PFREQ, &graph_R_16);
+    lv_spinbox_set_value(sbF, s_pulseFreqHz_x10);
+    lv_obj_add_event_cb(sbF, pulseSpinbox_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    lv_obj_t *sbD = spinbox_pro(cont, "#FFC107 Duty [%]:#", 10, 50, 2, 0, LV_ALIGN_TOP_LEFT, x0, y0 + yStep, sbW, ID_PDUTY, &graph_R_16);
+    lv_spinbox_set_value(sbD, s_pulseDutyPct);
+    lv_obj_add_event_cb(sbD, pulseSpinbox_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    // No separate "Peak current" field — it would just duplicate the main
+    // tab's Charge [A] spinbox and raise the question of which one actually
+    // wins. Peak ON-phase current always IS Charge [A]; pulse mode only
+    // changes how it's applied (duty-cycled instead of steady).
+    lv_obj_t *hint = lv_label_create(cont);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(hint, 190);
+    lv_label_set_text(hint, "Peak current = the main\ntab's Charge [A] setting.\n\n"
+                            "CV ceiling auto-drops\n50mV below Target V\nwhile pulsing.");
+    lv_obj_align(hint, LV_ALIGN_TOP_LEFT, 120, y0 + 2);
+}
+
 static void startIrTest()
 {
     readSettings();
@@ -526,9 +671,46 @@ static void batteryTick()
 
         if (s_state == BatState::TRICKLE) {
             if (vbat >= 3.0 * s_cells) { // recovered → full current
-                setSetpoints(vt, chargeAmps());
+                enterCcCvSetpoint(vt);
                 s_state = BatState::CC_CV;
             }
+            break;
+        }
+
+        // Pulse mode: alternates a peak-current ON phase with a low-current
+        // REST phase instead of a steady setpoint. Paused (not run) while a
+        // live-IR dip is in progress (s_liveIrPhase != 0) — the dip takes over
+        // the setpoint the same way it already does for steady CC/CV, and
+        // pulsing resumes automatically once the dip finishes below.
+        double pulseCeilingV = vt - kPulseVoltageMarginV;
+        if (s_pulseEnabled && s_liveIrPhase == 0) {
+            double periodMs = 1000.0 / (s_pulseFreqHz_x10 / 10.0); // tenths-of-Hz -> ms period
+            double onMs = periodMs * (s_pulseDutyPct / 100.0);
+            double offMs = periodMs - onMs;
+
+            if (s_pulsePhase == 0 && now - s_pulsePhaseMs >= (unsigned long)onMs) {
+                s_pulseLastOnAmps = amps; // settled ON-phase current, sampled right before REST
+                s_pulseLastOnVolts = vbat;
+                s_pulsePhase = 1;
+                setSetpoints(pulseCeilingV, kPulseRestA);
+                s_pulsePhaseMs = now;
+            } else if (s_pulsePhase == 1 && now - s_pulsePhaseMs >= (unsigned long)offMs) {
+                s_pulsePhase = 0;
+                setSetpoints(pulseCeilingV, chargeAmps()); // peak = the main tab's Charge [A]
+                s_pulsePhaseMs = now;
+            }
+
+            // Termination uses the settled ON-phase current, not the raw
+            // instantaneous amps (which swing wildly between phases). Pulse
+            // mode has its own termination check here instead of the generic
+            // one below, which is skipped entirely while pulsing.
+            if (vbat >= pulseCeilingV * 0.985 &&
+                s_pulseLastOnAmps >= 0 && s_pulseLastOnAmps <= s_term_mA / 1000.0)
+                s_termCount++;
+            else
+                s_termCount = 0;
+            if (s_termCount >= 8)
+                stopAll(BatState::DONE);
             break;
         }
 
@@ -538,11 +720,15 @@ static void batteryTick()
         // dip below what's already flowing, so it works throughout the CV
         // taper without asking for more current than the loop is already
         // giving. Skipped below ~60mA — too little current to get usable dI.
-        if (s_liveIrPhase == 0 && now >= s_liveIrNextMs && amps > 0.06) {
+        // While pulsing, only starts from a settled ON phase (never mid-REST,
+        // where current is intentionally near-zero) and resumes pulsing
+        // afterward instead of restoring the steady setpoint.
+        bool okToStartDip = s_pulseEnabled ? (s_pulsePhase == 0 && amps > 0.06) : (amps > 0.06);
+        if (s_liveIrPhase == 0 && now >= s_liveIrNextMs && okToStartDip) {
             s_liveIrPhase = 1;
             s_irStepIdx = 0;
             s_liveIrAmps0 = amps;
-            setSetpoints(vt, fmax(0.02, s_liveIrAmps0 * kIrFracs[0]));
+            setSetpoints(s_pulseEnabled ? pulseCeilingV : vt, fmax(0.02, s_liveIrAmps0 * kIrFracs[0]));
             s_liveIrPhaseMs = now;
         } else if (s_liveIrPhase == 1 && now - s_liveIrPhaseMs >= kIrDwellMs) {
             s_irStepI[s_irStepIdx] = amps;
@@ -553,7 +739,14 @@ static void batteryTick()
                 // the battery), so terminal V rises with I (V = Voc_chg + I*R) —
                 // opposite of the textbook discharge convention (V = Voc - I*R).
                 s_ir_mOhm = computeIrMOhm(s_irStepI, s_irStepV, kIrPoints);
-                setSetpoints(vt, chargeAmps()); // restore full charge-current ceiling
+                // Resume whichever mode was active before the dip.
+                if (s_pulseEnabled) {
+                    s_pulsePhase = 0;
+                    s_pulsePhaseMs = now;
+                    setSetpoints(pulseCeilingV, chargeAmps());
+                } else {
+                    setSetpoints(vt, chargeAmps()); // restore full charge-current ceiling
+                }
                 s_liveIrPhase = 0;
                 // Let the setpoint settle before the bar reacts again. 300ms wasn't
                 // quite enough margin beyond the loop's own restabilize time (the
@@ -567,13 +760,15 @@ static void batteryTick()
                 int pct = chargePct(vbat, amps);
                 s_liveIrNextMs = now + (pct < 50 ? 10000 : 60000);
             } else {
-                setSetpoints(vt, fmax(0.02, s_liveIrAmps0 * kIrFracs[s_irStepIdx]));
+                setSetpoints(s_pulseEnabled ? pulseCeilingV : vt, fmax(0.02, s_liveIrAmps0 * kIrFracs[s_irStepIdx]));
                 s_liveIrPhaseMs = now;
             }
         }
 
         // Termination: in CV (voltage reached) and current tapered below limit.
         // Never count during an IR dip — the forced low current would fake it.
+        // Pulse mode has its own equivalent check above and always breaks out
+        // before reaching here, so this only ever runs for steady CC/CV.
         if (s_liveIrPhase == 0 &&
             vbat >= vt * 0.985 && amps >= 0 && amps <= s_term_mA / 1000.0)
             s_termCount++;
@@ -748,9 +943,12 @@ static void batteryTick()
                 warnedHighV = false;
         }
         if (s_state == BatState::CC_CV) {
-            DEVICE st = PowerSupply.getStatus();
-            if (st == DEVICE::CC) nm = "CC";
-            else if (st == DEVICE::VC || st == DEVICE::ON) nm = "CV";
+            if (s_pulseEnabled) nm = s_pulsePhase == 0 ? "PLS ON" : "PLS OFF";
+            else {
+                DEVICE st = PowerSupply.getStatus();
+                if (st == DEVICE::CC) nm = "CC";
+                else if (st == DEVICE::VC || st == DEVICE::ON) nm = "CV";
+            }
         }
 
         // Visible proof the sweep is really stepping through each current
@@ -769,7 +967,19 @@ static void batteryTick()
         // Progress bar + % — only updated while supervising (or done) AND NOT during live IR measurement dips
         if ((batteryChargerActive() || s_state == BatState::DONE) &&
             s_liveIrPhase == 0 && now >= s_liveIrCooldownMs) {
-            double pct = chargePct(vbat, amps);
+            // Pulse mode: use the settled ON-phase current instead of the raw
+            // instantaneous amps, which swing between peak and near-zero every
+            // cycle — feeding that straight into chargePct() would make the
+            // bar visibly jitter at the pulse frequency instead of showing a
+            // stable trend (same class of jitter fixed for the live IR dip).
+            // vbat swings just as much as amps between ON/REST (V = Voc + I*R
+            // — REST's near-zero current drops V toward the resting Voc) —
+            // needs the same settled-ON-phase substitution as amps, or the
+            // bar would still jitter from the voltage side alone.
+            bool pulsingNow = (s_state == BatState::CC_CV && s_pulseEnabled);
+            double ampsForPct = pulsingNow ? s_pulseLastOnAmps : amps;
+            double vbatForPct = pulsingNow ? s_pulseLastOnVolts : vbat;
+            double pct = chargePct(vbatForPct, ampsForPct);
             lv_bar_set_value(s_bar, (int)lround(pct), LV_ANIM_OFF); // bar itself is integer-resolution
             lv_obj_set_style_bg_color(s_bar, stateColor(nm), LV_PART_INDICATOR);
             lv_label_set_text_fmt(s_pct_label, "%.1f%%", pct);
@@ -859,10 +1069,16 @@ static void chg_btn_event_cb(lv_event_t *e)
 static void ir_btn_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_SHORT_CLICKED) return;
-    // While charging: trigger an immediate live-IR dip instead of a standalone test
+    // While charging: trigger an immediate live-IR dip instead of a standalone
+    // test. Pulse mode now supports live-IR dips too (batteryTick() pauses
+    // pulsing for the dip and resumes it afterward) — but checking current
+    // right at click-time would often land during a REST phase (intentionally
+    // near-zero current) and wrongly report "I too low for IR" even though
+    // charging is fine, so require a settled ON phase instead.
     if (s_state == BatState::CC_CV && s_liveIrPhase == 0) {
-        if (measuredAmps() > 0.06) s_liveIrNextMs = 0; // dip now
-        else s_faultMsg = "I too low for IR";
+        bool ready = s_pulseEnabled ? (s_pulsePhase == 0 && measuredAmps() > 0.06) : (measuredAmps() > 0.06);
+        if (ready) s_liveIrNextMs = 0; // dip now
+        else s_faultMsg = s_pulseEnabled ? "Wait for pulse ON phase" : "I too low for IR";
     } else
         startIrTest();
 }
@@ -902,6 +1118,7 @@ void createBatteryTab(lv_obj_t *parent)
 
     loadSettings();
     loadLeadR();
+    loadPulseSettings();
 
     // Spinboxes in a 2-column x 3-row grid. spinbox_pro puts its label
     // above-left of the box, so each column needs clear space to its left:
@@ -956,13 +1173,13 @@ void createBatteryTab(lv_obj_t *parent)
         lv_label_set_recolor(lbl, true);
         lv_label_set_text(lbl, "#FFC107 Timer:#");
         lv_obj_set_style_text_font(lbl, &montserrat_b_12, 0); // matches spinbox_pro's own label style (s_style_spinbox_lbl)
-        lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, colX[2], rowY[1] - 18);
+        lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, colX[2], rowY[1] - 16);
     }
     s_timer_label = lv_label_create(parent);
     lv_obj_set_style_text_font(s_timer_label, &graph_R_16, 0);
     lv_obj_set_style_text_color(s_timer_label, lv_color_hex(0xE0F0FF), 0);
     lv_label_set_text(s_timer_label, "0:00:00");
-    lv_obj_align(s_timer_label, LV_ALIGN_TOP_LEFT, colX[2], rowY[1]);
+    lv_obj_align(s_timer_label, LV_ALIGN_TOP_LEFT, colX[2], rowY[1]+4);
 
     for (int i = 0; i < 4; i++) {
         lv_obj_add_event_cb(sbs[i], sb_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -985,12 +1202,17 @@ void createBatteryTab(lv_obj_t *parent)
     lv_style_init(&style_ir);
     lv_style_set_bg_color(&style_ir, lv_palette_darken(LV_PALETTE_INDIGO, 2));
     lv_style_set_text_color(&style_ir, lv_palette_main(LV_PALETTE_AMBER));
+    static lv_style_t style_pulse;
+    lv_style_init(&style_pulse);
+    lv_style_set_bg_color(&style_pulse, lv_palette_darken(LV_PALETTE_DEEP_PURPLE, 3)); // darker bg
+    lv_style_set_text_color(&style_pulse, lv_color_hex(0xF0E0FF)); // near-white lavender: was purple-on-purple, unreadable
 
-    // Span the full grid width (colX[0] .. colX[2]+width) with a small gap
-    // between the two buttons, instead of leaving column 3's width empty.
-    const int rowSpan = colX[2] + width - colX[0], btnGap = 8;
-    const int btnW = (rowSpan - btnGap) / 2;
-    const int btnBx = colX[0] + btnW + btnGap;
+    // Span the full grid width (colX[0] .. colX[2]+width) with small gaps
+    // between three buttons, instead of leaving column 3's width empty.
+    const int rowSpan = colX[2] + width - colX[0], btnGap = 6;
+    const int btnW = (rowSpan - 2 * btnGap) / 3;
+    const int btnBx1 = colX[0] + btnW + btnGap;
+    const int btnBx2 = btnBx1 + btnW + btnGap;
 
     s_chg_btn = lv_btn_create(parent);
     lv_obj_add_flag(s_chg_btn, LV_OBJ_FLAG_CHECKABLE);
@@ -1012,11 +1234,22 @@ void createBatteryTab(lv_obj_t *parent)
     lv_obj_set_style_border_color(s_ir_btn, lv_color_hex(0x405060), LV_PART_MAIN);
     // lv_obj_set_style_border_width(s_ir_btn, 1, LV_PART_MAIN);
     lv_obj_add_style(s_ir_btn, &style_ir, LV_STATE_DEFAULT);
-    lv_obj_align(s_ir_btn, LV_ALIGN_TOP_LEFT, btnBx, rowY[2]);
+    lv_obj_align(s_ir_btn, LV_ALIGN_TOP_LEFT, btnBx1, rowY[2]);
     lv_obj_t *l = lv_label_create(s_ir_btn);
     lv_label_set_text(l, "IR TEST");
     lv_obj_center(l);
     lv_obj_add_event_cb(s_ir_btn, ir_btn_event_cb, LV_EVENT_SHORT_CLICKED, NULL);
+
+    lv_obj_t *pulse_btn = lv_btn_create(parent);
+    lv_obj_set_size(pulse_btn, btnW, 26);
+    lv_obj_set_style_radius(pulse_btn, 3, LV_PART_MAIN);
+    lv_obj_set_style_border_color(pulse_btn, lv_color_hex(0x405060), LV_PART_MAIN);
+    lv_obj_add_style(pulse_btn, &style_pulse, LV_STATE_DEFAULT);
+    lv_obj_align(pulse_btn, LV_ALIGN_TOP_LEFT, btnBx2, rowY[2]);
+    lv_obj_t *pl = lv_label_create(pulse_btn);
+    lv_label_set_text(pl, "PULSE");
+    lv_obj_center(pl);
+    lv_obj_add_event_cb(pulse_btn, battPulseMenu_cb, LV_EVENT_CLICKED, NULL);
 
     // Bottom: instrument readout panel — state chip + big V/A + details line
     lv_obj_t *panel = lv_obj_create(parent);
