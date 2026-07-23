@@ -112,6 +112,12 @@ void DispObjects::statUpdate(void)
 }
 
 
+// EXPERIMENTAL DEBUG (er-fix branch): count how often the bar actually gets a
+// NEW value pushed (i.e. how fast the underlying data path really moves),
+// separately from how fast the display can visibly show it. Read/reset from
+// intervals.cpp once per second. Remove once the bar-speed investigation is done.
+volatile uint32_t g_barInvalidateCount = 0;
+
 void DispObjects::barUpdate(void)
 {
     // Guard: skip if Core 1 is rendering — lv_obj_set_x() is not safe from Core 0
@@ -136,6 +142,7 @@ void DispObjects::barUpdate(void)
     if (*Bar.curValuePtr != newBarValue) {
         *Bar.curValuePtr = newBarValue;
         lv_obj_invalidate(Bar.bar);
+        g_barInvalidateCount++; // EXPERIMENTAL DEBUG
     }
 
     // Always update max/min markers (remove old value check for maximum refresh)

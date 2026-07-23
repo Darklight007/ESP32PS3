@@ -509,30 +509,62 @@ bool scanI2CBus(TwoWire &i2cBus, uint8_t address)
         return false; // No device found
 }
 
+// EXPERIMENTAL DEBUG (er-fix branch, bar-speed investigation): per-flush
+// stats, read/reset once/sec from intervals.cpp. Remove once resolved.
+volatile uint32_t g_flushCount = 0;
+volatile uint32_t g_flushPixelsTotal = 0;
+volatile uint32_t g_flushMicrosTotal = 0;
+volatile uint32_t g_flushMicrosMax = 0;
+volatile uint32_t g_flushMaxW = 0, g_flushMaxH = 0;
+
+// EXPERIMENTAL (er-fix branch, bar-speed investigation): both endWrite()'s
+// DMA_BUSY_CHECK (== dmaWait() on ESP32-S3, see TFT_eSPI_ESP32_S3.h:138) and
+// our own explicit dmaWait() force a synchronous wait for the SPI/DMA
+// transfer to finish before returning to LVGL - so every flush of a large
+// widget (e.g. the big V/A readout, ~267x82px) blocks Core 1 for its full
+// transfer time (measured ~15ms), even though pushImageDMA() itself already
+// waits for any earlier pending transfer at its own start (TFT_eSPI_ESP32_S3.c:684)
+// before issuing a new one - that's the only synchronization actually needed
+// for correctness. Removing the per-flush startWrite()/endWrite() bracket
+// (no other file calls these directly - verified) lets LVGL/Core 1 move on
+// immediately after queuing the DMA transfer; the next flush's pushImageDMA()
+// waits for THIS one to finish only if it hasn't already.
+static bool dmaTransactionOpen = false;
+
 // LVGL display flush function
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p)
 {
-    tft.startWrite();
+    unsigned long t0 = micros(); // EXPERIMENTAL DEBUG
+
+    uint32_t w = area->x2 - area->x1 + 1; // EXPERIMENTAL DEBUG (moved up for both branches)
+    uint32_t h = area->y2 - area->y1 + 1;
 
 #if DMA
-    // Use DMA to push image to display
-    tft.pushImageDMA(area->x1, area->y1,
-                     area->x2 - area->x1 + 1,
-                     area->y2 - area->y1 + 1,
-                     (uint16_t *)&color_p->full);
-    tft.dmaWait(); // Wait for DMA transfer to complete
-
+    if (!dmaTransactionOpen)
+    {
+        tft.startWrite();
+        dmaTransactionOpen = true;
+    }
+    // pushImageDMA() waits internally (dmaWait()) for any still-pending
+    // previous transfer before starting this one - no explicit wait/endWrite
+    // here, so Core 1 doesn't block for the transfer to complete.
+    tft.pushImageDMA(area->x1, area->y1, w, h, (uint16_t *)&color_p->full);
 #else
     // Push image to display without DMA
-    uint32_t w = area->x2 - area->x1 + 1;
-    uint32_t h = area->y2 - area->y1 + 1;
+    tft.startWrite();
     tft.setAddrWindow(area->x1, area->y1, w, h);
     tft.pushColors((uint16_t *)&color_p->full, w * h, true);
+    tft.endWrite();
 #endif
 
-    tft.endWrite();
-
     lv_disp_flush_ready(disp); // Indicate that flushing is done
+
+    // EXPERIMENTAL DEBUG
+    unsigned long dt = micros() - t0;
+    g_flushCount++;
+    g_flushPixelsTotal += (w * h);
+    g_flushMicrosTotal += dt;
+    if (dt > g_flushMicrosMax) { g_flushMicrosMax = dt; g_flushMaxW = w; g_flushMaxH = h; }
 }
 
 // Initialize the display driver for LVGL
