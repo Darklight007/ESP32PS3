@@ -198,17 +198,8 @@ void loop()
   HistogramChartRefreshInterval(125); // Refresh histogram chart every 125ms
   GraphChartRefreshInterval(125);   // Refresh graph chart every 125ms
 
-  // EXPERIMENTAL (er-fix branch): at 1000 SPS or in FUN mode, exact digits on
-  // the big V/A readout are unreadable anyway — what matters is the bar
-  // tracking the measurement. The bar's data path is already per-sample
-  // (Task_BarGraph pushes at 1 kHz); its VISIBLE rate is limited by Core 1
-  // render/SPI bandwidth, which the large-font label redraws eat. Slowing the
-  // numeric labels here frees that bandwidth for the bar.
-  bool barPriorityMode = (PowerSupply.settingParameters.adcRate == 4) ||
-                         (PowerSupply.getStatus() == DEVICE::FUN);
-
   // Flush measures - Slow when encoder active for immediate visual feedback
-  if (encoderActive || barPriorityMode)
+  if (encoderActive)
     FlushMeasuresInterval(500); // Very xxxx update during encoder activity
   else
     FlushMeasuresInterval(100 /**PowerSupply.Voltage.measured.NofAvgs*/); // Slow update even when idle for responsive display
@@ -221,9 +212,7 @@ void loop()
   PowerSupply.Current.Flush();
 
   // Adaptive statistics update: Slow when encoder active for responsive display
-  if (barPriorityMode)
-    statisticUpdateInterval(1000); // Bar-priority: 12 stat labels are the other big render load
-  else if (encoderActive)
+  if (encoderActive)
     statisticUpdateInterval(500); // Slow update during encoder activity
   else
     statisticUpdateInterval(333); // Normal update when idle
