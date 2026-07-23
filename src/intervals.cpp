@@ -168,21 +168,6 @@ void VCCCInterval(unsigned long interval)
 static unsigned long lvgl_timer_ = {0};
 static unsigned int lvglIsBlocked = {0};
 
-// EXPERIMENTAL DEBUG (er-fix branch): measure how often lv_refr_now() actually
-// completes and how long each call takes, to find out whether the bar's
-// visible speed is limited by SPI/DMA transfer time or by loop cadence.
-// Prints once/sec on page 2. Remove once the bar-speed investigation is done.
-extern volatile uint32_t g_barInvalidateCount;
-extern volatile uint32_t g_flushCount;
-extern volatile uint32_t g_flushPixelsTotal;
-extern volatile uint32_t g_flushMicrosTotal;
-extern volatile uint32_t g_flushMicrosMax;
-extern volatile uint32_t g_flushMaxW, g_flushMaxH;
-static uint32_t dbgRefrCount = 0;
-static uint32_t dbgRefrMicrosTotal = 0;
-static uint32_t dbgRefrMicrosMax = 0;
-static unsigned long dbgPrintTimer = 0;
-
 void LvglUpdatesInterval(unsigned long interval, bool forceUpdate)
 {
     // Safety: ensure invalidation is always enabled (could get stuck disabled
@@ -197,12 +182,7 @@ void LvglUpdatesInterval(unsigned long interval, bool forceUpdate)
                  if (!lvglChartIsBusy && !blockAll && (forceUpdate || adcDataReady))
                  {
                      lvglIsBusy = 1;
-                     unsigned long t0 = micros(); // EXPERIMENTAL DEBUG
                      lv_refr_now(NULL);
-                     unsigned long dt = micros() - t0; // EXPERIMENTAL DEBUG
-                     dbgRefrCount++;
-                     dbgRefrMicrosTotal += dt;
-                     if (dt > dbgRefrMicrosMax) dbgRefrMicrosMax = dt;
                      lvglIsBusy = 0;
                      lvglIsBlocked = 0;
                      return;
@@ -218,31 +198,6 @@ void LvglUpdatesInterval(unsigned long interval, bool forceUpdate)
     {
         lvglIsBlocked = 0;
         lv_obj_invalidate(lv_scr_act());
-    }
-
-    // EXPERIMENTAL DEBUG: print once/sec — redraws/sec, avg+max redraw time,
-    // and how many times the bar actually got a new value in that second.
-    if (Tabs::getCurrentPage() == 2 && millis() - dbgPrintTimer >= 1000)
-    {
-        dbgPrintTimer = millis();
-        uint32_t avgUs = dbgRefrCount ? (dbgRefrMicrosTotal / dbgRefrCount) : 0;
-        uint32_t avgFlushUs = g_flushCount ? (g_flushMicrosTotal / g_flushCount) : 0;
-        Serial.printf("\n[BARDBG] refr/s=%lu avgUs=%lu maxUs=%lu barPush/s=%lu | flush/s=%lu avgFlushUs=%lu maxFlushUs=%lu maxFlushWH=%lux%lu px/s=%lu\n",
-                      (unsigned long)dbgRefrCount, (unsigned long)avgUs,
-                      (unsigned long)dbgRefrMicrosMax, (unsigned long)g_barInvalidateCount,
-                      (unsigned long)g_flushCount, (unsigned long)avgFlushUs,
-                      (unsigned long)g_flushMicrosMax, (unsigned long)g_flushMaxW, (unsigned long)g_flushMaxH,
-                      (unsigned long)g_flushPixelsTotal);
-        dbgRefrCount = 0;
-        dbgRefrMicrosTotal = 0;
-        dbgRefrMicrosMax = 0;
-        g_barInvalidateCount = 0;
-        g_flushCount = 0;
-        g_flushPixelsTotal = 0;
-        g_flushMicrosTotal = 0;
-        g_flushMicrosMax = 0;
-        g_flushMaxW = 0;
-        g_flushMaxH = 0;
     }
 }
 
