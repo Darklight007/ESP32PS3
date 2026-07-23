@@ -87,9 +87,14 @@ void Device::calibrationUpdate(void)
 
     Current.calib_1m = 1.0 / Current.calib_m;
 
-    // Update current ADC full-scale range for correct ENOB calculation
-    // A mode: 6.5536A, mA mode: 0.0065536A (1000x smaller)
-    Current.adc_maxValue = mA_Active ? 0.0065536 : 6.5536;
+    // EXPERIMENTAL (er-fix): FSR for ER must be in the SAME unit as the
+    // values it's compared against. Current.measured/Statistics are already
+    // numerically expressed in whichever unit is active (the mA/A graph
+    // label just relabels the same digit, e.g. ui_helpers.cpp "8mA"/"8A" -
+    // see Power.measureUpdate()'s *0.001 which only rescales for watts).
+    // Dividing FSR by 1000 in mA mode compared it against the wrong scale,
+    // understating ER by log2(1000) =~ 10 bits. Same numeric FSR both modes.
+    Current.adc_maxValue = 6.5536;
 }
 
 //  std::vector<Calibration> CalBank
