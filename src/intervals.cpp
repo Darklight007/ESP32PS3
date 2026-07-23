@@ -49,7 +49,12 @@ void FlushMeasuresInterval(unsigned long interval)
 {
     static unsigned long timer_ = {0};
     schedule([]
-             { PowerSupply.FlushMeasures(); }, interval, timer_);
+             {
+                 // FlushMeasures() only formats/writes the Main page's V/A labels;
+                 // the underlying measurement accumulation happens elsewhere and
+                 // keeps running regardless. Skip the LVGL writes when Main isn't visible.
+                 if (Tabs::getCurrentPage() != 2) return;
+                 PowerSupply.FlushMeasures(); }, interval, timer_);
 }
 
 void statisticUpdateInterval(unsigned long interval)
@@ -72,8 +77,13 @@ void statisticUpdateInterval(unsigned long interval)
                     lastCurrent = PowerSupply.Current.adjValue;
                 }
 
-                PowerSupply.Voltage.statUpdate();
-                PowerSupply.Current.statUpdate(); },
+                // Data above (SaveSetting) always runs. Only the stat label
+                // formatting/writes below are Main-page-only display work —
+                // skip them when Main isn't the visible tab.
+                if (Tabs::getCurrentPage() == 2) {
+                    PowerSupply.Voltage.statUpdate();
+                    PowerSupply.Current.statUpdate();
+                } },
              interval, timer_);
 }
 
