@@ -150,11 +150,11 @@ void loop()
   static unsigned long lastBarRender = 0;
   if (millis() - lastBarRender >= 100)
   {
-    // lvglIsBusy = true;
+    lvglIsBusy = true;
     TRACE("loop_pre_lvgl");
     lv_timer_handler();
     TRACE("loop_post_lvgl");
-    // lvglIsBusy = false;
+    lvglIsBusy = false;
     lastBarRender = millis();
   }
   // }
