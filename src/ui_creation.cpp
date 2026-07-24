@@ -918,6 +918,8 @@ void StatusBar()
 
         lv_obj_add_style(statusLabel_time, &style_font, LV_STATE_DEFAULT);
         lv_obj_add_style(statusLabel_avg, &style_font, LV_STATE_DEFAULT);
+        // Moved from the per-call path below (was re-applied every 300ms forever)
+        lv_obj_set_style_text_font(statusLabel_wifi, &lv_font_montserrat_10, LV_STATE_DEFAULT);
 
         lv_obj_align(statusLabel_time, LV_ALIGN_LEFT_MID, -12, 0);
         lv_obj_align(statusLabel_wifi, LV_ALIGN_CENTER, -30, 0);
@@ -925,7 +927,13 @@ void StatusBar()
         statusCreationFlag = true;
     }
 
-    // Update OVP/OCP status indicator - compact format like mWh display
+    // Update OVP/OCP status indicator - compact format like mWh display.
+    // AUDIT_BARGRAPH_ENCODER #4 (2026-07-23): all three writes below used to run
+    // unconditionally every 300ms even though the underlying values usually only
+    // change once/sec or less - each lv_label_set_text/_fmt call invalidates the
+    // label regardless of whether the string actually changed. Font-style was the
+    // worst offender: re-applied every single call forever, not just once at
+    // creation. Now gated on real change, same pattern as barUpdate()'s markers.
     char protStatus[64];
     const char *ovpColor = PowerSupply.settingParameters.ovpTriggered ? "#FF0000 " :
                            (PowerSupply.settingParameters.ovpEnabled ? "#00FF00 " : "#888888 ");
@@ -935,9 +943,13 @@ void StatusBar()
     snprintf(protStatus, sizeof(protStatus), "%sOVP:%.2fV# %sOCP:%.2fA#",
              ovpColor, PowerSupply.settingParameters.voltageLimitMax,
              ocpColor, PowerSupply.settingParameters.currentLimitMax);
-    lv_label_set_recolor(statusLabel_wifi, true);
-    lv_label_set_text(statusLabel_wifi, protStatus);
-    lv_obj_set_style_text_font(statusLabel_wifi, &lv_font_montserrat_10, LV_STATE_DEFAULT);
+    static char lastProtStatus[64] = {0};
+    if (strcmp(protStatus, lastProtStatus) != 0)
+    {
+        lv_label_set_recolor(statusLabel_wifi, true);
+        lv_label_set_text(statusLabel_wifi, protStatus);
+        strcpy(lastProtStatus, protStatus);
+    }
 
     static time_t now;
     char strftime_buf[16];
@@ -946,15 +958,23 @@ void StatusBar()
     time(&now);
     localtime_r(&now, &timeinfo);
     strftime(strftime_buf, sizeof(strftime_buf), "%H:%M:%S", &timeinfo);
-    lv_label_set_text_fmt(statusLabel_time, "%s", strftime_buf);
+    static char lastTimeStr[16] = {0};
+    if (strcmp(strftime_buf, lastTimeStr) != 0)
+    {
+        lv_label_set_text_fmt(statusLabel_time, "%s", strftime_buf);
+        strcpy(lastTimeStr, strftime_buf);
+    }
 
     static char str[35];
-
-    sprintf(str, "SPS:%3i;#Avgs ", PowerSupply.adc.realADCSpeed);
-
-    strcat(str, "%i");
-
-    lv_label_set_text_fmt(statusLabel_avg, str, PowerSupply.Voltage.measured.NofAvgs);
+    static int lastSps = -1, lastAvgs = -1;
+    if (PowerSupply.adc.realADCSpeed != lastSps || PowerSupply.Voltage.measured.NofAvgs != lastAvgs)
+    {
+        sprintf(str, "SPS:%3i;#Avgs ", PowerSupply.adc.realADCSpeed);
+        strcat(str, "%i");
+        lv_label_set_text_fmt(statusLabel_avg, str, PowerSupply.Voltage.measured.NofAvgs);
+        lastSps = PowerSupply.adc.realADCSpeed;
+        lastAvgs = PowerSupply.Voltage.measured.NofAvgs;
+    }
 
     auto StatsPositions = [&](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
     {

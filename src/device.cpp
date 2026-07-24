@@ -385,10 +385,9 @@ void Device::SaveMemoryFgen(const String &key, const FunGen &data)
 
     // Save large arrays to SPIFFS (3.375MB available!)
     // No more 1984-byte NVS blob limits or chunking needed!
-    if (!SPIFFS.begin(true)) {
-        Serial.println("SPIFFS Mount Failed");
-        return;
-    }
+    // SPIFFS is mounted once at boot (main.cpp) and stays mounted - mount/unmount
+    // is the expensive part of a SPIFFS op (confirmed live: 638ms for one
+    // mount+unmount elsewhere), not the read/write itself.
 
     // Save table_points (4000 bytes) - completely separate from Arbt
     fs::File tableFile = SPIFFS.open("/fgen_table.dat", "w");
@@ -405,8 +404,6 @@ void Device::SaveMemoryFgen(const String &key, const FunGen &data)
         arbFile.close();
         Serial.println("Arbt bank data saved to SPIFFS");
     }
-
-    SPIFFS.end();
 }
 
 FunGen Device::LoadMemoryFgen(const String &key)
@@ -440,11 +437,7 @@ FunGen Device::LoadMemoryFgen(const String &key)
     }
     StoreMem.end();
 
-    // Load large arrays from SPIFFS
-    if (!SPIFFS.begin(true)) {
-        Serial.println("SPIFFS Mount Failed");
-        return data;
-    }
+    // Load large arrays from SPIFFS (mounted once at boot in main.cpp)
 
     // Load table_points (4000 bytes) - independent from Arbt
     fs::File tableFile = SPIFFS.open("/fgen_table.dat", "r");
@@ -466,7 +459,6 @@ FunGen Device::LoadMemoryFgen(const String &key)
         Serial.println("Arbt bank data file not found - using defaults");
     }
 
-    SPIFFS.end();
     return data;
 }
 
@@ -1190,7 +1182,7 @@ void Device::FlushBars(void)
         // _lv_disp_refr_timer(NULL);
         // lv_bar_set_value(Voltage.Bar.bar, Voltage.measured.value / Voltage.maxValue * lv_bar_get_max_value(Voltage.Bar.bar), LV_ANIM_OFF);
         // lv_tick_inc(10);
-        lv_refr_now(NULL);
+        // lv_refr_now(NULL);
 
         Voltage.Bar.changed = false;
         Current.Bar.changed = false;

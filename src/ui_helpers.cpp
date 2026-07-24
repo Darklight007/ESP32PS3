@@ -455,10 +455,8 @@ void graphReset()
 
 void LoadGraphData()
 {
-    if (!SPIFFS.begin(true)) {
-        Serial.println("SPIFFS Mount Failed (graph data)");
-        return;
-    }
+    // SPIFFS is mounted once at boot (main.cpp) and stays mounted - mount/unmount
+    // is the expensive part of a SPIFFS op, not the read/write itself.
     fs::File f = SPIFFS.open("/graph_data.dat", "r");
     if (f && f.size() == sizeof(graph_data_V) + sizeof(graph_data_I)) {
         f.read((uint8_t *)graph_data_V, sizeof(graph_data_V));
@@ -468,21 +466,23 @@ void LoadGraphData()
         Serial.println("No saved graph data (or size mismatch) - starting blank");
     }
     if (f) f.close();
-    SPIFFS.end();
 }
 
 void SaveGraphDataIfDirty()
 {
+    // Confirmed live: SPIFFS open()-for-write-on-existing-file + close() cost
+    // ~330ms combined (vs <20ms for the actual data write) - a known SPIFFS
+    // weakness, not something fixable here without migrating storage (bigger
+    // change, own task). This function firing less often is the mitigation
+    // available right now - see the 180000ms interval at the call site.
     if (!g_graphDataDirty) return;
     g_graphDataDirty = false;
-    if (!SPIFFS.begin(true)) return;
     fs::File f = SPIFFS.open("/graph_data.dat", "w");
     if (f) {
         f.write((uint8_t *)graph_data_V, sizeof(graph_data_V));
         f.write((uint8_t *)graph_data_I, sizeof(graph_data_I));
         f.close();
     }
-    SPIFFS.end();
 }
 
 void GraphPush()

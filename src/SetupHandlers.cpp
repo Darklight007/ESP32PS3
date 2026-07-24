@@ -459,7 +459,7 @@ void createTasks()
         "Task_bargraph",       /* Name of task */
         8000,          /* Stack size of task */
         NULL,          /* Parameter of the task */
-        0,             /* Priority of the task */
+        5,             /* Priority of the task */
         &Task_bargraph,        /* Task handle to keep track of created task */
         0              /* Pin task to core 0 */
     );

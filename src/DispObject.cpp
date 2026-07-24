@@ -115,6 +115,8 @@ void DispObjects::statUpdate(void)
 void DispObjects::barUpdate(void)
 {
     // Guard: skip if Core 1 is rendering — lv_obj_set_x() is not safe from Core 0
+    // (camera test 2026-07-23 confirmed: removing this produced stale-pixel
+    // corruption within seconds and zero speed gain)
     if (blockAll || lvglIsBusy) return;
     if (!Bar.bar || !Bar.curValuePtr) return;  // Add null check for Power measurement
 
@@ -138,9 +140,11 @@ void DispObjects::barUpdate(void)
         lv_obj_invalidate(Bar.bar);
     }
 
-    // Always update max/min markers (remove old value check for maximum refresh)
-    lv_obj_set_x(Bar.bar_maxMarker, newMaxX);
-    lv_obj_set_x(Bar.bar_minMarker, newMinX);
+    // Update max/min markers only on change — unconditional lv_obj_set_x() did a
+    // style lookup every 1ms tick (~2000/s) even when the markers hadn't moved
+    // (AUDIT_BARGRAPH_ENCODER #3), stealing Core 0 time from the ADC path.
+    if (newMaxX != lastMaxMarkerX) { lv_obj_set_x(Bar.bar_maxMarker, newMaxX); lastMaxMarkerX = newMaxX; }
+    if (newMinX != lastMinMarkerX) { lv_obj_set_x(Bar.bar_minMarker, newMinX); lastMinMarkerX = newMinX; }
 
     Bar.changed = false;
 }
@@ -274,7 +278,7 @@ void DispObjects::Flush(void)
         lv_obj_set_width(Bar.bar_adjValue, ((adjValue - adjOffset) / adjFactor) / maxValue * lv_bar_get_max_value(Bar.bar));
         adjValueChanged = false;
         // lv_obj_invalidate(label_setValue);
-        Serial.printf("\n%10.4f", (adjValue - adjOffset) / adjFactor);
+        // Serial.printf("\n%10.4f", (adjValue - adjOffset) / adjFactor);
     }
     // _lv_disp_refr_timer(NULL);
 }

@@ -695,6 +695,8 @@ public:
 
     // Per-instance bar cache (avoids stale shared statics across V/I/P)
     lv_coord_t cachedBarMax{0};
+    int lastMaxMarkerX{INT32_MIN}; // per-instance: barUpdate() marker change-detect
+    int lastMinMarkerX{INT32_MIN};
     lv_coord_t cachedBarWidth{0};
     lv_coord_t cachedBarX{0};
     double cachedScaleFactor{0};

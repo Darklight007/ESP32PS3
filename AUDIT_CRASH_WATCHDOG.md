@@ -100,3 +100,95 @@ Three distinct, real issues, none currently fixed in the running firmware:
 
 Per user instruction, no code changes were made as part of this audit —
 analysis and documentation only.
+
+## Update — 2026-07-23: status re-verified against current code, not assumed
+
+Re-checked all three issues directly against the running source (not just this
+document's prior claims) before touching anything.
+
+### Issue 3 (cross-core LVGL race) — partially fixed, and bigger than first scoped
+
+**Fixed:** the `lvglIsBusy` guard around `lv_timer_handler()` in `main.cpp` was
+restored (branch `fix-core0-lvgl-race`, commit `bc69dd1`):
+```cpp
+lvglIsBusy = true;
+lv_timer_handler();
+lvglIsBusy = false;
+```
+This closes the door for `DispObjects::barUpdate()` (`DispObject.cpp:118`),
+which is the *only* call site in the whole codebase that actually checks
+`lvglIsBusy` before touching LVGL — confirmed by grepping every reference to
+the flag, not assumed.
+
+**Still open, and much larger than originally scoped:** `keyCheckLoop()`
+(`input_handler.cpp`, runs on **Core 0** via `Task_ADC` — confirmed via
+`tasks.cpp:149`) makes dozens of direct, unguarded LVGL calls across many key
+handlers, none deferred to Core 1 and none checking `lvglIsBusy`/`blockAll`:
+
+| Key(s) | Call | What it touches |
+|---|---|---|
+| `H` (RELEASED) | `hide()` ×5, `Tabs::goToHomeTab()`, `lv_obj_invalidate(lv_scr_act())` | Calibration window flags; **`goToHomeTab()` is missing the same Core-1 deferral `Tabs::setCurrentPage()` already has right next to it** |
+| `r` | `lv_obj_invalidate(lv_scr_act())`, **`lv_refr_now(NULL)`** | Forces a full synchronous redraw pass directly from Core 0 — the most serious of this group, since it's not a single widget touch, it's an entire render pass racing Core 1's own `lv_refr_now()` |
+| `V`/`A` (histogram & graph pages) | `lv_chart_hide_series()`, `lv_obj_clear_flag`/`add_flag` on legend labels | Chart series visibility + legend labels |
+| `X` (histogram & graph pages) | Already deferred via `DEFER_VIEW_MODE_TO_CORE1` / `g_pendingViewModeChange` | Safe — good existing pattern |
+| `Z` | `lv_slider_set_value()`, `lv_event_send()` | Averaging-count slider |
+| Digit keys (page 3) | `lv_obj_get_child()` chain, `loadMemory(btn)` | Memory-bank load button lookup |
+| `T` (HOLD) | `lv_obj_clear_flag`/`add_flag` on `label_current_rel` | REL indicator visibility |
+
+**Already safe, confirmed by inspection, not by assumption:**
+- `Tabs::setCurrentPage()`/`nextPage()`/`previousPage()` — already deferred to
+  Core 1 via `DEFER_PAGE_CHANGE_TO_CORE1` in `tabs.cpp`.
+- `'O'` key (power toggle) — deferred via `g_powerTogglePending`.
+- `'T'` key mA/A toggle — deferred via `mA_toggle_pending`.
+- `lv_obj_has_flag()` reads and bare `lv_obj_invalidate()` calls — both
+  explicitly documented in `CLAUDE.md` as accepted Core-0 exceptions.
+- `managePageEncoderInteraction()` (encoder-driven graph/histogram/utility
+  scrolling) — initially suspected as another Core-0 offender, but confirmed
+  via `main.cpp:253` that it actually runs inside `loop()` on **Core 1**. Not
+  part of this bug.
+
+**Recommendation:** don't batch-fix all of `keyCheckLoop()` in one pass — too
+many independent call sites, too much risk of dropping/delaying a keypress if
+the gating is wrong on any one of them (input responsiveness is inviolable
+here). `Tabs::goToHomeTab()` is a clean, small, low-risk next step (mirrors an
+existing pattern already proven in the same file). The rest — chart
+show/hide, the `Z`-key slider, `loadMemory()`, and especially the `'r'` key's
+direct `lv_refr_now()` — is real, additional work that needs its own scoping
+pass, not a rushed sweep.
+
+### Issue 1 (watchdog never fed) — confirmed still not fixed, live
+
+Directly observed in a serial capture during this session: a task-watchdog
+trip on `loopTask` (CPU 1) at ~125.8s uptime, matching the predicted ~120s
+timeout + `setup()` overhead. `panic=false` confirmed — no reboot followed,
+device kept running normally. Grepped `main.cpp` for `esp_task_wdt_reset()`:
+no calls found anywhere. Still exactly as described in Issue 1 above.
+
+The backtrace captured at that exact trip happened to show Core 1 mid-redraw
+of a table widget (`lv_table_event` → `draw_main` → `lv_draw_label` →
+`draw_letter_normal`), correlated with a page-navigation keypress
+(`Last key: l`) just before it — most likely coincidental timing (the
+watchdog was going to fire regardless of what Core 1 was doing at that
+moment), not evidence that the table redraw itself is unusually slow.
+
+### Issue 2 (SPIFFS mount race) — partially fixed
+
+The **cross-core** aspect of this was closed this session: `Tabs::setCurrentPage()`'s
+FunGen tab-leave save now only runs after the existing Core-1-only deferral
+gate (`tabs.cpp`, commit `f593191`, from an earlier part of this session — see
+git log). That fixed a real, confirmed "CORRUPT HEAP" crash.
+
+Still open: the original two-independent-timers race described above (FunGen
+autosave timer vs. graph-trace snapshot timer, `device.cpp` vs.
+`ui_helpers.cpp`, each independently calling `SPIFFS.begin()`/`end()`) is
+structurally unchanged — confirmed both still call `SPIFFS.begin`/`end`
+independently via direct grep. Lower severity (risk of a lost/partial save,
+not a crash), not addressed this session.
+
+### Related, separate finding (from AUDIT_SUMMARY.md, re-confirmed this session)
+
+FUN-Only mode's early `return` in `loop()` (`main.cpp:165-169`) still precedes
+`scpiParser.process()` and all `drainPending*()` calls — confirmed via direct
+read of the current file. SCPI and queued page/view/power-toggle events are
+still silently skipped while FUN-Only mode is active. Not touched this
+session.

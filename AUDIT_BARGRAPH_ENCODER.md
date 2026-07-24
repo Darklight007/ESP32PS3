@@ -71,9 +71,61 @@ and were not acted on.
 | # | Area | Finding | Type | Touches input path? |
 |---|------|---------|------|---------------------|
 | 1 | Bar graph | ADC SPS setting (not the 1ms task delay) is the real ceiling | Informational | No |
-| 2 | Bar graph | Leftover `Serial.printf` in `Flush()` runs unthrottled during setpoint changes | Removable overhead | No |
-| 3 | Bar graph | Marker `lv_obj_set_x()` calls do a style lookup every 1ms tick even when unchanged; faster version already exists commented out | Redundant work, small | No |
+| 2 | Bar graph | Leftover `Serial.printf` in `Flush()` runs unthrottled during setpoint changes | Removable overhead | No — **fixed 2026-07-23** |
+| 3 | Bar graph | Marker `lv_obj_set_x()` calls do a style lookup every 1ms tick even when unchanged; faster version already exists commented out | Redundant work, small | No — **fixed 2026-07-23** |
 | 4 | Bar graph | Task priorities / forced-refresh split already well-tuned | No action needed | Adjacent (shares render pipeline with indev) |
 | 5 | Encoder | ISR, PCNT config, 1ms poll cadence already near the practical floor | No action possible without risk | Yes — do not touch |
 | 6 | Encoder | Adaptive VCCC/stat/flush throttling already correctly tuned | No action needed | No |
 | 7 | Encoder | `EncoderRestartInterval()` has a narrow race that can drop a count | Correctness risk, not performance | Yes — sensitive, needs strong justification |
+
+## Update — 2026-07-23: full render-request audit (whole codebase, not just this file)
+
+Grepped every `lv_refr_now`, `lv_obj_invalidate(lv_scr_act())`, and `lv_timer_handler`
+call site in `src/` to find redundant/unnecessary render work, per direct request.
+
+### 8. Fixed: `StatusBar()` re-wrote 3 labels every 300ms regardless of change
+
+`StatusBar()` (`ui_creation.cpp`, called via `StatusBarUpdateInterval(300)` from
+`main.cpp` — Core 1 only, no race risk) unconditionally called, every single
+tick:
+- `lv_label_set_text(statusLabel_wifi, protStatus)` — OVP/OCP string, which only
+  changes when a limit or trip-state changes (rare).
+- `lv_obj_set_style_text_font(statusLabel_wifi, &lv_font_montserrat_10, ...)` —
+  **re-applied the font every 300ms, forever**, not just once at widget
+  creation. Style application walks the style list and invalidates the object;
+  doing that ~3x/sec for a font that never changes was pure waste.
+- `lv_label_set_text_fmt(statusLabel_time, ...)` — the clock string only
+  changes once/sec (seconds ticking), so 2 of every 3 calls (300ms cadence)
+  reformatted and invalidated the label for an identical string.
+- `lv_label_set_text_fmt(statusLabel_avg, ...)` — SPS/Avgs string, similar:
+  `adc.realADCSpeed` itself only updates once/sec internally
+  (`device.cpp`'s 1000ms window), so most 300ms ticks reformatted and
+  invalidated this label for no new information.
+
+**Fixed:** each of the three now compares against a cached last-applied
+value/string first and only calls the LVGL setter when something actually
+changed — same pattern already used for `barUpdate()`'s markers (#3 above).
+The font-style call was moved into the one-time widget-creation block instead
+of the per-tick path.
+
+### Other call sites checked, no action needed
+- `Device::FlushBars()` (`device.cpp:1180`) calls `lv_refr_now(NULL)` on bar
+  change — **dead code, never called from anywhere**. Zero cost since it never
+  executes; flagged for awareness only, not fixed (out of scope of a
+  perf-focused pass).
+- `HistogramChartRefreshInterval`/`GraphChartRefreshInterval` (125ms) already
+  gate on tab visibility (page 0/1) — no waste.
+- `updateStatChartSize()` (every loop, Core 1) already has its own
+  change-detection guard (`s_lastAppliedVI`) with a comment describing a prior
+  infinite-resize bug it was built to avoid — already correct.
+- The dozen-plus `lv_obj_invalidate(lv_scr_act())` full-screen invalidations
+  elsewhere (`tabs.cpp`, `setting_menu.cpp`, `calib_*.cpp`, numeric-entry
+  confirmation in `ui_creation.cpp`) are all on rare, user-driven events (page
+  change, calibration steps, confirming a typed value) — not per-frame,
+  nothing to gate further.
+- `Bar.changed` flag (`DispObject.cpp`) is set on every sample but the only
+  reader is the dead `FlushBars()` above — vestigial, zero live cost.
+- Doubling `LvglUpdatesInterval(0, true)` to twice per loop iteration
+  (`main.cpp`, tested same day) — camera-tested against a fast FUN-mode sweep,
+  no measurable improvement in bar lag. Left in (harmless, near-zero cost when
+  nothing's dirty) but not treated as a real fix.
