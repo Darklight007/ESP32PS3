@@ -129,3 +129,92 @@ of the per-tick path.
   (`main.cpp`, tested same day) — camera-tested against a fast FUN-mode sweep,
   no measurable improvement in bar lag. Left in (harmless, near-zero cost when
   nothing's dirty) but not treated as a real fix.
+
+## Update — 2026-07-23 (later same day): live diagnosis of the actual "hiccup"
+
+Everything above was static analysis plus one camera test. This round used
+live instrumentation (per-section timing printed over serial, `[SECDBG]`) and
+a webcam on the real display to separate real bugs from red herrings. Three
+real, confirmed causes found — in order of how they were found, not severity.
+
+### A. `keyCheckLoop()`'s LVGL calls — real, but not what was causing the hiccup
+
+Confirmed via camera: with a real load connected and current actually
+flowing, the bar tracked the digit correctly at every sampled point, even
+through large fast swings (5.7V→23V in ~100ms). With no load connected, the
+bar appeared to "lag" the digit by ~1.5V — but that's the physical output
+capacitor failing to slew without a discharge path, not a rendering bug.
+**Lesson for next time: always test bar-lag claims with a real load
+connected**, or the output's own analog settling time gets misread as a
+software problem.
+
+### B. Big-label flush pileup during active FUN mode — real, confirmed with numbers
+
+Reinstated flush/redraw timing (same technique as the display-performance
+investigation) and captured live while FUN mode was actively sweeping:
+`lv_refr_now()` spiked to **107-136ms** in a single call, vs. ~1.2ms normally.
+Root cause: the big V/A label flush costs ~10-15ms (SPI/DMA-bound, confirmed
+in the display-performance report), and during active sweeping several
+widgets (label, bar, stat labels) go dirty in the same window and flush
+sequentially. This is the same underlying mechanism the display-performance
+report already flagged — the only complete fix (non-blocking DMA) is the one
+change this session already proved unsafe (froze the display).
+
+Made worse, then fixed, by a follow-up change: `FlushMeasures()` was changed
+to run every loop gated only by `displayReady` (`NofAvgs`-driven, so avg=N
+updates every Nth sample as requested) — but at avg=1 with continuous change,
+that demanded up to ~1000 big-label repaints/sec against a ~65-100Hz physical
+ceiling, and spiked to **133-136ms**. Fixed with a 20ms floor (~50Hz cap) on
+top of the `displayReady` gate — confirmed live afterward: max dropped to
+9.27ms (a single normal flush, not a pileup).
+
+### C. Periodic ~16-19ms stall — `Page2RightSideCleanup(1000)`, confirmed and disabled
+
+A second, smaller but clockwork-regular spike (~16-19ms, once/sec, distinct
+from B) was isolated by disabling `Page2RightSideCleanup()` (which invalidates
+~10 separate small widgets every 1000ms) and re-measuring: max dropped from
+~19ms to ~1.9ms with it off. Currently **disabled** in `main.cpp` pending a
+decision on whether its original purpose (clearing dirty pixels on page 2's
+right side) still matters — watch for dirty/stale pixels there and re-enable
+or fix properly if so.
+
+### D. The real "freeze everything" cause — SPIFFS, not rendering at all
+
+After A-C, the user still reported a global pause hitting settings, V/A
+digits, the bar, *and* a visible notch in the graph trace, all simultaneously
+— too broad to be a render-only issue. Instrumented every periodic function
+in `loop()` individually and found it: **`SaveGraphDataIfDirty()`'s SPIFFS
+write cost up to 638ms in one call**, entirely blocking Core 1 (which is
+exactly why every UI element paused together, and why the graph itself
+showed a gap). Broke it down further: `SPIFFS.open(path, "w")` on an existing
+file cost ~196ms and `f.close()` cost ~137ms — the actual `f.write()` calls
+were under 20ms combined. This is a known SPIFFS weakness (open/close
+bookkeeping on an existing file), not a bug in this codebase's logic.
+
+**Fixed (partial, documented as such):**
+- Mounted SPIFFS once at boot (`main.cpp`) instead of `begin()`/`end()`
+  around every save/load — cut the worst case from 638ms to ~305ms, and
+  incidentally closes the independent-auto-save-timers mount race from
+  `AUDIT_CRASH_WATCHDOG.md` Issue 2 (both timers now share one mount instead
+  of racing to mount/unmount).
+- Reduced how often the remaining ~300ms cost can be hit: FunGen autosave
+  2s→15s, graph-trace autosave 30s→180s. Same per-hit cost, ~7-10x less
+  frequent.
+- **Not fixed:** the ~300ms open+close cost itself is inherent to SPIFFS.
+  The real fix is migrating this storage to LittleFS (ESP32's recommended
+  SPIFFS replacement specifically for this kind of overhead) — bigger change
+  touching graph save/load and FunGen save/load together, needs its own
+  scoped task with real testing, not a same-session patch.
+
+### Net effect
+
+All of B, C, and D were contributing to what the user experienced as one
+generic "hiccup" — they were three separate, unrelated mechanisms (render
+pileup, a redundant periodic invalidation, and filesystem latency) that
+happened to produce a similar-looking symptom. Splitting them required live
+timing data at each step, not code reading — several early hypotheses (CC/CV
+beep flapping, low real ADC sample rate from I2C contention) were tested live
+and ruled out before D was found. Current state: meaningfully better
+(confirmed by the user), not completely eliminated — the SPIFFS latency and
+the FUN-mode pileup ceiling both still exist, just far less frequently
+triggered.

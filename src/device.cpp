@@ -14,6 +14,8 @@ extern MonotoneCubicCalibrator g_voltINL;
 extern Calibration StoreData;
 extern volatile bool lvglIsBusy, lvglChartIsBusy, blockAll;
 
+const char *const kFmt4Decimals = "%+08.4f";
+
 extern lv_obj_t *btn_function_gen;
 extern CalibrationGui Calib_GUI;
 
@@ -318,7 +320,7 @@ void Device::LoadSetting(void)
         "%+05.1f", // 1 digit
         "%+06.2f", // 2 digits
         "%+07.3f", // 3 digits
-        "%+08.4f"  // 4 digits
+        kFmt4Decimals // 4 digits
     };
 
     int d = settingParameters.adcNumberOfDigits;
@@ -1124,8 +1126,8 @@ void Device::FlushMeasures(void)
         {
             static bool wasOverRange = false;
             const double curMean = Current.measured.Mean();
-            const double TRIG_ON  = 6.500;  // mA — start blinking
-            const double TRIG_OFF = 5.000;  // mA — stop blinking (hysteresis)
+            const double TRIG_ON  = 70.000; // mA — start blinking (raised for the new mA HW's ~75mA usable range; was 6.500 for the old front-end)
+            const double TRIG_OFF = 65.000; // mA — stop blinking (hysteresis)
             const bool isOverRange = wasOverRange ? (curMean > TRIG_OFF)
                                                   : (curMean >= TRIG_ON);
 

@@ -87,8 +87,21 @@ void DispObjects::displayUpdate(void)
     double mean_ = measured.Mean();
     if (oldValue != mean_ && !blockAll)
     {
+        // Power's range (up into the hundreds of Watts) can exceed what V/I's
+        // shared decimal-count setting assumes (tuned for 0-32V / 0-5A) - at
+        // the finest (4-decimal) setting, >=100W would print a 9-character
+        // "+100.0000", overflowing the box the setting already sized for 8.
+        // Drop to 3 decimals ("+100.000", still 8 chars) once Power crosses
+        // 100 at that setting; other decimal settings are already short
+        // enough not to need this. isPowerObj is cached once in setup() and
+        // the format check is a pointer compare (both come from device.cpp's
+        // same `formats[]`/kFmt4Decimals) - no strcmp on the hot path.
+        const char *fmt = restrict;
+        if (isPowerObj && restrict == kFmt4Decimals && fabs(mean_) >= 100.0)
+            fmt = "%+08.3f";
+
         // Display mean of measured data
-        lv_label_set_text_fmt(label_measureValue, restrict, mean_);
+        lv_label_set_text_fmt(label_measureValue, fmt, mean_);
         oldValue = mean_;
     }
 }
@@ -406,6 +419,7 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
 {
     maxValue = maxValue_;
     minValue = minValue_;
+    isPowerObj = (strcmp(_unit, "W") == 0);
 
     // SetRotaryStep(maxValue_ / 65535);
     SetRotaryStep(1);
@@ -454,7 +468,7 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     highlight_adjValue = lv_obj_create(parent);
     lv_obj_remove_style_all(highlight_adjValue);
     lv_obj_set_size(highlight_adjValue, 12, 17);
-    lv_obj_align(highlight_adjValue, 0, 8 * 12 - 2, -1);
+    lv_obj_align(highlight_adjValue, 0, 8 * 12 - 2 - kHighlightXShift, -1);
 
     // static lv_style_t style_highlight_adjValue;
     // lv_style_init(&style_highlight_adjValue);

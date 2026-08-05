@@ -1,6 +1,17 @@
 #ifndef DISPOBJECT_H
 #define DISPOBJECT_H
 
+// Shared with device.cpp's `formats[]` table (adcNumberOfDigits setting) so
+// displayUpdate() can pointer-compare `restrict` against it instead of
+// strcmp-ing the format string every tick.
+extern const char *const kFmt4Decimals;
+
+// Horizontal nudge (px) applied to the orange digit-highlight box's x-offset
+// in both its default position (DispObject.cpp setup()) and every step-size
+// realignment (input_handler.cpp's W/X/Y hold handlers) - one knob to shift
+// it left/right without touching the per-digit "N * 12" column math.
+constexpr int kHighlightXShift = 4;
+
 #include <algorithm>
 #include <vector>
 #include <lvgl.h>
@@ -674,6 +685,7 @@ public:
     bool displayReady{false};              // Flag when enough samples collected
 
     const char *restrict {"%+07.3f"};
+    bool isPowerObj{false}; // cached once in setup() - avoids a strcmp/lv_label_get_text per displayUpdate() tick
     const lv_font_t *font_measure{&lv_font_montserrat_42}; // dseg_b_48
     const lv_font_t *font_set{&graph_R_16};                //&unscii_16b4 Tauri_R_20
     const lv_font_t *font_unit{&Tauri_R_62};

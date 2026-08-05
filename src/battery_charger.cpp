@@ -50,6 +50,7 @@ static const char *stateName(BatState s)
 
 static double s_mAh = 0, s_Wh = 0;
 static unsigned long s_startMs = 0, s_lastIntMs = 0, s_phaseMs = 0;
+static unsigned long s_stoppedElapsedSecs = 0; // elapsed time frozen at whatever it was when charging stopped (any reason)
 static int s_termCount = 0;
 static double s_ir_mOhm = NAN;
 static const char *s_faultMsg = "";
@@ -60,7 +61,7 @@ static const char *s_faultMsg = "";
 static bool s_pulseEnabled = false;
 static int32_t s_pulseFreqHz_x10 = 10; // tenths of Hz: 10 = 1.0Hz (range 5-100 = 0.5-10Hz)
 static int32_t s_pulseDutyPct = 25;    // 10-50%
-static const double kPulseVoltageMarginV = 0.05; // 50mV below Target V while pulsing
+static const double kPulseVoltageMarginV = 0.10; // 100mV below Target V while pulsing
 static const double kPulseRestA = 0.02;          // near-open-circuit "rest" floor
 static int s_pulsePhase = 0;             // 0 = ON (peak), 1 = REST
 static unsigned long s_pulsePhaseMs = 0;
@@ -191,10 +192,25 @@ static double chargePct(double vbat, double amps)
     if (s_state == BatState::DONE) return 100.0;
     double vt = targetVolts();
     double pct;
-    if (vbat < vt * 0.985)
+    bool inCv = (vbat >= vt * 0.985);
+    // The CV-phase "100% tapered" reference must be the Charge [A] setting as
+    // it was WHEN CV phase started, not read live every call - otherwise
+    // nudging Charge [A] mid-charge (which doesn't touch the real setpoint
+    // until the next CC/CV cycle anyway) yanks the reported percentage around
+    // with no corresponding change in the battery's actual state.
+    static double s_cvRefAmps = 0.0;
+    static bool s_wasInCv = false;
+    if (inCv) {
+        if (!s_wasInCv) s_cvRefAmps = chargeAmps(); // latch once, at the CC->CV transition
+        s_wasInCv = true;
+    } else {
+        s_wasInCv = false; // back in CC territory - next CV entry re-latches fresh
+    }
+
+    if (!inCv)
         pct = 80.0 * (vbat - 3.0) / fmax(0.1, vt - 3.0);
     else {
-        double hi = chargeAmps(), lo = s_term_mA / 1000.0;
+        double hi = s_cvRefAmps, lo = s_term_mA / 1000.0;
         pct = 80.0 + 20.0 * (1.0 - (amps - lo) / fmax(0.001, hi - lo));
     }
     return fmin(100.0, fmax(0.0, pct));
@@ -313,6 +329,17 @@ static void syncChargeBtn(bool checked)
 
 static void stopAll(BatState endState, const char *msg = "")
 {
+    // Freeze the elapsed-time display at whatever it was the moment charging
+    // actually stopped - for ANY reason (done, fault, manual stop, output
+    // killed externally) - instead of either blanking it to 0:00:00 (losing
+    // how long the attempt ran) or leaving it computing live forever after
+    // DONE. batteryChargerActive() still reflects the state from before this
+    // call overwrites it below. Only capture if a charge was genuinely
+    // running - stopAll() is also reached from precheck failures before
+    // anything started, where s_startMs would be stale.
+    if (batteryChargerActive())
+        s_stoppedElapsedSecs = (millis() - s_startMs) / 1000;
+
     ensureOutput(false);
     s_state = endState;
     s_faultMsg = msg;
@@ -524,7 +551,7 @@ void battLeadCalMenu_cb(lv_event_t *)
 // cracked active material, heavy SEI growth).
 //
 // SAFETY: this firmware has no temperature sensor anywhere — there is no
-// automatic thermal cutoff. Monitor cell temperature externally. The 50mV
+// automatic thermal cutoff. Monitor cell temperature externally. The 100mV
 // voltage-ceiling margin below Target V (matching the "don't command 4.20V
 // during a pulse — the instantaneous IR-drop overshoot can push the real
 // interface potential past 4.20V" reasoning) is applied automatically
@@ -599,15 +626,20 @@ static void battPulseMenu_cb(lv_event_t *)
                             "#FF6060 Does not reverse cell degradation.#");
     lv_obj_align(warn, LV_ALIGN_TOP_LEFT, 4, 4);
 
+    // Single knob for the whole block below the warning text - adjust yBase to
+    // shift everything (enable row + spinboxes + hint, which is y0-relative)
+    // up/down together instead of hand-editing each lv_obj_align() call.
+    const int yBase = 44;
+
     lv_obj_t *enLbl = lv_label_create(cont);
     lv_label_set_text(enLbl, "Enable pulse charging:");
-    lv_obj_align(enLbl, LV_ALIGN_TOP_LEFT, 4, 48);
+    lv_obj_align(enLbl, LV_ALIGN_TOP_LEFT, 4, yBase);
     s_pulseEnableSw = lv_switch_create(cont);
-    lv_obj_align(s_pulseEnableSw, LV_ALIGN_TOP_LEFT, 230, 44);
+    lv_obj_align(s_pulseEnableSw, LV_ALIGN_TOP_LEFT, 230, yBase - 4);
     if (s_pulseEnabled) lv_obj_add_state(s_pulseEnableSw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(s_pulseEnableSw, pulseEnableSw_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    const int y0 = 82, yStep = 42, x0 = 8, sbW = 100;
+    const int y0 = yBase + 50, yStep = 42, x0 = 8, sbW = 100;
     lv_obj_t *sbF = spinbox_pro(cont, "#FFC107 Freq [x0.1Hz]:#", 5, 100, 3, 0, LV_ALIGN_TOP_LEFT, x0, y0, sbW, ID_PFREQ, &graph_R_16);
     lv_spinbox_set_value(sbF, s_pulseFreqHz_x10);
     lv_obj_add_event_cb(sbF, pulseSpinbox_cb, LV_EVENT_VALUE_CHANGED, nullptr);
@@ -624,8 +656,8 @@ static void battPulseMenu_cb(lv_event_t *)
     lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(hint, 190);
     lv_label_set_text(hint, "Peak current = the main\ntab's Charge [A] setting.\n\n"
-                            "CV ceiling auto-drops\n50mV below Target V\nwhile pulsing.");
-    lv_obj_align(hint, LV_ALIGN_TOP_LEFT, 120, y0 + 2);
+                            "CV ceiling auto-drops\n100mV below Target V\nwhile pulsing.");
+    lv_obj_align(hint, LV_ALIGN_TOP_LEFT, 120, y0 - 20);
 }
 
 static void startIrTest()
@@ -651,10 +683,11 @@ static void startIrTest()
 // ---------- Periodic tick (Core 1) ----------
 static void batteryTick()
 {
-    // User killed the output (O key / touch) while we were running → abort
+    // User killed the output (O key / touch) while we were running → abort.
+    // Routed through stopAll() (not just setting s_state directly) so this
+    // gets the same elapsed-time freeze as every other stop reason.
     if (batteryChargerActive() && !outputIsOn()) {
-        s_state = BatState::IDLE;
-        syncChargeBtn(false);
+        stopAll(BatState::IDLE);
     }
 
     double vbat = PowerSupply.Voltage.measured.value;
@@ -716,8 +749,14 @@ static void batteryTick()
             // instantaneous amps (which swing wildly between phases). Pulse
             // mode has its own termination check here instead of the generic
             // one below, which is skipped entirely while pulsing.
+            // Lower bound relaxed from >=0: near end-of-charge the real current
+            // reads a tiny negative (ADC noise / leakage compensation, e.g. the
+            // "-0.000A" this was confirmed against), not a genuine reverse
+            // current - a strict >=0 check reset s_termCount to 0 every single
+            // tick forever, so a battery that finished charging never counted
+            // down to DONE and just sat there indefinitely.
             if (vbat >= pulseCeilingV * 0.985 &&
-                s_pulseLastOnAmps >= 0 && s_pulseLastOnAmps <= s_term_mA / 1000.0)
+                s_pulseLastOnAmps >= -0.1 && s_pulseLastOnAmps <= s_term_mA / 1000.0)
                 s_termCount++;
             else
                 s_termCount = 0;
@@ -781,8 +820,11 @@ static void batteryTick()
         // Never count during an IR dip — the forced low current would fake it.
         // Pulse mode has its own equivalent check above and always breaks out
         // before reaching here, so this only ever runs for steady CC/CV.
+        // Lower bound relaxed from >=0 - same reasoning as the pulse-mode check
+        // above (tiny negative readings near end-of-charge are noise/leakage,
+        // not real reverse current; requiring >=0 could block DONE forever).
         if (s_liveIrPhase == 0 &&
-            vbat >= vt * 0.985 && amps >= 0 && amps <= s_term_mA / 1000.0)
+            vbat >= vt * 0.985 && amps >= -0.1 && amps <= s_term_mA / 1000.0)
             s_termCount++;
         else if (s_liveIrPhase == 0)
             s_termCount = 0;
@@ -919,8 +961,14 @@ static void batteryTick()
     // rendering/SCPI/input on Core 1 for no reason.
     if (s_mah_label && lv_obj_is_valid(s_mah_label) && !blockAll && battTabVisible()) {
         char tstr[16] = "0:00:00";
-        if (batteryChargerActive() || s_state == BatState::DONE) {
+        if (batteryChargerActive()) {
             unsigned long secs = (now - s_startMs) / 1000;
+            snprintf(tstr, sizeof(tstr), "%lu:%02lu:%02lu", secs / 3600, (secs % 3600) / 60, secs % 60);
+        } else if (s_state == BatState::DONE || s_state == BatState::FAULT || s_state == BatState::IDLE) {
+            // Frozen at whatever it was when charging stopped (any reason),
+            // instead of blanking to 0:00:00 (losing how long the attempt ran)
+            // or, for DONE specifically, computing live and growing forever.
+            unsigned long secs = s_stoppedElapsedSecs;
             snprintf(tstr, sizeof(tstr), "%lu:%02lu:%02lu", secs / 3600, (secs % 3600) / 60, secs % 60);
         }
         char mah[16]; // "001mAh" while <1000, collapses to e.g. "1.2Ah" beyond
@@ -1002,9 +1050,15 @@ static void batteryTick()
             // — REST's near-zero current drops V toward the resting Voc) —
             // needs the same settled-ON-phase substitution as amps, or the
             // bar would still jitter from the voltage side alone.
+            // Steady (non-pulsing) case: vbat/amps above are the raw single-
+            // sample .value (needed live for the control loop/termination
+            // logic), which jitters with ADC noise on every tick — same class
+            // of jitter as pulse mode, just from raw sampling instead of the
+            // ON/REST swing. Feed the bar the averaged Mean() instead so the
+            // displayed % tracks the real trend, not per-sample noise.
             bool pulsingNow = (s_state == BatState::CC_CV && s_pulseEnabled);
-            double ampsForPct = pulsingNow ? s_pulseLastOnAmps : amps;
-            double vbatForPct = pulsingNow ? s_pulseLastOnVolts : vbat;
+            double ampsForPct = pulsingNow ? s_pulseLastOnAmps : PowerSupply.Current.measured.Mean() * (PowerSupply.mA_Active ? 0.001 : 1.0);
+            double vbatForPct = pulsingNow ? s_pulseLastOnVolts : PowerSupply.Voltage.measured.Mean();
             double pct = chargePct(vbatForPct, ampsForPct);
             lv_bar_set_value(s_bar, (int)lround(pct), LV_ANIM_OFF); // bar itself is integer-resolution
             lv_obj_set_style_bg_color(s_bar, stateColor(nm), LV_PART_INDICATOR);
@@ -1128,12 +1182,41 @@ static void saveChemIndex(uint16_t sel)
     p.end();
 }
 
+// How far above a chemistry's safe peak-voltage cap (s_chemPresets[].mv) the
+// Target [V] spinbox is still allowed to go. The presets are already safe
+// ceilings, not just "nominal" numbers (see comment above s_chemPresets) -
+// this is deliberately small headroom for meter/setpoint slop, not a general
+// allowance to charge a cell hotter than its chemistry supports.
+static const int kChemVoltageMarginMv = 50;
+
+// PSU's own calibrated max output voltage, in mV — same expression
+// scpi_parser.cpp/chgMaxMA use for Current. Voltage.maxValue is set up in
+// SetupHandlers.cpp before tabs are built, so it's already valid whenever
+// this is called (both at tab creation and later from the dropdown).
+static int32_t psuMaxVoltMv()
+{
+    int32_t mv = (int32_t)lround(PowerSupply.Voltage.maxValue / PowerSupply.Voltage.adjFactor * 1000.0);
+    if (mv < 1000 || mv > 99999) mv = 32768; // sane fallback if maxValue isn't set up yet
+    return mv;
+}
+
 static void applyChemPreset(uint16_t sel)
 {
     saveChemIndex(sel); // persist the selection itself, not just the resulting Target V,
                         // so the dropdown shows the real chemistry again after a restart
                         // instead of always falling back to "Custom".
-    if (sel >= (uint16_t)s_numChemPresets || s_chemPresets[sel].mv < 0) return; // Custom: leave Target as-is
+    if (sel >= (uint16_t)s_numChemPresets || s_chemPresets[sel].mv < 0) {
+        // Custom: no chemistry-derived ceiling — open it up to the PSU's own
+        // real output max (digit_count=5, separator_position=2 → dd.ddd, so
+        // up to 99.999V is representable; the actual ceiling is whatever this
+        // unit's DAC calibration allows). User's own responsibility.
+        lv_spinbox_set_range(s_target_sb, 1000, psuMaxVoltMv());
+        return;
+    }
+    // Clamp the spinbox's own range to this chemistry's ceiling + small margin,
+    // so a real chemistry selection can't be hand-cranked up to another
+    // chemistry's (or Custom's) higher ceiling afterwards.
+    lv_spinbox_set_range(s_target_sb, 1000, s_chemPresets[sel].mv + kChemVoltageMarginMv);
     lv_spinbox_set_value(s_target_sb, s_chemPresets[sel].mv);
     readSettings();
     if ((s_state == BatState::CC_CV || s_state == BatState::TRICKLE) && s_liveIrPhase == 0)
@@ -1161,7 +1244,15 @@ void createBatteryTab(lv_obj_t *parent)
     // above-left of the box, so each column needs clear space to its left:
     //   col A boxes at x=60 (labels in 0..58), col B at x=215 (labels in 158..213).
     // Settings grid: 2 cols x 2 rows (single-cell: no Cells spinbox)
-    const int colX[3]= {8, 112, 216}, rowY[3] = {16, 58, 90}, width=96; // rows 0-1: grid, row 2: buttons
+    // colX[2] moved 216->234 and the Target V / Charge A boxes below use their
+    // own (rather than the shared `width`) so Target V can grow to fit its 5th
+    // digit (dd.ddd, was d.ddd) while Charge A shrinks by the same 18px —
+    // total row span (8..312) is unchanged, so this can't push anything off
+    // the 320px-wide screen. Not visually verified on hardware — check the
+    // Battery tab still looks right and adjust widthTargetV/widthChargeA if
+    // either box looks cramped or clipped.
+    const int colX[3]= {8, 112, 234}, rowY[3] = {16, 58, 90}, width=96; // rows 0-1: grid, row 2: buttons
+    const int widthTargetV = 114, widthChargeA = 78;
     // Row 0: [chemistry preset] [Target V] [Charge A]
     // Row 1: [Cutoff A] [Timeout min] [Timer — live label, not editable]
     s_chem_dd = lv_dropdown_create(parent);
@@ -1182,6 +1273,7 @@ void createBatteryTab(lv_obj_t *parent)
     // "Custom". Just moves the dropdown's own selection — deliberately does
     // NOT go through applyChemPreset() (that would re-apply/overwrite Target V
     // and setSetpoints() a value that loadSettings() already restored above).
+    int32_t savedChemForRangeClamp;
     {
         Preferences p;
         p.begin("batt", true);
@@ -1189,6 +1281,7 @@ void createBatteryTab(lv_obj_t *parent)
         p.end();
         savedChem = constrain(savedChem, 0, s_numChemPresets - 1);
         lv_dropdown_set_selected(s_chem_dd, (uint16_t)savedChem);
+        savedChemForRangeClamp = savedChem;
     }
     lv_dropdown_set_symbol(s_chem_dd, NULL); // no arrow glyph: was overlapping the name in a 96px-wide box
     // Keep the selected-item highlight (default true): it only affects the
@@ -1205,9 +1298,14 @@ void createBatteryTab(lv_obj_t *parent)
     }
 
     lv_obj_t *sbs[4];
-    sbs[0] = spinbox_pro(parent, "#FFC107 Target [V]:#", 1000, 4400, 4, 1, LV_ALIGN_TOP_LEFT, colX[1], rowY[0], width, ID_VCELL, &graph_R_16); // 1.000V floor: room for NiMH/NiCd/LTO presets, not just Li chemistries
+    sbs[0] = spinbox_pro(parent, "#FFC107 Target [V]:#", 1000, psuMaxVoltMv(), 5, 2, LV_ALIGN_TOP_LEFT, colX[1], rowY[0], widthTargetV, ID_VCELL, &graph_R_16); // 1.000V floor: room for NiMH/NiCd/LTO presets, not just Li chemistries; ceiling is the PSU's own real output max (dd.ddd format), not a fixed chemistry cap
     lv_spinbox_set_value(sbs[0], s_mv_cell);
     s_target_sb = sbs[0];
+    // Apply the restored chemistry's range clamp (value already correct from
+    // loadSettings() above — this only tightens how far the spinbox can be
+    // hand-cranked afterwards, matching applyChemPreset()'s live-selection path).
+    if (savedChemForRangeClamp < s_numChemPresets && s_chemPresets[savedChemForRangeClamp].mv >= 0)
+        lv_spinbox_set_range(s_target_sb, 1000, s_chemPresets[savedChemForRangeClamp].mv + kChemVoltageMarginMv);
     // Charge current ceiling: use the PSU's own calibrated max instead of a
     // hardcoded 5000mA guess — matches whatever this specific unit's DAC
     // calibration actually allows (Current.maxValue/adjFactor is the same
@@ -1216,7 +1314,7 @@ void createBatteryTab(lv_obj_t *parent)
     // (SetupHandlers.cpp), before tabs are built, so it's already valid here.
     int32_t chgMaxMA = (int32_t)lround(PowerSupply.Current.maxValue / PowerSupply.Current.adjFactor * 1000.0);
     if (chgMaxMA < 100 || chgMaxMA > 9999) chgMaxMA = 5000; // sane fallback if maxValue isn't set up yet
-    sbs[1] = spinbox_pro(parent, "#FFC107 Charge [A]:#", 10, chgMaxMA, 4, 1, LV_ALIGN_TOP_LEFT, colX[2], rowY[0], width, ID_ICHG, &graph_R_16);
+    sbs[1] = spinbox_pro(parent, "#FFC107 Charge [A]:#", 10, chgMaxMA, 4, 1, LV_ALIGN_TOP_LEFT, colX[2], rowY[0], widthChargeA, ID_ICHG, &graph_R_16);
     lv_spinbox_set_value(sbs[1], s_chg_mA);
     sbs[2] = spinbox_pro(parent, "#FFC107 Cutoff [A]:#", 5, 1000, 4, 1, LV_ALIGN_TOP_LEFT, colX[0], rowY[1], width, ID_ITERM, &graph_R_16);
     lv_spinbox_set_value(sbs[2], s_term_mA);
@@ -1265,7 +1363,7 @@ void createBatteryTab(lv_obj_t *parent)
 
     // Span the full grid width (colX[0] .. colX[2]+width) with small gaps
     // between three buttons, instead of leaving column 3's width empty.
-    const int rowSpan = colX[2] + width - colX[0], btnGap = 6;
+    const int rowSpan = colX[2] + widthChargeA - colX[0], btnGap = 6; // true right edge is Charge A's box, not the shared `width`
     const int btnW = (rowSpan - 2 * btnGap) / 3;
     const int btnBx1 = colX[0] + btnW + btnGap;
     const int btnBx2 = btnBx1 + btnW + btnGap;
@@ -1329,7 +1427,7 @@ void createBatteryTab(lv_obj_t *parent)
     lv_obj_set_style_pad_all(s_chip, 0, LV_PART_MAIN);
     s_chip_label = lv_label_create(s_chip);
     lv_obj_set_style_text_font(s_chip_label, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(s_chip_label, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_color(s_chip_label, lv_color_hex(0x000000), 0);
     lv_label_set_text(s_chip_label, "IDLE");
     lv_obj_center(s_chip_label);
 

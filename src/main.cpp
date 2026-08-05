@@ -194,6 +194,10 @@ void loop()
   drainPendingViewModeChange();
   drainPendingTabEvent();
   drainPendingPowerToggle();
+  drainPendingKeyEvents(); // Home, numeric entry, V/v/A/a readback, Z-key avg slider,
+                           // memory load/save, chart mode/graph pause toggles, rotary
+                           // step buttons, V/A series toggle - was defined but never
+                           // called, so all of the above silently did nothing.
   drainBattChemDropdownClose(); // '>' key on Utility page: close the chem dropdown
   TRACE("loop_post_drain");
 

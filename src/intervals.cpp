@@ -77,10 +77,11 @@ void statisticUpdateInterval(unsigned long interval)
                     lastCurrent = PowerSupply.Current.adjValue;
                 }
 
-                // Data above (SaveSetting) always runs. Only the stat label
-                // formatting/writes below are Main-page-only display work —
-                // skip them when Main isn't the visible tab.
-                if (Tabs::getCurrentPage() == 2) {
+                // Data above (SaveSetting) always runs. The stat label
+                // formatting/writes below are only meaningful on pages where
+                // updateObjectPos_cb() actually parents these labels: Histogram(0),
+                // Graph(1), Main(2). Skip on Utility/Settings where they're hidden.
+                if (Tabs::getCurrentPage() <= 2) {
                     PowerSupply.Voltage.statUpdate();
                     PowerSupply.Current.statUpdate();
                 } },

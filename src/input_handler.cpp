@@ -32,6 +32,32 @@ static volatile int mA_toggle_source_page = -1; // which page triggered the togg
 // Power on/off deferral: set by the 'O' key handler (Core 0), drained on Core 1.
 volatile bool g_powerTogglePending = false;
 
+// Keypad value-entry deferral: numeric keys and V/v/A/a readback keys used to
+// call LVGL directly from Core 0 (keyCheckLoop, inside Task_ADC). Same fix
+// shape as g_powerTogglePending above.
+volatile bool g_keyNumPending = false;
+volatile int  g_keyNumBtnId = -1;
+volatile bool g_keyVoltEntryPending = false;
+volatile bool g_keyVoltEntryMilliPending = false;
+volatile bool g_keyCurrEntryPending = false;
+volatile bool g_keyCurrEntryMilliPending = false;
+volatile bool g_keyHomePending = false;
+volatile bool g_keyZPending = false;
+volatile int  g_keyZ_w = 0;
+volatile bool g_keyGraphPauseTogglePending = false;
+volatile bool g_keyChartModeTogglePending = false;
+volatile bool g_keyMemLoadPending = false;
+volatile bool g_keyMemSavePending = false;
+volatile int  g_keyMemDigit = -1;
+volatile bool g_keyRotaryStepFinePending = false;
+volatile bool g_keyRotaryStepHoldWPending = false;
+volatile bool g_keyRotaryStepHoldXPending = false;
+volatile bool g_keyRotaryStepHoldYPending = false;
+// Also toggled from Core 0 ('V'/'A' RELEASED, pages 0 & 1 share one toggle
+// state since the same underlying stats/graph charts are affected either way)
+volatile bool g_keyToggleVPending = false;
+volatile bool g_keyToggleIPending = false;
+
 // Touch attribute structure
 struct TouchAttr_
 {
@@ -788,7 +814,7 @@ void keyCheckLoop()
         if (now - lastDeleteRepeat >= DELETE_REPEAT_INTERVAL_MS) {
             // Trigger delete action
             if (Tabs::getCurrentPage() == 2 && !lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN)) {
-                key_event_handler(3);  // Delete
+                g_keyNumBtnId = 3; g_keyNumPending = true;  // Delete — drained on Core 1
                 keyboardInputActive = true;
             }
             lastDeleteRepeat = now;
@@ -843,17 +869,10 @@ void keyCheckLoop()
                  Tabs::nextPage();
              });
 
+    // goToHomeTab() and the hide() calls below all touch LVGL — this handler
+    // runs on Core 0 (inside Task_ADC), so defer the whole thing to Core 1.
     keyMenus('H', " RELEASED.", []
-             {
-                 Tabs::goToHomeTab();
-                 hide(PowerSupply.gui.calibration.win_ADC_voltage_calibration);
-                 hide(PowerSupply.gui.calibration.win_ADC_current_calibration);
-                 hide(PowerSupply.gui.calibration.win_int_current_calibration);
-                 hide(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration);
-                 // hide(PowerSupply.gui.calibration.win_ADC_INL_ZC_calibration);
-                 hide(PowerSupply.gui.calibration.win_DAC_calibration);
-                 lv_obj_invalidate(lv_scr_act());
-             });
+             { g_keyHomePending = true; });
 
     keyMenus('H', " HOLD.", [] // Home button
              {
@@ -962,31 +981,15 @@ void keyCheckLoop()
                      PowerSupply.Voltage.hist.Reset(); });
 
 
+    // Bodies were byte-for-byte duplicated across pages 0/1 (same shared
+    // stats/graph charts either way) and called lv_chart_hide_series/
+    // lv_obj_*_flag directly from Core 0 — deferred + deduped into one
+    // shared toggle handled by drainPendingKeyEvents() on Core 1.
     keyMenusPage('V', " RELEASED.", 0, []
-                 {
-                     static bool hide = false;
-                     hide = !hide;
-                     lv_chart_hide_series(PowerSupply.stats.chart, PowerSupply.stats.serV, hide);
-                     lv_chart_hide_series(PowerSupply.graph.chart, PowerSupply.graph.serV, hide);
-
-                     if (!hide)
-                         lv_obj_clear_flag(label_legend1, LV_OBJ_FLAG_HIDDEN);
-
-                     else
-                         lv_obj_add_flag(label_legend1, LV_OBJ_FLAG_HIDDEN); });
+                 { g_keyToggleVPending = true; });
 
     keyMenusPage('A', " RELEASED.", 0, []
-                 {
-                     static bool hide = false;
-                     hide = !hide;
-                     lv_chart_hide_series( PowerSupply.stats.chart,  PowerSupply.stats.serI,hide);
-                     lv_chart_hide_series(PowerSupply.graph.chart, PowerSupply.graph.serI, hide);
-
-                     if (!hide)
-                         lv_obj_clear_flag(label_legend2, LV_OBJ_FLAG_HIDDEN);
-
-                     else
-                         lv_obj_add_flag(label_legend2, LV_OBJ_FLAG_HIDDEN); });
+                 { g_keyToggleIPending = true; });
 
     keyMenusPage('X', " RELEASED.", 0, []
                  {
@@ -1004,29 +1007,10 @@ void keyCheckLoop()
                      TRACE("X0_post_apply"); });
 
     keyMenusPage('V', " RELEASED.", 1, []
-                 {
-                     static bool hide = false;
-                     hide = !hide;
-                     lv_chart_hide_series(PowerSupply.stats.chart, PowerSupply.stats.serV, hide);
-                     lv_chart_hide_series(PowerSupply.graph.chart, PowerSupply.graph.serV, hide);
-
-                     if (!hide)
-                         lv_obj_clear_flag(label_legend1, LV_OBJ_FLAG_HIDDEN);
-
-                     else
-                         lv_obj_add_flag(label_legend1, LV_OBJ_FLAG_HIDDEN); });
+                 { g_keyToggleVPending = true; });
 
     keyMenusPage('A', " RELEASED.", 1, []
-                 {
-                     static bool hide = false;
-                     hide = !hide;
-                     lv_chart_hide_series(PowerSupply.graph.chart, PowerSupply.graph.serI, hide);
-                     lv_chart_hide_series( PowerSupply.stats.chart,  PowerSupply.stats.serI,hide);
-                     if (!hide)
-                         lv_obj_clear_flag(label_legend2, LV_OBJ_FLAG_HIDDEN);
-
-                     else
-                         lv_obj_add_flag(label_legend2, LV_OBJ_FLAG_HIDDEN); });
+                 { g_keyToggleIPending = true; });
 
     keyMenusPage('X', " RELEASED.", 1, []
                  {
@@ -1083,6 +1067,11 @@ void keyCheckLoop()
                          lvglChartIsBusy = false;
                      }
                  PowerSupply.ResetStats();
+                 // ResetStats() only clears histogram/statistics data, none of
+                 // which is visible on the Graph page - the actual plotted
+                 // trace (graph_data_V/I) is a separate buffer it never
+                 // touches, so 'j' looked like it did nothing here. Clear it too.
+                 graphReset();
                 });
 
     keyMenusPage('j', " RELEASED.", 2, []
@@ -1099,8 +1088,9 @@ void keyCheckLoop()
                 // PowerSupply.Voltage.effectiveResolution(64);
                 PowerSupply.ResetStats();
 
-                lv_slider_set_value(lv_obj_get_child(PowerSupply.gui.slider_Avgs, -1), log2(w), LV_ANIM_OFF);
-                lv_event_send(lv_obj_get_child(PowerSupply.gui.slider_Avgs, -1), LV_EVENT_VALUE_CHANGED, NULL); });
+                // lv_slider_set_value/lv_event_send touch LVGL — defer to Core 1
+                g_keyZ_w = w;
+                g_keyZPending = true; });
 
     if ((Tabs::getCurrentPage() == 3))
     {
@@ -1129,9 +1119,12 @@ void keyCheckLoop()
 
         if (a >= 0) //-> released
         {
-            lv_obj_t *tab = lv_obj_get_child(lv_obj_get_child(lv_obj_get_child(PowerSupply.page[3], 0), 1), 0);
-            lv_obj_t *btn = find_btn_by_tag(tab, a);
-            loadMemory(btn);
+            // Resolving the tab/button tree + loadMemory() itself (SetUpdate,
+            // Tabs::setCurrentPage) touch LVGL — this whole block runs on
+            // Core 0 (Task_ADC), so defer it instead of walking/mutating
+            // LVGL objects directly here.
+            g_keyMemDigit = a;
+            g_keyMemLoadPending = true;
             return;
         }
 
@@ -1159,45 +1152,48 @@ void keyCheckLoop()
         if (a >= 0)
         {
             myTone(NOTE_A4, 150);
-
-            lv_obj_t *tab = lv_obj_get_child(lv_obj_get_child(lv_obj_get_child(PowerSupply.page[3], 0), 1), 0);
-            lv_obj_t *btn = find_btn_by_tag(tab, a);
-            saveMemory(btn);
+            // saveMemory() writes button-child labels directly — defer, same
+            // reasoning as the load path above.
+            g_keyMemDigit = a;
+            g_keyMemSavePending = true;
         }
     }
 
     // Numerical keys only active on Main page (2), NOT on Settings page (4)
     if (Tabs::getCurrentPage() == 2)
     {
+        // key_event_handler() touches LVGL directly and must not run on Core 0
+        // (this whole function executes inside Task_ADC) — request it and
+        // let drainPendingKeyEvents() perform it on Core 1 instead.
         keyMenus('7', " RELEASED.", []
-                 { keyboardInputActive = true; key_event_handler(0); });
+                 { keyboardInputActive = true; g_keyNumBtnId = 0; g_keyNumPending = true; });
         keyMenus('8', " RELEASED.", []
-                 { keyboardInputActive = true; key_event_handler(1); });
+                 { keyboardInputActive = true; g_keyNumBtnId = 1; g_keyNumPending = true; });
         keyMenus('9', " RELEASED.", []
-                 { keyboardInputActive = true; key_event_handler(2); });
+                 { keyboardInputActive = true; g_keyNumBtnId = 2; g_keyNumPending = true; });
         keyMenus('<', " RELEASED.", []
-                 { keyboardInputActive = true; key_event_handler(3); });
+                 { keyboardInputActive = true; g_keyNumBtnId = 3; g_keyNumPending = true; });
         keyMenus('<', " HOLD.", []
-                 { keyboardInputActive = true; key_event_handler(3); });  // Fast delete when held
+                 { keyboardInputActive = true; g_keyNumBtnId = 3; g_keyNumPending = true; });  // Fast delete when held
 
         keyMenus('4', " RELEASED.", []
-                 { keyboardInputActive = true; key_event_handler(5); });
+                 { keyboardInputActive = true; g_keyNumBtnId = 5; g_keyNumPending = true; });
         keyMenus('5', " RELEASED.", []
-                 { keyboardInputActive = true; key_event_handler(6); });
+                 { keyboardInputActive = true; g_keyNumBtnId = 6; g_keyNumPending = true; });
         keyMenus('6', " RELEASED.", []
-                 { keyboardInputActive = true; key_event_handler(7); });
+                 { keyboardInputActive = true; g_keyNumBtnId = 7; g_keyNumPending = true; });
 
         keyMenus('1', " RELEASED.", []
-                 { keyboardInputActive = true; key_event_handler(10); });
+                 { keyboardInputActive = true; g_keyNumBtnId = 10; g_keyNumPending = true; });
         keyMenus('2', " RELEASED.", []
-                 { keyboardInputActive = true; key_event_handler(11); });
+                 { keyboardInputActive = true; g_keyNumBtnId = 11; g_keyNumPending = true; });
         keyMenus('3', " RELEASED.", []
-                 { keyboardInputActive = true; key_event_handler(12); });
+                 { keyboardInputActive = true; g_keyNumBtnId = 12; g_keyNumPending = true; });
 
         keyMenus('0', " RELEASED.", []
-                 { keyboardInputActive = true; key_event_handler(15); });
+                 { keyboardInputActive = true; g_keyNumBtnId = 15; g_keyNumPending = true; });
         keyMenus('.', " RELEASED.", []
-                 { keyboardInputActive = true; key_event_handler(16); });
+                 { keyboardInputActive = true; g_keyNumBtnId = 16; g_keyNumPending = true; });
 
         keyMenusPage('E', " RELEASED.", 2, []
                      {  if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
@@ -1248,142 +1244,53 @@ void keyCheckLoop()
                          PowerSupply.Current.SetUpdate(PowerSupply.Current.adjValue - 1000);
                      } });
 
+    // These four all used to run their full LVGL logic (visibility checks,
+    // textarea/label writes, key_event_handler) directly on Core 0. That
+    // logic depends on reading live LVGL state, so it can't be split into
+    // "decide on Core 0, act on Core 1" — instead the whole thing is deferred
+    // as one opaque request and drainPendingKeyEvents() (Core 1) re-runs the
+    // identical branch logic where touching LVGL is actually safe. No more
+    // delay(100): that was only there to let the display settle before Core 0
+    // resumed scanning keys; now Core 0 never touches LVGL, so nothing to wait for.
     keyMenusPage('V', " RELEASED.", 2, []
-                 {
-                     if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
-                     {
-                         lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
-                         key_event_handler_readBack(PowerSupply.Voltage);
-                         ismyTextHiddenChange = true;
-                         keyboardInputActive = false;  // Reset - waiting for first number
-                         delay(100);
-                     }
-                     else if (strcmp(lv_label_get_text(unit_label), "V") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-                     {
-                         key_event_handler(8);
-                         keyboardInputActive = false;  // Disable after confirmation
-                     }
-                     lv_obj_invalidate(lv_scr_act()); });
+                 { g_keyVoltEntryPending = true; });
 
     keyMenusPage('v', " RELEASED.", 2, []
-                 {
-                     if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
-                     {
-                         lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
-                         key_event_handler_readBack_k(PowerSupply.Voltage);
-                         ismyTextHiddenChange = true;
-                         keyboardInputActive = false;  // Reset - waiting for first number
-                         delay(100);
-                     }
-                     else if (strcmp(lv_label_get_text(unit_label), "mV") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-                     {
-                         key_event_handler(9);
-                         keyboardInputActive = false;  // Disable after confirmation
-                     }
-                     lv_obj_invalidate(lv_scr_act());  });
+                 { g_keyVoltEntryMilliPending = true; });
 
     keyMenusPage('A', " RELEASED.", 2, []
-                 {
-                     if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
-                     {
-                         lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
-                         key_event_handler_readBack(PowerSupply.Current);
-                         ismyTextHiddenChange = true;
-                         keyboardInputActive = false;  // Reset - waiting for first number
-                         delay(100);
-                     }
-                     else if (strcmp(lv_label_get_text(unit_label), "A") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-                     {
-                         key_event_handler(13);
-                         keyboardInputActive = false;  // Disable after confirmation
-                     }
-                     lv_obj_invalidate(lv_scr_act()); });
+                 { g_keyCurrEntryPending = true; });
 
     keyMenusPage('a', " RELEASED.", 2, []
-                 {
-            if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
-            {
-                lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
-                key_event_handler_readBack_k(PowerSupply.Current);
-                ismyTextHiddenChange = true;
-                keyboardInputActive = false;  // Reset - waiting for first number
-                delay(100);
-            }
-            else if (strcmp(lv_label_get_text(unit_label), "mA") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
-            {
-                key_event_handler(14);
-                keyboardInputActive = false;  // Disable after confirmation
-            }
-            lv_obj_invalidate(lv_scr_act());  });
+                 { g_keyCurrEntryMilliPending = true; });
 
     keyMenusPage('W', " RELEASED.", 2, []
-                 {
-                     PowerSupply.Voltage.SetRotaryStep(1); //0.0005
-                     PowerSupply.Current.SetRotaryStep(1);
-                     lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 10 * 12, -1000);
-                     lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 10 * 12, -1000); });
+                 { g_keyRotaryStepFinePending = true; }); // identical body to X/Y RELEASED page 2
+
+    // All six below touch LVGL directly (lv_chart_*, lv_obj_align, lv_obj_*_flag)
+    // and ran on Core 0 — deferred to Core 1 via drainPendingKeyEvents().
+    keyMenusPage('W', " RELEASED.", 1, []
+                 { g_keyChartModeTogglePending = true; });
 
     keyMenusPage('W', " RELEASED.", 1, []
-                 {
-                     static bool chart_mode = false;
-                     if (chart_mode)
-                         lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_SHIFT);
-                     else
-                         lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_CIRCULAR);
-
-                     chart_mode = !chart_mode; });
-
-    keyMenusPage('W', " RELEASED.", 1, []
-                 {
-                     g_graphPaused = !g_graphPaused;
-                     if (PowerSupply.graph.label_pause) {
-                         if (g_graphPaused)
-                             lv_obj_clear_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
-                         else
-                             lv_obj_add_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
-                     }
-                     Serial.printf("[Graph] %s\n", g_graphPaused ? "Paused" : "Resumed"); });
+                 { g_graphPaused = !g_graphPaused;
+                   g_keyGraphPauseTogglePending = true;
+                   Serial.printf("[Graph] %s\n", g_graphPaused ? "Paused" : "Resumed"); });
 
     keyMenusPage('X', " RELEASED.", 2, []
-                 {
-                     PowerSupply.Voltage.SetRotaryStep(1); //0.0005
-                     PowerSupply.Current.SetRotaryStep(1);
-                     lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 10 * 12, -1000);
-                     lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 10 * 12, -1000); });
+                 { g_keyRotaryStepFinePending = true; });
 
     keyMenusPage('Y', " RELEASED.", 2, []
-                 {
-                     PowerSupply.Voltage.SetRotaryStep(1); //0.0005
-                     PowerSupply.Current.SetRotaryStep(1);
-                     lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 10 * 12, -1000);
-                     lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 10 * 12, -1000); });
+                 { g_keyRotaryStepFinePending = true; });
 
     keyMenusPage('W', " HOLD.", 2, []
-                 {
-            PowerSupply.Voltage.SetRotaryStep(2000.0000);
-            PowerSupply.Current.SetRotaryStep(10000.000);
-            lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 7 * 12, -10);
-            lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 7 * 12, 72);
-            lv_obj_clear_flag(PowerSupply.Voltage.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(PowerSupply.Current.highlight_adjValue, LV_OBJ_FLAG_HIDDEN); });
+                 { g_keyRotaryStepHoldWPending = true; });
 
     keyMenusPage('X', " HOLD.", 2, []
-                 {
-            PowerSupply.Voltage.SetRotaryStep(200);
-            PowerSupply.Current.SetRotaryStep(1000.000);
-            lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 9 * 12, -10);
-            lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 9 * 12, 72);
-            lv_obj_clear_flag(PowerSupply.Voltage.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(PowerSupply.Current.highlight_adjValue, LV_OBJ_FLAG_HIDDEN); });
+                 { g_keyRotaryStepHoldXPending = true; });
 
     keyMenusPage('Y', " HOLD.", 2, []
-                 {
-            PowerSupply.Voltage.SetRotaryStep(20);
-            PowerSupply.Current.SetRotaryStep(100.000);
-            lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 10 * 12, -10);
-            lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 10 * 12, 72);
-            lv_obj_clear_flag(PowerSupply.Voltage.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(PowerSupply.Current.highlight_adjValue, LV_OBJ_FLAG_HIDDEN); });
+                 { g_keyRotaryStepHoldYPending = true; });
 
     if ((msg == " IDLE.") && (Tabs::getCurrentPage() == 2))
     {
@@ -1400,6 +1307,220 @@ void drainPendingPowerToggle()
         return;
     g_powerTogglePending = false;
     PowerSupply.toggle();
+}
+
+// Called from Core 1 main loop — performs the exact LVGL logic the V/v/A/a
+// and numeric-keypad handlers used to run inline on Core 0. Each flag/branch
+// here matches its original Core-0 lambda body 1:1, just moved to the core
+// where touching LVGL is actually safe. No delay(100) needed anymore either:
+// that existed to let the display "settle" before Core 0 kept scanning keys;
+// now Core 0 never touches LVGL at all, so there's nothing to wait for.
+void drainPendingKeyEvents()
+{
+    if (g_keyNumPending)
+    {
+        g_keyNumPending = false;
+        key_event_handler((uint16_t)g_keyNumBtnId);
+    }
+
+    if (g_keyVoltEntryPending)
+    {
+        g_keyVoltEntryPending = false;
+        if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
+        {
+            lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
+            key_event_handler_readBack(PowerSupply.Voltage);
+            ismyTextHiddenChange = true;
+            keyboardInputActive = false;
+        }
+        else if (strcmp(lv_label_get_text(unit_label), "V") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
+        {
+            key_event_handler(8);
+            keyboardInputActive = false;
+        }
+        lv_obj_invalidate(lv_scr_act());
+    }
+
+    if (g_keyVoltEntryMilliPending)
+    {
+        g_keyVoltEntryMilliPending = false;
+        if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
+        {
+            lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
+            key_event_handler_readBack_k(PowerSupply.Voltage);
+            ismyTextHiddenChange = true;
+            keyboardInputActive = false;
+        }
+        else if (strcmp(lv_label_get_text(unit_label), "mV") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
+        {
+            key_event_handler(9);
+            keyboardInputActive = false;
+        }
+        lv_obj_invalidate(lv_scr_act());
+    }
+
+    if (g_keyCurrEntryPending)
+    {
+        g_keyCurrEntryPending = false;
+        if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
+        {
+            lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
+            key_event_handler_readBack(PowerSupply.Current);
+            ismyTextHiddenChange = true;
+            keyboardInputActive = false;
+        }
+        else if (strcmp(lv_label_get_text(unit_label), "A") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
+        {
+            key_event_handler(13);
+            keyboardInputActive = false;
+        }
+        lv_obj_invalidate(lv_scr_act());
+    }
+
+    if (g_keyHomePending)
+    {
+        g_keyHomePending = false;
+        Tabs::goToHomeTab();
+        hide(PowerSupply.gui.calibration.win_ADC_voltage_calibration);
+        hide(PowerSupply.gui.calibration.win_ADC_current_calibration);
+        hide(PowerSupply.gui.calibration.win_int_current_calibration);
+        hide(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration);
+        hide(PowerSupply.gui.calibration.win_DAC_calibration);
+        lv_obj_invalidate(lv_scr_act());
+    }
+
+    if (g_keyZPending)
+    {
+        g_keyZPending = false;
+        lv_slider_set_value(lv_obj_get_child(PowerSupply.gui.slider_Avgs, -1), log2((double)g_keyZ_w), LV_ANIM_OFF);
+        lv_event_send(lv_obj_get_child(PowerSupply.gui.slider_Avgs, -1), LV_EVENT_VALUE_CHANGED, NULL);
+    }
+
+    if (g_keyGraphPauseTogglePending)
+    {
+        g_keyGraphPauseTogglePending = false;
+        if (PowerSupply.graph.label_pause) {
+            if (g_graphPaused)
+                lv_obj_clear_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
+            else
+                lv_obj_add_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    if (g_keyMemLoadPending || g_keyMemSavePending)
+    {
+        bool wantSave = g_keyMemSavePending;
+        g_keyMemLoadPending = false;
+        g_keyMemSavePending = false;
+        // Single, null-checked resolution of the memory-bank button tree —
+        // was duplicated verbatim at both call sites with no null checks at
+        // any level (a silent crash risk if this tab's layout ever changes).
+        lv_obj_t *page3Child = lv_obj_get_child(PowerSupply.page[3], 0);
+        lv_obj_t *tab = page3Child ? lv_obj_get_child(lv_obj_get_child(page3Child, 1), 0) : nullptr;
+        lv_obj_t *btn = tab ? find_btn_by_tag(tab, g_keyMemDigit) : nullptr;
+        if (btn)
+        {
+            if (wantSave) saveMemory(btn);
+            else loadMemory(btn);
+        }
+    }
+
+    if (g_keyChartModeTogglePending)
+    {
+        g_keyChartModeTogglePending = false;
+        static bool chart_mode = false;
+        if (chart_mode)
+            lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_SHIFT);
+        else
+            lv_chart_set_update_mode(PowerSupply.graph.chart, LV_CHART_UPDATE_MODE_CIRCULAR);
+        chart_mode = !chart_mode;
+    }
+
+    if (g_keyRotaryStepFinePending)
+    {
+        g_keyRotaryStepFinePending = false;
+        PowerSupply.Voltage.SetRotaryStep(1);
+        PowerSupply.Current.SetRotaryStep(1);
+        lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 10 * 12 - kHighlightXShift, -1000);
+        lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 10 * 12 - kHighlightXShift, -1000);
+    }
+
+    if (g_keyRotaryStepHoldWPending)
+    {
+        g_keyRotaryStepHoldWPending = false;
+        PowerSupply.Voltage.SetRotaryStep(2000.0000);
+        PowerSupply.Current.SetRotaryStep(10000.000);
+        lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 7 * 12 - kHighlightXShift, -10);
+        lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 7 * 12 - kHighlightXShift, 72);
+        lv_obj_clear_flag(PowerSupply.Voltage.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(PowerSupply.Current.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    if (g_keyRotaryStepHoldXPending)
+    {
+        g_keyRotaryStepHoldXPending = false;
+        PowerSupply.Voltage.SetRotaryStep(200);
+        PowerSupply.Current.SetRotaryStep(1000.000);
+        lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 9 * 12 - kHighlightXShift, -10);
+        lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 9 * 12 - kHighlightXShift, 72);
+        lv_obj_clear_flag(PowerSupply.Voltage.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(PowerSupply.Current.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    if (g_keyRotaryStepHoldYPending)
+    {
+        g_keyRotaryStepHoldYPending = false;
+        PowerSupply.Voltage.SetRotaryStep(20);
+        PowerSupply.Current.SetRotaryStep(100.000);
+        lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 10 * 12 - kHighlightXShift, -10);
+        lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 10 * 12 - kHighlightXShift, 72);
+        lv_obj_clear_flag(PowerSupply.Voltage.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(PowerSupply.Current.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    if (g_keyToggleVPending)
+    {
+        g_keyToggleVPending = false;
+        static bool hide = false;
+        hide = !hide;
+        lv_chart_hide_series(PowerSupply.stats.chart, PowerSupply.stats.serV, hide);
+        lv_chart_hide_series(PowerSupply.graph.chart, PowerSupply.graph.serV, hide);
+        if (!hide)
+            lv_obj_clear_flag(label_legend1, LV_OBJ_FLAG_HIDDEN);
+        else
+            lv_obj_add_flag(label_legend1, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    if (g_keyToggleIPending)
+    {
+        g_keyToggleIPending = false;
+        static bool hide = false;
+        hide = !hide;
+        lv_chart_hide_series(PowerSupply.stats.chart, PowerSupply.stats.serI, hide);
+        lv_chart_hide_series(PowerSupply.graph.chart, PowerSupply.graph.serI, hide);
+        if (!hide)
+            lv_obj_clear_flag(label_legend2, LV_OBJ_FLAG_HIDDEN);
+        else
+            lv_obj_add_flag(label_legend2, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    if (g_keyCurrEntryMilliPending)
+    {
+        g_keyCurrEntryMilliPending = false;
+        if (!lv_obj_is_visible(PowerSupply.gui.textarea_set_value))
+        {
+            lv_obj_clear_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN);
+            key_event_handler_readBack_k(PowerSupply.Current);
+            ismyTextHiddenChange = true;
+            keyboardInputActive = false;
+        }
+        else if (strcmp(lv_label_get_text(unit_label), "mA") == 0 || strcmp(lv_label_get_text(unit_label), "mV/V/mA/A") == 0)
+        {
+            key_event_handler(14);
+            keyboardInputActive = false;
+        }
+        lv_obj_invalidate(lv_scr_act());
+    }
 }
 
 void processDeferredMaToggle()

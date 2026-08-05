@@ -300,7 +300,7 @@ void setupPowerSupply()
 
     PowerSupply.gui.label_energy_counter = lv_label_create(PowerSupply.page[2]);
     lv_label_set_text(PowerSupply.gui.label_energy_counter, "0.000Wh");
-    lv_obj_align(PowerSupply.gui.label_energy_counter, LV_ALIGN_DEFAULT, 165, 171);
+    lv_obj_align(PowerSupply.gui.label_energy_counter, LV_ALIGN_DEFAULT, 165, 163);
     lv_obj_set_style_text_font(PowerSupply.gui.label_energy_counter, &lv_font_montserrat_10, 0);
 
     PowerSupply.gui.label_power_on_time = lv_label_create(PowerSupply.page[2]);
