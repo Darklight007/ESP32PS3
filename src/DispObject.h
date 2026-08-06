@@ -10,7 +10,11 @@ extern const char *const kFmt4Decimals;
 // in both its default position (DispObject.cpp setup()) and every step-size
 // realignment (input_handler.cpp's W/X/Y hold handlers) - one knob to shift
 // it left/right without touching the per-digit "N * 12" column math.
-constexpr int kHighlightXShift = 4;
+constexpr int kHighlightXShift = 5;
+// W-hold (coarsest/whole-unit digit) needs 2px left of its original position
+// (7*12) net, i.e. 1px more than kHighlightXShift alone gives it - applied
+// on top of kHighlightXShift, only for the W-hold case.
+constexpr int kHighlightXShiftWExtra = -3;
 
 #include <algorithm>
 #include <vector>

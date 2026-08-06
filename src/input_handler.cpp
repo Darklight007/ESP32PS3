@@ -1450,8 +1450,8 @@ void drainPendingKeyEvents()
         g_keyRotaryStepHoldWPending = false;
         PowerSupply.Voltage.SetRotaryStep(2000.0000);
         PowerSupply.Current.SetRotaryStep(10000.000);
-        lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 7 * 12 - kHighlightXShift, -10);
-        lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 7 * 12 - kHighlightXShift, 72);
+        lv_obj_align(PowerSupply.Voltage.highlight_adjValue, 0, 7 * 12 - kHighlightXShift - kHighlightXShiftWExtra, -10);
+        lv_obj_align(PowerSupply.Current.highlight_adjValue, 0, 7 * 12 - kHighlightXShift - kHighlightXShiftWExtra, 72);
         lv_obj_clear_flag(PowerSupply.Voltage.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(PowerSupply.Current.highlight_adjValue, LV_OBJ_FLAG_HIDDEN);
     }
