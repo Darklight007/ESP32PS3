@@ -194,30 +194,35 @@ void loop()
   drainPendingViewModeChange();
   drainPendingTabEvent();
   drainPendingPowerToggle();
-  drainPendingKeyEvents(); // Home, numeric entry, V/v/A/a readback, Z-key avg slider,
-                           // memory load/save, chart mode/graph pause toggles, rotary
-                           // step buttons, V/A series toggle - was defined but never
-                           // called, so all of the above silently did nothing.
+  drainPendingKeyEvents();      // Home, numeric entry, V/v/A/a readback, Z-key avg slider,
+                                // memory load/save, chart mode/graph pause toggles, rotary
+                                // step buttons, V/A series toggle - was defined but never
+                                // called, so all of the above silently did nothing.
   drainBattChemDropdownClose(); // '>' key on Utility page: close the chem dropdown
   TRACE("loop_post_drain");
 
   // Adaptive encoder response: fast when active, slower when idle
   bool encoderActive = (millis() - encoderTimeStamp) < 500; // 500ms idle threshold
 
-  // EXPERIMENTAL DEBUG (2026-07-23): per-section timing to find what causes
-  // the once/sec ~90-140ms stall found earlier this session (BARDBG). Prints
-  // once/sec whichever section had the largest single call that second.
-  // Remove once the stall's cause is found.
-  #define TIME_SECTION(name, call) do { \
-    unsigned long _t0 = micros(); \
-    call; \
-    unsigned long _dt = micros() - _t0; \
-    static unsigned long _max = 0; \
-    if (_dt > _max) _max = _dt; \
-    if (millis() - g_sectionPrintTimer >= 1000) { \
-      if (_max > 1000) Serial.printf("[SECDBG] %s maxUs=%lu\n", name, _max); \
-      _max = 0; \
-    } \
+// EXPERIMENTAL DEBUG (2026-07-23): per-section timing to find what causes
+// the once/sec ~90-140ms stall found earlier this session (BARDBG). Prints
+// once/sec whichever section had the largest single call that second.
+// Remove once the stall's cause is found.
+#define TIME_SECTION(name, call)                              \
+  do                                                          \
+  {                                                           \
+    unsigned long _t0 = micros();                             \
+    call;                                                     \
+    unsigned long _dt = micros() - _t0;                       \
+    static unsigned long _max = 0;                            \
+    if (_dt > _max)                                           \
+      _max = _dt;                                             \
+    if (millis() - g_sectionPrintTimer >= 1000)               \
+    {                                                         \
+      if (_max > 1000)                                        \
+        Serial.printf("[SECDBG] %s maxUs=%lu\n", name, _max); \
+      _max = 0;                                               \
+    }                                                         \
   } while (0)
   static unsigned long g_sectionPrintTimer = 0;
 
@@ -226,7 +231,7 @@ void loop()
 
   TIME_SECTION("scpi", scpiParser.process());
   TIME_SECTION("pwrMgmt", PowerManagementInterval(500));
-  MemoryMonitorInterval(5000);  // Memory monitoring every 5 seconds
+  MemoryMonitorInterval(5000); // Memory monitoring every 5 seconds
   TIME_SECTION("recPlay", RecordingPlaybackInterval());
   // TEMP TEST: disabled to check if this causes the periodic ~16-19ms LvglUpd spike
   // TIME_SECTION("p2clean", Page2RightSideCleanup(1000));
@@ -252,7 +257,8 @@ void loop()
       lastFlushMeasuresMs = millis();
     }
   }
-  if (millis() - g_sectionPrintTimer >= 1000) g_sectionPrintTimer = millis();
+  if (millis() - g_sectionPrintTimer >= 1000)
+    g_sectionPrintTimer = millis();
 
   // Settings flush: SetUpdate runs on Core 0 (function generator, encoder) and only
   // updates adjValue + adjValueChanged. The actual LVGL writes (setpoint label, bar)
@@ -289,12 +295,12 @@ void loop()
   // migrating this storage off SPIFFS (e.g. LittleFS) - bigger, separate task.
   {
     static unsigned long fgenSaveTimer = 0;
-    TIME_SECTION("fgenSave", schedule([] {
+    TIME_SECTION("fgenSave", schedule([]
+                                      {
       if (PowerSupply.funGenMemDirty) {
         PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
         PowerSupply.funGenMemDirty = false;
-      }
-    }, 15000, fgenSaveTimer));
+      } }, 15000, fgenSaveTimer));
   }
 
   // Auto-save the graph trace snapshot (Core 1). GraphPush() runs at ADC rate
@@ -305,11 +311,12 @@ void loop()
   // fix (move off SPIFFS) is scoped separately.
   {
     static unsigned long graphSaveTimer = 0;
-    TIME_SECTION("graphSave", schedule([] { SaveGraphDataIfDirty(); }, 180000, graphSaveTimer));
+    TIME_SECTION("graphSave", schedule([]
+                                       { SaveGraphDataIfDirty(); }, 180000, graphSaveTimer));
   }
-  BatteryChargerInterval(250);  // Li-ion charge/test state machine (Core 1)
-  processDeferredMaToggle();    // Handle mA/A toggle UI updates from Core 0
-  updateStatChartSize();        // Safe resize: never call lv_obj_set_size from draw callbacks
+  BatteryChargerInterval(250); // Li-ion charge/test state machine (Core 1)
+  processDeferredMaToggle();   // Handle mA/A toggle UI updates from Core 0
+  updateStatChartSize();       // Safe resize: never call lv_obj_set_size from draw callbacks
   managePageEncoderInteraction();
 
   // if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
@@ -335,7 +342,7 @@ void loop()
   // trackLoopExecution(__func__);
 }
 
-/*DATA:GRAPH? 
+/*DATA:GRAPH?
 //pio device monitor --log-file graph_dump.csv
 Noise analysis
 80Mhz page 2: ER:18.09

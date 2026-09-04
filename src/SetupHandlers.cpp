@@ -294,7 +294,7 @@ void setupPowerSupply()
     // Timer at top (y=159), then Energy (y=171), then Time (y=183)
     PowerSupply.gui.label_timer_remaining = lv_label_create(PowerSupply.page[2]);
     lv_label_set_text(PowerSupply.gui.label_timer_remaining, "");
-    lv_obj_align(PowerSupply.gui.label_timer_remaining, LV_ALIGN_DEFAULT, 165, 159);
+    lv_obj_align(PowerSupply.gui.label_timer_remaining, LV_ALIGN_DEFAULT, 165, 173);
     lv_obj_set_style_text_font(PowerSupply.gui.label_timer_remaining, &lv_font_montserrat_10, 0);
     lv_obj_add_flag(PowerSupply.gui.label_timer_remaining, LV_OBJ_FLAG_HIDDEN);  // Hidden by default
 

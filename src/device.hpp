@@ -356,8 +356,16 @@ public:
     // calibPoints iCal[2];
     // calibPoints mACal;             // ← renamed from miCal
     std::array<double, 2> internalLeakage;  // [0]=Amp range, [1]=mA range
-    double adc_inl_measure[36];
-    double adc_inl_ideal[36];
+    // Fixed storage for calib_inl.cpp's INL knot table (MEASURED[]/TRUE_IDEAL[]
+    // there, NPTS = their length). MUST stay >= NPTS or the calibration-save
+    // loop (calib_inl.cpp COMPUTE phase) writes past the end of these arrays
+    // into whatever follows in the CalBank vector - silent heap corruption,
+    // not a bounds-checked crash at the write site. calib_inl.cpp static_asserts
+    // NPTS against this constant, so growing the knot table past it fails the
+    // build instead of corrupting memory at runtime.
+    static constexpr size_t INL_MAX_POINTS = 48;
+    double adc_inl_measure[INL_MAX_POINTS];
+    double adc_inl_ideal[INL_MAX_POINTS];
     // double adc_inl_zc_measure[36];  // Zero-current INL: measured voltage (no load)
     // double adc_inl_zc_ideal[36];    // Zero-current INL: commanded voltage
 

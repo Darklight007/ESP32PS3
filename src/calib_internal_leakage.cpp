@@ -15,6 +15,12 @@
 #define LEAKAGE_SETTLE_MS    1500    // Voltage settling time after setpoint change (ms)
 // ────────────────────────────────────────────────────────────────────────────
 
+// Leakage-resistance measurement points - shared by both A and mA ranges
+// (mA_Active only routes the result to the right spinbox/internalLeakage[]
+// slot, the sequence and setpoints below are identical either way).
+static constexpr double kLeakageVLow  = 0.005; // was 0.0
+static constexpr double kLeakageVHigh = 32.0;
+
 // ─── Countdown timer ────────────────────────────────────────────────────────
 static lv_timer_t *s_countdown_timer = nullptr;
 static int         s_countdown_secs  = 0;
@@ -82,19 +88,19 @@ void start_leakage_resistance_measurement(lv_event_t *)
 
     esp_task_wdt_reset();
     static const SeqStep steps[] = {
-        {"Setting voltage to 0V", LEAKAGE_SETTLE_MS, 500,
+        {"Setting voltage to 5mV", LEAKAGE_SETTLE_MS, 500,
          []()
-         { PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); }, nullptr},
+         { PowerSupply.Voltage.SetUpdate(kLeakageVLow * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); }, nullptr},
         {"Reset statistics", 1000, LEAKAGE_SETTLE_MS,
          []()
          { PowerSupply.Current.Statistics.ResetStats(); }, nullptr},
-        {"Measuring current at 0V", LEAKAGE_MEASURE_MS, LEAKAGE_SETTLE_MS,
+        {"Measuring current at 5mV", LEAKAGE_MEASURE_MS, LEAKAGE_SETTLE_MS,
          []() { start_countdown(LEAKAGE_MEASURE_MS / 1000); },
          []() { stop_countdown(); g_leakage_i_at_0v = PowerSupply.Current.Statistics.Mean(); }},
         {"Setting voltage to 32V", LEAKAGE_SETTLE_MS, 500,
          []()
          {
-             PowerSupply.Voltage.SetUpdate(32.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+             PowerSupply.Voltage.SetUpdate(kLeakageVHigh * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
          },
          nullptr},
         {"Reset statistics", LEAKAGE_SETTLE_MS, LEAKAGE_SETTLE_MS,
@@ -112,7 +118,7 @@ void start_leakage_resistance_measurement(lv_event_t *)
              log_step("           i0 = %+1.6f", g_leakage_i_at_0v);
              log_step("           i1 = %+1.6f", g_leakage_i_at_32v);
              double diff = g_leakage_i_at_32v - g_leakage_i_at_0v;
-             double Rtot = (PowerSupply.mA_Active ? 1000.0 : 1.0) * 32.0 / diff / 1000.0;
+             double Rtot = (PowerSupply.mA_Active ? 1000.0 : 1.0) * (kLeakageVHigh - kLeakageVLow) / diff / 1000.0;
              // Allow negative R: at high V some hardware exhibits an inverse
              // bias (current sourced INTO the sense path) that scales linearly
              // with output voltage. Same I = V/R model handles it with R<0.
