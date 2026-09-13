@@ -659,7 +659,14 @@ public:
     MovingStatistics Statistics;
     MovingStatistics effectiveResolution;
     
+    // Voltage has one range, so a single instance is correct there. Current has
+    // two ranges (A / mA) with different ADC gain, so raw codes from one range
+    // are not the same population as the other - PowerSupply.Current uses
+    // rawValueStats for the A range and rawValueStats_mA for mA, selected by
+    // mA_Active, so switching ranges doesn't mix codes from both into one
+    // rolling average. rawValueStats_mA sits unused on Voltage.
     MovingStatistics rawValueStats;
+    MovingStatistics rawValueStats_mA;
     //  MovingStats measuredRaw;
 
     Histogram hist;

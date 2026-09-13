@@ -287,8 +287,14 @@ void DispObjects::Flush(void)
         else
             lv_label_set_text_fmt(label_setValue, "%+08.4fA", (adjValue - adjOffset) / adjFactor);
 
-        // update bar setting shadaow
-        lv_obj_set_width(Bar.bar_adjValue, ((adjValue - adjOffset) / adjFactor) / maxValue * lv_bar_get_max_value(Bar.bar));
+        // Update the setpoint shadow bar. Same formula as SetUpdate()'s
+        // direct-write path: adjValue, adjOffset and maxValue are all DAC
+        // counts, so the fraction needs NO adjFactor. The old extra
+        // /adjFactor here shrank the width 2000-10000x to ~0 px - and since
+        // encoder turns run on Core 0 (SetUpdate defers LVGL to this Flush),
+        // every encoder move "vanished" the shadow bar, while keypad entry
+        // (Core 1, SetUpdate's own write) restored it.
+        lv_obj_set_width(Bar.bar_adjValue, ((adjValue - adjOffset)) / maxValue * lv_bar_get_max_value(Bar.bar));
         adjValueChanged = false;
         // lv_obj_invalidate(label_setValue);
         // Serial.printf("\n%10.4f", (adjValue - adjOffset) / adjFactor);

@@ -1016,7 +1016,12 @@ void StatusBar()
         lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_calib_b, "%f", get_b(code1, m, vin1));
 
         lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_rawCode, "%+08i", PowerSupply.Voltage.rawValue);
-        lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_rawAVG_, "%+08.0f", PowerSupply.Voltage.measured.Mean() * m + get_b(code1, m, vin1));
+        // Average of the actual raw ADC codes (rawValueStats, fed in device.cpp on
+        // every conversion). This previously showed measured.Mean()*m + b, i.e. the
+        // CALIBRATED mean pushed back through the calibration line - so it moved
+        // whenever code1/vin1 were edited in this very window, despite the raw codes
+        // being unchanged. A raw average must not depend on the constants being tuned.
+        lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_rawAVG_, "%+08.0f", PowerSupply.Voltage.rawValueStats.Mean());
         lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
         lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
         lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_ER, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
@@ -1028,6 +1033,11 @@ void StatusBar()
 
         PowerSupply.calibrationUpdate();
 
+        // calibrationUpdate() just changed calib_m/calib_b, so previously-converted
+        // samples in `measured` were computed with the old constants - drop them.
+        // rawValueStats is deliberately NOT reset: raw codes are independent of the
+        // calibration, so its average must keep accumulating across these updates
+        // (resetting it here is what made "Avg Raw" average only a few samples).
         PowerSupply.Power.measured.ResetStats();
         PowerSupply.Voltage.measured.ResetStats();
 
@@ -1054,7 +1064,12 @@ void StatusBar()
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_calib_b, "%f", get_b(code1, m, vin1));
 
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_rawCode, "%+08i", PowerSupply.Current.rawValue);
-        lv_label_set_text_fmt(Calib_GUI.Current.lbl_rawAVG_, "%+08.0f", PowerSupply.Current.measured.Mean() * m + get_b(code1, m, vin1));
+        // Average of the actual raw ADC codes - see note in the voltage branch.
+        // A and mA ranges use different ADC gain, so each has its own rolling
+        // window (device.hpp/device.cpp); show whichever range is active.
+        lv_label_set_text_fmt(Calib_GUI.Current.lbl_rawAVG_, "%+08.0f",
+                               PowerSupply.mA_Active ? PowerSupply.Current.rawValueStats_mA.Mean()
+                                                      : PowerSupply.Current.rawValueStats.Mean());
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_calibratedValue, "%+09.4f", PowerSupply.Current.measured.value);
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Current.measured.Mean());
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_ER, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());

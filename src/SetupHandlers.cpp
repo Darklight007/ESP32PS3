@@ -253,8 +253,11 @@ void setupPowerSupply()
     PowerSupply.Current.effectiveResolution.SetWindowSize(32);
     PowerSupply.Power.effectiveResolution.SetWindowSize(1);
 
+    // Fixed window, independent of the ADC Avgs setting (which only sizes the
+    // calibrated `measured` averages above).
     PowerSupply.Voltage.rawValueStats.SetWindowSize(2048);
     PowerSupply.Current.rawValueStats.SetWindowSize(2048);
+    PowerSupply.Current.rawValueStats_mA.SetWindowSize(2048);
     // Setup current parameters
     PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", PowerSupply.Current.maxValue, PowerSupply.Current.minValue,
                               1.0, PowerSupply.dac_data.zero_current, 10000,"m");
@@ -425,6 +428,11 @@ void setupADC()
 
     // Setup ADC with READY pin number, ISR function, and I2C bus (Wire1)
     PowerSupply.setupADC(9, ADCPinISR, &Wire1);  // FIXED: ADC is on Wire1, not Wire!
+
+    // Populate Current.calib_m/b, adc_maxValue, and restrict (mA vs A decimal
+    // format) for the current range now that CalBank exists. LoadSetting() ran
+    // earlier in setup() but couldn't do this - CalBank was still empty then.
+    PowerSupply.calibrationUpdate();
     Serial.print("\nADC Setup & Calibration Completed.");
 
     // Rebuild INL interpolators from saved calibration data (must be after CalBank init)

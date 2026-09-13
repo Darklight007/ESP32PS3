@@ -18,7 +18,7 @@
 // Leakage-resistance measurement points - shared by both A and mA ranges
 // (mA_Active only routes the result to the right spinbox/internalLeakage[]
 // slot, the sequence and setpoints below are identical either way).
-static constexpr double kLeakageVLow  = 0.005; // was 0.0
+static constexpr double kLeakageVLow  = 0.000; //  
 static constexpr double kLeakageVHigh = 32.0;
 
 // ─── Countdown timer ────────────────────────────────────────────────────────
@@ -88,13 +88,13 @@ void start_leakage_resistance_measurement(lv_event_t *)
 
     esp_task_wdt_reset();
     static const SeqStep steps[] = {
-        {"Setting voltage to 5mV", LEAKAGE_SETTLE_MS, 500,
+        {"Setting voltage to low point", LEAKAGE_SETTLE_MS, 500,
          []()
          { PowerSupply.Voltage.SetUpdate(kLeakageVLow * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); }, nullptr},
         {"Reset statistics", 1000, LEAKAGE_SETTLE_MS,
          []()
          { PowerSupply.Current.Statistics.ResetStats(); }, nullptr},
-        {"Measuring current at 5mV", LEAKAGE_MEASURE_MS, LEAKAGE_SETTLE_MS,
+        {"Measuring current at low point", LEAKAGE_MEASURE_MS, LEAKAGE_SETTLE_MS,
          []() { start_countdown(LEAKAGE_MEASURE_MS / 1000); },
          []() { stop_countdown(); g_leakage_i_at_0v = PowerSupply.Current.Statistics.Mean(); }},
         {"Setting voltage to 32V", LEAKAGE_SETTLE_MS, 500,
@@ -238,11 +238,17 @@ void start_current_zero_calibration(lv_event_t *e)
          { PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); }, nullptr},
         {"Reset statistics", 1000, 1500,
          []()
-         { PowerSupply.Current.rawValueStats.ResetStats(); }, nullptr},
+         {
+             // A and mA ranges use different ADC gain, so each has its own
+             // rawValueStats instance (see DispObject.h) - reset whichever is active.
+             if (PowerSupply.mA_Active) PowerSupply.Current.rawValueStats_mA.ResetStats();
+             else PowerSupply.Current.rawValueStats.ResetStats();
+         }, nullptr},
         {"Measuring current at 0V", 10000, 1500,
          []() { start_countdown(10); },
          []() { stop_countdown();
-             g_zero_current_code = PowerSupply.Current.rawValueStats.Mean();
+             g_zero_current_code = PowerSupply.mA_Active ? PowerSupply.Current.rawValueStats_mA.Mean()
+                                                           : PowerSupply.Current.rawValueStats.Mean();
              Serial.printf("\n Code 1 at zero current:%i", g_zero_current_code);
          }},
         {"Setting code for 0.0A", 1500, 500, []()

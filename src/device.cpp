@@ -16,6 +16,24 @@ extern volatile bool lvglIsBusy, lvglChartIsBusy, blockAll;
 
 const char *const kFmt4Decimals = "%+08.4f";
 
+// Shared by LoadSetting() (Settings menu -> adcNumberOfDigits) and
+// calibrationUpdate() (range toggle), so both agree on what "the configured
+// decimal format" means for a given adcNumberOfDigits value.
+static const char *digitFormat(uint8_t adcNumberOfDigits)
+{
+    static const char *formats[] = {
+        "%+07.3f", // fallback/default
+        "%+05.1f", // 1 digit
+        "%+06.2f", // 2 digits
+        "%+07.3f", // 3 digits
+        kFmt4Decimals // 4 digits
+    };
+    int d = adcNumberOfDigits;
+    if (d < 1 || d > 4)
+        d = 3; // default if out of range
+    return formats[d];
+}
+
 extern lv_obj_t *btn_function_gen;
 extern CalibrationGui Calib_GUI;
 
@@ -97,6 +115,14 @@ void Device::calibrationUpdate(void)
     // Dividing FSR by 1000 in mA mode compared it against the wrong scale,
     // understating ER by log2(1000) =~ 10 bits. Same numeric FSR both modes.
     Current.adc_maxValue = 6.5536;
+
+    // mA range uses its own decimal-count setting (adcNumberOfDigits_mA,
+    // "mA Digits" in the Measure menu), independent of the A-range/Voltage
+    // setting - at mA_Active's ~1000x steeper calibration slope, the same
+    // digit count as A would mostly render ADC code noise (mA's effective
+    // resolution is ~10 bits lower than A's for the same physical noise).
+    Current.restrict = mA_Active ? digitFormat(settingParameters.adcNumberOfDigits_mA)
+                                  : digitFormat(settingParameters.adcNumberOfDigits);
 }
 
 //  std::vector<Calibration> CalBank
@@ -315,21 +341,14 @@ void Device::LoadSetting(void)
 
     Voltage.measured.SetWindowSize(std::pow(2, settingParameters.adcNumberOfAvgs));
 
-    static const char *formats[] = {
-        "%+07.3f", // fallback/default
-        "%+05.1f", // 1 digit
-        "%+06.2f", // 2 digits
-        "%+07.3f", // 3 digits
-        kFmt4Decimals // 4 digits
-    };
-
-    int d = settingParameters.adcNumberOfDigits;
-    if (d < 1 || d > 4)
-        d = 3; // default if out of range
-
-    Voltage.restrict = formats[d];
-    Current.restrict = formats[d];
-    Power.restrict = formats[d];
+    Voltage.restrict = digitFormat(settingParameters.adcNumberOfDigits);
+    Power.restrict = digitFormat(settingParameters.adcNumberOfDigits);
+    // Current.restrict is range-dependent (fixed 2 decimals in mA, the
+    // configured format in A) and is set by calibrationUpdate() instead -
+    // NOT called here because CalBank isn't populated yet this early in boot
+    // (setupADC() fills it after LoadSetting() runs). setupADC() calls
+    // calibrationUpdate() once CalBank is ready, which covers both boot and
+    // every later range toggle / calibration edit.
 
     Serial.printf("\nLast Voltage Value:% +8.4f", Voltage.adjValue / 2000.0 + 0 * Voltage.adjOffset);
     Serial.printf("\nLast Current Value:% +8.4f", Current.adjValue / 10000.0 + 0 * Current.adjOffset);
@@ -648,7 +667,13 @@ void Device::readCurrent()
             startTime = millis();
         }
 
-         Current.rawValueStats(Current.rawValue);
+        // Route to the A or mA raw-code average by range: the two ranges use
+        // different ADC gain, so their raw codes are different populations and
+        // must not share one rolling window (see DispObject.h field comment).
+        if (mA_Active)
+            Current.rawValueStats_mA(Current.rawValue);
+        else
+            Current.rawValueStats(Current.rawValue);
     }
 }
 
@@ -767,18 +792,21 @@ void Device::writeDAC_Current(uint16_t value)
 
 void Device::VCCCStatusUpdate(void)
 {
-    // Fast path: read pin first, bail if unchanged (most common case)
-    int currentStatus = digitalRead(CCCVPin);
-    if (currentStatus == lastCCCVStatus)
-        return;
-
-    // Skip if output is off or in function generator mode
+    // Check device state BEFORE the change-detect bail. The pin already sits in
+    // its CC state while the output is off into a load, so reading it first let
+    // lastCCCVStatus latch that value and return early - the -1 reset below was
+    // unreachable. Switching on then found the pin "unchanged" and never called
+    // setStatus(), leaving the display on CV while the supply was really in CC.
     DEVICE s = status;
     if (s == DEVICE::OFF || s == DEVICE::FUN)
     {
         lastCCCVStatus = -1;  // Reset so we re-check when turning on
         return;
     }
+
+    int currentStatus = digitalRead(CCCVPin);
+    if (currentStatus == lastCCCVStatus)
+        return;
 
     // Beep on CC/CV transitions (skip on first check after power on)
     if (lastCCCVStatus != -1 && settingParameters.beeperOnPowerChange)

@@ -122,6 +122,7 @@ struct SettingParameters
     uint8_t adcRateSavedForFUN = 0;  // Saved ADC rate when FUN mode activated
     uint16_t adcNumberOfAvgs;
     uint8_t adcNumberOfDigits;
+    uint8_t adcNumberOfDigits_mA = 2;  // Decimal places for the mA current range (independent of adcNumberOfDigits)
     uint16_t SetVoltage;
     uint16_t SetCurrent;
     bool buzzer = false;
