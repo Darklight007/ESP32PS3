@@ -499,6 +499,15 @@ public:
     const byte AmA_Pin = 13;
     bool mA_Active = false;
 
+    // Voltage used by the leakage compensation in readCurrent()/DACUpdate(),
+    // one-pole filtered. Deliberately NOT Voltage.measured.Mean(): that window
+    // is a single sample at adcNumberOfAvgs=0, so it passed the full per-sample
+    // voltage noise (~3.8mV) straight into the current reading - ~244nA on the
+    // mA range, about half the observed noise floor. It is also immune to
+    // ResetStats(), which used to slam the compensation to 0 and step the
+    // current by ~2.1mA. NAN = not seeded yet.
+    double leakageVFiltered = NAN;
+
     // REL (relative) mode - like Keithley 2010 REL button
     double currentRelOffset_A = 0.0;   // REL offset for A range
     double currentRelOffset_mA = 0.0;  // REL offset for mA range

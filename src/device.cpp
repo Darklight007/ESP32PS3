@@ -579,6 +579,16 @@ void Device::readVoltage()
         //     v_corrected = g_voltINL.apply(v_corrected);
 
         Voltage.measureUpdate(v_corrected);
+
+        // Feed the leakage-compensation voltage filter (see device.hpp).
+        // alpha = 1/8 -> ~8-sample time constant: 0.4s at 20 SPS, 8ms at 1000
+        // SPS, so it still tracks real setpoint changes quickly while cutting
+        // the per-sample noise it injects into the current reading by ~4x.
+        if (!std::isfinite(leakageVFiltered))
+            leakageVFiltered = v_corrected; // seed on first conversion
+        else
+            leakageVFiltered += 0.125 * (v_corrected - leakageVFiltered);
+
         Voltage.rawValueStats(Voltage.rawValue);
         adc.ADC_loopCounter++;
 
@@ -626,7 +636,11 @@ void Device::readCurrent()
             // adds the bias magnitude, which is correct.
             if (std::isfinite(leakage_R) && std::abs(leakage_R) > 0.001 && std::abs(leakage_R) < 1e9)
             {
-                c -= ((mA_Active ? 1000.0 : 1.0) * (Voltage.measured.Mean() / (leakage_R * 1000.0)));
+                // Filtered voltage, not Voltage.measured.Mean() - see device.hpp.
+                // Falls back to the raw mean only before the filter is seeded.
+                double vLeak = std::isfinite(leakageVFiltered) ? leakageVFiltered
+                                                               : Voltage.measured.Mean();
+                c -= ((mA_Active ? 1000.0 : 1.0) * (vLeak / (leakage_R * 1000.0)));
             }
         }
 
@@ -832,8 +846,15 @@ void Device::DACUpdate(void)
         double leakage_R = CalBank[bankCalibId].internalLeakage[mA_Active];
         if (std::isfinite(leakage_R) && std::abs(leakage_R) > 0.001 && std::abs(leakage_R) < 1e9)
         {
-            // double comp = (mA_Active ? 1000.0 : 1.0) * (Voltage.measured.Mean() / (leakage_R * 1000.0));
-            double comp = 0.8*(Voltage.measured.Mean() / (leakage_R * 1000.0));
+            // Same filtered voltage as the measurement path (see device.hpp) so
+            // the setpoint compensation doesn't chase per-sample voltage noise.
+            // NOTE: unlike readCurrent()'s compensation this has no mA_Active
+            // x1000 factor (commented out below) and an empirical 0.8 - the two
+            // paths disagree by ~1250x in mA mode. Left as-is; behaviour unchanged.
+            double vLeakDac = std::isfinite(leakageVFiltered) ? leakageVFiltered
+                                                              : Voltage.measured.Mean();
+            // double comp = (mA_Active ? 1000.0 : 1.0) * (vLeakDac / (leakage_R * 1000.0));
+            double comp = 0.8*(vLeakDac / (leakage_R * 1000.0));
             cur_comp_dac = (int32_t)(comp * Current.adjFactor);
         }
     }
