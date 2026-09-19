@@ -1026,22 +1026,38 @@ void StatusBar()
         lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
         lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_ER, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
 
-        PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2 = code2;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_1 = vin1;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_2 = vin2;
+        // Only re-apply the calibration when a spinbox actually moved. StatusBar()
+        // runs every 300ms (main.cpp), so doing this unconditionally wiped
+        // Voltage.measured 3x/second for as long as this window was open. With
+        // adcNumberOfAvgs=0 that window is ONE sample, so Mean() read 0 until the
+        // next conversion - and readCurrent()'s leakage compensation divides
+        // Voltage.measured.Mean() into the current, so every wipe injected a step
+        // of (V / leakage_R) into the current reading. Measured live: ~2.1mA steps
+        // on an 8.192mA range, which dragged ER from ~15 down to ~4 and left the
+        // graph's stddev spiking for the 25s it takes 512 samples to scroll out.
+        static int lastC1 = INT_MIN, lastC2 = INT_MIN;
+        static double lastV1 = NAN, lastV2 = NAN;
+        if (code1 != lastC1 || code2 != lastC2 || vin1 != lastV1 || vin2 != lastV2)
+        {
+            lastC1 = code1; lastC2 = code2; lastV1 = vin1; lastV2 = vin2;
 
-        PowerSupply.calibrationUpdate();
+            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2 = code2;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_1 = vin1;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_2 = vin2;
 
-        // calibrationUpdate() just changed calib_m/calib_b, so previously-converted
-        // samples in `measured` were computed with the old constants - drop them.
-        // rawValueStats is deliberately NOT reset: raw codes are independent of the
-        // calibration, so its average must keep accumulating across these updates
-        // (resetting it here is what made "Avg Raw" average only a few samples).
-        PowerSupply.Power.measured.ResetStats();
-        PowerSupply.Voltage.measured.ResetStats();
+            PowerSupply.calibrationUpdate();
 
-        PowerSupply.Voltage.hist.Reset();
+            // calibrationUpdate() just changed calib_m/calib_b, so previously-converted
+            // samples in `measured` were computed with the old constants - drop them.
+            // rawValueStats is deliberately NOT reset: raw codes are independent of the
+            // calibration, so its average must keep accumulating across these updates
+            // (resetting it here is what made "Avg Raw" average only a few samples).
+            PowerSupply.Power.measured.ResetStats();
+            PowerSupply.Voltage.measured.ResetStats();
+
+            PowerSupply.Voltage.hist.Reset();
+        }
     }
     if (PowerSupply.gui.calibration.win_ADC_current_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_current_calibration))
     {
@@ -1074,26 +1090,32 @@ void StatusBar()
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Current.measured.Mean());
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_ER, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
 
-        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_1 = code1;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_2 = code2;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_1 = vin1;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_2 = vin2;
+        // Same change-gate as the voltage branch above - see the note there for
+        // why an unconditional 300ms reset destroyed ER and the graph stddev.
+        // Tracked per range: switching A/mA legitimately changes the constants.
+        static int lastC1 = INT_MIN, lastC2 = INT_MIN;
+        static double lastV1 = NAN, lastV2 = NAN;
+        static int8_t lastRange = -1;
+        if (code1 != lastC1 || code2 != lastC2 || vin1 != lastV1 || vin2 != lastV2 ||
+            PowerSupply.mA_Active != lastRange)
+        {
+            lastC1 = code1; lastC2 = code2; lastV1 = vin1; lastV2 = vin2;
+            lastRange = PowerSupply.mA_Active;
 
-        PowerSupply.calibrationUpdate();
+            PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_1 = code1;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_2 = code2;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_1 = vin1;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_2 = vin2;
 
-        // PowerSupply.Current.calib_m = (PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_2 - PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_1) /
-        //                               (PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_2 - PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_1);
-        // PowerSupply.Current.calib_b = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_1 -
-        //                               PowerSupply.Current.calib_m * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_1;
+            PowerSupply.calibrationUpdate();
 
-        // PowerSupply.Current.calib_1m = 1.0 / PowerSupply.Current.calib_m;
+            PowerSupply.Power.measured.ResetStats();
+            PowerSupply.Voltage.measured.ResetStats();
+            PowerSupply.Voltage.hist.Reset();
 
-        PowerSupply.Power.measured.ResetStats();
-        PowerSupply.Voltage.measured.ResetStats();
-        PowerSupply.Voltage.hist.Reset();
-
-        PowerSupply.Current.measured.ResetStats();
-        PowerSupply.Current.hist.Reset();
+            PowerSupply.Current.measured.ResetStats();
+            PowerSupply.Current.hist.Reset();
+        }
     }
 
     // if (PowerSupply.eepromWriteFlag)

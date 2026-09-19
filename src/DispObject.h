@@ -376,6 +376,35 @@ public:
                 welfordMean_ += deltaA / static_cast<double>(NofAvgs);
                 double delta2A = sample - welfordMean_;
                 M2_ += deltaA * delta2A;
+
+                // Welford's removal step is NOT numerically stable: subtracting a
+                // sample's contribution back out loses precision every time, and on
+                // a quiet signal (deltas near zero, which is exactly our case at
+                // steady state) M2_ collapses to 0 or drifts negative within a few
+                // windows. Variance() then clamps to 0, StandardDeviation() returns
+                // 0, and ER() hands back its 0.0 sentinel - so a CLEANER signal
+                // produced a LOWER reported ER. Confirmed live: a 32-sample window
+                // with the mean visibly moving still reported stddev == 0.
+                // Re-derive mean/M2/sum exactly once per full window: O(N) every N
+                // samples = O(1) amortized, and it bounds the drift permanently.
+                if (windowSizeIndex_ % NofAvgs == 0)
+                {
+                    double m = 0.0;
+                    for (uint16_t i = 0; i < NofAvgs; i++) m += samples_[i];
+                    m /= static_cast<double>(NofAvgs);
+
+                    double m2 = 0.0, s2 = 0.0;
+                    for (uint16_t i = 0; i < NofAvgs; i++)
+                    {
+                        double d = samples_[i] - m;
+                        m2 += d * d;
+                        s2 += samples_[i] * samples_[i];
+                    }
+                    welfordMean_ = m;
+                    M2_ = m2;
+                    sum_ = m * static_cast<double>(NofAvgs);
+                    sum_sq_ = s2;
+                }
             }
         }
 
@@ -749,6 +778,10 @@ public:
     // every existing call site (encoder, keypad, direct entry) is unaffected.
     void SetUpdate(int value, bool bypassLock = false);
     void Flush(void);
+    // Setpoint shadow-bar width in px - single source of truth shared by
+    // SetUpdate() (Core 1 direct write) and Flush() (deferred Core 0 changes),
+    // range-aware for Current's mA mode. See definition for the unit math.
+    lv_coord_t shadowBarWidth(void);
     void SetEncoderUpdate(void);
     void setLock(bool lck);
     bool getLock();

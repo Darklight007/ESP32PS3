@@ -1,7 +1,9 @@
 #include "DispObject.h"
+#include "device.hpp"   // PowerSupply.mA_Active for measured-bar range scaling
 #include <esp32-hal.h>  // xPortGetCoreID
 
 extern volatile bool lvglIsBusy, blockAll;
+extern Device PowerSupply;
 
 // =====================================================================
 // REVERT SWITCH for SetUpdate() LVGL writes from Core 0:
@@ -71,7 +73,13 @@ void DispObjects::StatisticsUpdate(double value)
     if (Statistics.windowSizeIndex_ >= 2)
     {
         double er_sample = Statistics.ER(2 * adc_maxValue); // maxValue
-        if (!std::isinf(er_sample))
+        // ER() returns a 0.0 sentinel whenever stdDev isn't positive - not a
+        // real "0 bits" reading. Averaging those zeros into effectiveResolution
+        // dragged the displayed ER far below the true value (seen live: ~6 bits
+        // on a signal with no visible noise, where the genuine samples were
+        // ~18). A perfectly stable window means "can't measure it this window",
+        // so skip it and keep the last good average instead of poisoning it.
+        if (std::isfinite(er_sample) && er_sample > 0.0)
             effectiveResolution(er_sample);
     }
 }
@@ -142,10 +150,19 @@ void DispObjects::barUpdate(void)
         cachedScaleFactor = adjFactor / maxValue;
     }
 
+    // MEASURED bar only (shadow/setpoint bar is handled by shadowBarWidth()).
+    // In mA mode the measured value is mA-numeric (0..8.192) but
+    // cachedScaleFactor assumes the A range's full scale of 6.5536 A. The mA
+    // range's full scale is 8.192 mA = 6.5536 x 1.25, so divide the scale by
+    // 1.25 for the Current instance when mA is active. mA_Active is a bool
+    // (atomic read on Xtensa), computed fresh each call - no cached value to
+    // go stale on a range toggle, which is what sank an earlier attempt here.
+    double scale = cachedScaleFactor;
+    if (this == &PowerSupply.Current && PowerSupply.mA_Active)
+        scale /= 1.25; // full bar at 8.192 mA instead of 6.5536 A
+
     // Compute bar value before critical section
-    int32_t newBarValue = rawBarValue * cachedScaleFactor * cachedBarMax;
-    int newMaxX = cachedBarX + int(measured.absMax * cachedScaleFactor * cachedBarWidth) - 3;
-    int newMinX = cachedBarX + int(measured.absMin * cachedScaleFactor * cachedBarWidth) - 3;
+    int32_t newBarValue = rawBarValue * scale * cachedBarMax;
 
     // OPTIMIZED: Direct pointer write instead of lv_bar_set_value()
     if (*Bar.curValuePtr != newBarValue) {
@@ -156,8 +173,17 @@ void DispObjects::barUpdate(void)
     // Update max/min markers only on change — unconditional lv_obj_set_x() did a
     // style lookup every 1ms tick (~2000/s) even when the markers hadn't moved
     // (AUDIT_BARGRAPH_ENCODER #3), stealing Core 0 time from the ADC path.
-    if (newMaxX != lastMaxMarkerX) { lv_obj_set_x(Bar.bar_maxMarker, newMaxX); lastMaxMarkerX = newMaxX; }
-    if (newMinX != lastMinMarkerX) { lv_obj_set_x(Bar.bar_minMarker, newMinX); lastMinMarkerX = newMinX; }
+    // Finite guard BEFORE the int() casts: absMin/absMax are +/-inf right
+    // after ResetStats(), and casting inf to int is UB (documented hang risk
+    // in input_handler.cpp's 'T' handler) - skip markers until samples exist.
+    if (std::isfinite(measured.absMax)) {
+        int newMaxX = cachedBarX + int(measured.absMax * scale * cachedBarWidth) - 3;
+        if (newMaxX != lastMaxMarkerX) { lv_obj_set_x(Bar.bar_maxMarker, newMaxX); lastMaxMarkerX = newMaxX; }
+    }
+    if (std::isfinite(measured.absMin)) {
+        int newMinX = cachedBarX + int(measured.absMin * scale * cachedBarWidth) - 3;
+        if (newMinX != lastMinMarkerX) { lv_obj_set_x(Bar.bar_minMarker, newMinX); lastMinMarkerX = newMinX; }
+    }
 
     Bar.changed = false;
 }
@@ -225,6 +251,29 @@ void DispObjects::SetRotaryStep(double val)
     rotaryEncoderStep = val;
 }
 
+lv_coord_t DispObjects::shadowBarWidth(void)
+{
+    // Base fraction: setpoint counts over the full DAC-count span. adjValue,
+    // adjOffset and maxValue are all DAC counts, so no adjFactor here.
+    double frac = (adjValue - adjOffset) / maxValue;
+
+    // mA range (Current only): the setpoint stays in A-range counts
+    // (10 counts/mA - confirmed on hardware: entering "40 mA" = 400 counts;
+    // the shunt change did NOT alter this side), but the bar's full scale in
+    // mA mode is 8.192 mA = 81.92 counts. So the on-bar fraction is 800x the
+    // count fraction (65536/10 / 8.192 = 800 exactly). Same fresh-read
+    // pattern as barUpdate(): bool read is atomic, nothing cached to go stale.
+    if (this == &PowerSupply.Current && PowerSupply.mA_Active)
+        frac *= 800.0;
+
+    // Setpoints above the mA range's 8.192 mA ceiling would overflow the
+    // track - clamp to the bar's full width.
+    if (frac > 1.0) frac = 1.0;
+    if (frac < 0.0) frac = 0.0;
+
+    return (lv_coord_t)(frac * lv_bar_get_max_value(Bar.bar));
+}
+
 void DispObjects::SetUpdate(int value, bool bypassLock)
 {
     // value-= adjOffset;
@@ -265,7 +314,7 @@ void DispObjects::SetUpdate(int value, bool bypassLock)
         if (parent) lv_obj_invalidate(parent);
     }
     if (Bar.bar_adjValue && Bar.bar) {
-        lv_obj_set_width(Bar.bar_adjValue, ((adjValue - adjOffset)) / maxValue * lv_bar_get_max_value(Bar.bar));
+        lv_obj_set_width(Bar.bar_adjValue, shadowBarWidth());
     }
 
     // Serial.printf("\nmaxValue %15.5f  ",maxValue);
@@ -287,14 +336,13 @@ void DispObjects::Flush(void)
         else
             lv_label_set_text_fmt(label_setValue, "%+08.4fA", (adjValue - adjOffset) / adjFactor);
 
-        // Update the setpoint shadow bar. Same formula as SetUpdate()'s
-        // direct-write path: adjValue, adjOffset and maxValue are all DAC
-        // counts, so the fraction needs NO adjFactor. The old extra
-        // /adjFactor here shrank the width 2000-10000x to ~0 px - and since
-        // encoder turns run on Core 0 (SetUpdate defers LVGL to this Flush),
-        // every encoder move "vanished" the shadow bar, while keypad entry
+        // Update the setpoint shadow bar - shared formula with SetUpdate()'s
+        // direct-write path (see shadowBarWidth()). Keeping ONE implementation
+        // matters: these two paths once drifted apart (Flush had an extra
+        // /adjFactor) and the shadow bar "vanished" on every encoder turn
+        // (Core 0 defers LVGL writes to this Flush) while keypad entry
         // (Core 1, SetUpdate's own write) restored it.
-        lv_obj_set_width(Bar.bar_adjValue, ((adjValue - adjOffset)) / maxValue * lv_bar_get_max_value(Bar.bar));
+        lv_obj_set_width(Bar.bar_adjValue, shadowBarWidth());
         adjValueChanged = false;
         // lv_obj_invalidate(label_setValue);
         // Serial.printf("\n%10.4f", (adjValue - adjOffset) / adjFactor);
@@ -607,8 +655,11 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
             style_bar_adjValue_inited = true;
             lv_style_init(&style_bar_adjValue);
             lv_style_set_border_width(&style_bar_adjValue, 0);
-            lv_style_set_bg_opa(&style_bar_adjValue, LV_OPA_40);
-            lv_style_set_bg_color(&style_bar_adjValue, lv_color_hex(0xB1BFB1));
+            // Darker + lower opacity than the original 0xB1BFB1 @ 40% - the
+            // shadow should read as a faint reference mark, not compete with
+            // the measured bar.
+            lv_style_set_bg_opa(&style_bar_adjValue, LV_OPA_30);
+            lv_style_set_bg_color(&style_bar_adjValue, lv_color_hex(0x5A625A));
         }
         lv_obj_remove_style(Bar.bar_adjValue, &style_bar_adjValue, LV_STATE_DEFAULT);
         lv_obj_add_style(Bar.bar_adjValue, &style_bar_adjValue, LV_STATE_DEFAULT);

@@ -506,11 +506,12 @@ void GraphPush()
         if (count > CHART_SIZE) count = CHART_SIZE;
 
         lv_coord_t vVal = PowerSupply.Voltage.measured.value * 1000.0;
-        // mA-mode readings are already in mA (up to ~75), not Amps - scaling by
-        // 1000 like A-mode would blow past the chart's fixed 8000 raw ceiling
-        // and pin the trace flat. *100 instead lands mA readings in the same
-        // raw space (see the SECONDARY_Y tick-label comment above draw_event_cb2).
-        lv_coord_t iVal = PowerSupply.Current.measured.value * (PowerSupply.mA_Active ? 100.0 : 1000.0);
+        // Both ranges use the same x1000 factor now: A-mode reads 0..6.5536 A
+        // and mA-mode 0..8.192 mA, so each lands in the chart's -1000..8000
+        // raw space directly (see the SECONDARY_Y tick-label comment above
+        // draw_event_cb2). Before the shunt change mA-mode spanned 0..81.92
+        // and needed x100 to fit the same ceiling.
+        lv_coord_t iVal = PowerSupply.Current.measured.value * 1000.0;
 
         memmove(&graph_data_V[0], &graph_data_V[count], (CHART_SIZE - count) * sizeof(graph_data_V[0]));
         memmove(&graph_data_I[0], &graph_data_I[count], (CHART_SIZE - count) * sizeof(graph_data_I[0]));
@@ -538,7 +539,7 @@ void GraphPush()
     memcpy(&graph_data_V[0], &graph_data_V[1], (CHART_SIZE - 1) * sizeof(graph_data_V[0]));
     memcpy(&graph_data_I[0], &graph_data_I[1], (CHART_SIZE - 1) * sizeof(graph_data_I[0]));
     graph_data_V[CHART_SIZE - 1] = PowerSupply.Voltage.measured.value * 1000.0;
-    graph_data_I[CHART_SIZE - 1] = PowerSupply.Current.measured.value * (PowerSupply.mA_Active ? 100.0 : 1000.0);
+    graph_data_I[CHART_SIZE - 1] = PowerSupply.Current.measured.value * 1000.0;
     g_graphDataDirty = true;
 
     // Auto-stop after one full chart fill
@@ -907,13 +908,12 @@ void draw_event_cb2(lv_event_t *e)
         {
             static int index_sy = 0;
             // A-mode range is fixed at -1000..8000 raw (see GraphChart()), each tick
-            // worth 1000 raw = 1A. mA-mode reuses that exact same raw range/ticks
-            // (GraphPush() below scales mA readings by 100 instead of 1000 so they
-            // land in the same raw space) - each tick is then 1000 raw = 10mA,
-            // giving a -10..80mA scale with headroom above the new ~75mA HW ceiling,
-            // the same proportions the old -1..8A scale had above a ~5A ceiling.
+            // worth 1000 raw = 1A. Since the shunt change the mA range is
+            // 0..8.192 mA, so GraphPush() scales both ranges by 1000 and the two
+            // share identical tick numbers - only the unit on the top label
+            // differs (8A vs 8mA). Each tick is 1000 raw = 1A or 1mA.
             static const char *tickLabels_sy_A[]  = {"8A", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0", "-1.0"};
-            static const char *tickLabels_sy_mA[] = {"80", "70",  "60",  "50",  "40",  "30",  "20",  "10",  "0",   "-10"};
+            static const char *tickLabels_sy_mA[] = {"8mA", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0", "-1.0"};
             const char *const *tickLabels_sy = PowerSupply.mA_Active ? tickLabels_sy_mA : tickLabels_sy_A;
             constexpr int SY_LABEL_COUNT = 10;
 
@@ -922,7 +922,7 @@ void draw_event_cb2(lv_event_t *e)
 
             const char *sy_label = (index_sy >= 0 && index_sy < SY_LABEL_COUNT) ? tickLabels_sy[index_sy] : "";
             if (index_sy == 0)
-                lv_snprintf(dsc->text, dsc->text_length, "%s", PowerSupply.mA_Active ? "80mA" : "8A");
+                lv_snprintf(dsc->text, dsc->text_length, "%s", PowerSupply.mA_Active ? "8mA" : "8A");
             else
                 lv_snprintf(dsc->text, dsc->text_length, "%s", sy_label);
             index_sy++;

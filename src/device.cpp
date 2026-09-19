@@ -107,13 +107,13 @@ void Device::calibrationUpdate(void)
 
     Current.calib_1m = 1.0 / Current.calib_m;
 
-    // EXPERIMENTAL (er-fix): FSR for ER must be in the SAME unit as the
-    // values it's compared against. Current.measured/Statistics are already
-    // numerically expressed in whichever unit is active (the mA/A graph
-    // label just relabels the same digit, e.g. ui_helpers.cpp "8mA"/"8A" -
-    // see Power.measureUpdate()'s *0.001 which only rescales for watts).
-    // Dividing FSR by 1000 in mA mode compared it against the wrong scale,
-    // understating ER by log2(1000) =~ 10 bits. Same numeric FSR both modes.
+    // FSR for ER: StatisticsUpdate() uses 2 * adc_maxValue, so this yields
+    // 13.1072 - read as 13.1072 A in the A range and 13.1072 mA in the mA
+    // range. Deliberately ONE numeric value for both: Current.measured /
+    // Statistics are already expressed in whichever unit is active, so the
+    // same number carries the unit with it and ER stays directly comparable
+    // between ranges. Do not scale this per range (an earlier attempt divided
+    // it by 1000 for mA and understated ER by ~10 bits).
     Current.adc_maxValue = 6.5536;
 
     // mA range uses its own decimal-count setting (adcNumberOfDigits_mA,
@@ -1154,8 +1154,8 @@ void Device::FlushMeasures(void)
         {
             static bool wasOverRange = false;
             const double curMean = Current.measured.Mean();
-            const double TRIG_ON  = 70.000; // mA — start blinking (raised for the new mA HW's ~75mA usable range; was 6.500 for the old front-end)
-            const double TRIG_OFF = 65.000; // mA — stop blinking (hysteresis)
+            const double TRIG_ON  = 7.000; // mA — start blinking (shunt change took full scale 81.92 -> 8.192 mA, so these scale /10 from the old 70/65 and keep the same position relative to the ~7.5mA usable range)
+            const double TRIG_OFF = 6.500; // mA — stop blinking (hysteresis)
             const bool isOverRange = wasOverRange ? (curMean > TRIG_OFF)
                                                   : (curMean >= TRIG_ON);
 

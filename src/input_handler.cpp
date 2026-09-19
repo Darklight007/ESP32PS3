@@ -1573,6 +1573,12 @@ void processDeferredMaToggle()
 
     PowerSupply.Current.displayUpdate(true);
 
+    // Refresh the setpoint shadow bar for the new range: its width is only
+    // recomputed on setpoint changes (SetUpdate/Flush), so without this it
+    // kept the old range's 80x-different scaling until the next adjustment.
+    if (PowerSupply.Current.Bar.bar_adjValue && PowerSupply.Current.Bar.bar)
+        lv_obj_set_width(PowerSupply.Current.Bar.bar_adjValue, PowerSupply.Current.shadowBarWidth());
+
     // Update REL label for new range (page 2)
     if (srcPage == 2) {
         bool relActive = PowerSupply.mA_Active ? PowerSupply.currentRelActive_mA : PowerSupply.currentRelActive_A;
