@@ -38,7 +38,22 @@ public:
      * @param sdaPin SDA pin number
      * @param sclPin SCL pin number
      */
-    static void init(TwoWire* wire, int sdaPin, int sclPin);
+    static void init(TwoWire* wire, int sdaPin, int sclPin, uint32_t clockHz = 400000UL);
+
+    /**
+     * Register a callback invoked after the bus is successfully recovered.
+     *
+     * Recovering the BUS is not the same as recovering the DEVICES on it. If a
+     * slave reset (brownout, RESET glitch, power dip) its registers are back at
+     * power-on defaults - for the MCP23017 that means GPPU=0x0000, i.e. every
+     * internal pull-up configured at startup is gone and the keypad rows float.
+     * Use this to re-run the device's begin()/config so it matches what the
+     * driver thinks it wrote.
+     *
+     * The callback will itself perform I2C traffic; re-entrant recovery is
+     * suppressed while it runs.
+     */
+    static void setRecoveryCallback(void (*cb)());
 
     /**
      * Handle I2C error and attempt recovery
@@ -86,6 +101,9 @@ private:
     static TwoWire* wire;
     static int sdaPin;
     static int sclPin;
+    static uint32_t clockHz;          // restored after every re-begin()
+    static void (*recoveryCallback)();
+    static bool inRecovery;           // re-entrancy guard for the callback
     static I2CErrorStats stats;
 
     // Maximum consecutive errors before attempting recovery

@@ -110,6 +110,19 @@ void initializeI2C()
     else
         Serial.println("I2C_2 device OK.");
 
+    // NOTE: I2CRecovery is deliberately NOT armed here (no init() call), so it
+    // stays inert exactly as it has been: Keypad_MC17/LTC2655 still call
+    // handleError() on failed transfers, but with wire/sdaPin unset both
+    // recoverBus() and resetBus() bail immediately and nothing is touched.
+    // Arming it (init + a kpd.begin() recovery callback) was tried on
+    // 2026-09-20 and coincided with V/I/mV entry closing the textarea
+    // immediately instead of waiting for input - recovery tears the bus down
+    // (wire->end(), pin re-muxing, ~70ms of delays) and re-runs kpd.begin()
+    // mid-keypress, which can scramble the key state machine into a second
+    // RELEASED event. Causation was never proven (the board disconnected
+    // before logs could be captured). Re-arm only with a serial monitor
+    // attached, watching for "I2C: Attempting bus recovery".
+
     // Initialize keypad (does not start Wire library now)
     kpd.begin();
     kpd.setDebounceTime(33 * 2); // Set debounce time (no bouncing for this I2C)
