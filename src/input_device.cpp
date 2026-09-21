@@ -50,6 +50,25 @@ void getKeys() {
             }
         }
     }
+    else
+    {
+        // No state change this pass - retire the previous event.
+        //
+        // msg/keyChar describe the key event that JUST happened, but nothing
+        // used to clear them. keyMenus() self-consumes (it sets msg="done!"
+        // after firing); keyMenusPage() does NOT, so every page handler kept
+        // re-matching the same stale event on every later keyCheckLoop() call.
+        //
+        // kpd.getKeys() only rescans every debounceTime (66ms) and only returns
+        // true on an actual change, while keyCheckLoop() runs every 2-105ms -
+        // so one key release re-fired its handler ~6 times before the next real
+        // scan. For the V/I/mV handlers, which TOGGLE the textarea, that meant
+        // open, close, open, close... landing closed ~5 times out of 6.
+        //
+        // Handlers run immediately after this call within the same
+        // keyCheckLoop(), so a real event still dispatches exactly once.
+        msg = "done!";
+    }
 }
 
 // Menu helpers
