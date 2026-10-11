@@ -202,6 +202,7 @@ struct GUI
     lv_obj_t *label_energy_counter = nullptr;  // Energy Counter display
     lv_obj_t *label_timer_remaining = nullptr; // Timer countdown display
     lv_obj_t *label_current_rel = nullptr;     // REL indicator for current
+    lv_obj_t *label_current_ovl = nullptr;     // "OVL" shown near current full scale
 };
 
 struct Graph_
@@ -498,6 +499,16 @@ public:
     const byte CCCVPin = 12;
     const byte AmA_Pin = 13;
     bool mA_Active = false;
+
+    // TEMPORARY experiment: ADS1219 PGA x4 on CURRENT conversions only.
+    // Deliberately NOT part of SettingParameters, so it is never persisted and
+    // always comes back as x1 after a reboot. Toggled from Measure > "I PGA x4".
+    bool iPgaX4 = false;
+    // Which gain the conversion currently in flight was actually started with.
+    // readVoltage() sets the PGA and kicks off the CURRENT conversion; readCurrent()
+    // reads it back one sample later. Latching the value here instead of re-reading
+    // iPgaX4 means a mid-flight toggle can never divide a sample by the wrong gain.
+    volatile bool iPgaPendingCurrentX4 = false;
 
     // Voltage used by the leakage compensation in readCurrent()/DACUpdate(),
     // one-pole filtered. Deliberately NOT Voltage.measured.Mean(): that window

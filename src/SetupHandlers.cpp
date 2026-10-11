@@ -1,7 +1,17 @@
 #include "SetupHandlers.h" // Include the setup handlers header
 #include "i2c_recovery.h"  // Include I2C bus recovery module
 #include "calib_inl.h"     // Include INL calibration for startup rebuild
+#include "esp_heap_caps.h" // heap_caps_malloc for the internal DMA band buffer
 // #include "calib_inl_zc.h"  // Include zero-current INL calibration for startup rebuild
+
+// Staging buffer for display DMA, in internal (DMA-capable) RAM. The LVGL draw
+// buffers live in PSRAM, which SPI master cannot DMA from - see the detailed
+// note in setupDMA(). my_disp_flush() pushes through this in bands.
+// 320 x 24 px = 15360 bytes; sized to stay well inside the ~41KB of free
+// internal heap while keeping the band count (and so the SPI overhead) low.
+static constexpr size_t DMA_BAND_ROWS = 24;
+static constexpr size_t DMA_BAND_PIXELS = (size_t)IWIDTH * DMA_BAND_ROWS;
+static uint16_t *dmaBandBuf = nullptr;
 
 // **Pin Definitions**
 #define SDA_1_ADC 17 // SDA pin for I2C bus 1 (ADC)
@@ -181,6 +191,30 @@ void setupDMA()
     tft.initDMA();
     lv_disp_draw_buf_init(&draw_buf, buf[0], buf[1], IWIDTH * IHEIGHT);
 
+    // DMA staging buffer in INTERNAL (DMA-capable) RAM.
+    //
+    // The LVGL draw buffers above are TFT_eSprites of IWIDTH*IHEIGHT, which
+    // createSprite() puts in PSRAM (2 x 150KB). PSRAM is not DMA-capable for
+    // SPI master, so when pushImageDMA() handed such a pointer straight to
+    // spi_device_queue_trans() the driver tried to allocate its own internal
+    // bounce buffer for the whole transfer and failed:
+    //     [TFTDMA] ret=0x101 (ESP_ERR_NO_MEM) len=16287 buf=0x3d800908 dmaCap=0
+    // Upstream then did assert(ret == ESP_OK), which abort()s and REBOOTED the
+    // unit - the random restarts during full-auto calibration, where INL's
+    // repaints are large and frequent.
+    //
+    // pushImageDMA()'s 6th argument is exactly the hook for this: given a
+    // buffer, it copies the image into it and DMAs from THAT. So stage each
+    // band through this internal buffer and the driver never needs to bounce.
+    // One fixed allocation at boot - no per-frame malloc, so no fragmentation.
+    dmaBandBuf = (uint16_t *)heap_caps_malloc(DMA_BAND_PIXELS * sizeof(uint16_t),
+                                              MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+    Serial.printf("\nDMA band buffer: %u px (%u bytes) @ %p\n",
+                  (unsigned)DMA_BAND_PIXELS, (unsigned)(DMA_BAND_PIXELS * sizeof(uint16_t)),
+                  (void *)dmaBandBuf);
+    if (!dmaBandBuf)
+        Serial.println("WARNING: DMA band buffer alloc failed - flushing direct from PSRAM (may drop frames)");
+
 #else
     // Initialize display buffer without DMA
     lv_disp_draw_buf_init(&draw_buf, buf[0], buf[1], screenWidth * 10);
@@ -282,6 +316,15 @@ void setupPowerSupply()
     lv_obj_set_style_text_font(PowerSupply.gui.label_current_rel, &lv_font_montserrat_12, 0);
     lv_obj_align(PowerSupply.gui.label_current_rel, LV_ALIGN_TOP_RIGHT, -2, 74);
     lv_obj_add_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
+
+    // "OVL" overload indicator - shown once the current reading approaches the
+    // active range's full scale (threshold scales with the PGA; see FlushMeasures).
+    PowerSupply.gui.label_current_ovl = lv_label_create(PowerSupply.page[2]);
+    lv_label_set_text(PowerSupply.gui.label_current_ovl, "OVL");
+    lv_obj_set_style_text_color(PowerSupply.gui.label_current_ovl, lv_color_hex(0xFF0000), 0);
+    lv_obj_set_style_text_font(PowerSupply.gui.label_current_ovl, &lv_font_montserrat_12, 0);
+    lv_obj_align(PowerSupply.gui.label_current_ovl, LV_ALIGN_TOP_RIGHT, -24, 74);
+    lv_obj_add_flag(PowerSupply.gui.label_current_ovl, LV_OBJ_FLAG_HIDDEN);
 
     // Setup power display parameters
     PowerSupply.Power.setup(PowerSupply.page[2], "", -14, 144, "W", 0, 0, 0, 0, 0,"", &dseg_b_24, &Tauri_R_28);
@@ -536,12 +579,58 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
     tft.startWrite();
 
 #if DMA
-    // Use DMA to push image to display
-    tft.pushImageDMA(area->x1, area->y1,
-                     area->x2 - area->x1 + 1,
-                     area->y2 - area->y1 + 1,
-                     (uint16_t *)&color_p->full);
-    tft.dmaWait(); // Wait for DMA transfer to complete
+    // Push in horizontal bands of at most 0x4000 (16384) pixels.
+    //
+    // pushImageDMA() can only DMA 64KB at once, and for anything larger it falls
+    // back to a `while (len > 0x4000) pushPixels(...)` loop - that is BLOCKING
+    // (polling) SPI, after which it still queues a DMA transaction on the same
+    // device. Mixing a polling transfer with spi_device_queue_trans() makes the
+    // queue call return ESP_ERR_INVALID_STATE, and the library does
+    // `assert(ret == ESP_OK)` - which abort()s and REBOOTS the unit.
+    //
+    // Our LVGL draw buffer is a full-screen sprite (IWIDTH*IHEIGHT = 76800 px),
+    // so every large invalidation took that path. It only bit on big repaints
+    // (INL opening its window during full-auto calibration) and only sometimes,
+    // depending on whether the polling transfer had drained - which is exactly
+    // how it presented: random reboots at step 6/6.
+    // TFT_eSPI's own comment says the caller should split into <=32768 px
+    // blocks; staying under 0x4000 keeps us clear of the fallback entirely.
+    //
+    // No throughput cost: the original code called dmaWait() immediately after
+    // the single push, so transfers were never overlapped anyway.
+    {
+        const int32_t x = area->x1;
+        const int32_t w = area->x2 - area->x1 + 1;
+        const int32_t h = area->y2 - area->y1 + 1;
+        uint16_t *src = (uint16_t *)&color_p->full;
+
+        // Rows per band. Bounded by the internal staging buffer when we have
+        // one (that is what makes the source DMA-capable), otherwise by the
+        // library's 0x4000-pixel fallback threshold.
+        const size_t bandLimitPx = dmaBandBuf ? DMA_BAND_PIXELS : (size_t)0x4000;
+        int32_t maxRows = (w > 0) ? (int32_t)(bandLimitPx / (size_t)w) : h;
+        if (maxRows < 1)
+            maxRows = 1;
+
+        int32_t yy = area->y1;
+        int32_t rowsLeft = h;
+        while (rowsLeft > 0)
+        {
+            const int32_t rows = (rowsLeft > maxRows) ? maxRows : rowsLeft;
+            // 6th arg = staging buffer: pushImageDMA() copies this band into it
+            // and DMAs from THERE, so the SPI driver gets DMA-capable internal
+            // memory instead of a PSRAM pointer it has to bounce (and fail on
+            // with ESP_ERR_NO_MEM). nullptr falls back to DMA straight from the
+            // source, i.e. the old behaviour, if the alloc ever failed.
+            tft.pushImageDMA(x, yy, w, rows, src, dmaBandBuf);
+            tft.dmaWait(); // must complete before the next band overwrites the
+                           // staging buffer / reuses the library's static
+                           // spi_transaction_t
+            src += (size_t)rows * (size_t)w;
+            yy += rows;
+            rowsLeft -= rows;
+        }
+    }
 
 #else
     // Push image to display without DMA

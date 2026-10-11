@@ -289,11 +289,31 @@ namespace
         case 2:  fmt = "%+06.2f"; break;
         case 3:  fmt = "%+07.3f"; break;
         case 4:  fmt = "%+08.4f"; break;
+        // 5 decimals trades the leading integer digit for a fifth decimal
+        // (+7.12345 instead of +07.1234) - same 8-char width. Only valid
+        // because the mA range tops out at 8.192; see digitFormat() in
+        // device.cpp.
+        case 5:  fmt = "%+08.5f"; break;
         default: fmt = "%+07.3f"; break;
         }
         if (PowerSupply.mA_Active)
             PowerSupply.Current.restrict = fmt;
         PowerSupply.settingParameters.adcNumberOfDigits_mA = v;
+    }
+
+    // TEMPORARY experiment: ADS1219 PGA x4 on current conversions only.
+    // Intentionally not written to settingParameters, so it is never saved and
+    // always returns to x1 on the next boot.
+    static void switch_iPga_event_cb(lv_event_t *e)
+    {
+        if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED)
+            return;
+        auto *sw = lv_event_get_target(e);
+        const bool x4 = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        PowerSupply.iPgaX4 = x4;
+        // No on-screen "x4" marker by request - the switch state and this log
+        // line are the only indication. OVL still reflects the scaled range.
+        Serial.printf("\nI PGA: x%d", x4 ? 4 : 1);
     }
 
     static void switch_buzzer_event_cb(lv_event_t *e)
@@ -677,8 +697,14 @@ void SettingMenu(lv_obj_t *parent)
     PowerSupply.gui.slider_adcRate = create_slider(section, nullptr, "ADC SPS", 0, 4, PowerSupply.settingParameters.adcRate, slider_adcRate_event_cb, LV_EVENT_VALUE_CHANGED);
     PowerSupply.gui.slider_Avgs = create_slider(section, nullptr, "ADC # of Avgs", 0, (int)std::log2(MAX_NO_OF_AVG), PowerSupply.settingParameters.adcNumberOfAvgs, slider_adcAVG_event_cb, LV_EVENT_VALUE_CHANGED);
     create_slider(section, nullptr, "Number of Digits", 1, 4, PowerSupply.settingParameters.adcNumberOfDigits, slider_decimalPoints_event_cb, LV_EVENT_VALUE_CHANGED);
-    create_slider(section, nullptr, "mA Digits", 1, 4, PowerSupply.settingParameters.adcNumberOfDigits_mA, slider_decimalPoints_mA_event_cb, LV_EVENT_VALUE_CHANGED);
+    // Max 5 (not 4 like the general slider): at 5 the format drops the leading
+    // integer digit, which only works for the mA range's 0-8.192 span.
+    create_slider(section, nullptr, "mA Digits", 1, 5, PowerSupply.settingParameters.adcNumberOfDigits_mA, slider_decimalPoints_mA_event_cb, LV_EVENT_VALUE_CHANGED);
     create_switch_(section, nullptr, "Auto Bar-Graph", false, switch_buzzer_event_cb, LV_EVENT_VALUE_CHANGED, PowerSupply.gui.setting_menu);
+    // TEMPORARY: ADS1219 PGA x4 on current only. Kept last in the Measure page
+    // as it is an experiment. Always starts unchecked (x1) - PowerSupply.iPgaX4
+    // is not part of settingParameters, so nothing persists it.
+    create_switch_(section, nullptr, "I PGA x4", false, switch_iPga_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     // Calibration
     lv_obj_t *sub_cal = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);

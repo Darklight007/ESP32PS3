@@ -26,10 +26,16 @@ static const char *digitFormat(uint8_t adcNumberOfDigits)
         "%+05.1f", // 1 digit
         "%+06.2f", // 2 digits
         "%+07.3f", // 3 digits
-        kFmt4Decimals // 4 digits
+        kFmt4Decimals, // 4 digits
+        // 5 digits: drops to ONE integer digit to keep the field 8 chars wide
+        // (+7.12345 vs +07.1234), so it only fits a range whose magnitude stays
+        // under 10. That is true for mA (full scale 8.192) but NOT for Voltage
+        // (0-32.768) or Power - the "Number of Digits" slider is capped at 4 for
+        // exactly that reason; only the mA Digits slider offers 5.
+        "%+08.5f" // 5 digits (mA range only)
     };
     int d = adcNumberOfDigits;
-    if (d < 1 || d > 4)
+    if (d < 1 || d > 5)
         d = 3; // default if out of range
     return formats[d];
 }
@@ -562,7 +568,15 @@ void Device::readVoltage()
 
         Voltage.rawValue = adc.readConversion();
         adcDataReady = false;
-        adc.ads1219->setGain(ONE);
+        // TEMPORARY experiment: apply the PGA to CURRENT conversions only. This
+        // gain is programmed right before the CURRENT conversion is kicked off,
+        // so it is the gain that sample will be digitised with. Voltage keeps
+        // x1 (set in readCurrent, before it starts the VOLTAGE conversion).
+        // Latch what we actually used so readCurrent() divides by the matching
+        // factor even if the toggle flips while this conversion is in flight.
+        const bool useX4 = iPgaX4;
+        iPgaPendingCurrentX4 = useX4;
+        adc.ads1219->setGain(useX4 ? FOUR : ONE);
         adc.startConversion(CURRENT, REF_EXTERNAL);
 
         // OPTIMIZED: Single line calculation for speed
@@ -620,11 +634,24 @@ void Device::readCurrent()
 
         Current.rawValue = adc.readConversion();
         adcDataReady = false;
+        // Voltage always runs at x1 - the PGA experiment is current-only.
         adc.ads1219->setGain(ONE);
         adc.startConversion(VOLTAGE, REF_EXTERNAL);
 
+        // Undo the PGA before applying the x1 calibration. Divide the RAW code
+        // rather than the final current: calib_b is a zero-CODE offset, and at
+        // x4 the hardware offset is amplified along with the signal, so raw/4
+        // recovers the exact x1-equivalent code and the stored calibration
+        // stays valid. Dividing the result instead would leave calib_b
+        // unscaled and bias the reading by (3/4)*calib_b/calib_m ~ 0.058 mA.
+        // Current.rawValue itself is left as the true ADC code so the
+        // calibration screen's Raw Code / Avg Raw still show what the converter
+        // returned - do NOT calibrate while x4 is engaged.
+        const double rawI = iPgaPendingCurrentX4 ? (Current.rawValue / 4.0)
+                                                 : (double)Current.rawValue;
+
         // OPTIMIZED: Fast path for current calculation with bounds check
-        double c = (Current.rawValue - Current.calib_b) * Current.calib_1m;
+        double c = (rawI - Current.calib_b) * Current.calib_1m;
 
         // Leakage compensation (with bounds validation and division-by-zero protection)
         if (!CalBank.empty() && bankCalibId >= 0 && bankCalibId < (int8_t)CalBank.size() &&
@@ -1175,8 +1202,13 @@ void Device::FlushMeasures(void)
         {
             static bool wasOverRange = false;
             const double curMean = Current.measured.Mean();
-            const double TRIG_ON  = 7.000; // mA — start blinking (shunt change took full scale 81.92 -> 8.192 mA, so these scale /10 from the old 70/65 and keep the same position relative to the ~7.5mA usable range)
-            const double TRIG_OFF = 6.500; // mA — stop blinking (hysteresis)
+            // Thresholds scale with the PGA: at x4 the converter saturates at a
+            // quarter of the input current, so full scale drops 8.192 -> 2.048 mA
+            // and these come down with it (7.000/6.500 -> 1.750/1.625), keeping
+            // the same position relative to the usable range.
+            const double pgaDiv  = iPgaX4 ? 4.0 : 1.0;
+            const double TRIG_ON  = 7.000 / pgaDiv; // mA — start blinking (shunt change took full scale 81.92 -> 8.192 mA, so these scale /10 from the old 70/65 and keep the same position relative to the ~7.5mA usable range)
+            const double TRIG_OFF = 6.500 / pgaDiv; // mA — stop blinking (hysteresis)
             const bool isOverRange = wasOverRange ? (curMean > TRIG_OFF)
                                                   : (curMean >= TRIG_ON);
 
@@ -1194,12 +1226,16 @@ void Device::FlushMeasures(void)
                     lv_obj_add_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
                 else
                     lv_obj_clear_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
+                if (gui.label_current_ovl)
+                    lv_obj_clear_flag(gui.label_current_ovl, LV_OBJ_FLAG_HIDDEN);
                 wasOverRange = true;
             }
             else if (wasOverRange)
             {
                 // Clear once on transition back to in-range
                 lv_obj_clear_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
+                if (gui.label_current_ovl)
+                    lv_obj_add_flag(gui.label_current_ovl, LV_OBJ_FLAG_HIDDEN);
                 wasOverRange = false;
             }
         }

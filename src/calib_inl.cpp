@@ -22,8 +22,14 @@ bool g_voltINL_ready = false;
 
 // Optional preload calibration data (0..32V, 35 pts)
 lv_obj_t *table_inl = nullptr;
-static const double MEASURED[] = {-.0005, 0, 0.100, 0.250, .500, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 32.5};
-static const double TRUE_IDEAL[] = {-.0005, 0, 0.100, 0.250, .500, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 32.5};
+// NOTE on the first knot: keep it well clear of the second one. It was briefly
+// -0.0005, only 0.5mV below the 0 point, and since X in the COMPUTE phase is
+// the MEASURED voltage (mV-scale noise even after averaging) the two came back
+// tied or inverted - build() then threw "x must be strictly increasing" inside
+// an LVGL timer callback and REBOOTED the unit mid-calibration. -0.0045 is the
+// long-standing value and gives ~4.5mV of separation.
+static const double MEASURED[] = {-.0045, 0, 0.100, 0.250, .500, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 32.5};
+static const double TRUE_IDEAL[] = {-.0045, 0, 0.100, 0.250, .500, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 32.5};
 constexpr size_t NPTS = sizeof(MEASURED) / sizeof(MEASURED[0]);
 static_assert(NPTS == sizeof(TRUE_IDEAL) / sizeof(TRUE_IDEAL[0]), "knot sizes must match");
 // CalBank's adc_inl_measure/adc_inl_ideal (device.hpp) are fixed-size storage
@@ -218,9 +224,53 @@ static void INL_timer_cb(lv_timer_t *)
 
         std::vector<double> X(inl.x_raw, inl.x_raw + INL_FSM::NPTS); // ideal volts (Mean)
         std::vector<double> Y(TRUE_IDEAL, TRUE_IDEAL + NPTS);        // true volts (set)
-        g_voltINL.setPoints(X, Y);
-        g_voltINL.build();
-        g_voltINL_ready = true;
+
+        // MonotoneCubicCalibrator::build() THROWS ("x must be strictly
+        // increasing") and this runs inside an LVGL timer callback, so an
+        // uncaught throw aborts and REBOOTS the device mid-calibration.
+        // X is the MEASURED voltage at each knot, so any two closely-spaced
+        // knots can come back tied or inverted once noise is included - the
+        // table starts -0.0005, 0.000, 0.100, 0.250, 0.500 and that first pair
+        // is only 0.5mV apart against mV-scale noise. Find the offending pair,
+        // report it, and abandon the run instead of crashing.
+        int badIdx = -1;
+        for (size_t i = 1; i < X.size(); i++)
+        {
+            if (!(X[i] > X[i - 1]))
+            {
+                badIdx = (int)i;
+                break;
+            }
+        }
+        if (badIdx >= 0)
+        {
+            INL_dbg("[INL] ABORT: measured volts not strictly increasing at knot %d: "
+                    "%.6f -> %.6f (commanded %.4f -> %.4f). INL not applied, nothing saved. "
+                    "Widen the low-end knot spacing in MEASURED[]/TRUE_IDEAL[] or raise settle time.",
+                    badIdx, X[badIdx - 1], X[badIdx],
+                    TRUE_IDEAL[badIdx - 1], TRUE_IDEAL[badIdx]);
+            g_voltINL_ready = false;
+            inl_gui_compute();
+            inl.ph = INL_FSM::DONE;
+            break;
+        }
+
+        try
+        {
+            g_voltINL.setPoints(X, Y);
+            g_voltINL.build();
+            g_voltINL_ready = true;
+        }
+        catch (const std::exception &e)
+        {
+            INL_dbg("[INL] ABORT: build() rejected the measured set (%s). "
+                    "INL not applied, nothing saved.", e.what());
+            g_voltINL_ready = false;
+            inl_gui_compute();
+            inl.ph = INL_FSM::DONE;
+            break;
+        }
+
         for (int i = 0; i < NPTS; i++)
         {
             PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure[i] = inl.x_raw[i];
