@@ -6,3 +6,16 @@ lib
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# Machine-local Claude Code settings (settings.local.json holds personal paths)
+.claude/
+
+# Python bytecode from the helper scripts
+__pycache__/
+
+# Captured serial/graph dumps - regenerated on demand, not source
+graph_dump.csv
+graph_dump.html
+
+# Editor/font backup files
+*.c.bak
