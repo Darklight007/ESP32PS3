@@ -602,6 +602,15 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     lv_style_set_text_font(&style_measure, font_measure);
     lv_obj_remove_style(label_measureValue, &style_measure, LV_STATE_DEFAULT);
     lv_obj_add_style(label_measureValue, &style_measure, LV_STATE_DEFAULT);
+    // LVGL pads every label's redraw area by font_height/4 on all sides (for
+    // italic glyphs) - 12 px here, turning each 261x48 digit update into a
+    // ~285x72 repaint (+64%). The DSEG digit fonts overhang their box by at most
+    // 3 px sideways and never vertically, so 3 px is enough. Runs after the
+    // label class handler (user callbacks follow it), so it overrides it.
+    lv_obj_add_event_cb(label_measureValue, [](lv_event_t *e) {
+        *(lv_coord_t *)lv_event_get_param(e) = 3;
+    }, LV_EVENT_REFR_EXT_DRAW_SIZE, nullptr);
+    lv_obj_refresh_ext_draw_size(label_measureValue);
 
     /******************************
      **   Unit
@@ -720,6 +729,45 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
         lv_line_set_points(lineMn[i], minorTick, 2); /*Set the points*/
         lv_obj_align(lineMn[i], 0, 2 + i * tickDist, 70 + 4);
     }
+
+    // The 39 tick lines sit under the bar, so every bar frame repainted 39
+    // widgets - per-object draw overhead was 4.4 of a 13 ms bar frame. Keep
+    // them as hidden geometry/style references and draw them all from one
+    // transparent host, created right here so it keeps their z-order (above
+    // the bars, below the markers). Same math as lv_line's own DRAW_MAIN.
+    for (auto i = 0; i < 7; i++)
+        lv_obj_add_flag(lineMj[i], LV_OBJ_FLAG_HIDDEN);
+    for (auto i = 0; i < 32; i++)
+        lv_obj_add_flag(lineMn[i], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t *tickHost = lv_obj_create(label_set);
+    lv_obj_remove_style_all(tickHost);
+    lv_obj_clear_flag(tickHost, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_pos(tickHost, 0, 66); // covers ticks at y 71..75, x 2..barLength+2
+    lv_obj_set_size(tickHost, barLength + 16, 14);
+    lv_obj_add_event_cb(tickHost, [](lv_event_t *e) {
+        lv_obj_t *set = (lv_obj_t *)lv_event_get_user_data(e);
+        lv_draw_ctx_t *draw_ctx = lv_event_get_draw_ctx(e);
+        lv_draw_line_dsc_t dsc;
+        bool dscReady = false;
+        for (uint32_t c = 0; c < lv_obj_get_child_cnt(set); c++)
+        {
+            lv_obj_t *ln = lv_obj_get_child(set, c);
+            if (!lv_obj_check_type(ln, &lv_line_class))
+                continue;
+            if (!dscReady) // all ticks share the default line style
+            {
+                lv_draw_line_dsc_init(&dsc);
+                lv_obj_init_draw_line_dsc(ln, LV_PART_MAIN, &dsc);
+                dscReady = true;
+            }
+            const lv_point_t *pts = ((lv_line_t *)ln)->point_array; // no getter in LVGL 8
+            lv_area_t a;
+            lv_obj_get_coords(ln, &a);
+            lv_point_t p1 = {(lv_coord_t)(pts[0].x + a.x1), (lv_coord_t)(pts[0].y + a.y1)};
+            lv_point_t p2 = {(lv_coord_t)(pts[1].x + a.x1), (lv_coord_t)(pts[1].y + a.y1)};
+            lv_draw_line(draw_ctx, &dsc, &p1, &p2);
+        }
+    }, LV_EVENT_DRAW_MAIN, label_set);
 
     /******************************
     **   Bar max Value

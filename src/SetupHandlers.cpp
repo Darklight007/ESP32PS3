@@ -2,6 +2,7 @@
 #include "i2c_recovery.h"  // Include I2C bus recovery module
 #include "calib_inl.h"     // Include INL calibration for startup rebuild
 #include "esp_heap_caps.h" // heap_caps_malloc for the internal DMA band buffer
+#include "error_handler.h" // startup failure reporting (createTasks)
 // #include "calib_inl_zc.h"  // Include zero-current INL calibration for startup rebuild
 
 // Staging buffer for display DMA, in internal (DMA-capable) RAM. The LVGL draw
@@ -144,7 +145,10 @@ void initializeI2C()
 
     // Initialize keypad (does not start Wire library now)
     kpd.begin();
-    kpd.setDebounceTime(33 * 2); // Set debounce time (no bouncing for this I2C)
+    // Keypad::getKeys() won't rescan sooner than this, so at 66 ms it silently
+    // overrode the 2/10 ms typing tiers in tasks.cpp. 20 ms still rides out
+    // switch bounce (typically <5-10 ms) and lets those tiers take effect.
+    kpd.setDebounceTime(20);
     kpd.setHoldTime(1000);       // Set hold time
 
     Serial.println("I2C Initialized.");
@@ -526,20 +530,14 @@ void setupBuzzer()
 // Create tasks for FreeRTOS
 void createTasks()
 {
-    // Create a task for Bar Graph display, with priority 0, pinned to core 0
-    xTaskCreatePinnedToCore(
-        Task_BarGraph, /* Task function */
-        "Task_bargraph",       /* Name of task */
-        4096,          /* Stack size of task (high-water ~0.7KB; was 8000 - see DMA_BAND_ROWS) */
-        NULL,          /* Parameter of the task */
-        5,             /* Priority of the task */
-        &Task_bargraph,        /* Task handle to keep track of created task */
-        0              /* Pin task to core 0 */
-    );
+    // No bar-graph task: the bars are updated on Core 1 right before each
+    // render (updateBarsForFrame() in intervals.cpp), so every frame carries the
+    // newest value. The old Core 0 task polled every 1 ms, skipped whenever
+    // Core 1 was rendering, and its LVGL writes raced the renderer.
 
     // Create a task for ADC reading and FUN generation
     // Priority 5 - balanced (was 1 too low, 20 was too high)
-    xTaskCreatePinnedToCore(
+    const BaseType_t adcOk = xTaskCreatePinnedToCore(
         Task_ADC,                /* Task function */
         "Voltage & Current ADC", /* Name of task */
         14000,                   /* Stack size of task */
@@ -548,6 +546,23 @@ void createTasks()
         &Task_adc,               /* Task handle */
         0                        /* Pin task to core 0 */
     );
+    // Task_ADC is created after the UI has taken most internal SRAM. If its
+    // 14 KB stack doesn't fit, creation fails and the unit boots looking normal
+    // but with no measurements and a dead keypad - make that impossible to miss.
+    // (setup() runs on Core 1, so the LVGL calls here are safe.)
+    if (adcOk != pdPASS)
+    {
+        Task_adc = nullptr;
+        char msg[96];
+        snprintf(msg, sizeof(msg), "Task_ADC not started: %u B internal RAM free, largest block %u B",
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        ErrorHandler::report(ErrorHandler::Severity::CRITICAL, ErrorHandler::Category::MEMORY, msg, __FILE__, __LINE__);
+        lv_obj_t *mb = lv_msgbox_create(NULL, "STARTUP FAILURE",
+                                        "ADC/keypad task could not start (out of internal RAM).\n"
+                                        "Measurements and keypad are disabled.", NULL, false);
+        lv_obj_center(mb);
+    }
 
  
     // Create a task for ADC reading, with priority 1, pinned to core 0

@@ -82,6 +82,10 @@ private:
 //	byte pin_iosetup( );
 	// MC17 setup
 	word iodir_state;    // copy of IODIR register
+	// Keypad::scanKeys() reads every row of a column one pin at a time; the
+	// whole 16-bit port comes back each time, so cache it until the next write.
+	word portCache = 0;
+	bool portCacheValid = false;
 	void _begin( void );
 };
 

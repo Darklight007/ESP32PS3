@@ -814,9 +814,10 @@ void Device::adjustAdcTaskPriority()
         vTaskPrioritySet(Task_adc, newPriority);
         Serial.printf("\n[Task Priority] Task_ADC priority set to %d (ADC rate: %d)\n",
                       newPriority, settingParameters.adcRate);
-        vTaskPrioritySet(Task_bargraph, newPriority_bargraph);
-        Serial.printf("\n[Task Priority] Task_bargraph priority set to %d (ADC rate: %d)\n",
-                      newPriority_bargraph, settingParameters.adcRate);
+        // Task_bargraph no longer exists (bars render on Core 1). Guard anyway:
+        // vTaskPrioritySet(NULL, ...) would change the CALLING task's priority.
+        if (Task_bargraph != nullptr)
+            vTaskPrioritySet(Task_bargraph, newPriority_bargraph);
 
     }
 }

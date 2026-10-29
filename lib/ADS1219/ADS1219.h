@@ -84,6 +84,7 @@ public:
 	TwoWire *_wire;
 
 	void start();  // Made public for direct conversion control
+	void selectSingleEnded(int channel);  // configure channel only, no start
 
 private:
 	uint8_t readRegister(uint8_t reg);

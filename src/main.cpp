@@ -25,6 +25,7 @@
 #include "demos/lv_demos.h"
 // #include <../lib/TFT_eSPI/Processors/TFT_eSPI_ESP32_S3.h>
 #include <TFT_eSPI.h>
+#include "spi_quiet.h"
 
 // Custom components
 #include "myFonts.h"
@@ -164,13 +165,19 @@ void loop()
   //   // Render bars immediately (throttled to ~60 FPS to avoid DMA issues)
   TRACE("loop_top");
   static unsigned long lastBarRender = 0;
-  if (millis() - lastBarRender >= 10) // was 100: touch was polled at only 10 Hz
+  // spiQuietBegin(): in low-noise mode (ADC rate 0) skip while a conversion
+  // is in flight - lv_timer_handler draws and reads touch over SPI.
+  if (millis() - lastBarRender >= 10 && spiQuietBegin()) // was 100: touch was polled at only 10 Hz
   {
+    updateBarsForFrame(); // lv_timer_handler may render too - keep bars current
     lvglIsBusy = true;
     TRACE("loop_pre_lvgl");
     lv_timer_handler();
+    if (SpiQuiet::lowNoise.load())
+      lv_refr_now(NULL); // low-noise: one SPI slot per conversion - don't waste it
     TRACE("loop_post_lvgl");
     lvglIsBusy = false;
+    spiQuietEnd();
     lastBarRender = millis();
   }
   // }
@@ -230,9 +237,10 @@ void loop()
   } while (0)
   static unsigned long g_sectionPrintTimer = 0;
 
-  // 5 ms, not 0: at 0 this ran ~6000x/s, almost always with nothing dirty,
-  // ~35us each - about a fifth of Core 1. 5 ms is still faster than the panel.
-  TIME_SECTION("LvglUpd", LvglUpdatesInterval(5, true));
+  // No render here: one render per loop pass, at the end of loop() after the
+  // digits/bars are updated. With a render here AND at the end (AND inside
+  // lv_timer_handler), a heavy pass ran up to three back to back - ~150 ms in
+  // FUN mode, freezing the digits and bars for the whole pass.
   StatusBarUpdateInterval(300);
 
   TIME_SECTION("scpi", scpiParser.process());
@@ -343,8 +351,9 @@ void loop()
   // invalidations queued by the work above (SCPI, intervals) without waiting
   // for the next full loop pass. Same call already used at line 187 — no new
   // mechanism, just doubles the paint opportunities per iteration.
-  // Shares the 5 ms throttle with the call above (same timer).
-  LvglUpdatesInterval(5, true);
+  // Now the ONLY per-pass render (see note above). 5 ms throttle, not 0: at 0
+  // it ran ~6000x/s with nothing dirty, ~35 us each - a fifth of Core 1.
+  TIME_SECTION("LvglUpd", LvglUpdatesInterval(5, true));
 
   // trackLoopExecution(__func__);
 }

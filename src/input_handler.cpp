@@ -901,7 +901,11 @@ void keyCheckLoop()
     keyMenus('r', " RELEASED.", []
              {
                  lv_obj_invalidate(lv_scr_act());
-                 lv_refr_now(NULL);
+                 if (spiQuietBegin()) // else the next normal render draws it
+                 {
+                     lv_refr_now(NULL);
+                     spiQuietEnd();
+                 }
              });
 
     // Long press T - REL mode: zero current display (like Keithley 2010 REL)

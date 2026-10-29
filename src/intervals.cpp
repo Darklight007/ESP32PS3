@@ -165,6 +165,17 @@ void VCCCInterval(unsigned long interval)
              interval, timer_);
 }
 
+// Bars are drawn from Core 1 just before each render, so every frame shows
+// the newest measured value. Cheap when nothing moved (barUpdate() only
+// invalidates on a real change). Main page only - that's where the bars live.
+void updateBarsForFrame()
+{
+    if (blockAll || Tabs::getCurrentPage() != 2) // 2 = main page
+        return;
+    PowerSupply.Voltage.barUpdate();
+    PowerSupply.Current.barUpdate();
+}
+
 // Internal state for LvglUpdatesInterval - shared between overloads
 static unsigned long lvgl_timer_ = {0};
 static unsigned int lvglIsBlocked = {0};
@@ -180,11 +191,13 @@ void LvglUpdatesInterval(unsigned long interval, bool forceUpdate)
              {
                  // When forceUpdate is true (encoder active), bypass adcDataReady check
                  // for immediate UI responsiveness
-                 if (!lvglChartIsBusy && !blockAll && (forceUpdate || adcDataReady))
+                 if (!lvglChartIsBusy && !blockAll && (forceUpdate || adcDataReady) && spiQuietBegin())
                  {
+                     updateBarsForFrame();
                      lvglIsBusy = 1;
                      lv_refr_now(NULL);
                      lvglIsBusy = 0;
+                     spiQuietEnd();
                      lvglIsBlocked = 0;
                      return;
                  }

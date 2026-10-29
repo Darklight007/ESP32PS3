@@ -59,7 +59,7 @@ void getKeys() {
         // after firing); keyMenusPage() does NOT, so every page handler kept
         // re-matching the same stale event on every later keyCheckLoop() call.
         //
-        // kpd.getKeys() only rescans every debounceTime (66ms) and only returns
+        // kpd.getKeys() only rescans every debounceTime (20 ms) and only returns
         // true on an actual change, while keyCheckLoop() runs every 2-105ms -
         // so one key release re-fired its handler ~6 times before the next real
         // scan. For the V/I/mV handlers, which TOGGLE the textarea, that meant

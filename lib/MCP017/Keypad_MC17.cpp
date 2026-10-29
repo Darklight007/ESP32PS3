@@ -146,13 +146,19 @@ void Keypad_MC17::_begin(void)
 void Keypad_MC17::pin_mode(byte pinNum, byte mode)
 {
 
+	const word prev = iodir_state;
 if (mode == OUTPUT) {
         iodir_state &= ~(0b0000000000000001 << pinNum);
     }
     else {
         iodir_state |= (0b0000000000000001 << pinNum);
     } // if mode
-	
+	// scanKeys() re-asserts every row as input on each scan; skip the I2C
+	// write when IODIR wouldn't change (iodir_state mirrors the chip).
+	if (iodir_state == prev)
+		return;
+	portCacheValid = false;
+
 
 	_wire->beginTransmission((int)i2caddr);
 	_wire->write(IODIRA);
@@ -178,15 +184,18 @@ void Keypad_MC17::pin_write(byte pinNum, boolean level)
 
 int Keypad_MC17::pin_read(byte pinNum)
 {
-	_wire->beginTransmission((int)i2caddr);
-	_wire->write(GPIOA);
-	_wire->endTransmission();
 	word mask = 0x1 << pinNum;
-	_wire->requestFrom((int)i2caddr, 2);
-	word pinVal = 0;
-	pinVal = _wire->read();
-	pinVal |= (_wire->read() << 8);
-	pinVal &= mask;
+	if (!portCacheValid)
+	{
+		_wire->beginTransmission((int)i2caddr);
+		_wire->write(GPIOA);
+		_wire->endTransmission();
+		_wire->requestFrom((int)i2caddr, 2);
+		portCache = _wire->read();
+		portCache |= (_wire->read() << 8);
+		portCacheValid = true;
+	}
+	word pinVal = portCache & mask;
 	if (pinVal == mask)
 	{
 		return 1;
@@ -206,6 +215,7 @@ void Keypad_MC17::port_write(word i2cportval)
 	_wire->write(highByte(i2cportval));
 	_wire->endTransmission();
 	pinState = i2cportval;
+	portCacheValid = false;
 } // port_write( )
 
 word Keypad_MC17::pinState_set()
@@ -229,6 +239,7 @@ word Keypad_MC17::iodir_read()
 void Keypad_MC17::iodir_write(word iodir)
 {
 	iodir_state = iodir;
+	portCacheValid = false;
 	_wire->beginTransmission((int)i2caddr); // read current IODIR reg
 	_wire->write(IODIRA);
 	_wire->write(lowByte(iodir_state));

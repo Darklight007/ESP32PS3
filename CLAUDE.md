@@ -25,15 +25,13 @@ Precision laboratory power supply with 24-bit ADC measurement (ADS1219), 16-bit 
 
 **Core 0 (ADC/DAC critical path):**
 - `Task_ADC` (Priority 1): ADC interrupt handling, measurement processing, INL calibration, DAC updates, input polling
-- `Task_BarGraph` (Priority 0): Bar graph rendering (main page only)
 
 **Core 1 (UI/SCPI):**
-- Main loop: LVGL timer handler (UI rendering), SCPI command processing, status bar updates, power management, statistics calculation
+- Main loop: LVGL timer handler (UI rendering), bar graph updates (`updateBarsForFrame()` right before each render), SCPI command processing, status bar updates, power management, statistics calculation
 
 **CRITICAL:** LVGL is NOT thread-safe. Most LVGL calls MUST happen on Core 1 (main loop).
 
 **Exceptions (Core 0):**
-- `lv_obj_invalidate()` - Used in Task_BarGraph for bar graph updates (safe, only marks for redraw)
 - `lv_obj_has_state()` / `lv_obj_has_flag()` - Read-only state checks in Task_ADC (used cautiously for mode detection)
 
 **Never call from Core 0:** Widget creation, deletion, style changes, or complex UI updates. Use `lvglIsBusy` and `blockAll` flags when necessary.
@@ -73,7 +71,6 @@ ADS1219 ADC → GPIO9 DRDY interrupt → Task_ADC
 ### FUN Only Mode
 
 Special optimization when function generator needs minimal UI overhead:
-- Disables bar graph task updates
 - Reduces graph refresh rate (500ms vs 125ms)
 - Keyboard polling goes to ultra-fast (2ms when typing, otherwise 10ms)
 - Allows maximum waveform generation performance
@@ -81,7 +78,8 @@ Special optimization when function generator needs minimal UI overhead:
 ### Cross-Core Synchronization Flags
 
 - **`blockAll`** - Set `true` during destructive UI operations (calibration windows, full-screen overlays). Both cores check this before touching shared state. Used in ~11 files.
-- **`lvglIsBusy`** - Set `true` while LVGL is rendering. Core 0 skips ADC reads at slowest SPS (rate 0) when display SPI is active to avoid bus contention.
+- **`lvglIsBusy`** - Set `true` while LVGL is rendering.
+- **Low-noise mode (`spi_quiet.h`)** - At ADC rate 0, display/touch SPI and ADC conversions strictly alternate: Core 0 defers `start()` while Core 1 draws; Core 1 skips renders (`spiQuietBegin()`) while a conversion runs. Display SPI otherwise shifts readings ~-0.33 mV with spikes. Any new display SPI call must be wrapped in `spiQuietBegin()/spiQuietEnd()`.
 - **`lvglChartIsBusy`** - Prevents chart data pushes while LVGL is actively rendering chart widgets.
 
 ### Interval Scheduling Pattern
@@ -111,7 +109,7 @@ src/
 ├── SetupHandlers.cpp     # Hardware initialization sequence
 ├── device.hpp/cpp        # Central Device class (state management)
 ├── DispObject.h/cpp      # Measurement display objects (Voltage/Current)
-├── tasks.cpp             # FreeRTOS tasks (Task_ADC, Task_BarGraph)
+├── tasks.cpp             # FreeRTOS task (Task_ADC)
 ├── intervals.cpp         # Scheduled periodic functions
 ├── ui_creation.cpp       # LVGL UI layout (5 tabs: Histogram[0]/Graph[1]/Main[2]/Utility[3]/Settings[4])
 ├── ui_helpers.cpp        # UI event callbacks

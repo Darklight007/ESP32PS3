@@ -10,6 +10,7 @@
 #include <ADS1219.h>
 #include <WiFi.h>
 #include <functional>
+#include "spi_quiet.h"
 #include <Preferences.h>
 #include <EEPROM.h>
 #include "LTC2655.h"
@@ -98,6 +99,7 @@ extern TaskHandle_t Task_bargraph;
 static void IRAM_ATTR ADCPinISR()
 {
     adcDataReady = true;
+    SpiQuiet::adcConverting.store(false); // conversion done - display may draw
 
     // Notify ADC task that new data is ready
     // Use task notification for efficient interrupt-to-task communication
@@ -427,9 +429,43 @@ public:
         //     ads1219->readDifferential_2_3();
         //     // ads1219->readSingleEnded(3);
 
-        ads1219->readSingleEnded(channel);  // Configure channel
-        ads1219->start();  // Actually START the conversion!
+        ads1219->selectSingleEnded(channel);  // Configure channel (no start)
         busyChannel = channel;
+        if (quietMode)
+        {
+            startPending = true; // started by serviceStart() when SPI is idle
+            pendingSince = millis();
+        }
+        else
+            ads1219->start();  // Actually START the conversion!
+    }
+
+    // Task_ADC calls this every loop pass. In low-noise mode (adcRate 0) it
+    // starts a deferred conversion only while display SPI is idle; see spi_quiet.h.
+    bool quietMode{false};
+    bool startPending{false};
+    unsigned long pendingSince{0};
+    void serviceStart(bool lowNoise)
+    {
+        using namespace SpiQuiet;
+        quietMode = lowNoise;
+        SpiQuiet::lowNoise.store(lowNoise);
+        if (!lowNoise)
+            adcTurn.store(false);
+        if (!startPending)
+            return;
+        // Give a waiting render its slot first (bounded, so the ADC never starves)
+        if (lowNoise && renderWanted.load() && millis() - pendingSince < 150)
+            return;
+        adcConverting.store(true);
+        if (spiActive.load())
+        {
+            adcConverting.store(false);
+            return;
+        }
+        ads1219->start();
+        startPending = false;
+        adcTurn.store(false);
     }
 
     int address = 0x40;
