@@ -37,6 +37,10 @@ volatile bool g_powerTogglePending = false;
 // shape as g_powerTogglePending above.
 volatile bool g_keyNumPending = false;
 volatile int  g_keyNumBtnId = -1;
+// REL (long-press T) toggles currentRelActive_* on Core 0, but the "R" marker is
+// an LVGL object - show/hide it from Core 1 instead, or the flag change races the
+// renderer and the marker only updates sometimes.
+volatile bool g_relLabelPending = false;
 volatile bool g_keyVoltEntryPending = false;
 volatile bool g_keyVoltEntryMilliPending = false;
 volatile bool g_keyCurrEntryPending = false;
@@ -923,14 +927,11 @@ void keyCheckLoop()
                          PowerSupply.currentRelActive_A = true;
                      }
                  }
-                 // Update REL label visibility
-                 bool relActive = PowerSupply.mA_Active ? PowerSupply.currentRelActive_mA : PowerSupply.currentRelActive_A;
-                 if (PowerSupply.gui.label_current_rel) {
-                     if (relActive)
-                         lv_obj_clear_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
-                     else
-                         lv_obj_add_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
-                 }
+                 // Defer the "R" marker to Core 1. This lambda runs inside
+                 // keyCheckLoop(), i.e. Task_ADC on Core 0, and touching an LVGL
+                 // object from there races the renderer - which is why the marker
+                 // only tracked the REL state some of the time.
+                 g_relLabelPending = true;
              });
 
     keyMenusPage('T', " RELEASED.", 2, [&]
@@ -1309,6 +1310,20 @@ void drainPendingPowerToggle()
     PowerSupply.toggle();
 }
 
+// Show/hide the "R" REL marker for whichever current range is active.
+// Core 1 only - the marker is an LVGL object.
+void applyRelLabel()
+{
+    if (!PowerSupply.gui.label_current_rel)
+        return;
+    const bool relActive = PowerSupply.mA_Active ? PowerSupply.currentRelActive_mA
+                                                 : PowerSupply.currentRelActive_A;
+    if (relActive)
+        lv_obj_clear_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_add_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
+}
+
 // Called from Core 1 main loop — performs the exact LVGL logic the V/v/A/a
 // and numeric-keypad handlers used to run inline on Core 0. Each flag/branch
 // here matches its original Core-0 lambda body 1:1, just moved to the core
@@ -1317,6 +1332,13 @@ void drainPendingPowerToggle()
 // now Core 0 never touches LVGL at all, so there's nothing to wait for.
 void drainPendingKeyEvents()
 {
+    // REL toggled by long-press T on Core 0; apply the marker here.
+    if (g_relLabelPending)
+    {
+        g_relLabelPending = false;
+        applyRelLabel();
+    }
+
     if (g_keyNumPending)
     {
         g_keyNumPending = false;
@@ -1579,14 +1601,9 @@ void processDeferredMaToggle()
     if (PowerSupply.Current.Bar.bar_adjValue && PowerSupply.Current.Bar.bar)
         lv_obj_set_width(PowerSupply.Current.Bar.bar_adjValue, PowerSupply.Current.shadowBarWidth());
 
-    // Update REL label for new range (page 2)
-    if (srcPage == 2) {
-        bool relActive = PowerSupply.mA_Active ? PowerSupply.currentRelActive_mA : PowerSupply.currentRelActive_A;
-        if (PowerSupply.gui.label_current_rel) {
-            if (relActive) lv_obj_clear_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
-            else lv_obj_add_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
-        }
-    }
+    // Update REL label for new range (page 2) - REL state is per-range
+    if (srcPage == 2)
+        applyRelLabel();
 
     lv_obj_invalidate(lv_scr_act());
     blockAll = false;
