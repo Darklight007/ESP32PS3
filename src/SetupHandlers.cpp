@@ -7,9 +7,12 @@
 // Staging buffer for display DMA, in internal (DMA-capable) RAM. The LVGL draw
 // buffers live in PSRAM, which SPI master cannot DMA from - see the detailed
 // note in setupDMA(). my_disp_flush() pushes through this in bands.
-// 320 x 24 px = 15360 bytes; sized to stay well inside the ~41KB of free
-// internal heap while keeping the band count (and so the SPI overhead) low.
-static constexpr size_t DMA_BAND_ROWS = 24;
+// 320 x 12 px = 7680 bytes. Internal RAM is tight: LV_ATTRIBUTE_FAST_MEM puts
+// LVGL's draw code in IRAM (~13KB of the same SRAM), and Task_ADC's 14KB stack
+// is created after the UI - when it didn't fit, xTaskCreatePinnedToCore failed
+// silently and the unit ran with no ADC and no keypad. 12 rows costs ~3ms per
+// full-screen flush vs 24.
+static constexpr size_t DMA_BAND_ROWS = 12;
 static constexpr size_t DMA_BAND_PIXELS = (size_t)IWIDTH * DMA_BAND_ROWS;
 static uint16_t *dmaBandBuf = nullptr;
 
@@ -51,6 +54,12 @@ extern int32_t barGraph_V[1];
 void initializeSerial()
 {
     Serial.begin(115200);
+    // Native USB CDC: once plugged in, the core's TX timeout becomes 100 ms. With
+    // the cable in but no program reading the port, the TX buffer fills and every
+    // print then blocks 100 ms - a once-per-second debug print froze the digits
+    // and bars like clockwork. 20 ms bounds that while still letting a reading
+    // host (SCPI responses) drain without truncation.
+    Serial.setTxTimeoutMs(20);
     delay(1000); // Wait for serial connection to stabilize
 
     // Use ESP_LOGI for debugging since Serial.print may not work
@@ -521,7 +530,7 @@ void createTasks()
     xTaskCreatePinnedToCore(
         Task_BarGraph, /* Task function */
         "Task_bargraph",       /* Name of task */
-        8000,          /* Stack size of task */
+        4096,          /* Stack size of task (high-water ~0.7KB; was 8000 - see DMA_BAND_ROWS) */
         NULL,          /* Parameter of the task */
         5,             /* Priority of the task */
         &Task_bargraph,        /* Task handle to keep track of created task */

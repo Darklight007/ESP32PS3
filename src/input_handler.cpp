@@ -150,22 +150,25 @@ void touch_calibrate()
 
 void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
 {
+    // getTouch() takes 5 samples with delay(1)/delay(2) between them - ~5-10ms
+    // even when nothing is touched, and this used to call it twice per poll.
+    // One raw pressure read (~50us) rejects the idle case first. Idle noise
+    // measured up to Z~60; getTouch() itself needs >600 to register a press.
     uint16_t x, y;
-    bool touched = tft.getTouch(&x, &y);
+    const bool touched = (tft.getTouchRawZ() > 100) && tft.getTouch(&x, &y);
 
-    if (TouchAttr.getTouched(tft))
+    if (touched)
     {
+        TouchAttr.x = x;
+        TouchAttr.y = y;
         data->state = LV_INDEV_STATE_PR;
-        data->point.x = TouchAttr.x;
-        data->point.y = TouchAttr.y;
+        data->point.x = x;
+        data->point.y = y;
 
-        if (touched)
-        {
-            if (dropdown_active)
-                return; // Ignore touch when dropdown is open
-            lv_obj_clear_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
-            plotToBucket(x, y, util_Arbit_chart, util_Arbit_chart_series);
-        }
+        if (dropdown_active)
+            return; // Ignore touch when dropdown is open
+        lv_obj_clear_flag(lv_obj_get_parent(PowerSupply.page[3]), LV_OBJ_FLAG_SCROLLABLE);
+        plotToBucket(x, y, util_Arbit_chart, util_Arbit_chart_series);
     }
     else
     {

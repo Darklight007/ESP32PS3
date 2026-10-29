@@ -164,7 +164,7 @@ void loop()
   //   // Render bars immediately (throttled to ~60 FPS to avoid DMA issues)
   TRACE("loop_top");
   static unsigned long lastBarRender = 0;
-  if (millis() - lastBarRender >= 100)
+  if (millis() - lastBarRender >= 10) // was 100: touch was polled at only 10 Hz
   {
     lvglIsBusy = true;
     TRACE("loop_pre_lvgl");
@@ -208,6 +208,10 @@ void loop()
 // the once/sec ~90-140ms stall found earlier this session (BARDBG). Prints
 // once/sec whichever section had the largest single call that second.
 // Remove once the stall's cause is found.
+// Found (2026-10-29): the stall WAS this print. With USB plugged in but no
+// program reading the port, each Serial write blocked the 100 ms CDC timeout,
+// once a second. Off by default; set to 1 only with a serial monitor open.
+#define SECTION_TIMING_PRINT 0
 #define TIME_SECTION(name, call)                              \
   do                                                          \
   {                                                           \
@@ -219,14 +223,16 @@ void loop()
       _max = _dt;                                             \
     if (millis() - g_sectionPrintTimer >= 1000)               \
     {                                                         \
-      if (_max > 1000)                                        \
+      if (SECTION_TIMING_PRINT && _max > 1000)                \
         Serial.printf("[SECDBG] %s maxUs=%lu\n", name, _max); \
       _max = 0;                                               \
     }                                                         \
   } while (0)
   static unsigned long g_sectionPrintTimer = 0;
 
-  TIME_SECTION("LvglUpd", LvglUpdatesInterval(0, true));
+  // 5 ms, not 0: at 0 this ran ~6000x/s, almost always with nothing dirty,
+  // ~35us each - about a fifth of Core 1. 5 ms is still faster than the panel.
+  TIME_SECTION("LvglUpd", LvglUpdatesInterval(5, true));
   StatusBarUpdateInterval(300);
 
   TIME_SECTION("scpi", scpiParser.process());
@@ -337,7 +343,8 @@ void loop()
   // invalidations queued by the work above (SCPI, intervals) without waiting
   // for the next full loop pass. Same call already used at line 187 — no new
   // mechanism, just doubles the paint opportunities per iteration.
-  LvglUpdatesInterval(0, true);
+  // Shares the 5 ms throttle with the call above (same timer).
+  LvglUpdatesInterval(5, true);
 
   // trackLoopExecution(__func__);
 }
