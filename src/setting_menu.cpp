@@ -18,6 +18,7 @@
 #include "table_pro.h"
 #include "device.hpp"      // provides PowerSupply and dac_data_g
 #include "lv_gui_helper.h" // LVLabel, LVButton helpers
+#include "disp_perf.h"     // frame-rate overlay switch
 #include <float.h>
 
 #include <cmath>
@@ -314,6 +315,11 @@ namespace
         // No on-screen "x4" marker by request - the switch state and this log
         // line are the only indication. OVL still reflects the scaled range.
         Serial.printf("\nI PGA: x%d", x4 ? 4 : 1);
+    }
+
+    static void switch_show_fps_event_cb(lv_event_t *e)
+    {
+        dispPerfSetSaved(lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED));
     }
 
     static void switch_discard_first_event_cb(lv_event_t *e)
@@ -696,6 +702,11 @@ void SettingMenu(lv_obj_t *parent)
     lv_obj_set_style_pad_hor(sub_display, lv_obj_get_style_pad_left(lv_menu_get_main_header(PowerSupply.gui.setting_menu), 0), 0);
     auto *section = lv_menu_section_create(sub_display);
     create_slider(section, nullptr, "Backlight", 0, 255, 255, slider_backlight_event_cb, LV_EVENT_VALUE_CHANGED);
+    {
+        lv_obj_t *cont = create_switch_(section, nullptr, "Show FPS", PowerSupply.settingParameters.showFps == 1,
+                                        switch_show_fps_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+        dispPerfSetSwitch(lv_obj_get_child(cont, 1)); // child 0 label, 1 switch
+    }
 
 
     // Measure

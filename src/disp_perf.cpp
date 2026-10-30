@@ -1,5 +1,8 @@
 #include "disp_perf.h"
 #include "esp_timer.h"
+#include "device.hpp"
+
+extern Device PowerSupply;
 
 // All counters are touched only on Core 1 (LVGL refresh + main loop).
 static int64_t frameStartUs = 0;
@@ -75,6 +78,26 @@ void dispPerfShow(bool on)
     {
         lv_obj_del(overlay);
         overlay = nullptr;
+    }
+}
+
+static lv_obj_t *settingSwitch = nullptr;
+void dispPerfSetSwitch(lv_obj_t *sw) { settingSwitch = sw; }
+
+void dispPerfSetSaved(bool on)
+{
+    dispPerfShow(on);
+    if (settingSwitch)
+    {
+        if (on)
+            lv_obj_add_state(settingSwitch, LV_STATE_CHECKED);
+        else
+            lv_obj_clear_state(settingSwitch, LV_STATE_CHECKED);
+    }
+    if (PowerSupply.settingParameters.showFps != (on ? 1 : 0))
+    {
+        PowerSupply.settingParameters.showFps = on ? 1 : 0;
+        PowerSupply.SaveSetting();
     }
 }
 

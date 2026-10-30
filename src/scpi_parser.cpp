@@ -274,7 +274,7 @@ void SCPIParser::executeCommand(const String& command)
         {
             bool on = dispPerfShown();
             cmd_SETT_BOOL(paramPart, on);
-            dispPerfShow(on);
+            dispPerfSetSaved(on);
         }
         else addError(ERR_UNDEFINED_HEADER);
         return;

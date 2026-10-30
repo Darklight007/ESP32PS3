@@ -162,6 +162,9 @@ struct SettingParameters
     // Convert each V and I twice, keep only the second (new fields go last:
     // older saved blobs load with the default)
     bool adcDiscardFirst = false;
+    // Frame-rate overlay (DISP:FPS) shown at boot. uint8_t, not bool: blobs
+    // saved before this field may hold struct padding here - only 1 means on.
+    uint8_t showFps = 0;
 };
 
 class LVLabel_class; // Forward declaration

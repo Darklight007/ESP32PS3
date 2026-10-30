@@ -20,5 +20,7 @@ void dispPerfFlushBegin();
 void dispPerfFlushEnd();
 void dispPerfUpdate(); // Core 1 main loop - rolls the 1 s window, refreshes the overlay
 void dispPerfShow(bool on);
+void dispPerfSetSaved(bool on); // show/hide, remember in settings, sync the Settings switch
+void dispPerfSetSwitch(lv_obj_t *sw);
 bool dispPerfShown();
 const DispPerfStats &dispPerfStats();

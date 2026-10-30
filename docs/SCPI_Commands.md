@@ -430,7 +430,7 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 ```
 
 ### :DISPlay:FPS - Frame-Rate Overlay
-**Description:** Show/hide the same numbers in the bottom-left corner of the screen (not saved)
+**Description:** Show/hide the same numbers in the bottom-left corner of the screen. Saved; same as Settings → Display → Show FPS
 **Syntax:** `:DISP:FPS <0|1|ON|OFF>`
 **Example:**
 ```
