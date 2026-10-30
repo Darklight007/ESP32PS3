@@ -316,6 +316,13 @@ namespace
         Serial.printf("\nI PGA: x%d", x4 ? 4 : 1);
     }
 
+    static void switch_discard_first_event_cb(lv_event_t *e)
+    {
+        auto *sw = lv_event_get_target(e);
+        PowerSupply.settingParameters.adcDiscardFirst = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        Serial.printf("\nDiscard 1st conversion: %s", PowerSupply.settingParameters.adcDiscardFirst ? "ON" : "OFF");
+    }
+
     static void switch_buzzer_event_cb(lv_event_t *e)
     {
         if (lv_event_get_code(e) != LV_EVENT_SHORT_CLICKED)
@@ -700,6 +707,8 @@ void SettingMenu(lv_obj_t *parent)
     // Max 5 (not 4 like the general slider): at 5 the format drops the leading
     // integer digit, which only works for the mA range's 0-8.192 span.
     create_slider(section, nullptr, "mA Digits", 1, 5, PowerSupply.settingParameters.adcNumberOfDigits_mA, slider_decimalPoints_mA_event_cb, LV_EVENT_VALUE_CHANGED);
+    // Convert each V and I twice and keep only the second result (halves the rate)
+    create_switch_(section, nullptr, "Discard 1st Conversion", PowerSupply.settingParameters.adcDiscardFirst, switch_discard_first_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
     create_switch_(section, nullptr, "Auto Bar-Graph", false, switch_buzzer_event_cb, LV_EVENT_VALUE_CHANGED, PowerSupply.gui.setting_menu);
     // TEMPORARY: ADS1219 PGA x4 on current only. Kept last in the Measure page
     // as it is an experiment. Always starts unchecked (x1) - PowerSupply.iPgaX4

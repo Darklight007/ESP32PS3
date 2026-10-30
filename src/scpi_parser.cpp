@@ -235,6 +235,7 @@ void SCPIParser::executeCommand(const String& command)
         if (cmdPart.indexOf("ADC:RATE") > 0) cmd_SETT_ADC_RATE(paramPart);
         else if (cmdPart.indexOf("ADC:AVG") > 0) cmd_SETT_ADC_AVG(paramPart);
         else if (cmdPart.indexOf("ADC:DIG") > 0) cmd_SETT_ADC_DIG(paramPart);
+        else if (cmdPart.indexOf("ADC:DISC") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.adcDiscardFirst);
         else if (cmdPart.indexOf("BEEP:VOL") > 0) cmd_SETT_BEEP_VOL(paramPart);
         else if (cmdPart.indexOf("BEEP:PWR") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.beeperOnPowerChange);
         else if (cmdPart.indexOf("BEEP:ERR") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.beeperOnError);

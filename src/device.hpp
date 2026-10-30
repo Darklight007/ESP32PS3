@@ -99,7 +99,6 @@ extern TaskHandle_t Task_bargraph;
 static void IRAM_ATTR ADCPinISR()
 {
     adcDataReady = true;
-    SpiQuiet::adcConverting.store(false); // conversion done - display may draw
 
     // Notify ADC task that new data is ready
     // Use task notification for efficient interrupt-to-task communication
@@ -159,6 +158,10 @@ struct SettingParameters
     bool graphXaxisTimeMode = false;  // false = points mode, true = time mode
     uint16_t graphTimeSpanSeconds = 60;  // Time span for X-axis in seconds (1 min to several hours)
     bool graphAutoStop = false;  // Auto-pause graph after one full time span
+
+    // Convert each V and I twice, keep only the second (new fields go last:
+    // older saved blobs load with the default)
+    bool adcDiscardFirst = false;
 };
 
 class LVLabel_class; // Forward declaration
@@ -433,39 +436,63 @@ public:
         busyChannel = channel;
         if (quietMode)
         {
-            startPending = true; // started by serviceStart() when SPI is idle
+            startPending = true;
+            pendingPairStart = nextIsPairStart;
             pendingSince = millis();
+            tryStartPending();
         }
         else
             ads1219->start();  // Actually START the conversion!
+        nextIsPairStart = false;
     }
 
-    // Task_ADC calls this every loop pass. In low-noise mode (adcRate 0) it
-    // starts a deferred conversion only while display SPI is idle; see spi_quiet.h.
+    // Low-noise mode (adcRate 0), see spi_quiet.h. adcConverting is held for a
+    // whole V+I pair (set at the pair's first start, cleared by endPair()), so
+    // the display gets at most one SPI slot per pair and never splits one.
     bool quietMode{false};
     bool startPending{false};
+    bool pendingPairStart{false};
+    bool nextIsPairStart{false};
+    bool claimed{false}; // adcConverting raised for the pending start
     unsigned long pendingSince{0};
-    void serviceStart(bool lowNoise)
+
+    // Device calls this after the last conversion of a V+I pair was read.
+    void endPair()
+    {
+        SpiQuiet::adcConverting.store(false);
+        nextIsPairStart = true;
+    }
+
+    void tryStartPending()
     {
         using namespace SpiQuiet;
+        if (!startPending)
+            return;
+        if (!claimed)
+        {
+            // Pair boundary: give a waiting frame its slot first (bounded, so
+            // the ADC never starves)
+            if (pendingPairStart && renderWanted.load() && millis() - pendingSince < 150)
+                return;
+            adcConverting.store(true); // from here Core 1 can't start a new SPI slot
+            claimed = true;
+        }
+        if (spiActive.load())
+            return; // Core 1 is mid-slot; start once it releases
+        ads1219->start();
+        startPending = false;
+        claimed = false;
+        adcTurn.store(false);
+    }
+
+    // Task_ADC calls this every loop pass.
+    void serviceStart(bool lowNoise)
+    {
         quietMode = lowNoise;
         SpiQuiet::lowNoise.store(lowNoise);
         if (!lowNoise)
-            adcTurn.store(false);
-        if (!startPending)
-            return;
-        // Give a waiting render its slot first (bounded, so the ADC never starves)
-        if (lowNoise && renderWanted.load() && millis() - pendingSince < 150)
-            return;
-        adcConverting.store(true);
-        if (spiActive.load())
-        {
-            adcConverting.store(false);
-            return;
-        }
-        ads1219->start();
-        startPending = false;
-        adcTurn.store(false);
+            SpiQuiet::adcTurn.store(false);
+        tryStartPending();
     }
 
     int address = 0x40;
@@ -545,6 +572,12 @@ public:
     // reads it back one sample later. Latching the value here instead of re-reading
     // iPgaX4 means a mid-flight toggle can never divide a sample by the wrong gain.
     volatile bool iPgaPendingCurrentX4 = false;
+
+    // Measure > "Discard 1st Conversion": each V and I is converted twice and
+    // only the second result is kept. adcKeepNext marks the conversion in flight
+    // as the one to keep; adcLastDiscarded tells Task_ADC the last read was thrown away.
+    bool adcKeepNext = false;
+    bool adcLastDiscarded = false;
 
     // Voltage used by the leakage compensation in readCurrent()/DACUpdate(),
     // one-pole filtered. Deliberately NOT Voltage.measured.Mean(): that window

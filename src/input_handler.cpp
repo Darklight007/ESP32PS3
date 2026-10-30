@@ -148,14 +148,43 @@ void touch_calibrate()
     delay(4000);
 }
 
-void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
+static struct
+{
+    bool touched;
+    uint16_t x, y;
+    unsigned long at;
+} touchCache;
+
+// Reads the touch controller (SPI). In low-noise mode my_disp_flush() calls
+// this inside each frame's SPI slot.
+void touchSample()
 {
     // getTouch() takes 5 samples with delay(1)/delay(2) between them - ~5-10ms
     // even when nothing is touched, and this used to call it twice per poll.
     // One raw pressure read (~50us) rejects the idle case first. Idle noise
     // measured up to Z~60; getTouch() itself needs >600 to register a press.
     uint16_t x, y;
-    const bool touched = (tft.getTouchRawZ() > 100) && tft.getTouch(&x, &y);
+    touchCache.touched = (tft.getTouchRawZ() > 100) && tft.getTouch(&x, &y);
+    if (touchCache.touched)
+    {
+        touchCache.x = x;
+        touchCache.y = y;
+    }
+    touchCache.at = millis();
+}
+
+void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
+{
+    if (!SpiQuiet::lowNoise.load())
+        touchSample();
+    else if (millis() - touchCache.at > 300) // no frames lately - take a slot just for touch
+    {
+        spiQuietAcquire();
+        touchSample();
+        spiQuietEnd();
+    }
+    const bool touched = touchCache.touched;
+    const uint16_t x = touchCache.x, y = touchCache.y;
 
     if (touched)
     {
@@ -901,11 +930,8 @@ void keyCheckLoop()
     keyMenus('r', " RELEASED.", []
              {
                  lv_obj_invalidate(lv_scr_act());
-                 if (spiQuietBegin()) // else the next normal render draws it
-                 {
-                     lv_refr_now(NULL);
-                     spiQuietEnd();
-                 }
+                 lv_refr_now(NULL);
+                 spiFrameRelease(); // low-noise mode safety net
              });
 
     // Long press T - REL mode: zero current display (like Keithley 2010 REL)

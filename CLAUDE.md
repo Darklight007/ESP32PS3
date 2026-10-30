@@ -79,7 +79,8 @@ Special optimization when function generator needs minimal UI overhead:
 
 - **`blockAll`** - Set `true` during destructive UI operations (calibration windows, full-screen overlays). Both cores check this before touching shared state. Used in ~11 files.
 - **`lvglIsBusy`** - Set `true` while LVGL is rendering.
-- **Low-noise mode (`spi_quiet.h`)** - At ADC rate 0, display/touch SPI and ADC conversions strictly alternate: Core 0 defers `start()` while Core 1 draws; Core 1 skips renders (`spiQuietBegin()`) while a conversion runs. Display SPI otherwise shifts readings ~-0.33 mV with spikes. Any new display SPI call must be wrapped in `spiQuietBegin()/spiQuietEnd()`.
+- **Low-noise mode (`spi_quiet.h`)** - At ADC rate 0, display/touch SPI never overlaps a conversion. Core 0 holds `adcConverting` for a whole V+I pair; Core 1 renders into the buffer meanwhile and `my_disp_flush()` blocks (`spiFrameClaim()`) until the pair ends, then samples touch in the same slot. ~8.2 SPS per channel. Display SPI otherwise shifts readings ~-0.33 mV with spikes. Any new display SPI call must claim a slot (`spiQuietAcquire()`/`spiQuietEnd()`).
+- **Discard 1st Conversion** (`settingParameters.adcDiscardFirst`, Measure page, `SETT:ADC:DISC`) - each V and I converted twice, first thrown away; halves the rate.
 - **`lvglChartIsBusy`** - Prevents chart data pushes while LVGL is actively rendering chart widgets.
 
 ### Interval Scheduling Pattern

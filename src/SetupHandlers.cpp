@@ -598,8 +598,13 @@ bool scanI2CBus(TwoWire &i2cBus, uint8_t address)
 }
 
 // LVGL display flush function
+void touchSample();
+
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p)
 {
+    // Low-noise mode: wait here for the ADC to finish its V+I pair (the frame
+    // was already rendered into the buffer while it converted). No-op otherwise.
+    spiFrameClaim();
     tft.startWrite();
 
 #if DMA
@@ -665,6 +670,13 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
 #endif
 
     tft.endWrite();
+
+    if (lv_disp_flush_is_last(disp) && SpiQuiet::frameClaimed)
+    {
+        if (SpiQuiet::lowNoise.load())
+            touchSample(); // touch shares this slot; my_touchpad_read uses the cache
+        spiFrameRelease();
+    }
 
     lv_disp_flush_ready(disp); // Indicate that flushing is done
 }

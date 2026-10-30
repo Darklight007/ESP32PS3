@@ -191,13 +191,13 @@ void LvglUpdatesInterval(unsigned long interval, bool forceUpdate)
              {
                  // When forceUpdate is true (encoder active), bypass adcDataReady check
                  // for immediate UI responsiveness
-                 if (!lvglChartIsBusy && !blockAll && (forceUpdate || adcDataReady) && spiQuietBegin())
+                 if (!lvglChartIsBusy && !blockAll && (forceUpdate || adcDataReady))
                  {
                      updateBarsForFrame();
                      lvglIsBusy = 1;
                      lv_refr_now(NULL);
+                     spiFrameRelease(); // low-noise mode safety net
                      lvglIsBusy = 0;
-                     spiQuietEnd();
                      lvglIsBlocked = 0;
                      return;
                  }

@@ -165,19 +165,15 @@ void loop()
   //   // Render bars immediately (throttled to ~60 FPS to avoid DMA issues)
   TRACE("loop_top");
   static unsigned long lastBarRender = 0;
-  // spiQuietBegin(): in low-noise mode (ADC rate 0) skip while a conversion
-  // is in flight - lv_timer_handler draws and reads touch over SPI.
-  if (millis() - lastBarRender >= 10 && spiQuietBegin()) // was 100: touch was polled at only 10 Hz
+  if (millis() - lastBarRender >= 10) // was 100: touch was polled at only 10 Hz
   {
     updateBarsForFrame(); // lv_timer_handler may render too - keep bars current
     lvglIsBusy = true;
     TRACE("loop_pre_lvgl");
     lv_timer_handler();
-    if (SpiQuiet::lowNoise.load())
-      lv_refr_now(NULL); // low-noise: one SPI slot per conversion - don't waste it
+    spiFrameRelease(); // low-noise mode: normally already released by the last flush
     TRACE("loop_post_lvgl");
     lvglIsBusy = false;
-    spiQuietEnd();
     lastBarRender = millis();
   }
   // }

@@ -193,7 +193,8 @@ void Task_ADC(void *pvParameters)
         }
 
         // Only push to graph/histogram when ADC actually read fresh data
-        if (adcRead)
+        // (not a thrown-away first conversion)
+        if (adcRead && !PowerSupply.adcLastDiscarded)
         {
             HistPush();
             GraphPush();
