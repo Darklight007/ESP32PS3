@@ -564,6 +564,8 @@ void createTasks()
         lv_obj_center(mb);
     }
 
+    createPersistTask(); // background flash saves (tasks.cpp)
+
  
     // Create a task for ADC reading, with priority 1, pinned to core 0
     // xTaskCreatePinnedToCore(

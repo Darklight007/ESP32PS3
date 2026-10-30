@@ -25,6 +25,7 @@ Precision laboratory power supply with 24-bit ADC measurement (ADS1219), 16-bit 
 
 **Core 0 (ADC/DAC critical path):**
 - `Task_ADC` (Priority 1): ADC interrupt handling, measurement processing, INL calibration, DAC updates, input polling
+- `persist` task (Priority 0): background SPIFFS/NVS saves (graph trace, FUN tables) via `persistRequest()` in `tasks.cpp`, so a ~330 ms SPIFFS write no longer freezes Core 1. Flash writes still stall both cores ~45 ms; avoid them while FUN runs.
 
 **Core 1 (UI/SCPI):**
 - Main loop: LVGL timer handler (UI rendering), bar graph updates (`updateBarsForFrame()` right before each render), SCPI command processing, status bar updates, power management, statistics calculation
@@ -167,6 +168,13 @@ If I2C bus hangs (devices stop responding), check `i2c_recovery.cpp` for recover
 ### Calibration Data Storage Limits
 - **Preferences (NVS):** Max ~1984 bytes per namespace. Use for ADC/DAC coefficients.
 - **SPIFFS:** Use for large arrays (INL calibration tables with 100+ points).
+- **Flash writes stall both cores** (cache disabled): NVS ~1-6 ms, up to ~54 ms on a page GC; SPIFFS ~45 ms of stall plus ~330 ms CPU. Never save on every change (setpoints are saved 2 s after they stop changing) and run SPIFFS saves through `persistRequest()`.
+
+### Fast Display Updates
+Frame cost is dominated by how many pixels are invalidated, so frequently-changing UI updates repaint only what changed:
+- `setLabelTextChangedOnly()` (DispObject.cpp): repaints only changed characters and skips the layout pass (a content-sized label's set_text otherwise re-walks the whole object tree, ~1-2 ms). Use it for any label updated many times a second.
+- Bars and the setpoint shadow bar invalidate only the strip between old and new value; the shadow bar is drawn, not resized (resizing forces a layout pass).
+- Avoid `LV_OBJ_FLAG_OVERFLOW_VISIBLE` on main-page objects: LVGL 8 draws such objects for every invalidated area.
 
 ### ADC Timing Sensitivity
 ADC DRDY interrupt (GPIO9) drives the entire measurement loop. Don't block this interrupt. Keep ISR handlers minimal.
@@ -208,6 +216,7 @@ Container (returned object, e.g., gui.slider_adcRate)
 - Monitor speed: 115200 baud
 - `src/experimental/` is excluded from builds via `build_src_filter` in platformio.ini
 - Libraries are vendored in `lib/` (LVGL 8.4, TFT_eSPI, ADS1219, ESP32Encoder, Keypad/MCP017, arduinoFFT)
-- LVGL config: `include/lv_conf.h`, TFT_eSPI config: `include/User_Setup.h`
+- LVGL config: `include/lv_conf.h`. TFT_eSPI config (pins, 80 MHz SPI, fonts): `build_flags` in `platformio.ini` with `USER_SETUP_LOADED` - not `lib/TFT_eSPI/User_Setup.h` (submodule, untracked edits get lost) and not `include/User_Setup.h` (unused)
+- Keypad: `Keypad_MC17` overrides `scanKeys()` with a fast MCP23017 scan (1 I2C transfer when idle); every 8th scan cross-checks against the generic scan and falls back permanently on repeated mismatch
 - DMA double-buffering enabled by default (`#define DMA 1` in `config.hpp`) using two `TFT_eSprite` buffers
 - Watchdog timeout: 120 seconds (set in `setup()` and `loop()` first iteration)

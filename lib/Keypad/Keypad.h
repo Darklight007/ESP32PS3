@@ -99,17 +99,21 @@ public:
 	bool keyStateChanged();
 	byte numKeys();
 
-private:
-	unsigned long startTime;
-	char *keymap;
+protected:
+	// protected + virtual so an I/O-expander subclass can scan faster
+	// (Keypad_MC17 does).
     byte *rowPins;
     byte *columnPins;
 	KeypadSize sizeKpd;
+	virtual void scanKeys();
+
+private:
+	unsigned long startTime;
+	char *keymap;
 	uint debounceTime;
 	uint holdTime;
 	bool single_key;
 
-	void scanKeys();
 	bool updateList();
 	void nextKeyState(byte n, boolean button);
 	void transitionTo(byte n, KeyState nextState);

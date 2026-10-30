@@ -26,6 +26,7 @@
 // #include <../lib/TFT_eSPI/Processors/TFT_eSPI_ESP32_S3.h>
 #include <TFT_eSPI.h>
 #include "spi_quiet.h"
+#include "tasks.h"
 
 // Custom components
 #include "myFonts.h"
@@ -70,6 +71,7 @@ void setup()
 
   ESP_LOGI("SETUP", ">>> Starting setup()");
   initializeSerial();
+  setupBuzzer(); // first: setup code beeps (myTone/toneOff) before the old spot -> "LEDC is not initialized" errors
   ESP_LOGI("SETUP", ">>> After initializeSerial()");
   ErrorHandler::init(true, true); // Enable serial and UI error reporting
   ESP_LOGI("SETUP", ">>> After ErrorHandler::init()");
@@ -107,7 +109,6 @@ void setup()
   setupPreferences();
   setupADC();
   setupDAC();
-  setupBuzzer();
   // SetupOVP();  // Create OVP/OCP protection
 
   setupCalibPage();
@@ -292,7 +293,8 @@ void loop()
   // FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?
 
-  // Auto-save FGen settings on Core 1 — covers the case where user changes
+  // Auto-save FGen settings (the save itself runs in the background persist
+  // task on Core 0, see tasks.cpp) — covers the case where user changes
   // spinbox values and resets/power-cycles without leaving page 3 (the
   // tab-leave save in tabs.cpp never fires in that path). Debounced: only
   // writes NVS/SPIFFS while dirty, idempotent when clean.
@@ -301,19 +303,19 @@ void loop()
   // see SaveGraphDataIfDirty below) - at 2s cadence while actively
   // adjusting FUN parameters, this was very likely the dominant cause of
   // the reported freeze-everything hiccup (settings/digits/bar/graph all
-  // pause together because it blocks Core 1 outright). Real fix is
-  // migrating this storage off SPIFFS (e.g. LittleFS) - bigger, separate task.
+  // pause together because it blocked Core 1 outright). Now done by the
+  // background persist task, so Core 1 keeps running during the save.
   {
     static unsigned long fgenSaveTimer = 0;
     TIME_SECTION("fgenSave", schedule([]
                                       {
       if (PowerSupply.funGenMemDirty) {
-        PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
-        PowerSupply.funGenMemDirty = false;
+        PowerSupply.funGenMemDirty = false; // before the save, so an edit during it re-arms
+        persistRequest(PERSIST_FGEN);       // background task, see tasks.cpp
       } }, 15000, fgenSaveTimer));
   }
 
-  // Auto-save the graph trace snapshot (Core 1). GraphPush() runs at ADC rate
+  // Auto-save the graph trace snapshot (background persist task). GraphPush() runs at ADC rate
   // on Core 0, so this is throttled hard to protect flash - a power loss can
   // cost up to the last interval's worth of trace, not more.
   // Interval bumped 30s -> 180s (2026-07-23): same SPIFFS open/close cost
@@ -322,7 +324,11 @@ void loop()
   {
     static unsigned long graphSaveTimer = 0;
     TIME_SECTION("graphSave", schedule([]
-                                       { SaveGraphDataIfDirty(); }, 180000, graphSaveTimer));
+                                       {
+      // Background task (tasks.cpp). Skipped while FUN runs: the flash-busy
+      // stall (~45 ms on Core 0) would glitch the waveform.
+      if (PowerSupply.getStatus() != DEVICE::FUN)
+        persistRequest(PERSIST_GRAPH); }, 180000, graphSaveTimer));
   }
   BatteryChargerInterval(250); // Li-ion charge/test state machine (Core 1)
   processDeferredMaToggle();   // Handle mA/A toggle UI updates from Core 0

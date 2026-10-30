@@ -73,7 +73,16 @@ public:
 	word iodir_read( );
 	void iodir_write( word iodir );
 
+protected:
+	void scanKeys() override;
+
 private:
+	void fastScan();
+	word readPort();
+	bool fastScanOk = true;     // false after the self-check caught a mismatch
+	bool colLatchesLow = false; // column output latches parked at 0
+	uint8_t scanCount = 0;
+	uint8_t mismatchRun = 0;
     // I2C device address
     byte i2caddr;
 	TwoWire *_wire;

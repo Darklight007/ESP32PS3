@@ -782,6 +782,11 @@ public:
     // SetUpdate() (Core 1 direct write) and Flush() (deferred Core 0 changes),
     // range-aware for Current's mA mode. See definition for the unit math.
     lv_coord_t shadowBarWidth(void);
+    // Moves the setpoint shadow bar to shadowBarWidth() without a layout pass,
+    // repainting only the strip that changed (see definition).
+    void updateShadowBar(void);
+    lv_coord_t shadowW{0};                                  // shadow bar width in px (drawn, not sized)
+    static constexpr lv_opa_t kShadowBarOpa = LV_OPA_30;
     void SetEncoderUpdate(void);
     void setLock(bool lck);
     bool getLock();

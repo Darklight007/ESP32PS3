@@ -247,6 +247,96 @@ void Keypad_MC17::iodir_write(word iodir)
 	_wire->endTransmission();
 } // iodir_write( )
 
+word Keypad_MC17::readPort()
+{
+	_wire->beginTransmission((int)i2caddr);
+	_wire->write(GPIOA);
+	_wire->endTransmission();
+	_wire->requestFrom((int)i2caddr, 2);
+	word v = _wire->read();
+	v |= (_wire->read() << 8);
+	return v;
+}
+
+// Fast scan. Keypad::scanKeys() costs 5 I2C transfers per column (IODIR,
+// latch low, read, latch high, IODIR): ~36 per scan, 5.4 ms at 400 kHz, and
+// the bus is shared with the DAC. Here the column latches stay at 0, so a
+// column is driven low just by making it an output (and released by making
+// it an input again):
+//   - no key down: all columns low + read rows = 1 transfer (2 after a full scan)
+//   - key(s) down: 2 transfers per column
+// Same matrix logic as the generic scan (rows pulled up, active-low).
+void Keypad_MC17::fastScan()
+{
+	word rowMask = 0, colMask = 0;
+	for (byte r = 0; r < sizeKpd.rows; r++)
+		rowMask |= 1u << rowPins[r];
+	for (byte c = 0; c < sizeKpd.columns; c++)
+		colMask |= 1u << columnPins[c];
+
+	if (!colLatchesLow)
+	{
+		port_write(pinState & ~colMask);
+		colLatchesLow = true;
+	}
+	portCacheValid = false;
+
+	// All columns low: any pressed key pulls its row low.
+	const word allCols = (iodir_state | rowMask) & ~colMask;
+	if (iodir_state != allCols)
+		iodir_write(allCols);
+	const word port = readPort();
+
+	for (byte r = 0; r < sizeKpd.rows; r++)
+		bitMap[r] = 0;
+	if ((port & rowMask) == rowMask)
+		return; // nothing pressed
+
+	for (byte c = 0; c < sizeKpd.columns; c++)
+	{
+		iodir_write((iodir_state | rowMask | colMask) & ~(1u << columnPins[c]));
+		const word p = readPort();
+		for (byte r = 0; r < sizeKpd.rows; r++)
+			bitWrite(bitMap[r], c, !(p & (1u << rowPins[r])));
+	}
+}
+
+void Keypad_MC17::scanKeys()
+{
+	if (!fastScanOk)
+	{
+		Keypad::scanKeys();
+		return;
+	}
+	fastScan();
+
+	// Self-check: every 8th scan also runs the generic scan and uses ITS result.
+	// If the two disagree twice in a row (a single disagreement can be a key
+	// changing between the two scans) the fast path is switched off for good,
+	// so a mistake here can never cost more than a few missed scans.
+	if ((++scanCount & 7) != 0)
+		return;
+	uint fast[MAPSIZE];
+	for (byte r = 0; r < sizeKpd.rows; r++)
+		fast[r] = bitMap[r];
+	// The generic scan expects every column released (input) to start with.
+	word colMask = 0;
+	for (byte c = 0; c < sizeKpd.columns; c++)
+		colMask |= 1u << columnPins[c];
+	iodir_write(iodir_state | colMask);
+	Keypad::scanKeys(); // leaves the column latches high
+	colLatchesLow = false;
+	bool same = true;
+	for (byte r = 0; r < sizeKpd.rows; r++)
+		same &= (fast[r] == bitMap[r]);
+	mismatchRun = same ? 0 : mismatchRun + 1;
+	if (mismatchRun >= 2)
+	{
+		fastScanOk = false;
+		Serial.println("Keypad_MC17: fast scan disagreed with full scan - using full scan");
+	}
+}
+
 /*
 || @changelog
 || |

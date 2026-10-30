@@ -202,3 +202,43 @@ void Task_ADC(void *pvParameters)
     }
 }
  
+// Flash saves run here instead of in loop(): a SPIFFS write+close costs
+// ~180-340 ms of CPU (measured), which froze the display and inputs for that
+// long when it ran on Core 1. Pinned to Core 0 at priority 0, so it only gets
+// the time Task_ADC leaves idle. The flash-busy windows inside a save still
+// stall both cores (~45 ms per graph save measured) - that part is inherent
+// to writing flash.
+static TaskHandle_t Task_persist = nullptr;
+void SaveGraphDataIfDirty();
+
+static void Task_Persist(void *)
+{
+    for (;;)
+    {
+        uint32_t what = 0;
+        xTaskNotifyWait(0, UINT32_MAX, &what, portMAX_DELAY);
+        if (what & PERSIST_GRAPH)
+            SaveGraphDataIfDirty();
+        if (what & PERSIST_FGEN)
+            PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
+    }
+}
+
+void createPersistTask()
+{
+    if (xTaskCreatePinnedToCore(Task_Persist, "persist", 4096, nullptr, 0, &Task_persist, 0) != pdPASS)
+        Task_persist = nullptr; // persistRequest() then saves inline, as before
+}
+
+void persistRequest(uint32_t what)
+{
+    if (Task_persist)
+    {
+        xTaskNotify(Task_persist, what, eSetBits);
+        return;
+    }
+    if (what & PERSIST_GRAPH)
+        SaveGraphDataIfDirty();
+    if (what & PERSIST_FGEN)
+        PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
+}

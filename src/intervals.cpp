@@ -62,19 +62,28 @@ void statisticUpdateInterval(unsigned long interval)
     static unsigned long timer_ = {0};
     schedule([]
              {
-                // Only save settings if values actually changed AND not in FUN mode
-                // (FUN mode changes adjValue at 200-500Hz — saving to NVS that fast
-                // causes flash GC stalls that freeze the display)
+                // Save the setpoints once they have been still for 2 s, not on
+                // every change: an NVS write stalls BOTH cores (flash cache off)
+                // for ~1-6 ms and up to ~54 ms on a page GC (measured), which
+                // froze the ADC task and display while the encoder turned.
+                // Not in FUN mode (adjValue changes at 200-500 Hz there).
                 static uint16_t lastVoltage = 0;
                 static uint16_t lastCurrent = 0;
-                if (PowerSupply.getStatus() != DEVICE::FUN &&
-                    (PowerSupply.Voltage.adjValue != lastVoltage ||
-                     PowerSupply.Current.adjValue != lastCurrent)) {
-                    PowerSupply.settingParameters.SetVoltage = PowerSupply.Voltage.adjValue;
-                    PowerSupply.settingParameters.SetCurrent = PowerSupply.Current.adjValue;
-                    PowerSupply.SaveSetting();
+                static unsigned long changedAt = 0;
+                static bool savePending = false;
+                if (PowerSupply.Voltage.adjValue != lastVoltage ||
+                    PowerSupply.Current.adjValue != lastCurrent) {
                     lastVoltage = PowerSupply.Voltage.adjValue;
                     lastCurrent = PowerSupply.Current.adjValue;
+                    changedAt = millis();
+                    savePending = true;
+                }
+                if (savePending && millis() - changedAt >= 2000 &&
+                    PowerSupply.getStatus() != DEVICE::FUN) {
+                    PowerSupply.settingParameters.SetVoltage = lastVoltage;
+                    PowerSupply.settingParameters.SetCurrent = lastCurrent;
+                    PowerSupply.SaveSetting();
+                    savePending = false;
                 }
 
                 // Data above (SaveSetting) always runs. The stat label

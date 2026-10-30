@@ -43,8 +43,9 @@ void DispObjects::measureUpdate(double value)
     Bar.changed = true;
 
     // Fast path: skip statistics if power (calculated from V×I, not measured directly)
-    bool isPower = (label_unit && lv_label_get_text(label_unit)[0] == 'W');
-    if (!isPower) {
+    // isPowerObj is cached in setup(); reading the unit label here meant an
+    // LVGL access from Core 0 on every sample.
+    if (!isPowerObj) {
         StatisticsUpdate(value);
     }
 
@@ -84,6 +85,84 @@ void DispObjects::StatisticsUpdate(double value)
     }
 }
 
+// Set a label's text but redraw only the characters that changed. The
+// readings are fixed-format numbers where usually just the last digit or two
+// move, while lv_label_set_text() repaints the whole 258x64 label every time -
+// that was ~37k px per frame on the main page. Only safe when every changed
+// glyph has the same advance width as the one it replaces (then no other
+// character moves, whatever the alignment); otherwise fall back to a full set.
+// Repaint only columns [from, to] (offsets from the object's left edge,
+// inclusive) of an object, full height plus its ext draw size.
+static void invalidateColumns(lv_obj_t *obj, lv_coord_t from, lv_coord_t to)
+{
+    lv_area_t a = obj->coords;
+    const lv_coord_t x0 = a.x1;
+    a.x1 = x0 + from;
+    a.x2 = x0 + to;
+    lv_obj_invalidate_area(obj, &a);
+}
+
+static void setLabelTextChangedOnly(lv_obj_t *lbl, const char *txt)
+{
+    const char *old = lv_label_get_text(lbl);
+    const size_t n = strlen(txt);
+    if (!old || strlen(old) != n || n > 32 || lv_obj_has_flag(lbl, LV_OBJ_FLAG_HIDDEN))
+    {
+        lv_label_set_text(lbl, txt);
+        return;
+    }
+    const lv_font_t *font = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
+    uint32_t changed = 0; // bit i = char i differs (old text is freed by set_text)
+    for (size_t i = 0; i < n; i++)
+    {
+        if (old[i] == txt[i])
+            continue;
+        if (lv_font_get_glyph_width(font, (uint8_t)old[i], 0) != lv_font_get_glyph_width(font, (uint8_t)txt[i], 0))
+        {
+            lv_label_set_text(lbl, txt);
+            return;
+        }
+        changed |= 1u << i;
+    }
+    if (!changed)
+        return; // identical
+
+    // Every glyph keeps its width, so the label's size can't change: undo the
+    // layout-dirty marks lv_label_set_text() sets on a content-sized label.
+    // Left set, they make the next refresh re-walk the whole object tree
+    // (all five tabs) - ~1 ms per frame, ~2.4 ms in FUN mode, measured.
+    lv_obj_t *scr = lv_obj_get_screen(lbl);
+    const bool objLayoutInv = lbl->layout_inv;
+    const bool scrLayoutInv = scr->scr_layout_inv;
+    const bool inv = lv_disp_is_invalidation_enabled(NULL);
+    lv_disp_enable_invalidation(NULL, false);
+    lv_label_set_text(lbl, txt);
+    lv_disp_enable_invalidation(NULL, inv);
+    lbl->layout_inv = objLayoutInv;
+    scr->scr_layout_inv = scrLayoutInv;
+
+    // One strip per changed glyph (a sign flip plus a last-digit change must
+    // not repaint everything in between), full label height, plus the 3 px
+    // italic overhang allowed by the label's ext draw size. LVGL joins
+    // neighbouring strips itself.
+    lv_area_t content;
+    lv_obj_get_content_coords(lbl, &content);
+    const lv_coord_t ext = 3;
+    for (size_t i = 0; i < n; i++)
+    {
+        if (!(changed & (1u << i)))
+            continue;
+        lv_point_t p;
+        lv_label_get_letter_pos(lbl, i, &p);
+        lv_area_t a;
+        a.x1 = content.x1 + p.x - ext;
+        a.x2 = content.x1 + p.x + lv_font_get_glyph_width(font, (uint8_t)txt[i], 0) + ext;
+        a.y1 = lbl->coords.y1 - ext;
+        a.y2 = lbl->coords.y2 + ext;
+        lv_obj_invalidate_area(lbl, &a);
+    }
+}
+
 void DispObjects::displayUpdate(void)
 {
     // Only update display after NofAvgs samples collected
@@ -109,7 +188,9 @@ void DispObjects::displayUpdate(void)
             fmt = "%+08.3f";
 
         // Display mean of measured data
-        lv_label_set_text_fmt(label_measureValue, fmt, mean_);
+        char buf[24];
+        lv_snprintf(buf, sizeof(buf), fmt, mean_);
+        setLabelTextChangedOnly(label_measureValue, buf);
         oldValue = mean_;
     }
 }
@@ -123,13 +204,19 @@ void DispObjects::displayUpdate(bool update)
 
 void DispObjects::statUpdate(void)
 {
-
-    lv_label_set_text_fmt(statLabels.label_setSmallFont, "%+08.4f", (adjValue - adjOffset) / adjFactor);
-    lv_label_set_text_fmt(statLabels.label_value, "%+08.4f", Statistics.value);
-    lv_label_set_text_fmt(statLabels.label_mean, "%+08.4f", Statistics.Mean());
-    lv_label_set_text_fmt(statLabels.label_std, "%07.4f", Statistics.StandardDeviation());
-    lv_label_set_text_fmt(statLabels.label_max, "%+08.4f", Statistics.absMax);
-    lv_label_set_text_fmt(statLabels.label_min, "%+08.4f", Statistics.absMin);
+    // Changed characters only (and no layout pass) - 12 labels, 3x a second.
+    char buf[24];
+    auto put = [&buf](lv_obj_t *lbl, const char *fmt, double v)
+    {
+        lv_snprintf(buf, sizeof(buf), fmt, v);
+        setLabelTextChangedOnly(lbl, buf);
+    };
+    put(statLabels.label_setSmallFont, "%+08.4f", (adjValue - adjOffset) / adjFactor);
+    put(statLabels.label_value, "%+08.4f", Statistics.value);
+    put(statLabels.label_mean, "%+08.4f", Statistics.Mean());
+    put(statLabels.label_std, "%07.4f", Statistics.StandardDeviation());
+    put(statLabels.label_max, "%+08.4f", Statistics.absMax);
+    put(statLabels.label_min, "%+08.4f", Statistics.absMin);
 }
 
 
@@ -166,8 +253,16 @@ void DispObjects::barUpdate(void)
 
     // OPTIMIZED: Direct pointer write instead of lv_bar_set_value()
     if (*Bar.curValuePtr != newBarValue) {
+        // Repaint only the strip between the old and new indicator end, not
+        // the whole 290 px bar (the indicator's tiled image is anchored at its
+        // left edge, so nothing left of the change moves). Range == width
+        // (0..barLength px), but convert anyway in case that ever changes.
+        const int32_t oldV = *Bar.curValuePtr;
         *Bar.curValuePtr = newBarValue;
-        lv_obj_invalidate(Bar.bar);
+        const int32_t lo = std::max<int32_t>(0, std::min(oldV, newBarValue));
+        const int32_t hi = std::min<int32_t>(cachedBarMax, std::max(oldV, newBarValue));
+        invalidateColumns(Bar.bar, (lv_coord_t)((int64_t)lo * cachedBarWidth / cachedBarMax) - 1,
+                          (lv_coord_t)((int64_t)hi * cachedBarWidth / cachedBarMax) + 1);
     }
 
     // Update max/min markers only on change — unconditional lv_obj_set_x() did a
@@ -308,16 +403,60 @@ void DispObjects::SetUpdate(int value, bool bypassLock)
 
     // Null pointer checks to prevent crashes during calibration or when UI not initialized
     if (label_setValue && label_unit) {
-        lv_label_set_text_fmt(label_setValue, "%+08.4f%s", (adjValue - adjOffset) / adjFactor, lv_label_get_text(label_unit));
-        // Invalidate parent to clean artifacts from overlapping transparent widgets
-        lv_obj_t *parent = lv_obj_get_parent(label_setValue);
-        if (parent) lv_obj_invalidate(parent);
+        // Changed characters only. This used to repaint the whole parent
+        // (306x83) "to clean artifacts from overlapping transparent widgets";
+        // a full-screen stale-pixel check (forced full redraw compared with
+        // the incremental result, every second while the setpoint changed
+        // repeatedly) found no artifacts without it.
+        char buf[24];
+        lv_snprintf(buf, sizeof(buf), "%+08.4f%s", (adjValue - adjOffset) / adjFactor, lv_label_get_text(label_unit));
+        setLabelTextChangedOnly(label_setValue, buf);
     }
-    if (Bar.bar_adjValue && Bar.bar) {
-        lv_obj_set_width(Bar.bar_adjValue, shadowBarWidth());
-    }
+    updateShadowBar();
 
     // Serial.printf("\nmaxValue %15.5f  ",maxValue);
+}
+
+// The shadow bar object stays full width with a transparent background and
+// draws its own rectangle of width shadowW (shadowBarDraw). Changing an
+// object's width (the old lv_obj_set_width) marks the layout dirty, and the
+// next refresh re-walks the whole object tree (~1-4 ms/frame measured in FUN
+// mode, where the setpoint changes at 200-500 Hz) and repaints the whole bar
+// row. This does neither; the radius margin covers the rounded end moving.
+void DispObjects::updateShadowBar(void)
+{
+    if (!Bar.bar_adjValue || !Bar.bar)
+        return;
+    const lv_coord_t newW = shadowBarWidth();
+    const lv_coord_t oldW = shadowW;
+    if (newW == oldW)
+        return;
+    shadowW = newW;
+    const lv_coord_t r = lv_obj_get_style_radius(Bar.bar_adjValue, LV_PART_MAIN);
+    invalidateColumns(Bar.bar_adjValue, std::min(oldW, newW) - r - 1, std::max(oldW, newW) + 1);
+}
+
+// Same lv_draw_rect() call lv_obj makes for its own background, on an area
+// shadowW wide instead of the object's coords - so the pixels match what the
+// old resized object drew.
+static void shadowBarDraw(lv_event_t *e)
+{
+    lv_obj_t *obj = lv_event_get_target(e);
+    const DispObjects *d = (const DispObjects *)lv_event_get_user_data(e);
+    if (d->shadowW <= 0)
+        return;
+    lv_draw_rect_dsc_t dsc;
+    lv_draw_rect_dsc_init(&dsc);
+    lv_obj_init_draw_rect_dsc(obj, LV_PART_MAIN, &dsc);
+    // The object's own bg is transparent, so init_draw_rect_dsc() skipped the
+    // bg colour; fill it in exactly as it would have (no gradient here).
+    dsc.bg_opa = DispObjects::kShadowBarOpa;
+    dsc.bg_color = lv_obj_get_style_bg_color_filtered(obj, LV_PART_MAIN);
+    dsc.bg_grad.dir = LV_GRAD_DIR_NONE;
+    dsc.bg_grad.stops[0].color = dsc.bg_color;
+    lv_area_t a = obj->coords;
+    a.x2 = a.x1 + d->shadowW - 1;
+    lv_draw_rect(lv_event_get_draw_ctx(e), &dsc, &a);
 }
 
 void DispObjects::Flush(void)
@@ -330,11 +469,11 @@ void DispObjects::Flush(void)
         // strcpy(a, "%+08.4f");
         // strcat(a, lv_label_get_text(label_unit));
         // lv_label_set_text_fmt(label_setValue, a, adjValue +adjOffset);
-        if (strcmp(lv_label_get_text(label_unit), "A"))
-
-            lv_label_set_text_fmt(label_setValue, "%+08.4fV", (adjValue - adjOffset) / adjFactor);
-        else
-            lv_label_set_text_fmt(label_setValue, "%+08.4fA", (adjValue - adjOffset) / adjFactor);
+        // Changed characters only - in FUN mode this runs at the 50 Hz flush rate.
+        char buf[24];
+        lv_snprintf(buf, sizeof(buf), strcmp(lv_label_get_text(label_unit), "A") ? "%+08.4fV" : "%+08.4fA",
+                    (adjValue - adjOffset) / adjFactor);
+        setLabelTextChangedOnly(label_setValue, buf);
 
         // Update the setpoint shadow bar - shared formula with SetUpdate()'s
         // direct-write path (see shadowBarWidth()). Keeping ONE implementation
@@ -342,7 +481,7 @@ void DispObjects::Flush(void)
         // /adjFactor) and the shadow bar "vanished" on every encoder turn
         // (Core 0 defers LVGL writes to this Flush) while keypad entry
         // (Core 1, SetUpdate's own write) restored it.
-        lv_obj_set_width(Bar.bar_adjValue, shadowBarWidth());
+        updateShadowBar();
         adjValueChanged = false;
         // lv_obj_invalidate(label_setValue);
         // Serial.printf("\n%10.4f", (adjValue - adjOffset) / adjFactor);
@@ -629,12 +768,15 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     /******************************
      **   SI_Prefix
      ******************************/
-    lv_obj_add_flag(label_unit, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
-    label_si_prefix = lv_label_create(label_unit);
+    // Sibling of label_unit, not its child: as a child it needed
+    // LV_OBJ_FLAG_OVERFLOW_VISIBLE on the unit label (it sits 12 px left of
+    // it), and LVGL 8 draws an overflow-visible object for EVERY invalidated
+    // area - the big V/A/W glyphs were laid out ~3x per frame, ~4 ms/frame.
+    // Same position: label_unit is at (x+269, y+3) with no padding.
+    label_si_prefix = lv_label_create(parent);
     lv_obj_remove_style_all(label_si_prefix);
     lv_label_set_text(label_si_prefix, si_prefix); // µΩm
-    // lv_obj_align(label_si_prefix, LV_ALIGN_DEFAULT, x + 269-15, y + 3);
-    lv_obj_align(label_si_prefix, LV_ALIGN_DEFAULT, -12, +2);
+    lv_obj_align(label_si_prefix, LV_ALIGN_DEFAULT, x + 269 - 12, y + 3 + 2);
 
     lv_style_init(&style_si_prefix);
     lv_style_set_text_letter_space(&style_si_prefix, 0);
@@ -655,9 +797,13 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
     ******************************/
     if (strcmp(_unit, "W") != 0)
     {
+        // Stays full width; the setpoint width is drawn by shadowBarDraw()
+        // (see updateShadowBar() for why it is no longer resized).
         Bar.bar_adjValue = lv_obj_create(label_set);
         lv_obj_set_size(Bar.bar_adjValue, barLength, 5);
         lv_obj_align(Bar.bar_adjValue, 0, 5, 70);
+        shadowW = barLength;
+        lv_obj_add_event_cb(Bar.bar_adjValue, shadowBarDraw, LV_EVENT_DRAW_MAIN, this);
         static lv_style_t style_bar_adjValue;
         static bool style_bar_adjValue_inited = false;
         if (!style_bar_adjValue_inited) {
@@ -667,7 +813,7 @@ void DispObjects::setup(lv_obj_t *parent, const char *_text, int x, int y, const
             // Darker + lower opacity than the original 0xB1BFB1 @ 40% - the
             // shadow should read as a faint reference mark, not compete with
             // the measured bar.
-            lv_style_set_bg_opa(&style_bar_adjValue, LV_OPA_30);
+            lv_style_set_bg_opa(&style_bar_adjValue, LV_OPA_TRANSP); // drawn by shadowBarDraw() at kShadowBarOpa
             lv_style_set_bg_color(&style_bar_adjValue, lv_color_hex(0x5A625A));
         }
         lv_obj_remove_style(Bar.bar_adjValue, &style_bar_adjValue, LV_STATE_DEFAULT);

@@ -26,7 +26,6 @@ struct MemoryStats
 
     // Stack statistics (per task)
     uint32_t task1StackHighWater = 0;  // Task_ADC
-    uint32_t task2StackHighWater = 0;  // Task_BarGraph
 
     // Warning flags
     bool lowHeapWarning = false;
