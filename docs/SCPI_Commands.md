@@ -413,6 +413,32 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 
 ---
 
+## DISPlay Subsystem (Display Performance)
+
+### :DISPlay:FPS? - Frame-Rate Meter
+**Description:** Display statistics over the last second
+**Syntax:** `:DISP:FPS?`
+**Returns:** `fps,px_per_frame,render_ms,flush_ms,busy_pct,adc_sps`
+- `render_ms` - LVGL drawing per frame (in low-noise mode, rate 0, includes waiting for the ADC)
+- `flush_ms` - SPI/DMA transfer per frame
+- `busy_pct` - share of Core 1 spent on frames
+- `adc_sps` - ADC conversions per second per channel (as on the status bar)
+**Example:**
+```
+:DISP:FPS?
+→ 63.8,3854,6.60,1.82,53,310
+```
+
+### :DISPlay:FPS - Frame-Rate Overlay
+**Description:** Show/hide the same numbers in the bottom-left corner of the screen (not saved)
+**Syntax:** `:DISP:FPS <0|1|ON|OFF>`
+**Example:**
+```
+:DISP:FPS 1
+```
+
+---
+
 ## CALibration Subsystem
 
 ### :CALibration:STATe? - Query Calibration Status

@@ -155,16 +155,36 @@ static struct
     unsigned long at;
 } touchCache;
 
+// Cheap check before the slow getTouch(): three raw pressure reads (~50us
+// each), all in the range a real press can produce. getTouchRawZ() returns
+// 4095 + Z1 - Z2, and a press always has Z1 < Z2, so a press reads below 4096
+// and holds steady. With the output on, the controller's idle reading is
+// noise spread over 0..8200 on ~70% of polls (measured); one read > 100 let
+// most of it through to getTouch(), ~10 ms each - 26% of Core 1.
+static bool touchLikely()
+{
+    for (int i = 0; i < 3; i++)
+    {
+        const uint16_t z = tft.getTouchRawZ();
+        if (z <= 100 || z > 4095) // idle noise measured up to Z~60 with the output off
+            return false;
+    }
+    return true;
+}
+
 // Reads the touch controller (SPI). In low-noise mode my_disp_flush() calls
 // this inside each frame's SPI slot.
 void touchSample()
 {
     // getTouch() takes 5 samples with delay(1)/delay(2) between them - ~5-10ms
-    // even when nothing is touched, and this used to call it twice per poll.
-    // One raw pressure read (~50us) rejects the idle case first. Idle noise
-    // measured up to Z~60; getTouch() itself needs >600 to register a press.
+    // even when nothing is touched, so touchLikely() rejects the idle case first.
+    // getTouch() itself needs >600 to register a press.
     uint16_t x, y;
-    touchCache.touched = (tft.getTouchRawZ() > 100) && tft.getTouch(&x, &y);
+    // While held, the old single check: a press reads steady 900..1950, but 2 of
+    // 115 held samples caught a noise spike in one of the three reads (measured,
+    // output on) - rejecting those would split a hold into two taps.
+    const bool likely = touchCache.touched ? tft.getTouchRawZ() > 100 : touchLikely();
+    touchCache.touched = likely && tft.getTouch(&x, &y);
     if (touchCache.touched)
     {
         touchCache.x = x;

@@ -51,6 +51,8 @@
 #include "input_handler.h"
 #include "battery_charger.h"
 #include "ui_helpers.h"
+#include "disp_perf.h"
+#include "ui_creation.h"
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -112,6 +114,7 @@ void setup()
   // SetupOVP();  // Create OVP/OCP protection
 
   setupCalibPage();
+  dropIdleScrollbars(); // after the UI exists; render-time saving, no visual change
   createTasks();
   initialMemory();
   loadEnergyFromStorage(); // Load persistent energy counter
@@ -356,6 +359,7 @@ void loop()
   // Now the ONLY per-pass render (see note above). 5 ms throttle, not 0: at 0
   // it ran ~6000x/s with nothing dirty, ~35 us each - a fifth of Core 1.
   TIME_SECTION("LvglUpd", LvglUpdatesInterval(5, true));
+  dispPerfUpdate();
 
   // trackLoopExecution(__func__);
 }

@@ -112,7 +112,22 @@ static void setLabelTextChangedOnly(lv_obj_t *lbl, const char *txt)
         return;
     }
     const lv_font_t *font = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
+    // Ink box of a glyph relative to its letter position (how lv_draw_label
+    // places it), so only drawn pixels are repainted - not the advance width
+    // plus an overhang margin.
+    auto inkBox = [font](uint8_t c, lv_area_t &b)
+    {
+        lv_font_glyph_dsc_t g;
+        if (!lv_font_get_glyph_dsc(font, &g, c, 0) || g.box_w == 0)
+            return false;
+        b.x1 = g.ofs_x;
+        b.x2 = g.ofs_x + g.box_w - 1;
+        b.y1 = font->line_height - font->base_line - g.box_h - g.ofs_y;
+        b.y2 = b.y1 + g.box_h - 1;
+        return true;
+    };
     uint32_t changed = 0; // bit i = char i differs (old text is freed by set_text)
+    lv_area_t box[32];    // per changed char: union of old and new ink boxes
     for (size_t i = 0; i < n; i++)
     {
         if (old[i] == txt[i])
@@ -122,10 +137,26 @@ static void setLabelTextChangedOnly(lv_obj_t *lbl, const char *txt)
             lv_label_set_text(lbl, txt);
             return;
         }
+        lv_area_t bo, bn;
+        const bool ho = inkBox((uint8_t)old[i], bo), hn = inkBox((uint8_t)txt[i], bn);
+        if (!ho && !hn)
+            continue; // space -> space-like: nothing drawn either way
+        if (!ho)
+            bo = bn;
+        if (!hn)
+            bn = bo;
+        box[i].x1 = LV_MIN(bo.x1, bn.x1);
+        box[i].y1 = LV_MIN(bo.y1, bn.y1);
+        box[i].x2 = LV_MAX(bo.x2, bn.x2);
+        box[i].y2 = LV_MAX(bo.y2, bn.y2);
         changed |= 1u << i;
     }
     if (!changed)
-        return; // identical
+    {
+        if (strcmp(old, txt) != 0)
+            lv_label_set_text(lbl, txt); // only blank glyphs changed - keep the text right
+        return;
+    }
 
     // Every glyph keeps its width, so the label's size can't change: undo the
     // layout-dirty marks lv_label_set_text() sets on a content-sized label.
@@ -141,13 +172,11 @@ static void setLabelTextChangedOnly(lv_obj_t *lbl, const char *txt)
     lbl->layout_inv = objLayoutInv;
     scr->scr_layout_inv = scrLayoutInv;
 
-    // One strip per changed glyph (a sign flip plus a last-digit change must
-    // not repaint everything in between), full label height, plus the 3 px
-    // italic overhang allowed by the label's ext draw size. LVGL joins
-    // neighbouring strips itself.
+    // One area per changed glyph (a sign flip plus a last-digit change must
+    // not repaint everything in between), 1 px margin. LVGL joins
+    // neighbouring areas itself.
     lv_area_t content;
     lv_obj_get_content_coords(lbl, &content);
-    const lv_coord_t ext = 3;
     for (size_t i = 0; i < n; i++)
     {
         if (!(changed & (1u << i)))
@@ -155,10 +184,10 @@ static void setLabelTextChangedOnly(lv_obj_t *lbl, const char *txt)
         lv_point_t p;
         lv_label_get_letter_pos(lbl, i, &p);
         lv_area_t a;
-        a.x1 = content.x1 + p.x - ext;
-        a.x2 = content.x1 + p.x + lv_font_get_glyph_width(font, (uint8_t)txt[i], 0) + ext;
-        a.y1 = lbl->coords.y1 - ext;
-        a.y2 = lbl->coords.y2 + ext;
+        a.x1 = content.x1 + p.x + box[i].x1 - 1;
+        a.x2 = content.x1 + p.x + box[i].x2 + 1;
+        a.y1 = content.y1 + p.y + box[i].y1 - 1;
+        a.y2 = content.y1 + p.y + box[i].y2 + 1;
         lv_obj_invalidate_area(lbl, &a);
     }
 }
@@ -172,7 +201,10 @@ void DispObjects::displayUpdate(void)
     displayReady = false;
 
     double mean_ = measured.Mean();
-    if (oldValue != mean_ && !blockAll)
+    // Own "last shown" value: oldValue is Core 0's last sample, so comparing
+    // the mean against it skipped every redraw whenever mean == last sample
+    // (always at avg 1) and froze the label.
+    if (shownValue != mean_ && !blockAll)
     {
         // Power's range (up into the hundreds of Watts) can exceed what V/I's
         // shared decimal-count setting assumes (tuned for 0-32V / 0-5A) - at
@@ -191,7 +223,7 @@ void DispObjects::displayUpdate(void)
         char buf[24];
         lv_snprintf(buf, sizeof(buf), fmt, mean_);
         setLabelTextChangedOnly(label_measureValue, buf);
-        oldValue = mean_;
+        shownValue = mean_;
     }
 }
 
@@ -200,6 +232,7 @@ void DispObjects::displayUpdate(bool update)
     double mean_ = measured.Mean();
     // Display mean  of measured data not the value
     lv_label_set_text_fmt(label_measureValue, restrict, mean_);
+    shownValue = NAN; // next displayUpdate() rewrites with the settled mean
 }
 
 void DispObjects::statUpdate(void)

@@ -51,3 +51,5 @@ extern lv_chart_series_t *util_Arbit_chart_series;
 extern lv_obj_t *btn_function_gen;
 
 
+// Once, after the UI is built: skip LVGL's per-redraw scrollbar work where it can't show anything
+void dropIdleScrollbars();

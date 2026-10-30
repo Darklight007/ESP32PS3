@@ -718,7 +718,8 @@ public:
     volatile bool adjValueChanged = true;  // set on Core 0 (SetUpdate), read/cleared on Core 1 (Flush)
     uint16_t adjEEPROMAddress = 0;
 
-    double oldValue;
+    double oldValue;        // last sample (Core 0, measureUpdate) - drives `changed`
+    double shownValue{NAN}; // last mean written to label_measureValue (Core 1, displayUpdate)
     unsigned long timeKeeper{0};
     bool changed;
     uint32_t sampleCountSinceDisplay{0};  // Counter for proportional display update

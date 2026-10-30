@@ -3,6 +3,7 @@
 #include "calib_inl.h"     // Include INL calibration for startup rebuild
 #include "esp_heap_caps.h" // heap_caps_malloc for the internal DMA band buffer
 #include "error_handler.h" // startup failure reporting (createTasks)
+#include "disp_perf.h"     // DISP:FPS frame-rate meter
 // #include "calib_inl_zc.h"  // Include zero-current INL calibration for startup rebuild
 
 // Staging buffer for display DMA, in internal (DMA-capable) RAM. The LVGL draw
@@ -607,6 +608,7 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
     // Low-noise mode: wait here for the ADC to finish its V+I pair (the frame
     // was already rendered into the buffer while it converted). No-op otherwise.
     spiFrameClaim();
+    dispPerfFlushBegin();
     tft.startWrite();
 
 #if DMA
@@ -672,6 +674,7 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
 #endif
 
     tft.endWrite();
+    dispPerfFlushEnd();
 
     if (lv_disp_flush_is_last(disp) && SpiQuiet::frameClaimed)
     {
@@ -692,6 +695,7 @@ void init_display()
     disp_drv.draw_buf = &draw_buf;     // Set an initialized buffer
     disp_drv.hor_res = screenWidth;    // Set horizontal resolution
     disp_drv.ver_res = screenHeight;   // Set vertical resolution
+    dispPerfAttach(&disp_drv);         // frame-rate meter (DISP:FPS?)
     lv_disp_drv_register(&disp_drv);   // Finally register the driver
 
     lv_disp = lv_disp_get_default(); // Get the default display

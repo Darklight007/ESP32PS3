@@ -7,6 +7,7 @@
 #include "error_handler.h"
 #include "functions.h"
 #include "waveform_generator.h"
+#include "disp_perf.h"
 #include <Wire.h>
 #include <cstring>
 #include <cmath>
@@ -256,6 +257,25 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("START") > 0) cmd_SETT_STARTUP(paramPart);
         else if (cmdPart.indexOf("SAVE") > 0) { PowerSupply.SaveSetting(); sendResponse("OK"); }
         else if (cmdPart.indexOf("LOAD") > 0) { PowerSupply.LoadSetting(); sendResponse("OK"); }
+        else addError(ERR_UNDEFINED_HEADER);
+        return;
+    }
+
+    // SCPI DISPlay subsystem: frame-rate meter
+    if (cmdPart.startsWith("DISP"))
+    {
+        if (cmdPart.indexOf("FPS?") > 0)
+        {
+            const DispPerfStats &st = dispPerfStats();
+            Serial.printf("%.1f,%lu,%.2f,%.2f,%.0f,%u\n", st.fps, (unsigned long)st.pxPerFrame,
+                          st.renderMs, st.flushMs, st.busyPct, PowerSupply.adc.realADCSpeed);
+        }
+        else if (cmdPart.indexOf("FPS") > 0)
+        {
+            bool on = dispPerfShown();
+            cmd_SETT_BOOL(paramPart, on);
+            dispPerfShow(on);
+        }
         else addError(ERR_UNDEFINED_HEADER);
         return;
     }

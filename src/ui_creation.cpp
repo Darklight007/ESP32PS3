@@ -1349,3 +1349,52 @@ static void btnm_event_handler(lv_event_t *e)
 }
 
 // Include all other UI creation functions...
+// Every LVGL 8 object is scrollable by default, so after drawing any object
+// LVGL works out whether to draw its scrollbar from the scroll extents - for
+// a label that means re-measuring its text. ~0.3 ms per object per redraw,
+// about a third of the main page's render time (measured). Labels never
+// scroll here: make them non-scrollable (a drag still reaches the parent).
+// On the Main page and its parents, also switch the scrollbar off where it
+// can't show now (no scrollbar, or one outside the object's drawable area),
+// so nothing visible changes.
+static void dropScrollbarIfHidden(lv_obj_t *obj)
+{
+    if (lv_obj_get_scrollbar_mode(obj) == LV_SCROLLBAR_MODE_OFF)
+        return;
+    lv_area_t hor, ver, vis, tmp;
+    lv_obj_get_scrollbar_area(obj, &hor, &ver);
+    lv_obj_get_coords(obj, &vis);
+    const lv_coord_t ext = _lv_obj_get_ext_draw_size(obj);
+    lv_area_increase(&vis, ext, ext);
+    const bool horShown = hor.x2 >= hor.x1 && _lv_area_intersect(&tmp, &hor, &vis);
+    const bool verShown = ver.x2 >= ver.x1 && _lv_area_intersect(&tmp, &ver, &vis);
+    if (!horShown && !verShown)
+        lv_obj_set_scrollbar_mode(obj, LV_SCROLLBAR_MODE_OFF);
+}
+
+static void dropIdleScrollbarsIn(lv_obj_t *obj, bool mainPage)
+{
+    if (lv_obj_check_type(obj, &lv_label_class))
+        lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+    else if (mainPage)
+        dropScrollbarIfHidden(obj);
+    const uint32_t n = lv_obj_get_child_cnt(obj);
+    for (uint32_t i = 0; i < n; i++)
+    {
+        lv_obj_t *child = lv_obj_get_child(obj, i);
+        dropIdleScrollbarsIn(child, mainPage || child == PowerSupply.page[2]);
+    }
+}
+
+void dropIdleScrollbars()
+{
+    lv_obj_update_layout(lv_scr_act());
+    dropIdleScrollbarsIn(lv_scr_act(), false);
+    dropIdleScrollbarsIn(lv_layer_top(), false);
+    // The Main page's parents (tab container, tabview) are redrawn behind it
+    for (lv_obj_t *p = lv_obj_get_parent(PowerSupply.page[2]); p; p = lv_obj_get_parent(p))
+        dropScrollbarIfHidden(p);
+    // The Main page overflows its width by 2 px, which drew a stray 4 px
+    // scrollbar along its bottom edge. It still scrolls; just no bar.
+    lv_obj_set_scrollbar_mode(PowerSupply.page[2], LV_SCROLLBAR_MODE_OFF);
+}

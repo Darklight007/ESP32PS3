@@ -175,6 +175,9 @@ Frame cost is dominated by how many pixels are invalidated, so frequently-changi
 - `setLabelTextChangedOnly()` (DispObject.cpp): repaints only changed characters and skips the layout pass (a content-sized label's set_text otherwise re-walks the whole object tree, ~1-2 ms). Use it for any label updated many times a second.
 - Bars and the setpoint shadow bar invalidate only the strip between old and new value; the shadow bar is drawn, not resized (resizing forces a layout pass).
 - Avoid `LV_OBJ_FLAG_OVERFLOW_VISIBLE` on main-page objects: LVGL 8 draws such objects for every invalidated area.
+- `dropIdleScrollbars()` (ui_creation.cpp, once after UI setup): labels made non-scrollable, Main page scrollbars off where none shows. Every LVGL 8 object is scrollable by default and its post-draw scrollbar check re-measured label text, ~0.3 ms per object per redraw.
+- `patch_lvgl.py` (pre-build, like `patch_tft_espi.py`): LVGL 8.4 padded every invalidated area by 5 px per side even without transforms; the patch skips that.
+- Measure with `DISP:FPS?` / `DISP:FPS 1` (`disp_perf.cpp`): fps, px/frame, render and flush ms.
 
 ### ADC Timing Sensitivity
 ADC DRDY interrupt (GPIO9) drives the entire measurement loop. Don't block this interrupt. Keep ISR handlers minimal.
