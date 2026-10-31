@@ -172,11 +172,17 @@ static void setLabelTextChangedOnly(lv_obj_t *lbl, const char *txt)
     lbl->layout_inv = objLayoutInv;
     scr->scr_layout_inv = scrLayoutInv;
 
-    // One area per changed glyph (a sign flip plus a last-digit change must
-    // not repaint everything in between), 1 px margin. LVGL joins
-    // neighbouring areas itself.
+    // Exactly the ink boxes: no margin, so the areas stay inside the label and
+    // an opaque label covers them (see opaqueMeasureBackground). Changed glyphs
+    // at most one unchanged glyph apart share one area: every area costs ~1 ms
+    // of fixed LVGL overhead (top-object search, style lookups, a flush) on top
+    // of its pixels, and in FUN mode 4-5 neighbouring digits change per frame.
+    // Further apart (a sign flip plus a last-digit change) they stay separate,
+    // so the digits in between aren't repainted.
     lv_area_t content;
     lv_obj_get_content_coords(lbl, &content);
+    lv_area_t u;
+    int last = -2; // index of the last changed glyph in u, -2 = u empty
     for (size_t i = 0; i < n; i++)
     {
         if (!(changed & (1u << i)))
@@ -184,12 +190,27 @@ static void setLabelTextChangedOnly(lv_obj_t *lbl, const char *txt)
         lv_point_t p;
         lv_label_get_letter_pos(lbl, i, &p);
         lv_area_t a;
-        a.x1 = content.x1 + p.x + box[i].x1 - 1;
-        a.x2 = content.x1 + p.x + box[i].x2 + 1;
-        a.y1 = content.y1 + p.y + box[i].y1 - 1;
-        a.y2 = content.y1 + p.y + box[i].y2 + 1;
-        lv_obj_invalidate_area(lbl, &a);
+        a.x1 = content.x1 + p.x + box[i].x1;
+        a.x2 = content.x1 + p.x + box[i].x2;
+        a.y1 = content.y1 + p.y + box[i].y1;
+        a.y2 = content.y1 + p.y + box[i].y2;
+        if (last >= 0 && (int)i - last <= 2)
+        {
+            u.x1 = LV_MIN(u.x1, a.x1);
+            u.y1 = LV_MIN(u.y1, a.y1);
+            u.x2 = LV_MAX(u.x2, a.x2);
+            u.y2 = LV_MAX(u.y2, a.y2);
+        }
+        else
+        {
+            if (last >= 0)
+                lv_obj_invalidate_area(lbl, &u);
+            u = a;
+        }
+        last = (int)i;
     }
+    if (last >= 0)
+        lv_obj_invalidate_area(lbl, &u);
 }
 
 void DispObjects::displayUpdate(void)
@@ -456,6 +477,26 @@ void DispObjects::SetUpdate(int value, bool bypassLock)
 // next refresh re-walks the whole object tree (~1-4 ms/frame measured in FUN
 // mode, where the setpoint changes at 200-500 Hz) and repaints the whole bar
 // row. This does neither; the radius margin covers the rounded end moving.
+// Give the big reading an opaque background in the colour already behind it.
+// LVGL redraws an area starting from the topmost object that fully covers it;
+// with a transparent label that was the page, so every changed digit also
+// redrew the page background, the "V-Set:" label and the screen under it
+// (~0.45 ms of ~2.3 ms per digit, measured). Called once the UI is built and
+// again whenever the page colour changes (setStatus).
+// Skipped if anything between the label and the first opaque parent is
+// partly transparent, or that parent isn't a plain colour.
+void DispObjects::opaqueMeasureBackground(void)
+{
+    lv_obj_t *p = lv_obj_get_parent(label_measureValue);
+    while (p && lv_obj_get_style_bg_opa(p, LV_PART_MAIN) == LV_OPA_TRANSP)
+        p = lv_obj_get_parent(p);
+    if (!p || lv_obj_get_style_bg_opa(p, LV_PART_MAIN) != LV_OPA_COVER ||
+        lv_obj_get_style_bg_grad_dir(p, LV_PART_MAIN) != LV_GRAD_DIR_NONE || lv_obj_get_style_bg_img_src(p, LV_PART_MAIN))
+        return;
+    lv_obj_set_style_bg_color(label_measureValue, lv_obj_get_style_bg_color(p, LV_PART_MAIN), 0);
+    lv_obj_set_style_bg_opa(label_measureValue, LV_OPA_COVER, 0);
+}
+
 void DispObjects::updateShadowBar(void)
 {
     if (!Bar.bar_adjValue || !Bar.bar)

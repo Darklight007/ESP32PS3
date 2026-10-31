@@ -786,6 +786,7 @@ public:
     // Moves the setpoint shadow bar to shadowBarWidth() without a layout pass,
     // repainting only the strip that changed (see definition).
     void updateShadowBar(void);
+    void opaqueMeasureBackground(void);
     lv_coord_t shadowW{0};                                  // shadow bar width in px (drawn, not sized)
     static constexpr lv_opa_t kShadowBarOpa = LV_OPA_30;
     void SetEncoderUpdate(void);

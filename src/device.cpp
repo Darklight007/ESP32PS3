@@ -1116,6 +1116,10 @@ void Device::setStatus(DEVICE status_)
         for (int i = 0; i < 5; i++)
             lv_obj_set_style_bg_color(page[i], c.pageColor, 0);
         lv_obj_set_style_bg_color(lv_obj_get_child(page[3], 0), c.pageColor, 0);
+        // The big readings carry an opaque copy of the page colour
+        Voltage.opaqueMeasureBackground();
+        Current.opaqueMeasureBackground();
+        Power.opaqueMeasureBackground();
 
         lv_style_set_bg_color(&style_tabview_df_btn, c.pageColor);
         lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tab.tabview);

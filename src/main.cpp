@@ -116,6 +116,9 @@ void setup()
   setupCalibPage();
   dropIdleScrollbars(); // after the UI exists; render-time saving, no visual change
   dispPerfShow(PowerSupply.settingParameters.showFps == 1); // DISP:FPS overlay, if saved on
+  PowerSupply.Voltage.opaqueMeasureBackground(); // faster digit redraws, same pixels
+  PowerSupply.Current.opaqueMeasureBackground();
+  PowerSupply.Power.opaqueMeasureBackground();
   createTasks();
   initialMemory();
   loadEnergyFromStorage(); // Load persistent energy counter
