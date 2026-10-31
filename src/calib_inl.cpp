@@ -22,14 +22,24 @@ bool g_voltINL_ready = false;
 
 // Optional preload calibration data (0..32V, 35 pts)
 lv_obj_t *table_inl = nullptr;
-static const double MEASURED[] = {-.0045, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 32.5};
-static const double TRUE_IDEAL[] = {-.0045, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 32.5};
+// NOTE on the first knot: keep it well clear of the second one. It was briefly
+// -0.0005, only 0.5mV below the 0 point, and since X in the COMPUTE phase is
+// the MEASURED voltage (mV-scale noise even after averaging) the two came back
+// tied or inverted - build() then threw "x must be strictly increasing" inside
+// an LVGL timer callback and REBOOTED the unit mid-calibration. -0.0045 is the
+// long-standing value and gives ~4.5mV of separation.
+static const double MEASURED[] = {-.0045, 0, 0.100, 0.250, .500, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 32.5};
+static const double TRUE_IDEAL[] = {-.0045, 0, 0.100, 0.250, .500, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 32.5};
 constexpr size_t NPTS = sizeof(MEASURED) / sizeof(MEASURED[0]);
 static_assert(NPTS == sizeof(TRUE_IDEAL) / sizeof(TRUE_IDEAL[0]), "knot sizes must match");
+// CalBank's adc_inl_measure/adc_inl_ideal (device.hpp) are fixed-size storage
+// for this table - growing MEASURED[]/TRUE_IDEAL[] past that size used to
+// silently overrun them at save time (heap corruption -> crash elsewhere)
+// instead of failing here.
+static_assert(NPTS <= Calibration::INL_MAX_POINTS, "MEASURED[]/TRUE_IDEAL[] exceeds CalBank's adc_inl_measure/adc_inl_ideal storage - grow Calibration::INL_MAX_POINTS in device.hpp");
 
 // =============================================================================
-// Debug helper
-// =============================================================================
+// Debug helper ===================
 
 void INL_dbg(const char *fmt, ...)
 {
@@ -77,6 +87,7 @@ static inline uint32_t since(uint32_t t) { return lv_tick_elaps(t); }
 uint16_t last_adjValue;
 
 void inl_gui_prepare()
+
 {
     last_adjValue = PowerSupply.Voltage.adjValue;
     // Set start (0V)
@@ -171,9 +182,9 @@ static void INL_timer_cb(lv_timer_t *)
     case INL_FSM::SETTLE:
     {
         uint32_t settle_val = (PowerSupply.gui.calibration.inl.settle_time &&
-                                lv_obj_is_valid(PowerSupply.gui.calibration.inl.settle_time))
-                               ? lv_spinbox_get_value(PowerSupply.gui.calibration.inl.settle_time)
-                               : 30; // default 3.0s when GUI not open
+                               lv_obj_is_valid(PowerSupply.gui.calibration.inl.settle_time))
+                                  ? lv_spinbox_get_value(PowerSupply.gui.calibration.inl.settle_time)
+                                  : 30; // default 3.0s when GUI not open
         if (since(inl.t0) >= (uint32_t)100 * settle_val)
         {
             INL_dbg("[INL] SETTLE  +%u ms", unsigned(since(inl.t0)));
@@ -185,7 +196,7 @@ static void INL_timer_cb(lv_timer_t *)
     case INL_FSM::MEASURE:
     {
         double measure = PowerSupply.Voltage.measured.Mean(); // volts
-        inl.x_raw[inl.i] = measure; // X = ideal (linearized) volts
+        inl.x_raw[inl.i] = measure;                           // X = ideal (linearized) volts
         INL_dbg("[INL] MEASURE i=%d  ideal=%.6fV  true=%.6fV", inl.i, measure, inl.y_true[inl.i]);
 
         inl_gui_measure(measure, inl.y_true[inl.i]);
@@ -213,9 +224,53 @@ static void INL_timer_cb(lv_timer_t *)
 
         std::vector<double> X(inl.x_raw, inl.x_raw + INL_FSM::NPTS); // ideal volts (Mean)
         std::vector<double> Y(TRUE_IDEAL, TRUE_IDEAL + NPTS);        // true volts (set)
-        g_voltINL.setPoints(X, Y);
-        g_voltINL.build();
-        g_voltINL_ready = true;
+
+        // MonotoneCubicCalibrator::build() THROWS ("x must be strictly
+        // increasing") and this runs inside an LVGL timer callback, so an
+        // uncaught throw aborts and REBOOTS the device mid-calibration.
+        // X is the MEASURED voltage at each knot, so any two closely-spaced
+        // knots can come back tied or inverted once noise is included - the
+        // table starts -0.0005, 0.000, 0.100, 0.250, 0.500 and that first pair
+        // is only 0.5mV apart against mV-scale noise. Find the offending pair,
+        // report it, and abandon the run instead of crashing.
+        int badIdx = -1;
+        for (size_t i = 1; i < X.size(); i++)
+        {
+            if (!(X[i] > X[i - 1]))
+            {
+                badIdx = (int)i;
+                break;
+            }
+        }
+        if (badIdx >= 0)
+        {
+            INL_dbg("[INL] ABORT: measured volts not strictly increasing at knot %d: "
+                    "%.6f -> %.6f (commanded %.4f -> %.4f). INL not applied, nothing saved. "
+                    "Widen the low-end knot spacing in MEASURED[]/TRUE_IDEAL[] or raise settle time.",
+                    badIdx, X[badIdx - 1], X[badIdx],
+                    TRUE_IDEAL[badIdx - 1], TRUE_IDEAL[badIdx]);
+            g_voltINL_ready = false;
+            inl_gui_compute();
+            inl.ph = INL_FSM::DONE;
+            break;
+        }
+
+        try
+        {
+            g_voltINL.setPoints(X, Y);
+            g_voltINL.build();
+            g_voltINL_ready = true;
+        }
+        catch (const std::exception &e)
+        {
+            INL_dbg("[INL] ABORT: build() rejected the measured set (%s). "
+                    "INL not applied, nothing saved.", e.what());
+            g_voltINL_ready = false;
+            inl_gui_compute();
+            inl.ph = INL_FSM::DONE;
+            break;
+        }
+
         for (int i = 0; i < NPTS; i++)
         {
             PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure[i] = inl.x_raw[i];
@@ -319,7 +374,8 @@ static void INL_start(lv_event_t *e)
 
 static void ADC_INL_VCalib_cb(lv_event_t *)
 {
-    if (!calib_check_current_setpoint(10.0f)) return;
+    if (!calib_check_current_setpoint(10.0f))
+        return;
     Warning_msgbox("ADC INL Calibration", INL_start);
 }
 
@@ -336,7 +392,8 @@ void start_inl_calibration()
     inl = INL_FSM{};
     inl.ph = INL_FSM::PREPARE;
     inl.timer = lv_timer_create(INL_timer_cb, 10, nullptr);
-    if (!inl.timer) {
+    if (!inl.timer)
+    {
         INL_dbg("[INL] ERROR: Failed to create INL timer");
         inl.ph = INL_FSM::DONE;
     }
@@ -703,7 +760,7 @@ void rebuildINLFromCalibration()
 
     // Check if data looks valid (not all zeros or default identity)
     double sum_diff = 0.0;
-    for (size_t i = 0; i < NPTS && i < 36; i++)
+    for (size_t i = 0; i < NPTS; i++)
     {
         sum_diff += fabs(measure[i] - ideal[i]);
     }
@@ -721,9 +778,26 @@ void rebuildINLFromCalibration()
     std::vector<double> X(measure, measure + NPTS);
     std::vector<double> Y(ideal, ideal + NPTS);
 
-    g_voltINL.setPoints(X, Y);
-    g_voltINL.build();
-    g_voltINL_ready = true;
-
-    INL_dbg("[INL] INL interpolator rebuilt from saved data (ready=%d)", int(g_voltINL_ready));
+    // build() throws if X isn't strictly increasing - can legitimately happen
+    // with saved data from an older/incompatible NPTS or a corrupted NVS blob
+    // (e.g. growing the knot table changes sizeof(Calibration), so an old,
+    // smaller blob leaves the new tail slots as stale/garbage). This runs
+    // unconditionally at every boot, so an uncaught throw here means the
+    // device can never boot again until the data is cleared externally -
+    // degrade to "not calibrated" instead.
+    try
+    {
+        g_voltINL.setPoints(X, Y);
+        g_voltINL.build();
+        g_voltINL_ready = true;
+        INL_dbg("[INL] INL interpolator rebuilt from saved data (ready=%d)", int(g_voltINL_ready));
+    }
+    catch (const std::exception &e)
+    {
+        INL_dbg("[INL] ERROR: saved INL data rejected (%s) - clearing it, INL disabled until recalibrated", e.what());
+        g_voltINL_ready = false;
+        memset(&PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure, 0, sizeof(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_measure));
+        memset(&PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal, 0, sizeof(PowerSupply.CalBank[PowerSupply.bankCalibId].adc_inl_ideal));
+        PowerSupply.SaveCalibrationData();
+    }
 }

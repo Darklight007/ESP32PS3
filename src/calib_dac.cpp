@@ -53,8 +53,15 @@ namespace
         PowerSupply.dac_data.max_current = lv_spinbox_get_value(s_mc);
 
         PowerSupply.Current.adjOffset = PowerSupply.dac_data.zero_current;
-        PowerSupply.Current.minValue = (-PowerSupply.dac_data.zero_current) / 10000.0;
-        PowerSupply.Current.maxValue = (mc - zc) / 10000.0;
+        // DAC counts, NOT amps: everywhere else (SetupHandlers.cpp:234-235,
+        // this file's refresh path below, the voltage callback above) keeps
+        // min/maxValue in DAC counts, and every consumer (SetUpdate() range
+        // check, SCPI caps, battery charger, bar widths) divides by adjFactor
+        // itself. The old /10000.0 here silently flipped maxValue to amps
+        // whenever a DAC-calib spinbox changed - after that, the shadow bar
+        // and range checks were scaled 10000x wrong until reboot.
+        PowerSupply.Current.minValue = (-PowerSupply.dac_data.zero_current);
+        PowerSupply.Current.maxValue = (mc - zc);
         PowerSupply.SaveDACdata("dac_data_", PowerSupply.dac_data);
         PowerSupply.Current.SetEncoderUpdate();
     }

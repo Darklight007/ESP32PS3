@@ -62,25 +62,35 @@ void statisticUpdateInterval(unsigned long interval)
     static unsigned long timer_ = {0};
     schedule([]
              {
-                // Only save settings if values actually changed AND not in FUN mode
-                // (FUN mode changes adjValue at 200-500Hz — saving to NVS that fast
-                // causes flash GC stalls that freeze the display)
+                // Save the setpoints once they have been still for 2 s, not on
+                // every change: an NVS write stalls BOTH cores (flash cache off)
+                // for ~1-6 ms and up to ~54 ms on a page GC (measured), which
+                // froze the ADC task and display while the encoder turned.
+                // Not in FUN mode (adjValue changes at 200-500 Hz there).
                 static uint16_t lastVoltage = 0;
                 static uint16_t lastCurrent = 0;
-                if (PowerSupply.getStatus() != DEVICE::FUN &&
-                    (PowerSupply.Voltage.adjValue != lastVoltage ||
-                     PowerSupply.Current.adjValue != lastCurrent)) {
-                    PowerSupply.settingParameters.SetVoltage = PowerSupply.Voltage.adjValue;
-                    PowerSupply.settingParameters.SetCurrent = PowerSupply.Current.adjValue;
-                    PowerSupply.SaveSetting();
+                static unsigned long changedAt = 0;
+                static bool savePending = false;
+                if (PowerSupply.Voltage.adjValue != lastVoltage ||
+                    PowerSupply.Current.adjValue != lastCurrent) {
                     lastVoltage = PowerSupply.Voltage.adjValue;
                     lastCurrent = PowerSupply.Current.adjValue;
+                    changedAt = millis();
+                    savePending = true;
+                }
+                if (savePending && millis() - changedAt >= 2000 &&
+                    PowerSupply.getStatus() != DEVICE::FUN) {
+                    PowerSupply.settingParameters.SetVoltage = lastVoltage;
+                    PowerSupply.settingParameters.SetCurrent = lastCurrent;
+                    PowerSupply.SaveSetting();
+                    savePending = false;
                 }
 
-                // Data above (SaveSetting) always runs. Only the stat label
-                // formatting/writes below are Main-page-only display work —
-                // skip them when Main isn't the visible tab.
-                if (Tabs::getCurrentPage() == 2) {
+                // Data above (SaveSetting) always runs. The stat label
+                // formatting/writes below are only meaningful on pages where
+                // updateObjectPos_cb() actually parents these labels: Histogram(0),
+                // Graph(1), Main(2). Skip on Utility/Settings where they're hidden.
+                if (Tabs::getCurrentPage() <= 2) {
                     PowerSupply.Voltage.statUpdate();
                     PowerSupply.Current.statUpdate();
                 } },
@@ -164,6 +174,17 @@ void VCCCInterval(unsigned long interval)
              interval, timer_);
 }
 
+// Bars are drawn from Core 1 just before each render, so every frame shows
+// the newest measured value. Cheap when nothing moved (barUpdate() only
+// invalidates on a real change). Main page only - that's where the bars live.
+void updateBarsForFrame()
+{
+    if (blockAll || Tabs::getCurrentPage() != 2) // 2 = main page
+        return;
+    PowerSupply.Voltage.barUpdate();
+    PowerSupply.Current.barUpdate();
+}
+
 // Internal state for LvglUpdatesInterval - shared between overloads
 static unsigned long lvgl_timer_ = {0};
 static unsigned int lvglIsBlocked = {0};
@@ -181,8 +202,10 @@ void LvglUpdatesInterval(unsigned long interval, bool forceUpdate)
                  // for immediate UI responsiveness
                  if (!lvglChartIsBusy && !blockAll && (forceUpdate || adcDataReady))
                  {
+                     updateBarsForFrame();
                      lvglIsBusy = 1;
                      lv_refr_now(NULL);
+                     spiFrameRelease(); // low-noise mode safety net
                      lvglIsBusy = 0;
                      lvglIsBlocked = 0;
                      return;

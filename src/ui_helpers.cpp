@@ -455,10 +455,8 @@ void graphReset()
 
 void LoadGraphData()
 {
-    if (!SPIFFS.begin(true)) {
-        Serial.println("SPIFFS Mount Failed (graph data)");
-        return;
-    }
+    // SPIFFS is mounted once at boot (main.cpp) and stays mounted - mount/unmount
+    // is the expensive part of a SPIFFS op, not the read/write itself.
     fs::File f = SPIFFS.open("/graph_data.dat", "r");
     if (f && f.size() == sizeof(graph_data_V) + sizeof(graph_data_I)) {
         f.read((uint8_t *)graph_data_V, sizeof(graph_data_V));
@@ -468,21 +466,23 @@ void LoadGraphData()
         Serial.println("No saved graph data (or size mismatch) - starting blank");
     }
     if (f) f.close();
-    SPIFFS.end();
 }
 
 void SaveGraphDataIfDirty()
 {
+    // Confirmed live: SPIFFS open()-for-write-on-existing-file + close() cost
+    // ~330ms combined (vs <20ms for the actual data write) - a known SPIFFS
+    // weakness, not something fixable here without migrating storage (bigger
+    // change, own task). This function firing less often is the mitigation
+    // available right now - see the 180000ms interval at the call site.
     if (!g_graphDataDirty) return;
     g_graphDataDirty = false;
-    if (!SPIFFS.begin(true)) return;
     fs::File f = SPIFFS.open("/graph_data.dat", "w");
     if (f) {
         f.write((uint8_t *)graph_data_V, sizeof(graph_data_V));
         f.write((uint8_t *)graph_data_I, sizeof(graph_data_I));
         f.close();
     }
-    SPIFFS.end();
 }
 
 void GraphPush()
@@ -506,6 +506,11 @@ void GraphPush()
         if (count > CHART_SIZE) count = CHART_SIZE;
 
         lv_coord_t vVal = PowerSupply.Voltage.measured.value * 1000.0;
+        // Both ranges use the same x1000 factor now: A-mode reads 0..6.5536 A
+        // and mA-mode 0..8.192 mA, so each lands in the chart's -1000..8000
+        // raw space directly (see the SECONDARY_Y tick-label comment above
+        // draw_event_cb2). Before the shunt change mA-mode spanned 0..81.92
+        // and needed x100 to fit the same ceiling.
         lv_coord_t iVal = PowerSupply.Current.measured.value * 1000.0;
 
         memmove(&graph_data_V[0], &graph_data_V[count], (CHART_SIZE - count) * sizeof(graph_data_V[0]));
@@ -902,7 +907,14 @@ void draw_event_cb2(lv_event_t *e)
         else if (dsc->id == LV_CHART_AXIS_SECONDARY_Y)
         {
             static int index_sy = 0;
-            static const char *tickLabels_sy[] = {"8A", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0", "-1.0"};
+            // A-mode range is fixed at -1000..8000 raw (see GraphChart()), each tick
+            // worth 1000 raw = 1A. Since the shunt change the mA range is
+            // 0..8.192 mA, so GraphPush() scales both ranges by 1000 and the two
+            // share identical tick numbers - only the unit on the top label
+            // differs (8A vs 8mA). Each tick is 1000 raw = 1A or 1mA.
+            static const char *tickLabels_sy_A[]  = {"8A", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0", "-1.0"};
+            static const char *tickLabels_sy_mA[] = {"8mA", "7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0", "0.0", "-1.0"};
+            const char *const *tickLabels_sy = PowerSupply.mA_Active ? tickLabels_sy_mA : tickLabels_sy_A;
             constexpr int SY_LABEL_COUNT = 10;
 
             if (strcmp(dsc->text, "8000") == 0)

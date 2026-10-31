@@ -7,6 +7,7 @@
 #include "error_handler.h"
 #include "functions.h"
 #include "waveform_generator.h"
+#include "disp_perf.h"
 #include <Wire.h>
 #include <cstring>
 #include <cmath>
@@ -235,6 +236,7 @@ void SCPIParser::executeCommand(const String& command)
         if (cmdPart.indexOf("ADC:RATE") > 0) cmd_SETT_ADC_RATE(paramPart);
         else if (cmdPart.indexOf("ADC:AVG") > 0) cmd_SETT_ADC_AVG(paramPart);
         else if (cmdPart.indexOf("ADC:DIG") > 0) cmd_SETT_ADC_DIG(paramPart);
+        else if (cmdPart.indexOf("ADC:DISC") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.adcDiscardFirst);
         else if (cmdPart.indexOf("BEEP:VOL") > 0) cmd_SETT_BEEP_VOL(paramPart);
         else if (cmdPart.indexOf("BEEP:PWR") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.beeperOnPowerChange);
         else if (cmdPart.indexOf("BEEP:ERR") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.beeperOnError);
@@ -255,6 +257,25 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("START") > 0) cmd_SETT_STARTUP(paramPart);
         else if (cmdPart.indexOf("SAVE") > 0) { PowerSupply.SaveSetting(); sendResponse("OK"); }
         else if (cmdPart.indexOf("LOAD") > 0) { PowerSupply.LoadSetting(); sendResponse("OK"); }
+        else addError(ERR_UNDEFINED_HEADER);
+        return;
+    }
+
+    // SCPI DISPlay subsystem: frame-rate meter
+    if (cmdPart.startsWith("DISP"))
+    {
+        if (cmdPart.indexOf("FPS?") > 0)
+        {
+            const DispPerfStats &st = dispPerfStats();
+            Serial.printf("%.1f,%lu,%.2f,%.2f,%.0f,%u\n", st.fps, (unsigned long)st.pxPerFrame,
+                          st.renderMs, st.flushMs, st.busyPct, PowerSupply.adc.realADCSpeed);
+        }
+        else if (cmdPart.indexOf("FPS") > 0)
+        {
+            bool on = dispPerfShown();
+            cmd_SETT_BOOL(paramPart, on);
+            dispPerfSetSaved(on);
+        }
         else addError(ERR_UNDEFINED_HEADER);
         return;
     }
@@ -483,18 +504,10 @@ void SCPIParser::cmd_TST_Q()
     // Test 10: FreeRTOS Tasks Health
     // Verify critical tasks are running
     extern TaskHandle_t Task_adc;
-    extern TaskHandle_t Task_bargraph;
-
     if (Task_adc == NULL || eTaskGetState(Task_adc) == eDeleted)
     {
         allTestsPassed = false;
         failureDetails += "TASK_ADC_FAIL;";
-    }
-
-    if (Task_bargraph == NULL || eTaskGetState(Task_bargraph) == eDeleted)
-    {
-        allTestsPassed = false;
-        failureDetails += "TASK_GUI_FAIL;";
     }
 
     // Test 11: Watchdog Timer Status

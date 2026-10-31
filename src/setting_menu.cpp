@@ -18,6 +18,7 @@
 #include "table_pro.h"
 #include "device.hpp"      // provides PowerSupply and dac_data_g
 #include "lv_gui_helper.h" // LVLabel, LVButton helpers
+#include "disp_perf.h"     // frame-rate overlay switch
 #include <float.h>
 
 #include <cmath>
@@ -252,34 +253,80 @@ namespace
         lv_snprintf(buf, sizeof(buf), "%i", v);
         lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
 
+        const char *fmt;
         switch (v)
         {
-        case 1:
-            PowerSupply.Voltage.restrict = "%+05.1f";
-            PowerSupply.Current.restrict = "%+05.1f";
-            PowerSupply.Power.restrict = "%+05.1f";
-            break;
-        case 2:
-            PowerSupply.Voltage.restrict = "%+06.2f";
-            PowerSupply.Current.restrict = "%+06.2f";
-            PowerSupply.Power.restrict = "%+06.2f";
-            break;
-        case 3:
-            PowerSupply.Voltage.restrict = "%+07.3f";
-            PowerSupply.Current.restrict = "%+07.3f";
-            PowerSupply.Power.restrict = "%+07.3f";
-            break;
-        case 4:
-            PowerSupply.Voltage.restrict = "%+08.4f";
-            PowerSupply.Current.restrict = "%+08.4f";
-            PowerSupply.Power.restrict = "%+08.4f";
-            break;
-        default:
-            PowerSupply.Voltage.restrict = "%+07.3f";
-            PowerSupply.Current.restrict = "%+07.3f";
-            PowerSupply.Power.restrict = "%+07.3f";
+        case 1:  fmt = "%+05.1f"; break;
+        case 2:  fmt = "%+06.2f"; break;
+        case 3:  fmt = "%+07.3f"; break;
+        case 4:  fmt = "%+08.4f"; break;
+        default: fmt = "%+07.3f"; break;
         }
+        PowerSupply.Voltage.restrict = fmt;
+        PowerSupply.Power.restrict = fmt;
+        // mA range has its own decimal-count slider/setting below - only apply
+        // this one to Current when the A range is active.
+        if (!PowerSupply.mA_Active)
+            PowerSupply.Current.restrict = fmt;
         PowerSupply.settingParameters.adcNumberOfDigits = v;
+    }
+
+    // Decimal places for the mA current range, independent of the slider above.
+    // Kept separate because mA's effective resolution is ~10 bits lower than
+    // A's at the same physical noise (steeper calibration slope) - see
+    // calibrationUpdate() in device.cpp.
+    static void slider_decimalPoints_mA_event_cb(lv_event_t *e)
+    {
+        auto *slider = lv_event_get_target(e);
+        uint16_t v = lv_slider_get_value(slider);
+        char buf[4];
+        lv_snprintf(buf, sizeof(buf), "%i", v);
+        lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
+
+        const char *fmt;
+        switch (v)
+        {
+        case 1:  fmt = "%+05.1f"; break;
+        case 2:  fmt = "%+06.2f"; break;
+        case 3:  fmt = "%+07.3f"; break;
+        case 4:  fmt = "%+08.4f"; break;
+        // 5 decimals trades the leading integer digit for a fifth decimal
+        // (+7.12345 instead of +07.1234) - same 8-char width. Only valid
+        // because the mA range tops out at 8.192; see digitFormat() in
+        // device.cpp.
+        case 5:  fmt = "%+08.5f"; break;
+        default: fmt = "%+07.3f"; break;
+        }
+        if (PowerSupply.mA_Active)
+            PowerSupply.Current.restrict = fmt;
+        PowerSupply.settingParameters.adcNumberOfDigits_mA = v;
+    }
+
+    // TEMPORARY experiment: ADS1219 PGA x4 on current conversions only.
+    // Intentionally not written to settingParameters, so it is never saved and
+    // always returns to x1 on the next boot.
+    static void switch_iPga_event_cb(lv_event_t *e)
+    {
+        if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED)
+            return;
+        auto *sw = lv_event_get_target(e);
+        const bool x4 = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        PowerSupply.iPgaX4 = x4;
+        // No on-screen "x4" marker by request - the switch state and this log
+        // line are the only indication. OVL still reflects the scaled range.
+        Serial.printf("\nI PGA: x%d", x4 ? 4 : 1);
+    }
+
+    static void switch_show_fps_event_cb(lv_event_t *e)
+    {
+        dispPerfSetSaved(lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED));
+    }
+
+    static void switch_discard_first_event_cb(lv_event_t *e)
+    {
+        auto *sw = lv_event_get_target(e);
+        PowerSupply.settingParameters.adcDiscardFirst = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        Serial.printf("\nDiscard 1st conversion: %s", PowerSupply.settingParameters.adcDiscardFirst ? "ON" : "OFF");
     }
 
     static void switch_buzzer_event_cb(lv_event_t *e)
@@ -655,6 +702,11 @@ void SettingMenu(lv_obj_t *parent)
     lv_obj_set_style_pad_hor(sub_display, lv_obj_get_style_pad_left(lv_menu_get_main_header(PowerSupply.gui.setting_menu), 0), 0);
     auto *section = lv_menu_section_create(sub_display);
     create_slider(section, nullptr, "Backlight", 0, 255, 255, slider_backlight_event_cb, LV_EVENT_VALUE_CHANGED);
+    {
+        lv_obj_t *cont = create_switch_(section, nullptr, "Show FPS", PowerSupply.settingParameters.showFps == 1,
+                                        switch_show_fps_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+        dispPerfSetSwitch(lv_obj_get_child(cont, 1)); // child 0 label, 1 switch
+    }
 
 
     // Measure
@@ -663,7 +715,16 @@ void SettingMenu(lv_obj_t *parent)
     PowerSupply.gui.slider_adcRate = create_slider(section, nullptr, "ADC SPS", 0, 4, PowerSupply.settingParameters.adcRate, slider_adcRate_event_cb, LV_EVENT_VALUE_CHANGED);
     PowerSupply.gui.slider_Avgs = create_slider(section, nullptr, "ADC # of Avgs", 0, (int)std::log2(MAX_NO_OF_AVG), PowerSupply.settingParameters.adcNumberOfAvgs, slider_adcAVG_event_cb, LV_EVENT_VALUE_CHANGED);
     create_slider(section, nullptr, "Number of Digits", 1, 4, PowerSupply.settingParameters.adcNumberOfDigits, slider_decimalPoints_event_cb, LV_EVENT_VALUE_CHANGED);
+    // Max 5 (not 4 like the general slider): at 5 the format drops the leading
+    // integer digit, which only works for the mA range's 0-8.192 span.
+    create_slider(section, nullptr, "mA Digits", 1, 5, PowerSupply.settingParameters.adcNumberOfDigits_mA, slider_decimalPoints_mA_event_cb, LV_EVENT_VALUE_CHANGED);
+    // Convert each V and I twice and keep only the second result (halves the rate)
+    create_switch_(section, nullptr, "Discard 1st Conversion", PowerSupply.settingParameters.adcDiscardFirst, switch_discard_first_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
     create_switch_(section, nullptr, "Auto Bar-Graph", false, switch_buzzer_event_cb, LV_EVENT_VALUE_CHANGED, PowerSupply.gui.setting_menu);
+    // TEMPORARY: ADS1219 PGA x4 on current only. Kept last in the Measure page
+    // as it is an experiment. Always starts unchecked (x1) - PowerSupply.iPgaX4
+    // is not part of settingParameters, so nothing persists it.
+    create_switch_(section, nullptr, "I PGA x4", false, switch_iPga_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     // Calibration
     lv_obj_t *sub_cal = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
@@ -969,12 +1030,18 @@ void internal_leakage_calibration_cb(lv_event_t *)
     int xPos = 10, yPos = 20, yOffset = 48;
 
     // Resistor for A range
-    Calib_GUI.internalLeakage_A = spinbox_pro(cont, "#FFFFF7 Leakage [A] (kOhm):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos, 150, 21, &graph_R_16);
+    // Range allows negatives: at high V some hardware sources current INTO the
+    // sense path (an inverse bias that scales linearly with output voltage), and
+    // the same I = V/R model covers it with R < 0. The measurement in
+    // calib_internal_leakage.cpp already produces and clamps a signed Rtot, and
+    // DACUpdate()'s compensation is signed - a range_min of 0 here was the only
+    // thing forcing those measurements to clamp to zero.
+    Calib_GUI.internalLeakage_A = spinbox_pro(cont, "#FFFFF7 Leakage [A] (kOhm):#", -999'999'999, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos, 150, 21, &graph_R_16);
     lv_spinbox_set_value(Calib_GUI.internalLeakage_A, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[0]);
     lv_obj_add_event_cb(Calib_GUI.internalLeakage_A, ADC_internalRes_A_change_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    // Resistor for mA range
-    Calib_GUI.internalLeakage_mA = spinbox_pro(cont, "#FFFFF7 Leakage [mA] (kOhm):#", 0, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset, 150, 22, &graph_R_16);
+    // Resistor for mA range (see note on the A range above)
+    Calib_GUI.internalLeakage_mA = spinbox_pro(cont, "#FFFFF7 Leakage [mA] (kOhm):#", -999'999'999, 999'999'999, 9, 6, LV_ALIGN_DEFAULT, xPos, yPos + yOffset, 150, 22, &graph_R_16);
     lv_spinbox_set_value(Calib_GUI.internalLeakage_mA, 1000.0 * PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1]);
     lv_obj_add_event_cb(Calib_GUI.internalLeakage_mA, ADC_internalRes_mA_change_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 

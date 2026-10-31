@@ -1,7 +1,22 @@
 #include "SetupHandlers.h" // Include the setup handlers header
 #include "i2c_recovery.h"  // Include I2C bus recovery module
 #include "calib_inl.h"     // Include INL calibration for startup rebuild
+#include "esp_heap_caps.h" // heap_caps_malloc for the internal DMA band buffer
+#include "error_handler.h" // startup failure reporting (createTasks)
+#include "disp_perf.h"     // DISP:FPS frame-rate meter
 // #include "calib_inl_zc.h"  // Include zero-current INL calibration for startup rebuild
+
+// Staging buffer for display DMA, in internal (DMA-capable) RAM. The LVGL draw
+// buffers live in PSRAM, which SPI master cannot DMA from - see the detailed
+// note in setupDMA(). my_disp_flush() pushes through this in bands.
+// 320 x 12 px = 7680 bytes. Internal RAM is tight: LV_ATTRIBUTE_FAST_MEM puts
+// LVGL's draw code in IRAM (~13KB of the same SRAM), and Task_ADC's 14KB stack
+// is created after the UI - when it didn't fit, xTaskCreatePinnedToCore failed
+// silently and the unit ran with no ADC and no keypad. 12 rows costs ~3ms per
+// full-screen flush vs 24.
+static constexpr size_t DMA_BAND_ROWS = 12;
+static constexpr size_t DMA_BAND_PIXELS = (size_t)IWIDTH * DMA_BAND_ROWS;
+static uint16_t *dmaBandBuf = nullptr;
 
 // **Pin Definitions**
 #define SDA_1_ADC 17 // SDA pin for I2C bus 1 (ADC)
@@ -41,6 +56,12 @@ extern int32_t barGraph_V[1];
 void initializeSerial()
 {
     Serial.begin(115200);
+    // Native USB CDC: once plugged in, the core's TX timeout becomes 100 ms. With
+    // the cable in but no program reading the port, the TX buffer fills and every
+    // print then blocks 100 ms - a once-per-second debug print froze the digits
+    // and bars like clockwork. 20 ms bounds that while still letting a reading
+    // host (SCPI responses) drain without truncation.
+    Serial.setTxTimeoutMs(20);
     delay(1000); // Wait for serial connection to stabilize
 
     // Use ESP_LOGI for debugging since Serial.print may not work
@@ -110,9 +131,25 @@ void initializeI2C()
     else
         Serial.println("I2C_2 device OK.");
 
+    // NOTE: I2CRecovery is deliberately NOT armed here (no init() call), so it
+    // stays inert exactly as it has been: Keypad_MC17/LTC2655 still call
+    // handleError() on failed transfers, but with wire/sdaPin unset both
+    // recoverBus() and resetBus() bail immediately and nothing is touched.
+    // Arming it (init + a kpd.begin() recovery callback) was tried on
+    // 2026-09-20 and coincided with V/I/mV entry closing the textarea
+    // immediately instead of waiting for input - recovery tears the bus down
+    // (wire->end(), pin re-muxing, ~70ms of delays) and re-runs kpd.begin()
+    // mid-keypress, which can scramble the key state machine into a second
+    // RELEASED event. Causation was never proven (the board disconnected
+    // before logs could be captured). Re-arm only with a serial monitor
+    // attached, watching for "I2C: Attempting bus recovery".
+
     // Initialize keypad (does not start Wire library now)
     kpd.begin();
-    kpd.setDebounceTime(33 * 2); // Set debounce time (no bouncing for this I2C)
+    // Keypad::getKeys() won't rescan sooner than this, so at 66 ms it silently
+    // overrode the 2/10 ms typing tiers in tasks.cpp. 20 ms still rides out
+    // switch bounce (typically <5-10 ms) and lets those tiers take effect.
+    kpd.setDebounceTime(20);
     kpd.setHoldTime(1000);       // Set hold time
 
     Serial.println("I2C Initialized.");
@@ -167,6 +204,30 @@ void setupDMA()
     // Initialize DMA
     tft.initDMA();
     lv_disp_draw_buf_init(&draw_buf, buf[0], buf[1], IWIDTH * IHEIGHT);
+
+    // DMA staging buffer in INTERNAL (DMA-capable) RAM.
+    //
+    // The LVGL draw buffers above are TFT_eSprites of IWIDTH*IHEIGHT, which
+    // createSprite() puts in PSRAM (2 x 150KB). PSRAM is not DMA-capable for
+    // SPI master, so when pushImageDMA() handed such a pointer straight to
+    // spi_device_queue_trans() the driver tried to allocate its own internal
+    // bounce buffer for the whole transfer and failed:
+    //     [TFTDMA] ret=0x101 (ESP_ERR_NO_MEM) len=16287 buf=0x3d800908 dmaCap=0
+    // Upstream then did assert(ret == ESP_OK), which abort()s and REBOOTED the
+    // unit - the random restarts during full-auto calibration, where INL's
+    // repaints are large and frequent.
+    //
+    // pushImageDMA()'s 6th argument is exactly the hook for this: given a
+    // buffer, it copies the image into it and DMAs from THAT. So stage each
+    // band through this internal buffer and the driver never needs to bounce.
+    // One fixed allocation at boot - no per-frame malloc, so no fragmentation.
+    dmaBandBuf = (uint16_t *)heap_caps_malloc(DMA_BAND_PIXELS * sizeof(uint16_t),
+                                              MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+    Serial.printf("\nDMA band buffer: %u px (%u bytes) @ %p\n",
+                  (unsigned)DMA_BAND_PIXELS, (unsigned)(DMA_BAND_PIXELS * sizeof(uint16_t)),
+                  (void *)dmaBandBuf);
+    if (!dmaBandBuf)
+        Serial.println("WARNING: DMA band buffer alloc failed - flushing direct from PSRAM (may drop frames)");
 
 #else
     // Initialize display buffer without DMA
@@ -253,8 +314,11 @@ void setupPowerSupply()
     PowerSupply.Current.effectiveResolution.SetWindowSize(32);
     PowerSupply.Power.effectiveResolution.SetWindowSize(1);
 
+    // Fixed window, independent of the ADC Avgs setting (which only sizes the
+    // calibrated `measured` averages above).
     PowerSupply.Voltage.rawValueStats.SetWindowSize(2048);
     PowerSupply.Current.rawValueStats.SetWindowSize(2048);
+    PowerSupply.Current.rawValueStats_mA.SetWindowSize(2048);
     // Setup current parameters
     PowerSupply.Current.setup(PowerSupply.page[2], "I-Set:", -14, 74, "A", PowerSupply.Current.maxValue, PowerSupply.Current.minValue,
                               1.0, PowerSupply.dac_data.zero_current, 10000,"m");
@@ -266,6 +330,15 @@ void setupPowerSupply()
     lv_obj_set_style_text_font(PowerSupply.gui.label_current_rel, &lv_font_montserrat_12, 0);
     lv_obj_align(PowerSupply.gui.label_current_rel, LV_ALIGN_TOP_RIGHT, -2, 74);
     lv_obj_add_flag(PowerSupply.gui.label_current_rel, LV_OBJ_FLAG_HIDDEN);
+
+    // "OVL" overload indicator - shown once the current reading approaches the
+    // active range's full scale (threshold scales with the PGA; see FlushMeasures).
+    PowerSupply.gui.label_current_ovl = lv_label_create(PowerSupply.page[2]);
+    lv_label_set_text(PowerSupply.gui.label_current_ovl, "OVL");
+    lv_obj_set_style_text_color(PowerSupply.gui.label_current_ovl, lv_color_hex(0xFF0000), 0);
+    lv_obj_set_style_text_font(PowerSupply.gui.label_current_ovl, &lv_font_montserrat_12, 0);
+    lv_obj_align(PowerSupply.gui.label_current_ovl, LV_ALIGN_TOP_RIGHT, -24, 74);
+    lv_obj_add_flag(PowerSupply.gui.label_current_ovl, LV_OBJ_FLAG_HIDDEN);
 
     // Setup power display parameters
     PowerSupply.Power.setup(PowerSupply.page[2], "", -14, 144, "W", 0, 0, 0, 0, 0,"", &dseg_b_24, &Tauri_R_28);
@@ -294,13 +367,13 @@ void setupPowerSupply()
     // Timer at top (y=159), then Energy (y=171), then Time (y=183)
     PowerSupply.gui.label_timer_remaining = lv_label_create(PowerSupply.page[2]);
     lv_label_set_text(PowerSupply.gui.label_timer_remaining, "");
-    lv_obj_align(PowerSupply.gui.label_timer_remaining, LV_ALIGN_DEFAULT, 165, 159);
+    lv_obj_align(PowerSupply.gui.label_timer_remaining, LV_ALIGN_DEFAULT, 165, 173);
     lv_obj_set_style_text_font(PowerSupply.gui.label_timer_remaining, &lv_font_montserrat_10, 0);
     lv_obj_add_flag(PowerSupply.gui.label_timer_remaining, LV_OBJ_FLAG_HIDDEN);  // Hidden by default
 
     PowerSupply.gui.label_energy_counter = lv_label_create(PowerSupply.page[2]);
     lv_label_set_text(PowerSupply.gui.label_energy_counter, "0.000Wh");
-    lv_obj_align(PowerSupply.gui.label_energy_counter, LV_ALIGN_DEFAULT, 165, 171);
+    lv_obj_align(PowerSupply.gui.label_energy_counter, LV_ALIGN_DEFAULT, 165, 163);
     lv_obj_set_style_text_font(PowerSupply.gui.label_energy_counter, &lv_font_montserrat_10, 0);
 
     PowerSupply.gui.label_power_on_time = lv_label_create(PowerSupply.page[2]);
@@ -425,6 +498,11 @@ void setupADC()
 
     // Setup ADC with READY pin number, ISR function, and I2C bus (Wire1)
     PowerSupply.setupADC(9, ADCPinISR, &Wire1);  // FIXED: ADC is on Wire1, not Wire!
+
+    // Populate Current.calib_m/b, adc_maxValue, and restrict (mA vs A decimal
+    // format) for the current range now that CalBank exists. LoadSetting() ran
+    // earlier in setup() but couldn't do this - CalBank was still empty then.
+    PowerSupply.calibrationUpdate();
     Serial.print("\nADC Setup & Calibration Completed.");
 
     // Rebuild INL interpolators from saved calibration data (must be after CalBank init)
@@ -453,20 +531,14 @@ void setupBuzzer()
 // Create tasks for FreeRTOS
 void createTasks()
 {
-    // Create a task for Bar Graph display, with priority 0, pinned to core 0
-    xTaskCreatePinnedToCore(
-        Task_BarGraph, /* Task function */
-        "Task_bargraph",       /* Name of task */
-        8000,          /* Stack size of task */
-        NULL,          /* Parameter of the task */
-        0,             /* Priority of the task */
-        &Task_bargraph,        /* Task handle to keep track of created task */
-        0              /* Pin task to core 0 */
-    );
+    // No bar-graph task: the bars are updated on Core 1 right before each
+    // render (updateBarsForFrame() in intervals.cpp), so every frame carries the
+    // newest value. The old Core 0 task polled every 1 ms, skipped whenever
+    // Core 1 was rendering, and its LVGL writes raced the renderer.
 
     // Create a task for ADC reading and FUN generation
     // Priority 5 - balanced (was 1 too low, 20 was too high)
-    xTaskCreatePinnedToCore(
+    const BaseType_t adcOk = xTaskCreatePinnedToCore(
         Task_ADC,                /* Task function */
         "Voltage & Current ADC", /* Name of task */
         14000,                   /* Stack size of task */
@@ -475,6 +547,25 @@ void createTasks()
         &Task_adc,               /* Task handle */
         0                        /* Pin task to core 0 */
     );
+    // Task_ADC is created after the UI has taken most internal SRAM. If its
+    // 14 KB stack doesn't fit, creation fails and the unit boots looking normal
+    // but with no measurements and a dead keypad - make that impossible to miss.
+    // (setup() runs on Core 1, so the LVGL calls here are safe.)
+    if (adcOk != pdPASS)
+    {
+        Task_adc = nullptr;
+        char msg[96];
+        snprintf(msg, sizeof(msg), "Task_ADC not started: %u B internal RAM free, largest block %u B",
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        ErrorHandler::report(ErrorHandler::Severity::CRITICAL, ErrorHandler::Category::MEMORY, msg, __FILE__, __LINE__);
+        lv_obj_t *mb = lv_msgbox_create(NULL, "STARTUP FAILURE",
+                                        "ADC/keypad task could not start (out of internal RAM).\n"
+                                        "Measurements and keypad are disabled.", NULL, false);
+        lv_obj_center(mb);
+    }
+
+    createPersistTask(); // background flash saves (tasks.cpp)
 
  
     // Create a task for ADC reading, with priority 1, pinned to core 0
@@ -510,17 +601,69 @@ bool scanI2CBus(TwoWire &i2cBus, uint8_t address)
 }
 
 // LVGL display flush function
+void touchSample();
+
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p)
 {
+    // Low-noise mode: wait here for the ADC to finish its V+I pair (the frame
+    // was already rendered into the buffer while it converted). No-op otherwise.
+    spiFrameClaim();
+    dispPerfFlushBegin();
     tft.startWrite();
 
 #if DMA
-    // Use DMA to push image to display
-    tft.pushImageDMA(area->x1, area->y1,
-                     area->x2 - area->x1 + 1,
-                     area->y2 - area->y1 + 1,
-                     (uint16_t *)&color_p->full);
-    tft.dmaWait(); // Wait for DMA transfer to complete
+    // Push in horizontal bands of at most 0x4000 (16384) pixels.
+    //
+    // pushImageDMA() can only DMA 64KB at once, and for anything larger it falls
+    // back to a `while (len > 0x4000) pushPixels(...)` loop - that is BLOCKING
+    // (polling) SPI, after which it still queues a DMA transaction on the same
+    // device. Mixing a polling transfer with spi_device_queue_trans() makes the
+    // queue call return ESP_ERR_INVALID_STATE, and the library does
+    // `assert(ret == ESP_OK)` - which abort()s and REBOOTS the unit.
+    //
+    // Our LVGL draw buffer is a full-screen sprite (IWIDTH*IHEIGHT = 76800 px),
+    // so every large invalidation took that path. It only bit on big repaints
+    // (INL opening its window during full-auto calibration) and only sometimes,
+    // depending on whether the polling transfer had drained - which is exactly
+    // how it presented: random reboots at step 6/6.
+    // TFT_eSPI's own comment says the caller should split into <=32768 px
+    // blocks; staying under 0x4000 keeps us clear of the fallback entirely.
+    //
+    // No throughput cost: the original code called dmaWait() immediately after
+    // the single push, so transfers were never overlapped anyway.
+    {
+        const int32_t x = area->x1;
+        const int32_t w = area->x2 - area->x1 + 1;
+        const int32_t h = area->y2 - area->y1 + 1;
+        uint16_t *src = (uint16_t *)&color_p->full;
+
+        // Rows per band. Bounded by the internal staging buffer when we have
+        // one (that is what makes the source DMA-capable), otherwise by the
+        // library's 0x4000-pixel fallback threshold.
+        const size_t bandLimitPx = dmaBandBuf ? DMA_BAND_PIXELS : (size_t)0x4000;
+        int32_t maxRows = (w > 0) ? (int32_t)(bandLimitPx / (size_t)w) : h;
+        if (maxRows < 1)
+            maxRows = 1;
+
+        int32_t yy = area->y1;
+        int32_t rowsLeft = h;
+        while (rowsLeft > 0)
+        {
+            const int32_t rows = (rowsLeft > maxRows) ? maxRows : rowsLeft;
+            // 6th arg = staging buffer: pushImageDMA() copies this band into it
+            // and DMAs from THERE, so the SPI driver gets DMA-capable internal
+            // memory instead of a PSRAM pointer it has to bounce (and fail on
+            // with ESP_ERR_NO_MEM). nullptr falls back to DMA straight from the
+            // source, i.e. the old behaviour, if the alloc ever failed.
+            tft.pushImageDMA(x, yy, w, rows, src, dmaBandBuf);
+            tft.dmaWait(); // must complete before the next band overwrites the
+                           // staging buffer / reuses the library's static
+                           // spi_transaction_t
+            src += (size_t)rows * (size_t)w;
+            yy += rows;
+            rowsLeft -= rows;
+        }
+    }
 
 #else
     // Push image to display without DMA
@@ -531,6 +674,14 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
 #endif
 
     tft.endWrite();
+    dispPerfFlushEnd();
+
+    if (lv_disp_flush_is_last(disp) && SpiQuiet::frameClaimed)
+    {
+        if (SpiQuiet::lowNoise.load())
+            touchSample(); // touch shares this slot; my_touchpad_read uses the cache
+        spiFrameRelease();
+    }
 
     lv_disp_flush_ready(disp); // Indicate that flushing is done
 }
@@ -544,6 +695,7 @@ void init_display()
     disp_drv.draw_buf = &draw_buf;     // Set an initialized buffer
     disp_drv.hor_res = screenWidth;    // Set horizontal resolution
     disp_drv.ver_res = screenHeight;   // Set vertical resolution
+    dispPerfAttach(&disp_drv);         // frame-rate meter (DISP:FPS?)
     lv_disp_drv_register(&disp_drv);   // Finally register the driver
 
     lv_disp = lv_disp_get_default(); // Get the default display

@@ -56,7 +56,9 @@ void toneOff()
     // if (!buzzerSound)
     // return;
 
-    if (/*toneIsOn &&*/ (toneTime[1]+ toneTime[0]) <millis())
+    // toneIsOn guard: this runs on every Task_ADC pass (~1000x/s); without it
+    // the PWM was rewritten (two LEDC driver calls) even when silent.
+    if (toneIsOn && (toneTime[1]+ toneTime[0]) <millis())
     {
         // if ((millis() - toneTime[0]) > toneTime[1])
         ledcWrite(SOUND_PWM_CHANNEL, SOUND_OFF);

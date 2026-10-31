@@ -918,6 +918,8 @@ void StatusBar()
 
         lv_obj_add_style(statusLabel_time, &style_font, LV_STATE_DEFAULT);
         lv_obj_add_style(statusLabel_avg, &style_font, LV_STATE_DEFAULT);
+        // Moved from the per-call path below (was re-applied every 300ms forever)
+        lv_obj_set_style_text_font(statusLabel_wifi, &lv_font_montserrat_10, LV_STATE_DEFAULT);
 
         lv_obj_align(statusLabel_time, LV_ALIGN_LEFT_MID, -12, 0);
         lv_obj_align(statusLabel_wifi, LV_ALIGN_CENTER, -30, 0);
@@ -925,7 +927,13 @@ void StatusBar()
         statusCreationFlag = true;
     }
 
-    // Update OVP/OCP status indicator - compact format like mWh display
+    // Update OVP/OCP status indicator - compact format like mWh display.
+    // AUDIT_BARGRAPH_ENCODER #4 (2026-07-23): all three writes below used to run
+    // unconditionally every 300ms even though the underlying values usually only
+    // change once/sec or less - each lv_label_set_text/_fmt call invalidates the
+    // label regardless of whether the string actually changed. Font-style was the
+    // worst offender: re-applied every single call forever, not just once at
+    // creation. Now gated on real change, same pattern as barUpdate()'s markers.
     char protStatus[64];
     const char *ovpColor = PowerSupply.settingParameters.ovpTriggered ? "#FF0000 " :
                            (PowerSupply.settingParameters.ovpEnabled ? "#00FF00 " : "#888888 ");
@@ -935,9 +943,13 @@ void StatusBar()
     snprintf(protStatus, sizeof(protStatus), "%sOVP:%.2fV# %sOCP:%.2fA#",
              ovpColor, PowerSupply.settingParameters.voltageLimitMax,
              ocpColor, PowerSupply.settingParameters.currentLimitMax);
-    lv_label_set_recolor(statusLabel_wifi, true);
-    lv_label_set_text(statusLabel_wifi, protStatus);
-    lv_obj_set_style_text_font(statusLabel_wifi, &lv_font_montserrat_10, LV_STATE_DEFAULT);
+    static char lastProtStatus[64] = {0};
+    if (strcmp(protStatus, lastProtStatus) != 0)
+    {
+        lv_label_set_recolor(statusLabel_wifi, true);
+        lv_label_set_text(statusLabel_wifi, protStatus);
+        strcpy(lastProtStatus, protStatus);
+    }
 
     static time_t now;
     char strftime_buf[16];
@@ -946,15 +958,23 @@ void StatusBar()
     time(&now);
     localtime_r(&now, &timeinfo);
     strftime(strftime_buf, sizeof(strftime_buf), "%H:%M:%S", &timeinfo);
-    lv_label_set_text_fmt(statusLabel_time, "%s", strftime_buf);
+    static char lastTimeStr[16] = {0};
+    if (strcmp(strftime_buf, lastTimeStr) != 0)
+    {
+        lv_label_set_text_fmt(statusLabel_time, "%s", strftime_buf);
+        strcpy(lastTimeStr, strftime_buf);
+    }
 
     static char str[35];
-
-    sprintf(str, "SPS:%3i;#Avgs ", PowerSupply.adc.realADCSpeed);
-
-    strcat(str, "%i");
-
-    lv_label_set_text_fmt(statusLabel_avg, str, PowerSupply.Voltage.measured.NofAvgs);
+    static int lastSps = -1, lastAvgs = -1;
+    if (PowerSupply.adc.realADCSpeed != lastSps || PowerSupply.Voltage.measured.NofAvgs != lastAvgs)
+    {
+        sprintf(str, "SPS:%3i;#Avgs ", PowerSupply.adc.realADCSpeed);
+        strcat(str, "%i");
+        lv_label_set_text_fmt(statusLabel_avg, str, PowerSupply.Voltage.measured.NofAvgs);
+        lastSps = PowerSupply.adc.realADCSpeed;
+        lastAvgs = PowerSupply.Voltage.measured.NofAvgs;
+    }
 
     auto StatsPositions = [&](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)
     {
@@ -996,22 +1016,48 @@ void StatusBar()
         lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_calib_b, "%f", get_b(code1, m, vin1));
 
         lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_rawCode, "%+08i", PowerSupply.Voltage.rawValue);
-        lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_rawAVG_, "%+08.0f", PowerSupply.Voltage.measured.Mean() * m + get_b(code1, m, vin1));
+        // Average of the actual raw ADC codes (rawValueStats, fed in device.cpp on
+        // every conversion). This previously showed measured.Mean()*m + b, i.e. the
+        // CALIBRATED mean pushed back through the calibration line - so it moved
+        // whenever code1/vin1 were edited in this very window, despite the raw codes
+        // being unchanged. A raw average must not depend on the constants being tuned.
+        lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_rawAVG_, "%+08.0f", PowerSupply.Voltage.rawValueStats.Mean());
         lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_calibratedValue, "%+09.4f", PowerSupply.Voltage.measured.value);
         lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Voltage.measured.Mean());
         lv_label_set_text_fmt(Calib_GUI.Voltage.lbl_ER, "%+02.2f", PowerSupply.Voltage.effectiveResolution.Mean());
 
-        PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2 = code2;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_1 = vin1;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_2 = vin2;
+        // Only re-apply the calibration when a spinbox actually moved. StatusBar()
+        // runs every 300ms (main.cpp), so doing this unconditionally wiped
+        // Voltage.measured 3x/second for as long as this window was open. With
+        // adcNumberOfAvgs=0 that window is ONE sample, so Mean() read 0 until the
+        // next conversion - and readCurrent()'s leakage compensation divides
+        // Voltage.measured.Mean() into the current, so every wipe injected a step
+        // of (V / leakage_R) into the current reading. Measured live: ~2.1mA steps
+        // on an 8.192mA range, which dragged ER from ~15 down to ~4 and left the
+        // graph's stddev spiking for the 25s it takes 512 samples to scroll out.
+        static int lastC1 = INT_MIN, lastC2 = INT_MIN;
+        static double lastV1 = NAN, lastV2 = NAN;
+        if (code1 != lastC1 || code2 != lastC2 || vin1 != lastV1 || vin2 != lastV2)
+        {
+            lastC1 = code1; lastC2 = code2; lastV1 = vin1; lastV2 = vin2;
 
-        PowerSupply.calibrationUpdate();
+            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_1 = code1;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.code_2 = code2;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_1 = vin1;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].vCal.value_2 = vin2;
 
-        PowerSupply.Power.measured.ResetStats();
-        PowerSupply.Voltage.measured.ResetStats();
+            PowerSupply.calibrationUpdate();
 
-        PowerSupply.Voltage.hist.Reset();
+            // calibrationUpdate() just changed calib_m/calib_b, so previously-converted
+            // samples in `measured` were computed with the old constants - drop them.
+            // rawValueStats is deliberately NOT reset: raw codes are independent of the
+            // calibration, so its average must keep accumulating across these updates
+            // (resetting it here is what made "Avg Raw" average only a few samples).
+            PowerSupply.Power.measured.ResetStats();
+            PowerSupply.Voltage.measured.ResetStats();
+
+            PowerSupply.Voltage.hist.Reset();
+        }
     }
     if (PowerSupply.gui.calibration.win_ADC_current_calibration != nullptr && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_current_calibration))
     {
@@ -1034,31 +1080,42 @@ void StatusBar()
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_calib_b, "%f", get_b(code1, m, vin1));
 
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_rawCode, "%+08i", PowerSupply.Current.rawValue);
-        lv_label_set_text_fmt(Calib_GUI.Current.lbl_rawAVG_, "%+08.0f", PowerSupply.Current.measured.Mean() * m + get_b(code1, m, vin1));
+        // Average of the actual raw ADC codes - see note in the voltage branch.
+        // A and mA ranges use different ADC gain, so each has its own rolling
+        // window (device.hpp/device.cpp); show whichever range is active.
+        lv_label_set_text_fmt(Calib_GUI.Current.lbl_rawAVG_, "%+08.0f",
+                               PowerSupply.mA_Active ? PowerSupply.Current.rawValueStats_mA.Mean()
+                                                      : PowerSupply.Current.rawValueStats.Mean());
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_calibratedValue, "%+09.4f", PowerSupply.Current.measured.value);
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_calibValueAVG_, "%+09.4f", PowerSupply.Current.measured.Mean());
         lv_label_set_text_fmt(Calib_GUI.Current.lbl_ER, "%+02.2f", PowerSupply.Current.effectiveResolution.Mean());
 
-        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_1 = code1;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_2 = code2;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_1 = vin1;
-        PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_2 = vin2;
+        // Same change-gate as the voltage branch above - see the note there for
+        // why an unconditional 300ms reset destroyed ER and the graph stddev.
+        // Tracked per range: switching A/mA legitimately changes the constants.
+        static int lastC1 = INT_MIN, lastC2 = INT_MIN;
+        static double lastV1 = NAN, lastV2 = NAN;
+        static int8_t lastRange = -1;
+        if (code1 != lastC1 || code2 != lastC2 || vin1 != lastV1 || vin2 != lastV2 ||
+            PowerSupply.mA_Active != lastRange)
+        {
+            lastC1 = code1; lastC2 = code2; lastV1 = vin1; lastV2 = vin2;
+            lastRange = PowerSupply.mA_Active;
 
-        PowerSupply.calibrationUpdate();
+            PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_1 = code1;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_2 = code2;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_1 = vin1;
+            PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_2 = vin2;
 
-        // PowerSupply.Current.calib_m = (PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_2 - PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_1) /
-        //                               (PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_2 - PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_1);
-        // PowerSupply.Current.calib_b = PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].code_1 -
-        //                               PowerSupply.Current.calib_m * PowerSupply.CalBank[PowerSupply.bankCalibId].iCal[PowerSupply.mA_Active].value_1;
+            PowerSupply.calibrationUpdate();
 
-        // PowerSupply.Current.calib_1m = 1.0 / PowerSupply.Current.calib_m;
+            PowerSupply.Power.measured.ResetStats();
+            PowerSupply.Voltage.measured.ResetStats();
+            PowerSupply.Voltage.hist.Reset();
 
-        PowerSupply.Power.measured.ResetStats();
-        PowerSupply.Voltage.measured.ResetStats();
-        PowerSupply.Voltage.hist.Reset();
-
-        PowerSupply.Current.measured.ResetStats();
-        PowerSupply.Current.hist.Reset();
+            PowerSupply.Current.measured.ResetStats();
+            PowerSupply.Current.hist.Reset();
+        }
     }
 
     // if (PowerSupply.eepromWriteFlag)
@@ -1292,3 +1349,52 @@ static void btnm_event_handler(lv_event_t *e)
 }
 
 // Include all other UI creation functions...
+// Every LVGL 8 object is scrollable by default, so after drawing any object
+// LVGL works out whether to draw its scrollbar from the scroll extents - for
+// a label that means re-measuring its text. ~0.3 ms per object per redraw,
+// about a third of the main page's render time (measured). Labels never
+// scroll here: make them non-scrollable (a drag still reaches the parent).
+// On the Main page and its parents, also switch the scrollbar off where it
+// can't show now (no scrollbar, or one outside the object's drawable area),
+// so nothing visible changes.
+static void dropScrollbarIfHidden(lv_obj_t *obj)
+{
+    if (lv_obj_get_scrollbar_mode(obj) == LV_SCROLLBAR_MODE_OFF)
+        return;
+    lv_area_t hor, ver, vis, tmp;
+    lv_obj_get_scrollbar_area(obj, &hor, &ver);
+    lv_obj_get_coords(obj, &vis);
+    const lv_coord_t ext = _lv_obj_get_ext_draw_size(obj);
+    lv_area_increase(&vis, ext, ext);
+    const bool horShown = hor.x2 >= hor.x1 && _lv_area_intersect(&tmp, &hor, &vis);
+    const bool verShown = ver.x2 >= ver.x1 && _lv_area_intersect(&tmp, &ver, &vis);
+    if (!horShown && !verShown)
+        lv_obj_set_scrollbar_mode(obj, LV_SCROLLBAR_MODE_OFF);
+}
+
+static void dropIdleScrollbarsIn(lv_obj_t *obj, bool mainPage)
+{
+    if (lv_obj_check_type(obj, &lv_label_class))
+        lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+    else if (mainPage)
+        dropScrollbarIfHidden(obj);
+    const uint32_t n = lv_obj_get_child_cnt(obj);
+    for (uint32_t i = 0; i < n; i++)
+    {
+        lv_obj_t *child = lv_obj_get_child(obj, i);
+        dropIdleScrollbarsIn(child, mainPage || child == PowerSupply.page[2]);
+    }
+}
+
+void dropIdleScrollbars()
+{
+    lv_obj_update_layout(lv_scr_act());
+    dropIdleScrollbarsIn(lv_scr_act(), false);
+    dropIdleScrollbarsIn(lv_layer_top(), false);
+    // The Main page's parents (tab container, tabview) are redrawn behind it
+    for (lv_obj_t *p = lv_obj_get_parent(PowerSupply.page[2]); p; p = lv_obj_get_parent(p))
+        dropScrollbarIfHidden(p);
+    // The Main page overflows its width by 2 px, which drew a stray 4 px
+    // scrollbar along its bottom edge. It still scrolls; just no bar.
+    lv_obj_set_scrollbar_mode(PowerSupply.page[2], LV_SCROLLBAR_MODE_OFF);
+}

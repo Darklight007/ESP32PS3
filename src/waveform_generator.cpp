@@ -52,13 +52,24 @@ double exponentialDecay(double t)
 
 double randomNoise(double t)
 {
-    // Original: random(-1000,1001)/1000.0 ~ [-1,1]
-    // Shift to [0,1]:
-    double val = (double)random() / (double)RAND_MAX * 2.0 - 1.0;
-    // If you previously used random(-1000, 1001), replace with a suitable function that returns an int in [-1000,1000].
-    // Then val = (int_random / 1000.0) in [-1,1].
-    // Shift:
-    return (val + 1.0) / 2.0;
+    // Sample-and-hold noise: latch one new random level per cycle of the
+    // configured frequency, then hold it. This is what makes the Frequency
+    // setting mean something for noise - previously this returned a fresh
+    // random() on every call and ignored t entirely, so the output changed at
+    // whatever rate DACUpdate() happened to run (10Hz normal / 200Hz FUN /
+    // 500Hz FUN Only) and the frequency spinbox had no effect at all.
+    //
+    // t is the generator phase (waveform_generator.cpp: fmod(elapsed*freq, 1.0)),
+    // so it ramps 0->1 once per period. A decrease means the phase wrapped,
+    // which is exactly one period elapsed - latch a new sample there.
+    static double held = 0.5;
+    static double lastT = 0.0;
+
+    if (t < lastT) // phase wrapped -> one period elapsed
+        held = (double)random() / (double)RAND_MAX;
+    lastT = t;
+
+    return held; // already in [0,1], matching the other waveforms
 }
 
 double cosineWave(double t)

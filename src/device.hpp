@@ -10,6 +10,7 @@
 #include <ADS1219.h>
 #include <WiFi.h>
 #include <functional>
+#include "spi_quiet.h"
 #include <Preferences.h>
 #include <EEPROM.h>
 #include "LTC2655.h"
@@ -122,6 +123,7 @@ struct SettingParameters
     uint8_t adcRateSavedForFUN = 0;  // Saved ADC rate when FUN mode activated
     uint16_t adcNumberOfAvgs;
     uint8_t adcNumberOfDigits;
+    uint8_t adcNumberOfDigits_mA = 2;  // Decimal places for the mA current range (independent of adcNumberOfDigits)
     uint16_t SetVoltage;
     uint16_t SetCurrent;
     bool buzzer = false;
@@ -156,6 +158,13 @@ struct SettingParameters
     bool graphXaxisTimeMode = false;  // false = points mode, true = time mode
     uint16_t graphTimeSpanSeconds = 60;  // Time span for X-axis in seconds (1 min to several hours)
     bool graphAutoStop = false;  // Auto-pause graph after one full time span
+
+    // Convert each V and I twice, keep only the second (new fields go last:
+    // older saved blobs load with the default)
+    bool adcDiscardFirst = false;
+    // Frame-rate overlay (DISP:FPS) shown at boot. uint8_t, not bool: blobs
+    // saved before this field may hold struct padding here - only 1 means on.
+    uint8_t showFps = 0;
 };
 
 class LVLabel_class; // Forward declaration
@@ -201,6 +210,7 @@ struct GUI
     lv_obj_t *label_energy_counter = nullptr;  // Energy Counter display
     lv_obj_t *label_timer_remaining = nullptr; // Timer countdown display
     lv_obj_t *label_current_rel = nullptr;     // REL indicator for current
+    lv_obj_t *label_current_ovl = nullptr;     // "OVL" shown near current full scale
 };
 
 struct Graph_
@@ -356,8 +366,16 @@ public:
     // calibPoints iCal[2];
     // calibPoints mACal;             // ← renamed from miCal
     std::array<double, 2> internalLeakage;  // [0]=Amp range, [1]=mA range
-    double adc_inl_measure[36];
-    double adc_inl_ideal[36];
+    // Fixed storage for calib_inl.cpp's INL knot table (MEASURED[]/TRUE_IDEAL[]
+    // there, NPTS = their length). MUST stay >= NPTS or the calibration-save
+    // loop (calib_inl.cpp COMPUTE phase) writes past the end of these arrays
+    // into whatever follows in the CalBank vector - silent heap corruption,
+    // not a bounds-checked crash at the write site. calib_inl.cpp static_asserts
+    // NPTS against this constant, so growing the knot table past it fails the
+    // build instead of corrupting memory at runtime.
+    static constexpr size_t INL_MAX_POINTS = 48;
+    double adc_inl_measure[INL_MAX_POINTS];
+    double adc_inl_ideal[INL_MAX_POINTS];
     // double adc_inl_zc_measure[36];  // Zero-current INL: measured voltage (no load)
     // double adc_inl_zc_ideal[36];    // Zero-current INL: commanded voltage
 
@@ -417,9 +435,67 @@ public:
         //     ads1219->readDifferential_2_3();
         //     // ads1219->readSingleEnded(3);
 
-        ads1219->readSingleEnded(channel);  // Configure channel
-        ads1219->start();  // Actually START the conversion!
+        ads1219->selectSingleEnded(channel);  // Configure channel (no start)
         busyChannel = channel;
+        if (quietMode)
+        {
+            startPending = true;
+            pendingPairStart = nextIsPairStart;
+            pendingSince = millis();
+            tryStartPending();
+        }
+        else
+            ads1219->start();  // Actually START the conversion!
+        nextIsPairStart = false;
+    }
+
+    // Low-noise mode (adcRate 0), see spi_quiet.h. adcConverting is held for a
+    // whole V+I pair (set at the pair's first start, cleared by endPair()), so
+    // the display gets at most one SPI slot per pair and never splits one.
+    bool quietMode{false};
+    bool startPending{false};
+    bool pendingPairStart{false};
+    bool nextIsPairStart{false};
+    bool claimed{false}; // adcConverting raised for the pending start
+    unsigned long pendingSince{0};
+
+    // Device calls this after the last conversion of a V+I pair was read.
+    void endPair()
+    {
+        SpiQuiet::adcConverting.store(false);
+        nextIsPairStart = true;
+    }
+
+    void tryStartPending()
+    {
+        using namespace SpiQuiet;
+        if (!startPending)
+            return;
+        if (!claimed)
+        {
+            // Pair boundary: give a waiting frame its slot first (bounded, so
+            // the ADC never starves)
+            if (pendingPairStart && renderWanted.load() && millis() - pendingSince < 150)
+                return;
+            adcConverting.store(true); // from here Core 1 can't start a new SPI slot
+            claimed = true;
+        }
+        if (spiActive.load())
+            return; // Core 1 is mid-slot; start once it releases
+        ads1219->start();
+        startPending = false;
+        claimed = false;
+        adcTurn.store(false);
+    }
+
+    // Task_ADC calls this every loop pass.
+    void serviceStart(bool lowNoise)
+    {
+        quietMode = lowNoise;
+        SpiQuiet::lowNoise.store(lowNoise);
+        if (!lowNoise)
+            SpiQuiet::adcTurn.store(false);
+        tryStartPending();
     }
 
     int address = 0x40;
@@ -489,6 +565,31 @@ public:
     const byte CCCVPin = 12;
     const byte AmA_Pin = 13;
     bool mA_Active = false;
+
+    // TEMPORARY experiment: ADS1219 PGA x4 on CURRENT conversions only.
+    // Deliberately NOT part of SettingParameters, so it is never persisted and
+    // always comes back as x1 after a reboot. Toggled from Measure > "I PGA x4".
+    bool iPgaX4 = false;
+    // Which gain the conversion currently in flight was actually started with.
+    // readVoltage() sets the PGA and kicks off the CURRENT conversion; readCurrent()
+    // reads it back one sample later. Latching the value here instead of re-reading
+    // iPgaX4 means a mid-flight toggle can never divide a sample by the wrong gain.
+    volatile bool iPgaPendingCurrentX4 = false;
+
+    // Measure > "Discard 1st Conversion": each V and I is converted twice and
+    // only the second result is kept. adcKeepNext marks the conversion in flight
+    // as the one to keep; adcLastDiscarded tells Task_ADC the last read was thrown away.
+    bool adcKeepNext = false;
+    bool adcLastDiscarded = false;
+
+    // Voltage used by the leakage compensation in readCurrent()/DACUpdate(),
+    // one-pole filtered. Deliberately NOT Voltage.measured.Mean(): that window
+    // is a single sample at adcNumberOfAvgs=0, so it passed the full per-sample
+    // voltage noise (~3.8mV) straight into the current reading - ~244nA on the
+    // mA range, about half the observed noise floor. It is also immune to
+    // ResetStats(), which used to slam the compensation to 0 and step the
+    // current by ~2.1mA. NAN = not seeded yet.
+    double leakageVFiltered = NAN;
 
     // REL (relative) mode - like Keithley 2010 REL button
     double currentRelOffset_A = 0.0;   // REL offset for A range

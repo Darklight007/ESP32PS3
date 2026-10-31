@@ -14,6 +14,32 @@ extern MonotoneCubicCalibrator g_voltINL;
 extern Calibration StoreData;
 extern volatile bool lvglIsBusy, lvglChartIsBusy, blockAll;
 
+const char *const kFmt4Decimals = "%+08.4f";
+
+// Shared by LoadSetting() (Settings menu -> adcNumberOfDigits) and
+// calibrationUpdate() (range toggle), so both agree on what "the configured
+// decimal format" means for a given adcNumberOfDigits value.
+static const char *digitFormat(uint8_t adcNumberOfDigits)
+{
+    static const char *formats[] = {
+        "%+07.3f", // fallback/default
+        "%+05.1f", // 1 digit
+        "%+06.2f", // 2 digits
+        "%+07.3f", // 3 digits
+        kFmt4Decimals, // 4 digits
+        // 5 digits: drops to ONE integer digit to keep the field 8 chars wide
+        // (+7.12345 vs +07.1234), so it only fits a range whose magnitude stays
+        // under 10. That is true for mA (full scale 8.192) but NOT for Voltage
+        // (0-32.768) or Power - the "Number of Digits" slider is capped at 4 for
+        // exactly that reason; only the mA Digits slider offers 5.
+        "%+08.5f" // 5 digits (mA range only)
+    };
+    int d = adcNumberOfDigits;
+    if (d < 1 || d > 5)
+        d = 3; // default if out of range
+    return formats[d];
+}
+
 extern lv_obj_t *btn_function_gen;
 extern CalibrationGui Calib_GUI;
 
@@ -87,14 +113,22 @@ void Device::calibrationUpdate(void)
 
     Current.calib_1m = 1.0 / Current.calib_m;
 
-    // EXPERIMENTAL (er-fix): FSR for ER must be in the SAME unit as the
-    // values it's compared against. Current.measured/Statistics are already
-    // numerically expressed in whichever unit is active (the mA/A graph
-    // label just relabels the same digit, e.g. ui_helpers.cpp "8mA"/"8A" -
-    // see Power.measureUpdate()'s *0.001 which only rescales for watts).
-    // Dividing FSR by 1000 in mA mode compared it against the wrong scale,
-    // understating ER by log2(1000) =~ 10 bits. Same numeric FSR both modes.
+    // FSR for ER: StatisticsUpdate() uses 2 * adc_maxValue, so this yields
+    // 13.1072 - read as 13.1072 A in the A range and 13.1072 mA in the mA
+    // range. Deliberately ONE numeric value for both: Current.measured /
+    // Statistics are already expressed in whichever unit is active, so the
+    // same number carries the unit with it and ER stays directly comparable
+    // between ranges. Do not scale this per range (an earlier attempt divided
+    // it by 1000 for mA and understated ER by ~10 bits).
     Current.adc_maxValue = 6.5536;
+
+    // mA range uses its own decimal-count setting (adcNumberOfDigits_mA,
+    // "mA Digits" in the Measure menu), independent of the A-range/Voltage
+    // setting - at mA_Active's ~1000x steeper calibration slope, the same
+    // digit count as A would mostly render ADC code noise (mA's effective
+    // resolution is ~10 bits lower than A's for the same physical noise).
+    Current.restrict = mA_Active ? digitFormat(settingParameters.adcNumberOfDigits_mA)
+                                  : digitFormat(settingParameters.adcNumberOfDigits);
 }
 
 //  std::vector<Calibration> CalBank
@@ -313,21 +347,14 @@ void Device::LoadSetting(void)
 
     Voltage.measured.SetWindowSize(std::pow(2, settingParameters.adcNumberOfAvgs));
 
-    static const char *formats[] = {
-        "%+07.3f", // fallback/default
-        "%+05.1f", // 1 digit
-        "%+06.2f", // 2 digits
-        "%+07.3f", // 3 digits
-        "%+08.4f"  // 4 digits
-    };
-
-    int d = settingParameters.adcNumberOfDigits;
-    if (d < 1 || d > 4)
-        d = 3; // default if out of range
-
-    Voltage.restrict = formats[d];
-    Current.restrict = formats[d];
-    Power.restrict = formats[d];
+    Voltage.restrict = digitFormat(settingParameters.adcNumberOfDigits);
+    Power.restrict = digitFormat(settingParameters.adcNumberOfDigits);
+    // Current.restrict is range-dependent (fixed 2 decimals in mA, the
+    // configured format in A) and is set by calibrationUpdate() instead -
+    // NOT called here because CalBank isn't populated yet this early in boot
+    // (setupADC() fills it after LoadSetting() runs). setupADC() calls
+    // calibrationUpdate() once CalBank is ready, which covers both boot and
+    // every later range toggle / calibration edit.
 
     Serial.printf("\nLast Voltage Value:% +8.4f", Voltage.adjValue / 2000.0 + 0 * Voltage.adjOffset);
     Serial.printf("\nLast Current Value:% +8.4f", Current.adjValue / 10000.0 + 0 * Current.adjOffset);
@@ -385,10 +412,9 @@ void Device::SaveMemoryFgen(const String &key, const FunGen &data)
 
     // Save large arrays to SPIFFS (3.375MB available!)
     // No more 1984-byte NVS blob limits or chunking needed!
-    if (!SPIFFS.begin(true)) {
-        Serial.println("SPIFFS Mount Failed");
-        return;
-    }
+    // SPIFFS is mounted once at boot (main.cpp) and stays mounted - mount/unmount
+    // is the expensive part of a SPIFFS op (confirmed live: 638ms for one
+    // mount+unmount elsewhere), not the read/write itself.
 
     // Save table_points (4000 bytes) - completely separate from Arbt
     fs::File tableFile = SPIFFS.open("/fgen_table.dat", "w");
@@ -405,8 +431,6 @@ void Device::SaveMemoryFgen(const String &key, const FunGen &data)
         arbFile.close();
         Serial.println("Arbt bank data saved to SPIFFS");
     }
-
-    SPIFFS.end();
 }
 
 FunGen Device::LoadMemoryFgen(const String &key)
@@ -440,11 +464,7 @@ FunGen Device::LoadMemoryFgen(const String &key)
     }
     StoreMem.end();
 
-    // Load large arrays from SPIFFS
-    if (!SPIFFS.begin(true)) {
-        Serial.println("SPIFFS Mount Failed");
-        return data;
-    }
+    // Load large arrays from SPIFFS (mounted once at boot in main.cpp)
 
     // Load table_points (4000 bytes) - independent from Arbt
     fs::File tableFile = SPIFFS.open("/fgen_table.dat", "r");
@@ -466,7 +486,6 @@ FunGen Device::LoadMemoryFgen(const String &key)
         Serial.println("Arbt bank data file not found - using defaults");
     }
 
-    SPIFFS.end();
     return data;
 }
 
@@ -547,9 +566,28 @@ void Device::readVoltage()
       32.0000f / 31.9882f  // Index 4: 1000 SPS
   };
 
-        Voltage.rawValue = adc.readConversion();
+        const long raw = adc.readConversion();
         adcDataReady = false;
-        adc.ads1219->setGain(ONE);
+        // Discard 1st Conversion: throw this one away and convert the same
+        // channel again (gain/mux unchanged), keeping the second result.
+        adcLastDiscarded = settingParameters.adcDiscardFirst && !adcKeepNext;
+        if (adcLastDiscarded)
+        {
+            adcKeepNext = true;
+            adc.startConversion(VOLTAGE, REF_EXTERNAL);
+            return;
+        }
+        adcKeepNext = false;
+        Voltage.rawValue = raw;
+        // TEMPORARY experiment: apply the PGA to CURRENT conversions only. This
+        // gain is programmed right before the CURRENT conversion is kicked off,
+        // so it is the gain that sample will be digitised with. Voltage keeps
+        // x1 (set in readCurrent, before it starts the VOLTAGE conversion).
+        // Latch what we actually used so readCurrent() divides by the matching
+        // factor even if the toggle flips while this conversion is in flight.
+        const bool useX4 = iPgaX4;
+        iPgaPendingCurrentX4 = useX4;
+        adc.ads1219->setGain(useX4 ? FOUR : ONE);
         adc.startConversion(CURRENT, REF_EXTERNAL);
 
         // OPTIMIZED: Single line calculation for speed
@@ -566,6 +604,16 @@ void Device::readVoltage()
         //     v_corrected = g_voltINL.apply(v_corrected);
 
         Voltage.measureUpdate(v_corrected);
+
+        // Feed the leakage-compensation voltage filter (see device.hpp).
+        // alpha = 1/8 -> ~8-sample time constant: 0.4s at 20 SPS, 8ms at 1000
+        // SPS, so it still tracks real setpoint changes quickly while cutting
+        // the per-sample noise it injects into the current reading by ~4x.
+        if (!std::isfinite(leakageVFiltered))
+            leakageVFiltered = v_corrected; // seed on first conversion
+        else
+            leakageVFiltered += 0.125 * (v_corrected - leakageVFiltered);
+
         Voltage.rawValueStats(Voltage.rawValue);
         adc.ADC_loopCounter++;
 
@@ -595,13 +643,38 @@ void Device::readCurrent()
         // } // throw away first 2 readings after changing rate
         // throw_away = 0;
 
-        Current.rawValue = adc.readConversion();
+        const long raw = adc.readConversion();
         adcDataReady = false;
+        // Discard 1st Conversion - same as readVoltage(); the PGA gain set for
+        // this CURRENT conversion stays in place for the repeat.
+        adcLastDiscarded = settingParameters.adcDiscardFirst && !adcKeepNext;
+        if (adcLastDiscarded)
+        {
+            adcKeepNext = true;
+            adc.startConversion(CURRENT, REF_EXTERNAL);
+            return;
+        }
+        adcKeepNext = false;
+        Current.rawValue = raw;
+        // Voltage always runs at x1 - the PGA experiment is current-only.
         adc.ads1219->setGain(ONE);
+        adc.endPair(); // V+I pair done - low-noise mode lets the display draw now
         adc.startConversion(VOLTAGE, REF_EXTERNAL);
 
+        // Undo the PGA before applying the x1 calibration. Divide the RAW code
+        // rather than the final current: calib_b is a zero-CODE offset, and at
+        // x4 the hardware offset is amplified along with the signal, so raw/4
+        // recovers the exact x1-equivalent code and the stored calibration
+        // stays valid. Dividing the result instead would leave calib_b
+        // unscaled and bias the reading by (3/4)*calib_b/calib_m ~ 0.058 mA.
+        // Current.rawValue itself is left as the true ADC code so the
+        // calibration screen's Raw Code / Avg Raw still show what the converter
+        // returned - do NOT calibrate while x4 is engaged.
+        const double rawI = iPgaPendingCurrentX4 ? (Current.rawValue / 4.0)
+                                                 : (double)Current.rawValue;
+
         // OPTIMIZED: Fast path for current calculation with bounds check
-        double c = (Current.rawValue - Current.calib_b) * Current.calib_1m;
+        double c = (rawI - Current.calib_b) * Current.calib_1m;
 
         // Leakage compensation (with bounds validation and division-by-zero protection)
         if (!CalBank.empty() && bankCalibId >= 0 && bankCalibId < (int8_t)CalBank.size() &&
@@ -613,7 +686,11 @@ void Device::readCurrent()
             // adds the bias magnitude, which is correct.
             if (std::isfinite(leakage_R) && std::abs(leakage_R) > 0.001 && std::abs(leakage_R) < 1e9)
             {
-                c -= ((mA_Active ? 1000.0 : 1.0) * (Voltage.measured.Mean() / (leakage_R * 1000.0)));
+                // Filtered voltage, not Voltage.measured.Mean() - see device.hpp.
+                // Falls back to the raw mean only before the filter is seeded.
+                double vLeak = std::isfinite(leakageVFiltered) ? leakageVFiltered
+                                                               : Voltage.measured.Mean();
+                c -= ((mA_Active ? 1000.0 : 1.0) * (vLeak / (leakage_R * 1000.0)));
             }
         }
 
@@ -654,7 +731,13 @@ void Device::readCurrent()
             startTime = millis();
         }
 
-         Current.rawValueStats(Current.rawValue);
+        // Route to the A or mA raw-code average by range: the two ranges use
+        // different ADC gain, so their raw codes are different populations and
+        // must not share one rolling window (see DispObject.h field comment).
+        if (mA_Active)
+            Current.rawValueStats_mA(Current.rawValue);
+        else
+            Current.rawValueStats(Current.rawValue);
     }
 }
 
@@ -754,9 +837,10 @@ void Device::adjustAdcTaskPriority()
         vTaskPrioritySet(Task_adc, newPriority);
         Serial.printf("\n[Task Priority] Task_ADC priority set to %d (ADC rate: %d)\n",
                       newPriority, settingParameters.adcRate);
-        vTaskPrioritySet(Task_bargraph, newPriority_bargraph);
-        Serial.printf("\n[Task Priority] Task_bargraph priority set to %d (ADC rate: %d)\n",
-                      newPriority_bargraph, settingParameters.adcRate);
+        // Task_bargraph no longer exists (bars render on Core 1). Guard anyway:
+        // vTaskPrioritySet(NULL, ...) would change the CALLING task's priority.
+        if (Task_bargraph != nullptr)
+            vTaskPrioritySet(Task_bargraph, newPriority_bargraph);
 
     }
 }
@@ -773,18 +857,21 @@ void Device::writeDAC_Current(uint16_t value)
 
 void Device::VCCCStatusUpdate(void)
 {
-    // Fast path: read pin first, bail if unchanged (most common case)
-    int currentStatus = digitalRead(CCCVPin);
-    if (currentStatus == lastCCCVStatus)
-        return;
-
-    // Skip if output is off or in function generator mode
+    // Check device state BEFORE the change-detect bail. The pin already sits in
+    // its CC state while the output is off into a load, so reading it first let
+    // lastCCCVStatus latch that value and return early - the -1 reset below was
+    // unreachable. Switching on then found the pin "unchanged" and never called
+    // setStatus(), leaving the display on CV while the supply was really in CC.
     DEVICE s = status;
     if (s == DEVICE::OFF || s == DEVICE::FUN)
     {
         lastCCCVStatus = -1;  // Reset so we re-check when turning on
         return;
     }
+
+    int currentStatus = digitalRead(CCCVPin);
+    if (currentStatus == lastCCCVStatus)
+        return;
 
     // Beep on CC/CV transitions (skip on first check after power on)
     if (lastCCCVStatus != -1 && settingParameters.beeperOnPowerChange)
@@ -810,8 +897,15 @@ void Device::DACUpdate(void)
         double leakage_R = CalBank[bankCalibId].internalLeakage[mA_Active];
         if (std::isfinite(leakage_R) && std::abs(leakage_R) > 0.001 && std::abs(leakage_R) < 1e9)
         {
-            // double comp = (mA_Active ? 1000.0 : 1.0) * (Voltage.measured.Mean() / (leakage_R * 1000.0));
-            double comp = 0.8*(Voltage.measured.Mean() / (leakage_R * 1000.0));
+            // Same filtered voltage as the measurement path (see device.hpp) so
+            // the setpoint compensation doesn't chase per-sample voltage noise.
+            // NOTE: unlike readCurrent()'s compensation this has no mA_Active
+            // x1000 factor (commented out below) and an empirical 0.8 - the two
+            // paths disagree by ~1250x in mA mode. Left as-is; behaviour unchanged.
+            double vLeakDac = std::isfinite(leakageVFiltered) ? leakageVFiltered
+                                                              : Voltage.measured.Mean();
+            // double comp = (mA_Active ? 1000.0 : 1.0) * (vLeakDac / (leakage_R * 1000.0));
+            double comp = 0.8*(vLeakDac / (leakage_R * 1000.0));
             cur_comp_dac = (int32_t)(comp * Current.adjFactor);
         }
     }
@@ -1022,6 +1116,10 @@ void Device::setStatus(DEVICE status_)
         for (int i = 0; i < 5; i++)
             lv_obj_set_style_bg_color(page[i], c.pageColor, 0);
         lv_obj_set_style_bg_color(lv_obj_get_child(page[3], 0), c.pageColor, 0);
+        // The big readings carry an opaque copy of the page colour
+        Voltage.opaqueMeasureBackground();
+        Current.opaqueMeasureBackground();
+        Power.opaqueMeasureBackground();
 
         lv_style_set_bg_color(&style_tabview_df_btn, c.pageColor);
         lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tab.tabview);
@@ -1132,8 +1230,13 @@ void Device::FlushMeasures(void)
         {
             static bool wasOverRange = false;
             const double curMean = Current.measured.Mean();
-            const double TRIG_ON  = 6.500;  // mA — start blinking
-            const double TRIG_OFF = 5.000;  // mA — stop blinking (hysteresis)
+            // Thresholds scale with the PGA: at x4 the converter saturates at a
+            // quarter of the input current, so full scale drops 8.192 -> 2.048 mA
+            // and these come down with it (7.000/6.500 -> 1.750/1.625), keeping
+            // the same position relative to the usable range.
+            const double pgaDiv  = iPgaX4 ? 4.0 : 1.0;
+            const double TRIG_ON  = 7.000 / pgaDiv; // mA — start blinking (shunt change took full scale 81.92 -> 8.192 mA, so these scale /10 from the old 70/65 and keep the same position relative to the ~7.5mA usable range)
+            const double TRIG_OFF = 6.500 / pgaDiv; // mA — stop blinking (hysteresis)
             const bool isOverRange = wasOverRange ? (curMean > TRIG_OFF)
                                                   : (curMean >= TRIG_ON);
 
@@ -1151,12 +1254,16 @@ void Device::FlushMeasures(void)
                     lv_obj_add_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
                 else
                     lv_obj_clear_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
+                if (gui.label_current_ovl)
+                    lv_obj_clear_flag(gui.label_current_ovl, LV_OBJ_FLAG_HIDDEN);
                 wasOverRange = true;
             }
             else if (wasOverRange)
             {
                 // Clear once on transition back to in-range
                 lv_obj_clear_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
+                if (gui.label_current_ovl)
+                    lv_obj_add_flag(gui.label_current_ovl, LV_OBJ_FLAG_HIDDEN);
                 wasOverRange = false;
             }
         }
@@ -1190,7 +1297,7 @@ void Device::FlushBars(void)
         // _lv_disp_refr_timer(NULL);
         // lv_bar_set_value(Voltage.Bar.bar, Voltage.measured.value / Voltage.maxValue * lv_bar_get_max_value(Voltage.Bar.bar), LV_ANIM_OFF);
         // lv_tick_inc(10);
-        lv_refr_now(NULL);
+        // lv_refr_now(NULL);
 
         Voltage.Bar.changed = false;
         Current.Bar.changed = false;

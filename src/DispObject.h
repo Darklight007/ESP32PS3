@@ -1,6 +1,21 @@
 #ifndef DISPOBJECT_H
 #define DISPOBJECT_H
 
+// Shared with device.cpp's `formats[]` table (adcNumberOfDigits setting) so
+// displayUpdate() can pointer-compare `restrict` against it instead of
+// strcmp-ing the format string every tick.
+extern const char *const kFmt4Decimals;
+
+// Horizontal nudge (px) applied to the orange digit-highlight box's x-offset
+// in both its default position (DispObject.cpp setup()) and every step-size
+// realignment (input_handler.cpp's W/X/Y hold handlers) - one knob to shift
+// it left/right without touching the per-digit "N * 12" column math.
+constexpr int kHighlightXShift = 5;
+// W-hold (coarsest/whole-unit digit) needs 2px left of its original position
+// (7*12) net, i.e. 1px more than kHighlightXShift alone gives it - applied
+// on top of kHighlightXShift, only for the W-hold case.
+constexpr int kHighlightXShiftWExtra = -3;
+
 #include <algorithm>
 #include <vector>
 #include <lvgl.h>
@@ -361,6 +376,35 @@ public:
                 welfordMean_ += deltaA / static_cast<double>(NofAvgs);
                 double delta2A = sample - welfordMean_;
                 M2_ += deltaA * delta2A;
+
+                // Welford's removal step is NOT numerically stable: subtracting a
+                // sample's contribution back out loses precision every time, and on
+                // a quiet signal (deltas near zero, which is exactly our case at
+                // steady state) M2_ collapses to 0 or drifts negative within a few
+                // windows. Variance() then clamps to 0, StandardDeviation() returns
+                // 0, and ER() hands back its 0.0 sentinel - so a CLEANER signal
+                // produced a LOWER reported ER. Confirmed live: a 32-sample window
+                // with the mean visibly moving still reported stddev == 0.
+                // Re-derive mean/M2/sum exactly once per full window: O(N) every N
+                // samples = O(1) amortized, and it bounds the drift permanently.
+                if (windowSizeIndex_ % NofAvgs == 0)
+                {
+                    double m = 0.0;
+                    for (uint16_t i = 0; i < NofAvgs; i++) m += samples_[i];
+                    m /= static_cast<double>(NofAvgs);
+
+                    double m2 = 0.0, s2 = 0.0;
+                    for (uint16_t i = 0; i < NofAvgs; i++)
+                    {
+                        double d = samples_[i] - m;
+                        m2 += d * d;
+                        s2 += samples_[i] * samples_[i];
+                    }
+                    welfordMean_ = m;
+                    M2_ = m2;
+                    sum_ = m * static_cast<double>(NofAvgs);
+                    sum_sq_ = s2;
+                }
             }
         }
 
@@ -644,7 +688,14 @@ public:
     MovingStatistics Statistics;
     MovingStatistics effectiveResolution;
     
+    // Voltage has one range, so a single instance is correct there. Current has
+    // two ranges (A / mA) with different ADC gain, so raw codes from one range
+    // are not the same population as the other - PowerSupply.Current uses
+    // rawValueStats for the A range and rawValueStats_mA for mA, selected by
+    // mA_Active, so switching ranges doesn't mix codes from both into one
+    // rolling average. rawValueStats_mA sits unused on Voltage.
     MovingStatistics rawValueStats;
+    MovingStatistics rawValueStats_mA;
     //  MovingStats measuredRaw;
 
     Histogram hist;
@@ -667,13 +718,15 @@ public:
     volatile bool adjValueChanged = true;  // set on Core 0 (SetUpdate), read/cleared on Core 1 (Flush)
     uint16_t adjEEPROMAddress = 0;
 
-    double oldValue;
+    double oldValue;        // last sample (Core 0, measureUpdate) - drives `changed`
+    double shownValue{NAN}; // last mean written to label_measureValue (Core 1, displayUpdate)
     unsigned long timeKeeper{0};
     bool changed;
     uint32_t sampleCountSinceDisplay{0};  // Counter for proportional display update
     bool displayReady{false};              // Flag when enough samples collected
 
     const char *restrict {"%+07.3f"};
+    bool isPowerObj{false}; // cached once in setup() - avoids a strcmp/lv_label_get_text per displayUpdate() tick
     const lv_font_t *font_measure{&lv_font_montserrat_42}; // dseg_b_48
     const lv_font_t *font_set{&graph_R_16};                //&unscii_16b4 Tauri_R_20
     const lv_font_t *font_unit{&Tauri_R_62};
@@ -695,6 +748,8 @@ public:
 
     // Per-instance bar cache (avoids stale shared statics across V/I/P)
     lv_coord_t cachedBarMax{0};
+    int lastMaxMarkerX{INT32_MIN}; // per-instance: barUpdate() marker change-detect
+    int lastMinMarkerX{INT32_MIN};
     lv_coord_t cachedBarWidth{0};
     lv_coord_t cachedBarX{0};
     double cachedScaleFactor{0};
@@ -724,6 +779,16 @@ public:
     // every existing call site (encoder, keypad, direct entry) is unaffected.
     void SetUpdate(int value, bool bypassLock = false);
     void Flush(void);
+    // Setpoint shadow-bar width in px - single source of truth shared by
+    // SetUpdate() (Core 1 direct write) and Flush() (deferred Core 0 changes),
+    // range-aware for Current's mA mode. See definition for the unit math.
+    lv_coord_t shadowBarWidth(void);
+    // Moves the setpoint shadow bar to shadowBarWidth() without a layout pass,
+    // repainting only the strip that changed (see definition).
+    void updateShadowBar(void);
+    void opaqueMeasureBackground(void);
+    lv_coord_t shadowW{0};                                  // shadow bar width in px (drawn, not sized)
+    static constexpr lv_opa_t kShadowBarOpa = LV_OPA_30;
     void SetEncoderUpdate(void);
     void setLock(bool lck);
     bool getLock();

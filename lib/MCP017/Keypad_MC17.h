@@ -73,7 +73,16 @@ public:
 	word iodir_read( );
 	void iodir_write( word iodir );
 
+protected:
+	void scanKeys() override;
+
 private:
+	void fastScan();
+	word readPort();
+	bool fastScanOk = true;     // false after the self-check caught a mismatch
+	bool colLatchesLow = false; // column output latches parked at 0
+	uint8_t scanCount = 0;
+	uint8_t mismatchRun = 0;
     // I2C device address
     byte i2caddr;
 	TwoWire *_wire;
@@ -82,6 +91,10 @@ private:
 //	byte pin_iosetup( );
 	// MC17 setup
 	word iodir_state;    // copy of IODIR register
+	// Keypad::scanKeys() reads every row of a column one pin at a time; the
+	// whole 16-bit port comes back each time, so cache it until the next write.
+	word portCache = 0;
+	bool portCacheValid = false;
 	void _begin( void );
 };
 

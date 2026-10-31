@@ -17,6 +17,7 @@
 
 // Hardware specific
 #include <HardwareSerial.h>
+#include <SPIFFS.h>
 
 // TFT & LVGL includes
 #include <lvgl.h>
@@ -24,6 +25,8 @@
 #include "demos/lv_demos.h"
 // #include <../lib/TFT_eSPI/Processors/TFT_eSPI_ESP32_S3.h>
 #include <TFT_eSPI.h>
+#include "spi_quiet.h"
+#include "tasks.h"
 
 // Custom components
 #include "myFonts.h"
@@ -48,6 +51,8 @@
 #include "input_handler.h"
 #include "battery_charger.h"
 #include "ui_helpers.h"
+#include "disp_perf.h"
+#include "ui_creation.h"
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -68,6 +73,7 @@ void setup()
 
   ESP_LOGI("SETUP", ">>> Starting setup()");
   initializeSerial();
+  setupBuzzer(); // first: setup code beeps (myTone/toneOff) before the old spot -> "LEDC is not initialized" errors
   ESP_LOGI("SETUP", ">>> After initializeSerial()");
   ErrorHandler::init(true, true); // Enable serial and UI error reporting
   ESP_LOGI("SETUP", ">>> After ErrorHandler::init()");
@@ -90,15 +96,29 @@ void setup()
   // return;
 
   /**************************************************************************/
+  // Mount SPIFFS ONCE for the whole session. Previously every save/load
+  // (graph trace, FunGen tables) called SPIFFS.begin()/end() around itself -
+  // mount/unmount is the genuinely expensive part of a SPIFFS operation
+  // (confirmed live: one graph-trace autosave took 638ms, causing a visible
+  // freeze across every UI element plus a notch in the graph itself), not
+  // the actual file read/write. Never unmounting also removes the mount-race
+  // between independent auto-save timers (AUDIT_CRASH_WATCHDOG.md Issue 2).
+  if (!SPIFFS.begin(true))
+    Serial.println("SPIFFS Mount Failed at boot");
+
   setupPowerSupply();
   LoadGraphData(); // restore the graph trace before Task_ADC starts pushing new points
   setupPreferences();
   setupADC();
   setupDAC();
-  setupBuzzer();
   // SetupOVP();  // Create OVP/OCP protection
 
   setupCalibPage();
+  dropIdleScrollbars(); // after the UI exists; render-time saving, no visual change
+  dispPerfShow(PowerSupply.settingParameters.showFps == 1); // DISP:FPS overlay, if saved on
+  PowerSupply.Voltage.opaqueMeasureBackground(); // faster digit redraws, same pixels
+  PowerSupply.Current.opaqueMeasureBackground();
+  PowerSupply.Power.opaqueMeasureBackground();
   createTasks();
   initialMemory();
   loadEnergyFromStorage(); // Load persistent energy counter
@@ -129,6 +149,11 @@ void loop()
     // ESP_LOGI("LOOP", "Watchdog initialized - 120s timeout");
   }
 
+  // Feed the watchdog every loop - was never fed, causing a false trip (with
+  // a large Serial-printed backtrace dump) every ~120s of uptime, confirmed
+  // live earlier this session. AUDIT_CRASH_WATCHDOG.md Issue 1.
+  esp_task_wdt_reset();
+
   // // Debug: Log every 1000 loops
   // if (loopCounter++ % 1000 == 0)
   // {
@@ -148,13 +173,15 @@ void loop()
   //   // Render bars immediately (throttled to ~60 FPS to avoid DMA issues)
   TRACE("loop_top");
   static unsigned long lastBarRender = 0;
-  if (millis() - lastBarRender >= 100)
+  if (millis() - lastBarRender >= 10) // was 100: touch was polled at only 10 Hz
   {
-    // lvglIsBusy = true;
+    updateBarsForFrame(); // lv_timer_handler may render too - keep bars current
+    lvglIsBusy = true;
     TRACE("loop_pre_lvgl");
     lv_timer_handler();
+    spiFrameRelease(); // low-noise mode: normally already released by the last flush
     TRACE("loop_post_lvgl");
-    // lvglIsBusy = false;
+    lvglIsBusy = false;
     lastBarRender = millis();
   }
   // }
@@ -178,31 +205,78 @@ void loop()
   drainPendingViewModeChange();
   drainPendingTabEvent();
   drainPendingPowerToggle();
+  drainPendingKeyEvents();      // Home, numeric entry, V/v/A/a readback, Z-key avg slider,
+                                // memory load/save, chart mode/graph pause toggles, rotary
+                                // step buttons, V/A series toggle - was defined but never
+                                // called, so all of the above silently did nothing.
   drainBattChemDropdownClose(); // '>' key on Utility page: close the chem dropdown
   TRACE("loop_post_drain");
 
   // Adaptive encoder response: fast when active, slower when idle
   bool encoderActive = (millis() - encoderTimeStamp) < 500; // 500ms idle threshold
 
-  LvglUpdatesInterval(0, true); // Force update for immediate response
-  // CustomFPSMonitor();           // Optional custom FPS (built-in LVGL FPS is more accurate)
+// EXPERIMENTAL DEBUG (2026-07-23): per-section timing to find what causes
+// the once/sec ~90-140ms stall found earlier this session (BARDBG). Prints
+// once/sec whichever section had the largest single call that second.
+// Remove once the stall's cause is found.
+// Found (2026-10-29): the stall WAS this print. With USB plugged in but no
+// program reading the port, each Serial write blocked the 100 ms CDC timeout,
+// once a second. Off by default; set to 1 only with a serial monitor open.
+#define SECTION_TIMING_PRINT 0
+#define TIME_SECTION(name, call)                              \
+  do                                                          \
+  {                                                           \
+    unsigned long _t0 = micros();                             \
+    call;                                                     \
+    unsigned long _dt = micros() - _t0;                       \
+    static unsigned long _max = 0;                            \
+    if (_dt > _max)                                           \
+      _max = _dt;                                             \
+    if (millis() - g_sectionPrintTimer >= 1000)               \
+    {                                                         \
+      if (SECTION_TIMING_PRINT && _max > 1000)                \
+        Serial.printf("[SECDBG] %s maxUs=%lu\n", name, _max); \
+      _max = 0;                                               \
+    }                                                         \
+  } while (0)
+  static unsigned long g_sectionPrintTimer = 0;
+
+  // No render here: one render per loop pass, at the end of loop() after the
+  // digits/bars are updated. With a render here AND at the end (AND inside
+  // lv_timer_handler), a heavy pass ran up to three back to back - ~150 ms in
+  // FUN mode, freezing the digits and bars for the whole pass.
   StatusBarUpdateInterval(300);
 
-  scpiParser.process();         // Process SCPI commands from Serial
-  PowerManagementInterval(500); // Timer, Energy, Auto-save, Limits
-  MemoryMonitorInterval(5000);  // Memory monitoring every 5 seconds
-  RecordingPlaybackInterval();  // Voltage recording and playback
-  Page2RightSideCleanup(1000);  // Clean dirty pixels on right side of page 2
+  TIME_SECTION("scpi", scpiParser.process());
+  TIME_SECTION("pwrMgmt", PowerManagementInterval(500));
+  MemoryMonitorInterval(5000); // Memory monitoring every 5 seconds
+  TIME_SECTION("recPlay", RecordingPlaybackInterval());
+  // TEMP TEST: disabled to check if this causes the periodic ~16-19ms LvglUpd spike
+  // TIME_SECTION("p2clean", Page2RightSideCleanup(1000));
 
   // Chart refresh (Core 1 only - LVGL thread-safe)
-  HistogramChartRefreshInterval(125); // Refresh histogram chart every 125ms
-  GraphChartRefreshInterval(125);   // Refresh graph chart every 125ms
+  TIME_SECTION("histChart", HistogramChartRefreshInterval(125));
+  TIME_SECTION("graphChart", GraphChartRefreshInterval(125));
 
-  // Flush measures - Slow when encoder active for immediate visual feedback
-  if (encoderActive)
-    FlushMeasuresInterval(500); // Very xxxx update during encoder activity
-  else
-    FlushMeasuresInterval(100 /**PowerSupply.Voltage.measured.NofAvgs*/); // Slow update even when idle for responsive display
+  // Flush measures - gated by displayReady (NofAvgs-driven, DispObject.cpp) so
+  // avg=N updates every Nth sample. BUT: the big V/A label flush physically
+  // costs ~10-15ms (confirmed via SECDBG - SPI/DMA bound, not CPU bound), so
+  // the display can sustain at most ~50-65 repaints/sec. At avg=1 with FUN
+  // mode driving continuous change, displayReady fires far faster than that
+  // ceiling and requests pile up into 100ms+ stalls (confirmed live). This
+  // floor caps actual repaint attempts at the ceiling regardless of NofAvgs -
+  // avg=128 (~128ms between ready events) is unaffected; avg=1 gets capped
+  // instead of flooding.
+  {
+    static unsigned long lastFlushMeasuresMs = 0;
+    if (millis() - lastFlushMeasuresMs >= 20) // ~50Hz ceiling, safely under the ~65-100Hz physical limit
+    {
+      TIME_SECTION("flushMeas", PowerSupply.FlushMeasures());
+      lastFlushMeasuresMs = millis();
+    }
+  }
+  if (millis() - g_sectionPrintTimer >= 1000)
+    g_sectionPrintTimer = millis();
 
   // Settings flush: SetUpdate runs on Core 0 (function generator, encoder) and only
   // updates adjValue + adjValueChanged. The actual LVGL writes (setpoint label, bar)
@@ -226,30 +300,46 @@ void loop()
   // FFTUpdateInterval(1000);
   EncoderRestartInterval(1000); //--> some bugs?
 
-  // Auto-save FGen settings on Core 1 — covers the case where user changes
+  // Auto-save FGen settings (the save itself runs in the background persist
+  // task on Core 0, see tasks.cpp) — covers the case where user changes
   // spinbox values and resets/power-cycles without leaving page 3 (the
   // tab-leave save in tabs.cpp never fires in that path). Debounced: only
-  // writes NVS/SPIFFS every 2 s while dirty, idempotent when clean.
+  // writes NVS/SPIFFS while dirty, idempotent when clean.
+  // Interval bumped 2s -> 15s (2026-07-23): SPIFFS.open()-for-write +
+  // close() on an existing file costs ~330ms combined (confirmed live,
+  // see SaveGraphDataIfDirty below) - at 2s cadence while actively
+  // adjusting FUN parameters, this was very likely the dominant cause of
+  // the reported freeze-everything hiccup (settings/digits/bar/graph all
+  // pause together because it blocked Core 1 outright). Now done by the
+  // background persist task, so Core 1 keeps running during the save.
   {
     static unsigned long fgenSaveTimer = 0;
-    schedule([] {
+    TIME_SECTION("fgenSave", schedule([]
+                                      {
       if (PowerSupply.funGenMemDirty) {
-        PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
-        PowerSupply.funGenMemDirty = false;
-      }
-    }, 2000, fgenSaveTimer);
+        PowerSupply.funGenMemDirty = false; // before the save, so an edit during it re-arms
+        persistRequest(PERSIST_FGEN);       // background task, see tasks.cpp
+      } }, 15000, fgenSaveTimer));
   }
 
-  // Auto-save the graph trace snapshot (Core 1). GraphPush() runs at ADC rate
-  // on Core 0, so this is throttled hard (30s) to protect flash — a power
-  // loss can cost up to the last 30s of trace, not more.
+  // Auto-save the graph trace snapshot (background persist task). GraphPush() runs at ADC rate
+  // on Core 0, so this is throttled hard to protect flash - a power loss can
+  // cost up to the last interval's worth of trace, not more.
+  // Interval bumped 30s -> 180s (2026-07-23): same SPIFFS open/close cost
+  // (~330ms confirmed live) as FunGen above - less frequent while the real
+  // fix (move off SPIFFS) is scoped separately.
   {
     static unsigned long graphSaveTimer = 0;
-    schedule([] { SaveGraphDataIfDirty(); }, 30000, graphSaveTimer);
+    TIME_SECTION("graphSave", schedule([]
+                                       {
+      // Background task (tasks.cpp). Skipped while FUN runs: the flash-busy
+      // stall (~45 ms on Core 0) would glitch the waveform.
+      if (PowerSupply.getStatus() != DEVICE::FUN)
+        persistRequest(PERSIST_GRAPH); }, 180000, graphSaveTimer));
   }
-  BatteryChargerInterval(250);  // Li-ion charge/test state machine (Core 1)
-  processDeferredMaToggle();    // Handle mA/A toggle UI updates from Core 0
-  updateStatChartSize();        // Safe resize: never call lv_obj_set_size from draw callbacks
+  BatteryChargerInterval(250); // Li-ion charge/test state machine (Core 1)
+  processDeferredMaToggle();   // Handle mA/A toggle UI updates from Core 0
+  updateStatChartSize();       // Safe resize: never call lv_obj_set_size from draw callbacks
   managePageEncoderInteraction();
 
   // if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
@@ -266,10 +356,19 @@ void loop()
   //  Serial.printf("\nADC_loopCounter %l",PowerSupply.adc.ADC_loopCounter);
   //  Serial.printf("\n Current utiltap%i", lv_tabview_get_tab_act(tabview_utility));
 
+  // Second forced render pass per loop iteration: picks up any bar/label
+  // invalidations queued by the work above (SCPI, intervals) without waiting
+  // for the next full loop pass. Same call already used at line 187 — no new
+  // mechanism, just doubles the paint opportunities per iteration.
+  // Now the ONLY per-pass render (see note above). 5 ms throttle, not 0: at 0
+  // it ran ~6000x/s with nothing dirty, ~35 us each - a fifth of Core 1.
+  TIME_SECTION("LvglUpd", LvglUpdatesInterval(5, true));
+  dispPerfUpdate();
+
   // trackLoopExecution(__func__);
 }
 
-/*DATA:GRAPH? 
+/*DATA:GRAPH?
 //pio device monitor --log-file graph_dump.csv
 Noise analysis
 80Mhz page 2: ER:18.09

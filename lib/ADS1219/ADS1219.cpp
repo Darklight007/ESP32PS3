@@ -92,6 +92,13 @@ void ADS1219::resetConfig()
 
 void ADS1219::readSingleEnded(int channel)
 {
+  selectSingleEnded(channel);
+  start();
+}
+
+// Select the input channel without starting a conversion (caller calls start()).
+void ADS1219::selectSingleEnded(int channel)
+{
   config &= MUX_MASK;
   switch (channel)
   {
@@ -111,7 +118,6 @@ void ADS1219::readSingleEnded(int channel)
     break;
   }
   writeRegister(config);
-  start();
   //  busyChannel = channel;
   // while(digitalRead(data_ready)==1);
   // return readConversionResult();

@@ -32,5 +32,10 @@ void processDeferredMaToggle();
 void drainPendingPowerToggle();
 extern volatile bool g_powerTogglePending;
 
+// Deferred keypad-triggered LVGL actions (Home, numeric entry, V/v/A/a
+// readback, Z-key avg slider, memory load/save, chart/graph toggles, rotary
+// step buttons, V/A series toggle) - must be called from Core 1 main loop.
+void drainPendingKeyEvents();
+
 // Waveform selection helper
 void updateDutySpinboxState();

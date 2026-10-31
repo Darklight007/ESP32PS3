@@ -9,13 +9,14 @@
 // Task timing constants
 namespace TaskTiming
 {
-    constexpr unsigned long BARGRAPH_DELAY_OFF_PAGE_MS = 500;
-    constexpr unsigned long BARGRAPH_DELAY_ACTIVE_MS = 1; // Fast updates
-    constexpr unsigned long DAC_UPDATE_INTERVAL_NORMAL_MS = 20; // was 100: 10Hz made the measured V/I bars step visibly while turning the encoder; 50Hz output updates make them track smoothly. DAC is on Wire, ADC on Wire1 — no bus contention.
+    constexpr unsigned long DAC_UPDATE_INTERVAL_NORMAL_MS = 100;
     constexpr unsigned long DAC_UPDATE_INTERVAL_FUNGEN_MS = 5;   // Back to 5ms - 0ms was too fast
     constexpr unsigned long KEY_CHECK_INTERVAL_ULTRAFAST_MS = 2; // Ultra-fast when actively typing
     constexpr unsigned long KEY_CHECK_INTERVAL_FAST_MS = 10;
-    constexpr unsigned long KEY_CHECK_INTERVAL_SLOW_MS = 105;
+    // Idle (no number entry open) = normal navigation-key latency. Was 105 ms;
+    // the scan itself dropped 13.9 -> 5.4 ms (port-read cache in Keypad_MC17),
+    // so 50 ms keeps Wire (shared with the DAC) busy ~11% vs ~13% before.
+    constexpr unsigned long KEY_CHECK_INTERVAL_SLOW_MS = 50;
     constexpr unsigned long ADC_NOTIFY_TIMEOUT_MS = 1;
     constexpr unsigned long GRAPH_REFRESH_INTERVAL_MS = 60;
     constexpr unsigned long GRAPH_REFRESH_INTERVAL_FUNGEN_MS = 500; // Slow down graph updates during FUN
@@ -45,42 +46,6 @@ void GraphPush();
 void KeyCheckInterval(unsigned long interval);
 void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data);
 bool functionGenerator();
-
-/**
- * @brief Bar graph update task (runs on Core 0)
- *
- * Updates voltage and current bar graphs on the main page.
- * Also updates from Core 1 main loop for maximum responsiveness.
- *
- * @param pvParameters Unused FreeRTOS parameter
- */
-void Task_BarGraph(void *pvParameters)
-{
-    for (;;)
-    {
-        // Skip all bar graph updates in FUN Only mode
-        // if (lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED))
-        // {
-        //     vTaskDelay(100);  // Sleep longer when disabled
-        //     continue;
-        // }
-
-        if (Tabs::getCurrentPage() != Pages::MAIN)
-        {
-            vTaskDelay(TaskTiming::BARGRAPH_DELAY_OFF_PAGE_MS);
-            continue;
-        }
-
-        // Update bar values
-        if (!blockAll)
-        {
-            PowerSupply.Voltage.barUpdate();
-            PowerSupply.Current.barUpdate();
-        }
-
-        vTaskDelay(TaskTiming::BARGRAPH_DELAY_ACTIVE_MS);
-    }
-}
 
 /**
  * @brief ADC sampling and processing task (runs on Core 0)
@@ -152,6 +117,9 @@ void Task_ADC(void *pvParameters)
         if (!funOnlyMode)
             getSettingEncoder(NULL, NULL);
 
+        // Low-noise mode: start the next conversion only while display SPI is idle
+        PowerSupply.adc.serviceStart(PowerSupply.settingParameters.adcRate == 0);
+
         // Wait for ADC interrupt notification with short timeout for responsiveness
         if (!adcDataReady)
         {
@@ -164,9 +132,10 @@ void Task_ADC(void *pvParameters)
             continue;
         }
 
-        // Process ADC data
-        // Dont read ADC during LCD SPI activity if SPS set to 0 (slowest) — noise sensitive
-        bool adcRead = (!lvglIsBusy || PowerSupply.settingParameters.adcRate != 0);
+        // Process ADC data. Low-noise mode (rate 0) no longer skips reads during
+        // SPI: conversions and display SPI never overlap (spi_quiet.h), and
+        // reading a finished result is digital-only.
+        const bool adcRead = true;
         if (adcRead)
         {
             PowerSupply.readVoltage();
@@ -224,7 +193,8 @@ void Task_ADC(void *pvParameters)
         }
 
         // Only push to graph/histogram when ADC actually read fresh data
-        if (adcRead)
+        // (not a thrown-away first conversion)
+        if (adcRead && !PowerSupply.adcLastDiscarded)
         {
             HistPush();
             GraphPush();
@@ -232,3 +202,43 @@ void Task_ADC(void *pvParameters)
     }
 }
  
+// Flash saves run here instead of in loop(): a SPIFFS write+close costs
+// ~180-340 ms of CPU (measured), which froze the display and inputs for that
+// long when it ran on Core 1. Pinned to Core 0 at priority 0, so it only gets
+// the time Task_ADC leaves idle. The flash-busy windows inside a save still
+// stall both cores (~45 ms per graph save measured) - that part is inherent
+// to writing flash.
+static TaskHandle_t Task_persist = nullptr;
+void SaveGraphDataIfDirty();
+
+static void Task_Persist(void *)
+{
+    for (;;)
+    {
+        uint32_t what = 0;
+        xTaskNotifyWait(0, UINT32_MAX, &what, portMAX_DELAY);
+        if (what & PERSIST_GRAPH)
+            SaveGraphDataIfDirty();
+        if (what & PERSIST_FGEN)
+            PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
+    }
+}
+
+void createPersistTask()
+{
+    if (xTaskCreatePinnedToCore(Task_Persist, "persist", 4096, nullptr, 0, &Task_persist, 0) != pdPASS)
+        Task_persist = nullptr; // persistRequest() then saves inline, as before
+}
+
+void persistRequest(uint32_t what)
+{
+    if (Task_persist)
+    {
+        xTaskNotify(Task_persist, what, eSetBits);
+        return;
+    }
+    if (what & PERSIST_GRAPH)
+        SaveGraphDataIfDirty();
+    if (what & PERSIST_FGEN)
+        PowerSupply.SaveMemoryFgen("FunGen", PowerSupply.funGenMem);
+}

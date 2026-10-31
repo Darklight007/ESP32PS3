@@ -12,6 +12,7 @@ void FlushMeasuresInterval(unsigned long interval);
 void statisticUpdateInterval(unsigned long interval);
 void EncoderRestartInterval(unsigned long interval);
 void KeyCheckInterval(unsigned long interval);
+void updateBarsForFrame();
 void LvglFullUpdates(unsigned long interval);
 void Page2RightSideCleanup(unsigned long interval);  // Clean dirty pixels on right side of page 2
 void VCCCInterval(unsigned long interval);

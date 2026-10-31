@@ -87,8 +87,7 @@ extern TaskHandle_t Task_dac;
 // extern lv_obj_t *lbl_ER_;
 extern int heepMemory;
 
-extern void Task_BarGraph(void *pvParameters);
-extern void Task_ADC(void *pvParameters);
+#include "tasks.h"
 extern void  init_touch();
 
 

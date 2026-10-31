@@ -2,7 +2,7 @@
 #include "config.hpp"
 
 // External task handles from config
-extern TaskHandle_t Task_adc, Task_bargraph;
+extern TaskHandle_t Task_adc;
 
 // Static member initialization
 MemoryStats MemoryMonitor::stats = {};
@@ -52,10 +52,6 @@ void MemoryMonitor::update()
         stats.task1StackHighWater = uxTaskGetStackHighWaterMark(Task_adc);
     }
 
-    if (Task_bargraph != NULL)
-    {
-        stats.task2StackHighWater = uxTaskGetStackHighWaterMark(Task_bargraph);
-    }
 
     // Check warning conditions
     if (stats.heapFree < MIN_FREE_HEAP)
@@ -71,14 +67,14 @@ void MemoryMonitor::update()
         stats.lowHeapWarning = false;
     }
 
-    if (stats.task1StackHighWater < MIN_STACK_HIGHWATER ||
-        stats.task2StackHighWater < MIN_STACK_HIGHWATER)
+    // Task_BarGraph no longer exists; its zero high-water mark used to trip
+    // this warning at boot and then mask any real Task_ADC warning.
+    if (stats.task1StackHighWater < MIN_STACK_HIGHWATER)
     {
         if (!stats.lowStackWarning)
         {
             stats.lowStackWarning = true;
-            Serial.printf("WARNING: Low stack! Task_bargraph: %u, Task2: %u bytes\n",
-                         stats.task1StackHighWater, stats.task2StackHighWater);
+            Serial.printf("WARNING: Low stack! Task_ADC: %u bytes\n", stats.task1StackHighWater);
         }
     }
     else
@@ -145,7 +141,6 @@ void MemoryMonitor::printStats()
     // Stack
     Serial.println();
     Serial.printf("Task_ADC Stack High Water:      %u bytes\n", stats.task1StackHighWater);
-    Serial.printf("Task_BarGraph Stack High Water: %u bytes\n", stats.task2StackHighWater);
 
     // Warnings
     if (stats.lowHeapWarning || stats.lowStackWarning || stats.fragmentationWarning)

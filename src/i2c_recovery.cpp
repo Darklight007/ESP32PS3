@@ -4,15 +4,24 @@
 TwoWire* I2CRecovery::wire = nullptr;
 int I2CRecovery::sdaPin = -1;
 int I2CRecovery::sclPin = -1;
+uint32_t I2CRecovery::clockHz = 400000UL;
+void (*I2CRecovery::recoveryCallback)() = nullptr;
+bool I2CRecovery::inRecovery = false;
 I2CErrorStats I2CRecovery::stats = {};
 uint8_t I2CRecovery::consecutiveErrors = 0;
 
-void I2CRecovery::init(TwoWire* _wire, int _sdaPin, int _sclPin)
+void I2CRecovery::init(TwoWire* _wire, int _sdaPin, int _sclPin, uint32_t _clockHz)
 {
     wire = _wire;
     sdaPin = _sdaPin;
     sclPin = _sclPin;
+    clockHz = _clockHz;
     consecutiveErrors = 0;
+}
+
+void I2CRecovery::setRecoveryCallback(void (*cb)())
+{
+    recoveryCallback = cb;
 }
 
 bool I2CRecovery::handleError(uint8_t error)
@@ -60,35 +69,45 @@ bool I2CRecovery::handleError(uint8_t error)
         return false;
     }
 
-    // Attempt recovery if we've had too many consecutive errors
-    if (consecutiveErrors >= MAX_ERRORS_BEFORE_RECOVERY)
+    // Attempt recovery if we've had too many consecutive errors.
+    // Suppressed while the post-recovery callback runs: that callback re-inits
+    // slaves over I2C, so an error inside it would recurse straight back here.
+    if (consecutiveErrors >= MAX_ERRORS_BEFORE_RECOVERY && !inRecovery)
     {
         Serial.println("I2C: Attempting bus recovery due to consecutive errors...");
         stats.recoveryAttempts++;
 
-        if (recoverBus())
+        bool ok = recoverBus();
+        if (!ok)
         {
-            Serial.println("I2C: Bus recovery successful");
-            stats.recoverySuccess++;
-            consecutiveErrors = 0;
-            return true;
+            Serial.println("I2C: Bus recovery failed, attempting full reset...");
+            ok = resetBus();
+            Serial.println(ok ? "I2C: Bus reset successful"
+                              : "I2C: Bus reset failed - manual intervention required");
         }
         else
         {
-            Serial.println("I2C: Bus recovery failed, attempting full reset...");
-            if (resetBus())
-            {
-                Serial.println("I2C: Bus reset successful");
-                stats.recoverySuccess++;
-                consecutiveErrors = 0;
-                return true;
-            }
-            else
-            {
-                Serial.println("I2C: Bus reset failed - manual intervention required");
-                return false;
-            }
+            Serial.println("I2C: Bus recovery successful");
         }
+
+        if (!ok)
+            return false;
+
+        stats.recoverySuccess++;
+        consecutiveErrors = 0;
+
+        // Re-init the slaves. A healthy bus says nothing about slave register
+        // state: a device that browned out is back at power-on defaults and
+        // will misbehave silently (MCP23017: pull-ups off -> floating keypad
+        // rows) until reconfigured.
+        if (recoveryCallback)
+        {
+            inRecovery = true;
+            recoveryCallback();
+            inRecovery = false;
+            consecutiveErrors = 0; // ignore any errors raised during re-init
+        }
+        return true;
     }
 
     return false;  // Error occurred but no recovery needed yet
@@ -119,6 +138,7 @@ bool I2CRecovery::recoverBus()
         // SDA is high - bus might be OK
         Serial.println("I2C Recovery: SDA already high, reinitializing bus");
         wire->begin(sdaPin, sclPin);
+        wire->setClock(clockHz); // begin() resets to the 100kHz default
         return isBusHealthy();
     }
 
@@ -151,6 +171,7 @@ bool I2CRecovery::recoverBus()
 
     // 6. Reinitialize I2C
     wire->begin(sdaPin, sclPin);
+    wire->setClock(clockHz); // begin() resets to the 100kHz default
     delay(10);
 
     // 7. Verify bus health
@@ -175,10 +196,12 @@ bool I2CRecovery::resetBus()
     if (sdaPin >= 0 && sclPin >= 0)
     {
         wire->begin(sdaPin, sclPin);
+        wire->setClock(clockHz); // begin() resets to the 100kHz default
     }
     else
     {
         wire->begin();
+        wire->setClock(clockHz);
     }
 
     delay(10);
@@ -215,6 +238,7 @@ bool I2CRecovery::isBusHealthy()
 
     // Restore I2C function
     wire->begin(sdaPin, sclPin);
+    wire->setClock(clockHz); // begin() resets to the 100kHz default
 
     return sdaHigh && sclHigh;
 }
