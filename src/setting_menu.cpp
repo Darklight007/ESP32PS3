@@ -349,6 +349,14 @@ namespace
         PowerSupply.SaveSetting();  // Save buzzer state
     }
 
+    // Beep on Power Change / Beep on Error: user_data points at the setting
+    static void switch_beep_flag_event_cb(lv_event_t *e)
+    {
+        bool *flag = static_cast<bool *>(lv_event_get_user_data(e));
+        *flag = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
+        PowerSupply.SaveSetting();
+    }
+
     // General save/load callbacks used by settings menu and internal calibration window
     static void startup_behavior_event_cb(lv_event_t *e)
     {
@@ -437,16 +445,6 @@ namespace
             lv_snprintf(buf, sizeof(buf), "%dmin", v);
         lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
         PowerSupply.settingParameters.autoSaveIntervalMinutes = v;
-    }
-
-    static void slider_beeper_volume_event_cb(lv_event_t *e)
-    {
-        auto *slider = lv_event_get_target(e);
-        int32_t v = lv_slider_get_value(slider);
-        char buf[8];
-        lv_snprintf(buf, sizeof(buf), "%d%%", v);
-        lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
-        PowerSupply.settingParameters.beeperVolume = v;
     }
 
     // Graph X-axis mode toggle callback
@@ -795,9 +793,8 @@ void SettingMenu(lv_obj_t *parent)
     lv_obj_t *sub_beeper_detail = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_beeper_detail);
     create_switch_(section, nullptr, "Buzzer Enable", buzzerSound, switch_buzzer_event_cb, LV_EVENT_SHORT_CLICKED, nullptr);
-    create_switch_(section, nullptr, "Beep on Power Change", PowerSupply.settingParameters.beeperOnPowerChange, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
-    create_switch_(section, nullptr, "Beep on Error", PowerSupply.settingParameters.beeperOnError, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
-    create_switch_(section, nullptr, "Beep on Keypress", PowerSupply.settingParameters.beeperOnKeypress, nullptr, LV_EVENT_VALUE_CHANGED, nullptr);
+    create_switch_(section, nullptr, "Beep on Power Change", PowerSupply.settingParameters.beeperOnPowerChange, switch_beep_flag_event_cb, LV_EVENT_VALUE_CHANGED, &PowerSupply.settingParameters.beeperOnPowerChange);
+    create_switch_(section, nullptr, "Beep on Error", PowerSupply.settingParameters.beeperOnError, switch_beep_flag_event_cb, LV_EVENT_VALUE_CHANGED, &PowerSupply.settingParameters.beeperOnError);
 
     // Version/About/Sidebar
     lv_obj_t *sub_software_info_page = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);

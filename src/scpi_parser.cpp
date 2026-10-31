@@ -237,11 +237,10 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("ADC:AVG") > 0) cmd_SETT_ADC_AVG(paramPart);
         else if (cmdPart.indexOf("ADC:DIG") > 0) cmd_SETT_ADC_DIG(paramPart);
         else if (cmdPart.indexOf("ADC:DISC") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.adcDiscardFirst);
-        else if (cmdPart.indexOf("BEEP:VOL") > 0) cmd_SETT_BEEP_VOL(paramPart);
         else if (cmdPart.indexOf("BEEP:PWR") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.beeperOnPowerChange);
         else if (cmdPart.indexOf("BEEP:ERR") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.beeperOnError);
-        else if (cmdPart.indexOf("BEEP:KEY") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.beeperOnKeypress);
-        else if (cmdPart.indexOf("BEEP") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.buzzer);
+        else if (cmdPart.indexOf("BEEP:KEY") > 0 || cmdPart.indexOf("BEEP:VOL") > 0) addError(ERR_UNDEFINED_HEADER); // removed: did nothing
+        else if (cmdPart.indexOf("BEEP") > 0) { cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.buzzer); buzzerSound = PowerSupply.settingParameters.buzzer; }
         else if (cmdPart.indexOf("TIM:EN") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.timerEnabled);
         else if (cmdPart.indexOf("TIM:DUR") > 0) cmd_SETT_TIMER_DUR(paramPart);
         else if (cmdPart.indexOf("OVP:LVL") > 0) cmd_SETT_OVP_LVL(paramPart);
@@ -940,6 +939,8 @@ void SCPIParser::cmd_DATA_SETTINGS_Q()
     // adcRate,adcAvgs,adcDigits,buzzer,beepPwr,beepErr,beepKey,timerEn,timerDur,
     // ovpEn,ovpLvl,ocpEn,ocpLvl,delay,autoSave,graphTime,graphSpan,graphStop,
     // beepVol,startup
+    // beepKey and beepVol no longer do anything; still sent so ps_control.py's
+    // field positions stay the same.
     Serial.printf("%d,%d,%d,%d,%d,%d,%d,%d,%u,%d,%.1f,%d,%.1f,%u,%u,%d,%u,%d,%d,%d\n",
         s.adcRate, s.adcNumberOfAvgs, s.adcNumberOfDigits,
         s.buzzer ? 1 : 0, s.beeperOnPowerChange ? 1 : 0,
@@ -1233,15 +1234,6 @@ void SCPIParser::cmd_SETT_BACKLIGHT(const String& param)
     int val = param.toInt();
     if (val >= 0 && val <= 255) {
         // ledcWrite(lcdBacklightChannel, val);  // TODO: wire when backlight PWM is connected
-        sendResponse("OK");
-    } else addError(ERR_DATA_OUT_OF_RANGE);
-}
-
-void SCPIParser::cmd_SETT_BEEP_VOL(const String& param)
-{
-    int val = param.toInt();
-    if (val >= 0 && val <= 100) {
-        PowerSupply.settingParameters.beeperVolume = val;
         sendResponse("OK");
     } else addError(ERR_DATA_OUT_OF_RANGE);
 }
