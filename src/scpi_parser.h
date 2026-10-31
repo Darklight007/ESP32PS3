@@ -207,7 +207,6 @@ private:
     void cmd_SETT_AUTOSAVE(const String& param);
     void cmd_SETT_GRAPH_SPAN(const String& param);
     void cmd_SETT_BACKLIGHT(const String& param);
-    void cmd_SETT_BEEP_VOL(const String& param);
     void cmd_SETT_STARTUP(const String& param);
 
     // SCPI FGEN subsystem (function generator)

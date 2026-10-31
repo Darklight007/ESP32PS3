@@ -1135,7 +1135,8 @@ void Device::setStatus(DEVICE status_)
 
     if (status_ == DEVICE::OFF)
     {
-        myTone(NOTE_A3, 200);
+        if (settingParameters.beeperOnPowerChange)
+            myTone(NOTE_A3, 200);
         // Make sure function generator is also off and restore ADC rate
         lv_obj_clear_state(btn_function_gen, LV_STATE_CHECKED);
         lv_obj_add_state(btn_function_gen, LV_STATE_DISABLED);

@@ -155,20 +155,34 @@ static struct
     unsigned long at;
 } touchCache;
 
-// Cheap check before the slow getTouch(): three raw pressure reads (~50us
-// each), all in the range a real press can produce. getTouchRawZ() returns
-// 4095 + Z1 - Z2, and a press always has Z1 < Z2, so a press reads below 4096
-// and holds steady. With the output on, the controller's idle reading is
-// noise spread over 0..8200 on ~70% of polls (measured); one read > 100 let
-// most of it through to getTouch(), ~10 ms each - 26% of Core 1.
-static bool touchLikely()
+// Touch read without TFT_eSPI's getTouch(): that runs validTouch() 5 times,
+// each with delay(1)/delay(2) - ~10 ms per poll whenever the pressure read
+// passes, and with the output on the idle pressure reading is noise spread
+// over 0..8200 on ~70% of polls (measured), so it ran on almost every poll
+// (26% of Core 1). Pressure can't separate noise from a press: real presses
+// read anywhere from ~900 to ~8700 depending on where the panel is pressed.
+// The same checks validTouch() makes, back to back: pressure above the
+// threshold twice, two position samples within _RAWERR (20) of each other,
+// inside the calibrated range. ~0.3 ms per poll. Noise fails the position
+// checks; a press passes them at once.
+static bool fastTouch(uint16_t *x, uint16_t *y, bool held)
 {
-    for (int i = 0; i < 3; i++)
-    {
-        const uint16_t z = tft.getTouchRawZ();
-        if (z <= 100 || z > 4095) // idle noise measured up to Z~60 with the output off
-            return false;
-    }
+    const uint16_t thr = held ? 20 : 600; // getTouch() also drops to 20 while held
+    if (tft.getTouchRawZ() <= thr)
+        return false;
+    uint16_t x1, y1, x2, y2;
+    tft.getTouchRaw(&x1, &y1);
+    if (tft.getTouchRawZ() <= thr)
+        return false;
+    tft.getTouchRaw(&x2, &y2);
+    if (abs((int)x1 - (int)x2) > 20 || abs((int)y1 - (int)y2) > 20)
+        return false;
+    uint16_t xr = (x1 + x2) / 2, yr = (y1 + y2) / 2;
+    tft.convertRawXY(&xr, &yr);
+    if (xr >= tft.width() || yr >= tft.height())
+        return false;
+    *x = xr;
+    *y = yr;
     return true;
 }
 
@@ -176,19 +190,26 @@ static bool touchLikely()
 // this inside each frame's SPI slot.
 void touchSample()
 {
-    // getTouch() takes 5 samples with delay(1)/delay(2) between them - ~5-10ms
-    // even when nothing is touched, so touchLikely() rejects the idle case first.
-    // getTouch() itself needs >600 to register a press.
+    // While held, ride out up to two failed polls (a noise spike in one
+    // sample) before reporting a release - otherwise a hold could split
+    // into two taps.
+    static uint8_t misses = 0;
     uint16_t x, y;
-    // While held, the old single check: a press reads steady 900..1950, but 2 of
-    // 115 held samples caught a noise spike in one of the three reads (measured,
-    // output on) - rejecting those would split a hold into two taps.
-    const bool likely = touchCache.touched ? tft.getTouchRawZ() > 100 : touchLikely();
-    touchCache.touched = likely && tft.getTouch(&x, &y);
-    if (touchCache.touched)
+    if (fastTouch(&x, &y, touchCache.touched))
     {
+        touchCache.touched = true;
         touchCache.x = x;
         touchCache.y = y;
+        misses = 0;
+    }
+    else if (touchCache.touched && ++misses <= 2)
+    {
+        // keep the last position
+    }
+    else
+    {
+        touchCache.touched = false;
+        misses = 0;
     }
     touchCache.at = millis();
 }

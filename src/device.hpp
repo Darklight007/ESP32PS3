@@ -138,10 +138,10 @@ struct SettingParameters
     uint16_t outputDelayMs = 0;  // Delay in milliseconds before output turns on
 
     // Beeper Control (feature #11)
-    uint8_t beeperVolume = 100;  // 0-100%
+    uint8_t beeperVolume = 100;  // unused (the buzzer has no volume control); kept so saved settings keep their layout
     bool beeperOnPowerChange = true;
     bool beeperOnError = true;
-    bool beeperOnKeypress = false;
+    bool beeperOnKeypress = false; // unused (key beeps are unconditional); kept for the saved layout
 
     // Auto-save Interval (feature #13)
     uint16_t autoSaveIntervalMinutes = 0;  // 0 = disabled
