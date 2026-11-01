@@ -8,6 +8,11 @@
 #include "functions.h"
 #include "waveform_generator.h"
 #include "disp_perf.h"
+#include "input_handler.h"
+#include "calib_adc.h"
+#include "calib_internal_leakage.h"
+#include "calib_cc_limit.h"
+#include "calib_log_window.h"
 #include <Wire.h>
 #include <cstring>
 #include <cmath>
@@ -205,6 +210,33 @@ void SCPIParser::executeCommand(const String& command)
         if (cmdPart.indexOf("STAT?") > 0) cmd_CAL_STAT_Q();
         else if (cmdPart.indexOf("SAVE") > 0) cmd_CAL_SAVE();
         else if (cmdPart.indexOf("LOAD") > 0) cmd_CAL_LOAD();
+        else if (cmdPart.indexOf("BUSY?") > 0) sendResponse(g_calibration_in_progress ? "1" : "0");
+        else if (cmdPart.indexOf("CCLIM:CLE") > 0) { ccLimitClear(); sendResponse("OK"); }
+        else if (cmdPart.indexOf("CCLIM?") > 0) sendResponse(ccLimitTableString());
+        else if (cmdPart.indexOf("CCLIM") > 0)
+        {
+            // Current-limit table with the output shorted (CC Limit button).
+            // Runs ~2 min; poll CAL:BUSY?. Saves itself.
+            if (g_calibration_in_progress || PowerSupply.getStatus() == DEVICE::OFF) { addError(ERR_EXECUTION_ERROR); return; }
+            g_calibration_in_progress = true;
+            create_log_window("CC Limit (short)");
+            log_reset();
+            log_clear();
+            if (!start_cc_limit_calibration()) { g_calibration_in_progress = false; addError(ERR_EXECUTION_ERROR); return; }
+            sendResponse("OK");
+        }
+        else if (cmdPart.indexOf("LEAK") > 0)
+        {
+            // Zero + leakage fit for the active current range (Int. Resistance
+            // button). Runs ~2.5 min; poll CAL:BUSY?, then CAL:SAVE.
+            if (g_calibration_in_progress || PowerSupply.getStatus() == DEVICE::OFF) { addError(ERR_EXECUTION_ERROR); return; }
+            g_calibration_in_progress = true;
+            create_log_window("Zero + Leakage");
+            log_reset();
+            log_clear();
+            start_leakage_resistance_measurement(nullptr);
+            sendResponse("OK");
+        }
         else addError(ERR_UNDEFINED_HEADER);
         return;
     }
@@ -252,7 +284,7 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("GRAPH:TIME") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.graphXaxisTimeMode);
         else if (cmdPart.indexOf("GRAPH:SPAN") > 0) cmd_SETT_GRAPH_SPAN(paramPart);
         else if (cmdPart.indexOf("GRAPH:STOP") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.graphAutoStop);
-        else if (cmdPart.indexOf("BACK") > 0) cmd_SETT_BACKLIGHT(paramPart);
+        else if (cmdPart.indexOf("BACK") > 0) addError(ERR_UNDEFINED_HEADER); // no backlight PWM wired: did nothing
         else if (cmdPart.indexOf("START") > 0) cmd_SETT_STARTUP(paramPart);
         else if (cmdPart.indexOf("SAVE") > 0) { PowerSupply.SaveSetting(); sendResponse("OK"); }
         else if (cmdPart.indexOf("LOAD") > 0) { PowerSupply.LoadSetting(); sendResponse("OK"); }
@@ -274,6 +306,22 @@ void SCPIParser::executeCommand(const String& command)
             bool on = dispPerfShown();
             cmd_SETT_BOOL(paramPart, on);
             dispPerfSetSaved(on);
+        }
+        else addError(ERR_UNDEFINED_HEADER);
+        return;
+    }
+
+    // SCPI SENSe subsystem: current measurement range (as the mA key)
+    if (cmdPart.startsWith("SENS"))
+    {
+        if (cmdPart.indexOf("CURR:RANG?") > 0) sendResponse(PowerSupply.mA_Active ? "MA" : "A");
+        else if (cmdPart.indexOf("CURR:RANG") > 0)
+        {
+            String p = paramPart; p.trim(); p.toUpperCase();
+            if (p == "MA") setCurrentRange(true);
+            else if (p == "A") setCurrentRange(false);
+            else { addError(ERR_ILLEGAL_PARAMETER_VALUE); return; }
+            sendResponse("OK");
         }
         else addError(ERR_UNDEFINED_HEADER);
         return;
@@ -549,7 +597,10 @@ void SCPIParser::cmd_SOUR_VOLT(const String& param)
     if (parseNumeric(param, value))
     {
         double maxVolt = PowerSupply.Voltage.maxValue / PowerSupply.Voltage.adjFactor;
-        if (value >= 0 && value <= maxVolt)
+        // Above the OVP level while OVP is on (see enforceSoftwareLimits())
+        if (value > PowerSupply.Voltage.setCeiling)
+            addError(ERR_SETTINGS_CONFLICT);
+        else if (value >= 0 && value <= maxVolt)
         {
             PowerSupply.Voltage.SetUpdate(value * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
         }
@@ -754,7 +805,8 @@ void SCPIParser::cmd_OUTP_STAT(const String& param)
     }
     else if (p == "OFF" || p == "0")
     {
-        if (isOn) PowerSupply.toggle();
+        // Also while waiting out the Output Delay (button checked, still OFF)
+        if (isOn || lv_obj_has_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED)) PowerSupply.toggle();
     }
     else
     {
@@ -1187,7 +1239,7 @@ void SCPIParser::cmd_SETT_TIMER_DUR(const String& param)
 void SCPIParser::cmd_SETT_OVP_LVL(const String& param)
 {
     double val;
-    if (parseNumeric(param, val) && val >= 0 && val <= 32) {
+    if (parseNumeric(param, val) && val >= 0.1 && val <= 33) { // same range as the menu slider
         PowerSupply.settingParameters.voltageLimitMax = val;
         sendResponse("OK");
     } else addError(ERR_DATA_OUT_OF_RANGE);
@@ -1196,7 +1248,7 @@ void SCPIParser::cmd_SETT_OVP_LVL(const String& param)
 void SCPIParser::cmd_SETT_OCP_LVL(const String& param)
 {
     double val;
-    if (parseNumeric(param, val) && val >= 0 && val <= 6) {
+    if (parseNumeric(param, val) && val >= 0.01 && val <= 6.5) { // same range as the menu slider
         PowerSupply.settingParameters.currentLimitMax = val;
         sendResponse("OK");
     } else addError(ERR_DATA_OUT_OF_RANGE);
@@ -1469,6 +1521,7 @@ const char* SCPIParser::getErrorDescription(SCPIError error)
         case ERR_QUERY_DEADLOCKED: return "Query deadlocked";
         case ERR_QUERY_UNTERMINATED_AFTER_INDEFINITE: return "Query unterminated after indefinite response";
         case ERR_EXECUTION_ERROR: return "Execution error";
+        case ERR_SETTINGS_CONFLICT: return "Settings conflict";
         case ERR_SETTINGS_LOST: return "Settings lost due to power down";
         case ERR_CALIBRATION_FAILED: return "Calibration failed";
         default: return "Unknown error";

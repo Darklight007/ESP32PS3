@@ -118,7 +118,7 @@ void Task_ADC(void *pvParameters)
             getSettingEncoder(NULL, NULL);
 
         // Low-noise mode: start the next conversion only while display SPI is idle
-        PowerSupply.adc.serviceStart(PowerSupply.settingParameters.adcRate == 0);
+        PowerSupply.adc.serviceStart(PowerSupply.settingParameters.adcRate == 0 && !lowNoisePaused());
 
         // Wait for ADC interrupt notification with short timeout for responsiveness
         if (!adcDataReady)

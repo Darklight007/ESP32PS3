@@ -227,9 +227,16 @@ static bool outputIsOn()
     return st == DEVICE::ON || st == DEVICE::VC || st == DEVICE::CC;
 }
 
+// Button checked but still OFF = Output Delay running: already turning on
+static bool outputPending()
+{
+    return !outputIsOn() && lv_obj_has_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
+}
+
 static void ensureOutput(bool on)
 {
-    if (outputIsOn() != on)
+    const bool pending = outputPending();
+    if (on ? (!outputIsOn() && !pending) : (outputIsOn() || pending))
         PowerSupply.toggle(); // full path: button event + setStatus (Core 1 only)
 }
 
@@ -686,7 +693,7 @@ static void batteryTick()
     // User killed the output (O key / touch) while we were running → abort.
     // Routed through stopAll() (not just setting s_state directly) so this
     // gets the same elapsed-time freeze as every other stop reason.
-    if (batteryChargerActive() && !outputIsOn()) {
+    if (batteryChargerActive() && !outputIsOn() && !outputPending()) {
         stopAll(BatState::IDLE);
     }
 

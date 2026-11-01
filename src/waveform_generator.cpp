@@ -173,11 +173,11 @@ double arbitraryBank1(double t)
 
 // Array of waveform structs
 Waveform waveforms[] = {
-    {"Sine ", sineWave},
-    {"Sawtooth ", sawtoothWave},
-    {"Square ", squareWave},
-    {"Triangular", triangularWave},
-    {"PWM ", pwmWave},
+    {"Sine", sineWave},
+    {"Sawtooth", sawtoothWave},
+    {"Square", squareWave},
+    {"Triangle", triangularWave},
+    {"PWM", pwmWave},
     {"Exponential Decay", exponentialDecay},
     {"Exponential Rise", exponentialRise},
     {"Full Wave Rectified", fullWaveRectifiedSine},
@@ -185,7 +185,7 @@ Waveform waveforms[] = {
     {"Inverted Sawtooth", invertedSawtoothWave},
     {"Linear Chirp", linearChirp},
     {"Logarithmic Curve", logarithmicCurve},
-    {"Parabolic ", parabolicWave},
+    {"Parabolic", parabolicWave},
     {"Random Noise", randomNoise},
     {"Sinc Function", sincFunction},
     {"Table Points", tablePoint},

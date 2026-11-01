@@ -76,12 +76,14 @@ void internal_leakage_calibration_cb(lv_event_t *e);
 void open_dac_calibration_cb(lv_event_t *e);
 void btn_close_hide_obj_cb(lv_event_t *e);
 void Warning_msgbox(const char *title, lv_event_cb_t event_cb);
+void Message_msgbox(const char *title, const char *text); // OK-only notice
 void msgbox_close_deferred(lv_obj_t *mbox);  // Safe close from inside event callbacks
 
 // Returns true if current setpoint >= min_mA; otherwise shows an error msgbox and returns false.
 // Only use for calibrations that require a physical load (e.g. Full Auto Cal).
 // Do NOT use for auto-zero or INL — those run at zero/no-load conditions.
 bool calib_check_current_setpoint(float min_mA = 10.0f);
+bool calib_check_output_on(); // shows a msgbox and returns false if the output is off
 
 
 // void build_adc_calibration_window(lv_obj_t **win_holder,

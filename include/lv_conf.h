@@ -81,7 +81,7 @@
 #define LV_DISP_DEF_REFR_PERIOD 33      /*[ms] - reduced from 30 for smoother UI (~50 FPS)*/
 
 /*Input device read period in milliseconds*/
-#define LV_INDEV_DEF_READ_PERIOD 33     /*[ms] - reduced from 30 for faster input response*/
+#define LV_INDEV_DEF_READ_PERIOD 10     /*[ms] - touch read is ~0.3 ms (fastTouch), so poll every loop tick*/
 
 /*Use a custom tick source that tells the elapsed time in milliseconds.
  *It removes the need to manually update the tick with `lv_tick_inc()`)*/

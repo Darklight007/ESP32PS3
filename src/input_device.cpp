@@ -28,6 +28,7 @@ void getKeys() {
     if (kpd.getKeys()) {
         for (int i = 0; i < LIST_MAX; i++) {
             if (kpd.key[i].stateChanged) {
+                lowNoisePause(); // keypad in use: full-speed UI (spi_quiet.h)
                 switch (kpd.key[i].kstate) {
                     case PRESSED:
                         myTone(NOTE_A4, 50);

@@ -23,3 +23,11 @@ void btn_calibration_ADC_current_event_cb(lv_event_t *e);
 // Global calibration state (used by calibration sequences to prevent concurrent runs)
 extern bool g_calibration_in_progress;
 
+
+// Calibration measures in low-noise conditions: ADC rate 0, current PGA x1,
+// and touch/keys can't pause low-noise mode. Nests (full auto wraps the single
+// routines); the outermost end() restores the user's rate and PGA. Core 1 only.
+void calib_low_noise_begin();
+void calib_low_noise_end();
+// A calibration is running (between the outermost begin/end above)
+bool calib_low_noise_active();

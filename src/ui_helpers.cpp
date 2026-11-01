@@ -218,7 +218,7 @@ void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *se
     // Use global tabview_utility instead of navigating parents
     extern lv_obj_t *tabview_utility;
     int active_tab = lv_tabview_get_tab_act(tabview_utility);
-    if (active_tab != 2) { // 2 is the index for "Arbt" tab
+    if (active_tab != 2) { // 2 is the index for the "Arb" tab
         Serial.printf("plotToBucket: wrong tab %d (need 2)\n", active_tab);
         return;
     }
@@ -315,7 +315,7 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     lv_obj_align_to(PowerSupply.graph.label_pause, PowerSupply.graph.chart, LV_ALIGN_TOP_RIGHT, 0, 0);
     lv_obj_add_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
 
-    legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V-Set", lv_palette_main(LV_PALETTE_AMBER), "I-set", 25, 0);
+    legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V-Set", lv_palette_main(LV_PALETTE_AMBER), "I-Set", 25, 0);
 
     lv_obj_set_parent(PowerSupply.Voltage.statLabels.label_fft, parent);
     lv_obj_set_parent(PowerSupply.Current.statLabels.label_fft, parent);
@@ -485,8 +485,15 @@ void SaveGraphDataIfDirty()
     }
 }
 
+// Called from Task_ADC (Core 0) after every reading and from
+// GraphChartRefreshInterval() (Core 1). Time mode pushes only from Core 1 and
+// points mode only from Core 0: both cores used to run time mode at once,
+// racing on lastPushTime and the buffers. No LVGL here - Core 0 runs it; the
+// PAUSED label follows g_graphPaused in GraphChartRefreshInterval().
 void GraphPush()
 {
+    if ((xPortGetCoreID() == 1) != PowerSupply.settingParameters.graphXaxisTimeMode)
+        return;
     static unsigned long lastPushTime = 0;
     static bool wasPaused = false;
     if (g_graphPaused) { wasPaused = true; return; }
@@ -495,8 +502,9 @@ void GraphPush()
     if (PowerSupply.settingParameters.graphXaxisTimeMode)
     {
         unsigned long now = millis();
-        // graphTimeSpanSeconds is per-division; total chart = value * 24 divisions
-        unsigned long msPerPoint = (PowerSupply.settingParameters.graphTimeSpanSeconds / 24.0 * 1000UL) / CHART_SIZE;
+        // graphTimeSpanSeconds is the whole chart, as the x-axis labels and the
+        // menu show it (it was divided by 24 here: "12h" showed 30 min)
+        unsigned long msPerPoint = PowerSupply.settingParameters.graphTimeSpanSeconds * 1000UL / CHART_SIZE;
         if (msPerPoint < 1) msPerPoint = 1;
 
         if (lastPushTime == 0) { lastPushTime = now; return; }
@@ -528,8 +536,6 @@ void GraphPush()
             if (g_graphPushCount >= CHART_SIZE) {
                 g_graphPaused = true;
                 g_graphPushCount = 0;
-                if (PowerSupply.graph.label_pause)
-                    lv_obj_clear_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
             }
         }
         return;
@@ -548,8 +554,6 @@ void GraphPush()
         if (g_graphPushCount >= CHART_SIZE) {
             g_graphPaused = true;
             g_graphPushCount = 0;
-            if (PowerSupply.graph.label_pause)
-                lv_obj_clear_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
         }
     }
 }
