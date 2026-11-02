@@ -1,16 +1,10 @@
-// LovyanGFX configuration for the ILI9341 + XPT2046 panel.
-// Compiled only in the `lgfx` env (USE_LGFX); see display.h for the port plan.
-//
+#pragma once
+// LovyanGFX device config for the ILI9341 + XPT2046 panel (lgfx env only).
 // Pins and clocks come from the same TFT_* build flags TFT_eSPI uses
 // (platformio.ini), so both drivers always agree on the wiring.
-#ifdef USE_LGFX
-
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
-#include "display.h"
 
-namespace
-{
 class LGFX_PS : public lgfx::LGFX_Device
 {
     lgfx::Panel_ILI9341 _panel;
@@ -47,7 +41,10 @@ public:
             cfg.panel_height = 320;
             cfg.offset_x = 0;
             cfg.offset_y = 0;
-            cfg.offset_rotation = 0;
+            // LovyanGFX's ILI9341 rotation table sits 180 deg from TFT_eSPI's:
+            // setRotation(3) drew the UI upside down. Touch is unaffected - the
+            // shim maps raw XPT2046 coordinates with the TFT_eSPI calibration.
+            cfg.offset_rotation = 2;
             cfg.readable = true;
             cfg.invert = false;
             cfg.rgb_order = false;
@@ -79,16 +76,3 @@ public:
         setPanel(&_panel);
     }
 };
-
-LGFX_PS lcd;
-} // namespace
-
-bool lgfxInit(uint8_t rotation)
-{
-    if (!lcd.init())
-        return false;
-    lcd.setRotation(rotation);
-    return true;
-}
-
-#endif // USE_LGFX
