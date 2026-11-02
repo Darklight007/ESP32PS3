@@ -167,7 +167,13 @@ static struct
 // checks; a press passes them at once.
 static bool fastTouch(uint16_t *x, uint16_t *y, bool held)
 {
+#ifdef USE_LGFX
+    // LovyanGFX shim: idle reads <= ~215, presses ~500 (bottom-left corner)
+    // to ~3100 (measured), so 600 missed corner presses.
+    const uint16_t thr = held ? 20 : 350;
+#else
     const uint16_t thr = held ? 20 : 600; // getTouch() also drops to 20 while held
+#endif
     if (tft.getTouchRawZ() <= thr)
         return false;
     uint16_t x1, y1, x2, y2;

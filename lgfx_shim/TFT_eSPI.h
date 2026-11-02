@@ -40,14 +40,28 @@ public:
     // XPT2046 driver uses a different pressure formula and median filtering,
     // which made presses register inconsistently against fastTouch()'s
     // thresholds and the stored calibration - both tuned to these exact reads.
+    // Z1/Z2 read with the same repeated-command layout as getTouchRaw() below:
+    // each conversion command is issued four times so the panel settles, and
+    // the next command rides in the second result byte. The single-shot form
+    // TFT_eSPI uses (0xB0, then transfer16(0xC0), transfer16(0x00)) returned
+    // z1 == z2 on every read here - pressure always 0, so no press was ever
+    // detected - while the repeated X/Y read on the same bus worked.
+    void getTouchRawZ12(uint16_t *z1, uint16_t *z2)
+    {
+        uint8_t d[17] = {0xB0, 0, 0xB0, 0, 0xB0, 0, 0xB0, 0, 0xC0,
+                         0, 0xC0, 0, 0xC0, 0, 0xC0, 0, 0};
+        touchXfer(d, sizeof d);
+        *z1 = (uint16_t)(d[7] << 5) | (0x1F & (d[8] >> 3));
+        *z2 = (uint16_t)(d[15] << 5) | (0x1F & (d[16] >> 3));
+    }
+
+    // Same pressure value as TFT_eSPI: 0xFFF + Z1 - Z2, 4095 means "none".
     uint16_t getTouchRawZ()
     {
-        uint8_t d[5] = {0xB0, 0x00, 0xC0, 0x00, 0x00}; // Z1, then Z2
-        touchXfer(d, sizeof d);
-        int16_t tz = 0xFFF;
-        tz += ((d[1] << 8) | d[2]) >> 3;
-        tz -= ((d[3] << 8) | d[4]) >> 3;
-        if (tz == 4095)
+        uint16_t z1, z2;
+        getTouchRawZ12(&z1, &z2);
+        int16_t tz = 0xFFF + (int16_t)z1 - (int16_t)z2;
+        if (tz == 4095 || tz < 0)
             tz = 0;
         return (uint16_t)tz;
     }

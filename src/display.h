@@ -6,3 +6,10 @@
 // include path: lgfx_shim/TFT_eSPI.h implements the TFT_eSPI API the project
 // uses on top of LovyanGFX (device config in lgfx_shim/lgfx_ps.hpp), so the
 // call sites in src/ are shared by both builds.
+
+// Name of the display driver this firmware was built with (boot log, SYST:DISP?)
+#ifdef USE_LGFX
+#define DISPLAY_DRIVER_NAME "LovyanGFX"
+#else
+#define DISPLAY_DRIVER_NAME "TFT_eSPI"
+#endif

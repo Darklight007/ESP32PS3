@@ -1,4 +1,5 @@
 #include "scpi_parser.h"
+#include "display.h"
 #include "device.hpp"
 #include "globals.h"
 #include "ui_helpers.h"
@@ -196,6 +197,7 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("ERR:ALL?") > 0) cmd_SYST_ERR_ALL_Q();
         else if (cmdPart.indexOf("ERR?") > 0) cmd_SYST_ERR_Q();
         else if (cmdPart.indexOf("VERS?") > 0) cmd_SYST_VERS_Q();
+        else if (cmdPart.indexOf("DISP?") > 0) sendResponse(DISPLAY_DRIVER_NAME); // display driver built in
         else if (cmdPart.indexOf("CAP?") > 0) cmd_SYST_CAP_Q();
         else if (cmdPart.indexOf("BEEP") > 0) cmd_SYST_BEEP();
         else if (cmdPart.indexOf("LOC") > 0) cmd_SYST_LOC();
