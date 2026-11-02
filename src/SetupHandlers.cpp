@@ -1,4 +1,5 @@
 #include "SetupHandlers.h" // Include the setup handlers header
+#include "display.h"       // DISPLAY_DRIVER_NAME
 #include "i2c_recovery.h"  // Include I2C bus recovery module
 #include "calib_inl.h"     // Include INL calibration for startup rebuild
 #include "esp_heap_caps.h" // heap_caps_malloc for the internal DMA band buffer
@@ -161,7 +162,7 @@ void initializeDisplay()
 {
     tft.init();         // Initialize the TFT display
     tft.setRotation(3); // Set landscape orientation
-    Serial.println("Display Initialized.");
+    Serial.println("Display Initialized (" DISPLAY_DRIVER_NAME ").");
 }
 
 // Initialize the touch screen
