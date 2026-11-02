@@ -614,6 +614,7 @@ public:
     unsigned long lastEnergyUpdateTime = 0;  // For energy integration
     unsigned long timerStartTime = 0;        // For timer function
     unsigned long lastAutoSaveTime = 0;      // For auto-save feature
+    unsigned long settingsDirtyAt = 0;       // millis() of an unsaved Settings-menu change, 0 = none
     int lastCCCVStatus = -1;                 // -1 = invalid, forces re-check on power on
 
     /***************

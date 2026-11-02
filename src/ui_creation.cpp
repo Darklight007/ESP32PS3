@@ -124,6 +124,27 @@ static void textarea_event_handler(lv_event_t * e)
 }
 
 
+// Output Delay: the output turns on this long after the button. Done with a
+// one-shot timer, not delay(), which froze the screen and every key for up
+// to 5 s; pressing OFF meanwhile cancels it.
+static lv_timer_t *s_outputDelayTimer = nullptr;
+
+static void output_on_now()
+{
+    if (PowerSupply.settingParameters.beeperOnPowerChange)
+        myTone(NOTE_A5, 200);
+
+    PowerSupply.setStatus(DEVICE::ON);
+    initializePowerManagement();  // Start timer, energy tracking
+}
+
+static void output_delay_done_cb(lv_timer_t *)
+{
+    s_outputDelayTimer = nullptr; // one-shot: LVGL deletes it after this call
+    if (lv_obj_has_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED))
+        output_on_now();
+}
+
 void btn_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
@@ -132,20 +153,25 @@ void btn_event_cb(lv_event_t *e)
     {
         if (lv_obj_get_state(btn) & LV_STATE_CHECKED)
         {
-            // Apply output delay if configured
-            if (PowerSupply.settingParameters.outputDelayMs > 0)
+            if (PowerSupply.settingParameters.outputDelayMs > 0 && !s_outputDelayTimer)
             {
-                delay(PowerSupply.settingParameters.outputDelayMs);
+                s_outputDelayTimer = lv_timer_create(output_delay_done_cb, PowerSupply.settingParameters.outputDelayMs, nullptr);
+                if (s_outputDelayTimer)
+                {
+                    lv_timer_set_repeat_count(s_outputDelayTimer, 1);
+                    return;
+                }
             }
-
-            if (PowerSupply.settingParameters.beeperOnPowerChange)
-                myTone(NOTE_A5, 200);
-
-            PowerSupply.setStatus(DEVICE::ON);
-            initializePowerManagement();  // Start timer, energy tracking
+            if (!s_outputDelayTimer)
+                output_on_now();
         }
         else
         {
+            if (s_outputDelayTimer)
+            {
+                lv_timer_del(s_outputDelayTimer);
+                s_outputDelayTimer = nullptr;
+            }
             if (PowerSupply.settingParameters.beeperOnPowerChange)
                 myTone(NOTE_A3, 200);
 
@@ -341,8 +367,8 @@ void Utility_tabview(lv_obj_t *parent)
     /*Add 4 tabs (the tabs are page (lv_page) and can be scrolled*/
     lv_obj_t *tab1 = lv_tabview_add_tab(tabview_utility, "Mem");
     lv_obj_t *tab2 = lv_tabview_add_tab(tabview_utility, "FGen");
-    lv_obj_t *tab3 = lv_tabview_add_tab(tabview_utility, "Arbt");
-    lv_obj_t *tab4 = lv_tabview_add_tab(tabview_utility, "Tabl");
+    lv_obj_t *tab3 = lv_tabview_add_tab(tabview_utility, "Arb");
+    lv_obj_t *tab4 = lv_tabview_add_tab(tabview_utility, "Table");
     lv_obj_t *tab5 = lv_tabview_add_tab(tabview_utility, "Batt");
     createBatteryTab(tab5);
 
@@ -440,7 +466,7 @@ void Utility_tabview(lv_obj_t *parent)
 
     Utility_objs.fun.Amplitude = spinbox_pro(tab2, "#FFFFF7 Amplitude:#", 0, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0, 98, 0, &graph_R_16);
     Utility_objs.fun.Frequency = spinbox_pro(tab2, "#FFFFF7 Frequency [Hz]:#", 0, 10000, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1, 98, 1, &graph_R_16);
-    Utility_objs.fun.Offset = spinbox_pro(tab2, "#FFFFF7 Offset [v]:#", -32000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2, &graph_R_16);
+    Utility_objs.fun.Offset = spinbox_pro(tab2, "#FFFFF7 Offset [V]:#", -32000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2, &graph_R_16);
     Utility_objs.fun.Duty = spinbox_pro(tab2, "#FFFFF7 Duty [%]:#", 0, 10000, 5, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 3, 98, 3, &graph_R_16);
 
     PowerSupply.funGenMem = PowerSupply.LoadMemoryFgen("FunGen");

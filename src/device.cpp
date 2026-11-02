@@ -1,5 +1,6 @@
 #include "esp_task_wdt.h"
 #include "device.hpp"
+#include "calib_cc_limit.h"
 #include "MonotoneCubicCalibrator.h"
 #include "setting_menu.h"
 #include "error_handler.h"
@@ -890,23 +891,25 @@ void Device::DACUpdate(void)
     // Hidden from UI (adjValue itself unchanged). Mirror of measurement comp.
     // Signed: negative R produces a negative delta (DAC pulled DOWN) to cancel
     // an inverse hardware bias that sources current INTO the sense path at high V.
+    //
+    // The CC loop (U1_CC) senses the 10 mOhm A-range shunt directly, in both
+    // ranges - the mA key only switches which INA190 feeds the ADC. So the
+    // leakage that loop sees is the A-range one, internalLeakage[0], also in mA
+    // mode (the mA shunt carries more: 34.7k vs 54.6k measured 2026-10-31).
     int32_t cur_comp_dac = 0;
-    if (!CalBank.empty() && bankCalibId >= 0 && bankCalibId < (int8_t)CalBank.size() &&
-        mA_Active >= 0 && mA_Active <= 1)
+    if (!CalBank.empty() && bankCalibId >= 0 && bankCalibId < (int8_t)CalBank.size())
     {
-        double leakage_R = CalBank[bankCalibId].internalLeakage[mA_Active];
+        double leakage_R = CalBank[bankCalibId].internalLeakage[0];
         if (std::isfinite(leakage_R) && std::abs(leakage_R) > 0.001 && std::abs(leakage_R) < 1e9)
         {
             // Same filtered voltage as the measurement path (see device.hpp) so
             // the setpoint compensation doesn't chase per-sample voltage noise.
-            // NOTE: unlike readCurrent()'s compensation this has no mA_Active
-            // x1000 factor (commented out below) and an empirical 0.8 - the two
-            // paths disagree by ~1250x in mA mode. Left as-is; behaviour unchanged.
+            // Amps (adjFactor is DAC codes per A in both ranges, so no mA x1000).
+            // 0.8 is an older empirical factor, kept until checked with a load.
             double vLeakDac = std::isfinite(leakageVFiltered) ? leakageVFiltered
                                                               : Voltage.measured.Mean();
-            // double comp = (mA_Active ? 1000.0 : 1.0) * (vLeakDac / (leakage_R * 1000.0));
             double comp = 0.8*(vLeakDac / (leakage_R * 1000.0));
-            cur_comp_dac = (int32_t)(comp * Current.adjFactor);
+            cur_comp_dac = (int32_t)lround(comp * Current.adjFactor);
         }
     }
     auto clamp16 = [](int32_t v) -> uint16_t {
@@ -935,7 +938,10 @@ void Device::DACUpdate(void)
     {
         // Always write to DAC - no change detection, it was causing missed updates
         DAC.writeAndPowerAll(DAC_VOLTAGE, Voltage.adjValue);
-        DAC.writeAndPowerAll(DAC_CURRENT, clamp16((int32_t)Current.adjValue + cur_comp_dac));
+        // Current limit through the shorted-output table (calib_cc_limit.cpp)
+        const double limA = ccLimitCorrect((Current.adjValue - Current.adjOffset) / Current.adjFactor);
+        const int32_t limCode = (int32_t)Current.adjOffset + (int32_t)lround(limA * Current.adjFactor);
+        DAC.writeAndPowerAll(DAC_CURRENT, clamp16(limCode + cur_comp_dac));
         // Serial.printf("\n v_uint16_t: %i v:%f ", Voltage.adjValue, double((Voltage.adjValue - Voltage.adjOffset) / 2000.0));
         // Serial.printf(" c_uint16_t: %i c:%f ", Current.adjValue, double((Current.adjValue - Current.adjOffset) / 10000.0));
     }
@@ -953,7 +959,8 @@ void Device::turn(SWITCH onOff)
     powerSwitch.turn(onOff);
     if (onOff == SWITCH::ON)
     {
-        status = DEVICE::ON;
+        // status is set by btn_event_cb() -> setStatus(ON), possibly after
+        // the Output Delay; setting it here would turn the output on at once.
         // Clear OVP/OCP triggered flags when turning on
         settingParameters.ovpTriggered = false;
         settingParameters.ocpTriggered = false;
@@ -965,7 +972,8 @@ void Device::turn(SWITCH onOff)
 void Device::toggle(void)
 {
     // delay(4);
-    if (getStatus() != DEVICE::OFF)
+    // Checked but still OFF = waiting out the Output Delay: a press cancels it
+    if (getStatus() != DEVICE::OFF || lv_obj_has_state(powerSwitch.btn, LV_STATE_CHECKED))
         turn(SWITCH::OFF);
     else
         turn(SWITCH::ON);

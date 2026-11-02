@@ -295,6 +295,13 @@ FGEN
 
 ---
 
+### :SENSe:CURRent:RANGe - Current Measurement Range
+**Description:** Select the A or mA current range, same as the mA key
+**Syntax:** `:SENS:CURR:RANG <A|MA>` / `:SENS:CURR:RANG?`
+**Response:** `OK`; query returns `A` or `MA`
+
+---
+
 ## OUTPut Subsystem (Output Control)
 
 ### :OUTPut:STATe - Output Enable/Disable
@@ -467,6 +474,41 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 :CAL:LOAD
 ```
 
+### :CALibration:LEAKage - Zero + Leakage Calibration
+**Description:** Same as the Int. Resistance button: for the active current range
+(A or mA), measures the current with no load at 1, 8, 16, 24 and 32 V and fits
+`I = I0 + V/R`. Sets the zero code (`code_1`) and the leakage resistance. Runs at
+ADC rate 0 (restored afterwards), about 2.5 min. Output must be on with nothing
+connected. Not saved until `:CAL:SAVE`.
+**Syntax:** `:CAL:LEAK`
+**Response:** `OK` (error -200 if a calibration is already running)
+
+### :CALibration:BUSY? - Calibration Running
+**Syntax:** `:CAL:BUSY?`
+**Response:** `1` while a calibration routine runs, else `0`
+**Example:**
+```
+:CAL:LEAK
+OK
+:CAL:BUSY?      (repeat until 0)
+0
+:CAL:SAVE
+```
+
+### :CALibration:CCLIM - Current-Limit Calibration (Shorted Output)
+**Description:** With a thick wire across the output and the output ON, steps the current limit 0.1/1/2/3/4/5 A in the A range (ADC rate 0) and stores what actually flows. The current-limit DAC then uses that table, so the limit matches the setpoint. Runs ~2 min, restores the user's V/I setpoints and range, saves itself (no `CAL:SAVE` needed). Fails without changing anything if the output isn't shorted.
+**Syntax:** `:CAL:CCLIM`, `:CAL:CCLIM?`, `:CAL:CCLIM:CLEar`
+**Response:** `OK`; the query returns `set,actual;...` in A (empty = no table)
+**Example:**
+```
+:CAL:CCLIM
+OK
+:CAL:BUSY?      (repeat until 0)
+0
+:CAL:CCLIM?
+0.1000,0.10080;1.0000,1.00609;...;5.0000,5.02712
+```
+
 ---
 
 ## Error Codes
@@ -498,6 +540,7 @@ Standard SCPI error codes returned by `:SYST:ERR?`:
 | -134 | Suffix too long |
 | -138 | Suffix not allowed |
 | -200 | Execution error |
+| -221 | Settings conflict (e.g. voltage above the OVP level while OVP is on) |
 | -222 | Data out of range |
 | -223 | Too much data |
 | -224 | Illegal parameter value |

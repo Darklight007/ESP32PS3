@@ -427,7 +427,8 @@ void DispObjects::SetUpdate(int value, bool bypassLock)
 {
     // value-= adjOffset;
     // if (lock || value / adjFactor < minValue || value / adjFactor > maxValue)
-    if ((lock && !bypassLock) || (value) < 0 || (value - adjOffset) > maxValue)
+    if ((lock && !bypassLock) || (value) < 0 || (value - adjOffset) > maxValue ||
+        (value - adjOffset) / adjFactor > setCeiling)
     {
         myTone(NOTE_A5, 50);
         return;
@@ -578,10 +579,10 @@ void DispObjects::SetEncoderUpdate(void)
     if (!lock)
     {
         if (count > rotaryOldValue)
-            SetUpdate(adjValue + rotaryEncoderStep);
+            SetUpdate((int)(adjValue + rotaryEncoderStep));
 
         else if (count < rotaryOldValue)
-            SetUpdate(adjValue - rotaryEncoderStep);
+            SetUpdate((int)(adjValue - rotaryEncoderStep));
     }
 
     rotaryOldValue = count;

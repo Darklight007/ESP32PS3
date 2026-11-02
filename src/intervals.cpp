@@ -85,6 +85,12 @@ void statisticUpdateInterval(unsigned long interval)
                     PowerSupply.SaveSetting();
                     savePending = false;
                 }
+                // Settings-menu changes, saved the same way once they settle
+                if (PowerSupply.settingsDirtyAt && millis() - PowerSupply.settingsDirtyAt >= 2000 &&
+                    PowerSupply.getStatus() != DEVICE::FUN) {
+                    PowerSupply.settingsDirtyAt = 0;
+                    PowerSupply.SaveSetting();
+                }
 
                 // Data above (SaveSetting) always runs. The stat label
                 // formatting/writes below are only meaningful on pages where
@@ -387,11 +393,11 @@ void RecordingPlaybackInterval()
                 double voltage = PowerSupply.recordingMem.samples[PowerSupply.recordingMem.play_index];
                 PowerSupply.Voltage.SetUpdate(voltage * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
 
-                // Turn on output if not already on
-                if (PowerSupply.status != DEVICE::ON && PowerSupply.status != DEVICE::VC && PowerSupply.status != DEVICE::CC)
-                {
-                    PowerSupply.setStatus(DEVICE::ON);
-                }
+                // Turn on output if not already on (or turning on), through the
+                // button like every other path: setStatus() alone left the
+                // button showing OFF and skipped the timer and energy counter
+                if (!lv_obj_has_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED))
+                    PowerSupply.turn(SWITCH::ON);
 
                 PowerSupply.recordingMem.play_index++;
 
@@ -441,10 +447,18 @@ void GraphChartRefreshInterval(unsigned long interval)
     static unsigned long timer_ = 0;
     schedule([]
              {
-                 // In time mode, push data from Core 1 at the correct fixed rate
-                 // (independent of ADC speed — repeated values are fine)
-                 if (PowerSupply.settingParameters.graphXaxisTimeMode)
-                     GraphPush();
+                 // Time mode is pushed from Core 0 now, same as points mode, so
+                 // that every ADC sample is averaged into its point instead of
+                 // only the newest one surviving (see GraphPush in
+                 // ui_helpers.cpp). Nothing to push from here.
+
+                 // Auto-stop pauses from Core 0, so the label follows here
+                 if (PowerSupply.graph.label_pause &&
+                     lv_obj_has_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN) == g_graphPaused)
+                 {
+                     if (g_graphPaused) lv_obj_clear_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
+                     else lv_obj_add_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
+                 }
 
                  // Only refresh when on graph page (page 1)
                  if (Tabs::getCurrentPage() == 1 && !lvglChartIsBusy && !blockAll)

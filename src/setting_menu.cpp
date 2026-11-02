@@ -3,6 +3,7 @@
 #include "calib_sequencer.h"
 #include "calib_internal_leakage.h"
 #include "calib_dac.h"
+#include "calib_cc_limit.h"
 #include "calib_adc.h"
 #include "calib_inl.h"
 // #include "calib_inl_zc.h"
@@ -19,6 +20,7 @@
 #include "device.hpp"      // provides PowerSupply and dac_data_g
 #include "lv_gui_helper.h" // LVLabel, LVButton helpers
 #include "disp_perf.h"     // frame-rate overlay switch
+#include "spi_quiet.h"     // spiQuietAcquire() for the touch calibration
 #include <float.h>
 
 #include <cmath>
@@ -63,6 +65,8 @@ static void dbg_printf(const char *fmt, ...)
 // log_step_begin(), log_step_done(), log_step(), log_clear(), create_log_window() moved to calib_log_window.cpp
 // auto_zero_event_cb, autoZeroCurrent_cb moved to calib_adc.cpp
 
+void applyGraphXTicks(); // ui_helpers.cpp - re-applies graph X tick count
+
 namespace
 {
 }
@@ -102,6 +106,11 @@ namespace
     // pressed/released beeps
     static void PRESSED_event_cb(lv_event_t *) { myTone(NOTE_A4, 5); }
     static void RELEASED_event_cb(lv_event_t *) { myTone(NOTE_A4, 5); }
+
+    // Saved ~2 s after the last change by statisticUpdateInterval(): an NVS
+    // write stalls both cores, so not on every slider step. Most of these
+    // settings were never saved before unless a setpoint changed afterwards.
+    static void settingChanged() { PowerSupply.settingsDirtyAt = millis() | 1; }
 
 } // namespace
 
@@ -205,16 +214,6 @@ namespace
         return obj;
     }
 
-    static void slider_backlight_event_cb(lv_event_t *e)
-    {
-        auto *slider = lv_event_get_target(e);
-        int32_t v = lv_slider_get_value(slider);
-        char buf[8];
-        lv_snprintf(buf, sizeof(buf), "%d", v);
-        lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
-        // ledcWrite(lcdBacklightChannel, v); // if you wire it up
-    }
-
     static void slider_adcRate_event_cb(lv_event_t *e)
     {
         auto *slider = lv_event_get_target(e);
@@ -227,7 +226,7 @@ namespace
         PowerSupply.settingParameters.adcRate = v;
         PowerSupply.adjustAdcTaskPriority();  // Adjust task priority based on new rate
         PowerSupply.ResetStats();
-        PowerSupply.SaveSetting();
+        settingChanged();
     }
 
     static void slider_adcAVG_event_cb(lv_event_t *e)
@@ -242,7 +241,7 @@ namespace
         PowerSupply.Current.measured.SetWindowSize(std::pow(2, v));
         PowerSupply.Power.measured.SetWindowSize(std::pow(2, v));
         PowerSupply.settingParameters.adcNumberOfAvgs = v;
-        PowerSupply.SaveSetting();
+        settingChanged();
     }
 
     static void slider_decimalPoints_event_cb(lv_event_t *e)
@@ -269,6 +268,7 @@ namespace
         if (!PowerSupply.mA_Active)
             PowerSupply.Current.restrict = fmt;
         PowerSupply.settingParameters.adcNumberOfDigits = v;
+        settingChanged();
     }
 
     // Decimal places for the mA current range, independent of the slider above.
@@ -300,6 +300,7 @@ namespace
         if (PowerSupply.mA_Active)
             PowerSupply.Current.restrict = fmt;
         PowerSupply.settingParameters.adcNumberOfDigits_mA = v;
+        settingChanged();
     }
 
     // TEMPORARY experiment: ADS1219 PGA x4 on current conversions only.
@@ -327,6 +328,7 @@ namespace
         auto *sw = lv_event_get_target(e);
         PowerSupply.settingParameters.adcDiscardFirst = lv_obj_has_state(sw, LV_STATE_CHECKED);
         Serial.printf("\nDiscard 1st conversion: %s", PowerSupply.settingParameters.adcDiscardFirst ? "ON" : "OFF");
+        settingChanged();
     }
 
     static void switch_buzzer_event_cb(lv_event_t *e)
@@ -374,6 +376,9 @@ namespace
         auto *sw = lv_event_get_target(e);
         bool enabled = lv_obj_has_state(sw, LV_STATE_CHECKED);
         PowerSupply.settingParameters.timerEnabled = enabled;
+        settingChanged();
+        // Takes effect now, not only at the next output-on
+        PowerSupply.timerStartTime = (enabled && PowerSupply.getStatus() != DEVICE::OFF) ? millis() : 0;
         Serial.printf("\nTimer enabled: %d", enabled);
     }
 
@@ -385,6 +390,7 @@ namespace
         lv_snprintf(buf, sizeof(buf), "%d", v);
         lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
         PowerSupply.settingParameters.timerDurationSeconds = v * 60;  // Convert minutes to seconds
+        settingChanged();
         Serial.printf("\nTimer duration set to: %d seconds", PowerSupply.settingParameters.timerDurationSeconds);
     }
 
@@ -392,20 +398,22 @@ namespace
     {
         auto *slider = lv_event_get_target(e);
         int32_t v = lv_slider_get_value(slider);
-        char buf[8];
-        lv_snprintf(buf, sizeof(buf), "%dV", v);
+        char buf[10];
+        lv_snprintf(buf, sizeof(buf), "%d.%dV", v / 10, v % 10); // slider in 0.1 V
         lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
-        PowerSupply.settingParameters.voltageLimitMax = v;
+        PowerSupply.settingParameters.voltageLimitMax = v / 10.0f;
+        settingChanged();
     }
 
     static void slider_current_limit_event_cb(lv_event_t *e)
     {
         auto *slider = lv_event_get_target(e);
         int32_t v = lv_slider_get_value(slider);
-        char buf[8];
-        lv_snprintf(buf, sizeof(buf), "%dA", v);
+        char buf[10];
+        lv_snprintf(buf, sizeof(buf), "%d.%02dA", v / 100, v % 100); // slider in 0.01 A
         lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
-        PowerSupply.settingParameters.currentLimitMax = v;
+        PowerSupply.settingParameters.currentLimitMax = v / 100.0f;
+        settingChanged();
     }
 
     static void switch_ovp_enable_event_cb(lv_event_t *e)
@@ -413,6 +421,7 @@ namespace
         auto *sw = lv_event_get_target(e);
         bool enabled = lv_obj_has_state(sw, LV_STATE_CHECKED);
         PowerSupply.settingParameters.ovpEnabled = enabled;
+        settingChanged();
         Serial.printf("\nOVP enabled: %d", enabled);
     }
 
@@ -421,6 +430,7 @@ namespace
         auto *sw = lv_event_get_target(e);
         bool enabled = lv_obj_has_state(sw, LV_STATE_CHECKED);
         PowerSupply.settingParameters.ocpEnabled = enabled;
+        settingChanged();
         Serial.printf("\nOCP enabled: %d", enabled);
     }
 
@@ -432,6 +442,7 @@ namespace
         lv_snprintf(buf, sizeof(buf), "%dms", v);
         lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
         PowerSupply.settingParameters.outputDelayMs = v;
+        settingChanged();
     }
 
     static void slider_autosave_event_cb(lv_event_t *e)
@@ -445,6 +456,7 @@ namespace
             lv_snprintf(buf, sizeof(buf), "%dmin", v);
         lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
         PowerSupply.settingParameters.autoSaveIntervalMinutes = v;
+        settingChanged();
     }
 
     // Graph X-axis mode toggle callback
@@ -453,6 +465,8 @@ namespace
         auto *sw = lv_event_get_target(e);
         bool timeMode = lv_obj_has_state(sw, LV_STATE_CHECKED);
         PowerSupply.settingParameters.graphXaxisTimeMode = timeMode;
+        settingChanged();
+        applyGraphXTicks(); // label count depends on the mode
         Serial.printf("\nGraph X-axis mode: %s", timeMode ? "Time" : "Points");
     }
 
@@ -460,6 +474,7 @@ namespace
     {
         auto *sw = lv_event_get_target(e);
         PowerSupply.settingParameters.graphAutoStop = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        settingChanged();
         Serial.printf("\nGraph auto-stop: %s", PowerSupply.settingParameters.graphAutoStop ? "ON" : "OFF");
     }
 
@@ -478,6 +493,8 @@ namespace
         if (v >= 0 && v < 12)
         {
             PowerSupply.settingParameters.graphTimeSpanSeconds = timeSpans[v];
+            settingChanged();
+            applyGraphXTicks(); // divisions are chosen per span
             lv_snprintf(buf, sizeof(buf), "%s", labels[v]);
             lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
             Serial.printf("\nGraph time span set to: %s (%d seconds)", labels[v], timeSpans[v]);
@@ -613,9 +630,13 @@ namespace
     // DAC handlers moved to calib_dac.cpp
 
     // LCD touch calibration kept private
+    // Saved to NVS and loaded by initializeTouch() at boot (it used to be lost
+    // on every restart). Takes the SPI slot for the whole run, so in low-noise
+    // mode the ADC simply waits.
     static void LCD_Calibration_cb(lv_event_t *)
     {
         uint16_t calData[5];
+        spiQuietAcquire();
         tft.fillScreen(TFT_BLACK);
         tft.setCursor(20, 0);
         tft.setTextFont(2);
@@ -626,8 +647,12 @@ namespace
         tft.println();
         delay(2000);
         tft.calibrateTouch(calData, TFT_MAGENTA, TFT_BLACK, 15);
+        spiQuietEnd();
         tft.setTouch(calData);
-        lv_obj_invalidate(Tabs::tabview);
+        PowerSupply.StoreMem.begin("my-app", false);
+        PowerSupply.StoreMem.putBytes("touch_cal", calData, sizeof(calData));
+        PowerSupply.StoreMem.end();
+        lv_obj_invalidate(lv_scr_act());
     }
 
     static lv_obj_t *create_dropdown(lv_obj_t *parent, const char *txt, const char *options,
@@ -699,7 +724,7 @@ void SettingMenu(lv_obj_t *parent)
     lv_obj_t *sub_display = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     lv_obj_set_style_pad_hor(sub_display, lv_obj_get_style_pad_left(lv_menu_get_main_header(PowerSupply.gui.setting_menu), 0), 0);
     auto *section = lv_menu_section_create(sub_display);
-    create_slider(section, nullptr, "Backlight", 0, 255, 255, slider_backlight_event_cb, LV_EVENT_VALUE_CHANGED);
+    // No "Backlight" slider: the backlight has no PWM pin wired, it did nothing
     {
         lv_obj_t *cont = create_switch_(section, nullptr, "Show FPS", PowerSupply.settingParameters.showFps == 1,
                                         switch_show_fps_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
@@ -711,40 +736,37 @@ void SettingMenu(lv_obj_t *parent)
     lv_obj_t *sub_measure = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_measure);
     PowerSupply.gui.slider_adcRate = create_slider(section, nullptr, "ADC SPS", 0, 4, PowerSupply.settingParameters.adcRate, slider_adcRate_event_cb, LV_EVENT_VALUE_CHANGED);
-    PowerSupply.gui.slider_Avgs = create_slider(section, nullptr, "ADC # of Avgs", 0, (int)std::log2(MAX_NO_OF_AVG), PowerSupply.settingParameters.adcNumberOfAvgs, slider_adcAVG_event_cb, LV_EVENT_VALUE_CHANGED);
+    PowerSupply.gui.slider_Avgs = create_slider(section, nullptr, "Averaging", 0, (int)std::log2(MAX_NO_OF_AVG), PowerSupply.settingParameters.adcNumberOfAvgs, slider_adcAVG_event_cb, LV_EVENT_VALUE_CHANGED);
     create_slider(section, nullptr, "Number of Digits", 1, 4, PowerSupply.settingParameters.adcNumberOfDigits, slider_decimalPoints_event_cb, LV_EVENT_VALUE_CHANGED);
     // Max 5 (not 4 like the general slider): at 5 the format drops the leading
     // integer digit, which only works for the mA range's 0-8.192 span.
     create_slider(section, nullptr, "mA Digits", 1, 5, PowerSupply.settingParameters.adcNumberOfDigits_mA, slider_decimalPoints_mA_event_cb, LV_EVENT_VALUE_CHANGED);
     // Convert each V and I twice and keep only the second result (halves the rate)
     create_switch_(section, nullptr, "Discard 1st Conversion", PowerSupply.settingParameters.adcDiscardFirst, switch_discard_first_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
-    create_switch_(section, nullptr, "Auto Bar-Graph", false, switch_buzzer_event_cb, LV_EVENT_VALUE_CHANGED, PowerSupply.gui.setting_menu);
-    // TEMPORARY: ADS1219 PGA x4 on current only. Kept last in the Measure page
-    // as it is an experiment. Always starts unchecked (x1) - PowerSupply.iPgaX4
-    // is not part of settingParameters, so nothing persists it.
-    create_switch_(section, nullptr, "I PGA x4", false, switch_iPga_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+    // The experimental "I PGA x4" switch is off the menu (PowerSupply.iPgaX4
+    // stays x1); switch_iPga_event_cb() is kept for bringing it back.
+    create_button_item(section, [](lv_event_t *) { PowerSupply.ResetStats(); }, "Reset Stats");
 
     // Calibration
     lv_obj_t *sub_cal = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_cal);
     create_button_item(section, btn_calibration_ADC_voltage_event_cb, "ADC Voltage");
     create_button_item(section, btn_calibration_ADC_current_event_cb, "ADC Current");
-    create_button_item(section, open_dac_calibration_cb, "V/I DAC");
-    create_button_item(section, internal_leakage_calibration_cb, "Inter. Leakage");
-    create_button_item(section, ADC_INL_Voltage_calibration_cb, "ADC INL V_CAL");
+    create_button_item(section, open_dac_calibration_cb, "DAC Zero/Max");
+    create_button_item(section, internal_leakage_calibration_cb, "Leakage");
+    create_button_item(section, cc_limit_calibration_cb, "CC Limit (short)");
+    create_button_item(section, ADC_INL_Voltage_calibration_cb, "Voltage INL");
     // create_button_item(section, ADC_INL_ZC_calibration_cb, "ADC INL ZC_CAL");
     create_button_item(section, full_auto_calibration_cb, "Full Auto Cal");
-    create_button_item(section, battLeadCalMenu_cb, "PS Lead Resistance");
-
-    create_button_item(section, nullptr /* Stats reset wiring */, "Reset Stats");
-    create_button_item(section, LCD_Calibration_cb, "LCD Touch");
+    create_button_item(section, battLeadCalMenu_cb, "Lead Resistance");
+    create_button_item(section, LCD_Calibration_cb, "Touch Screen");
 
     // Save/Load
     lv_obj_t *sub_save_load = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_save_load);
 
-    create_button_item(section, load_cb, "Load");
-    create_button_item(section, save_cb, "Save");
+    create_button_item(section, load_cb, "Load Cal.");
+    create_button_item(section, save_cb, "Save Cal.");
 
     // Startup behavior dropdown (placed after Load/Save for better spacing)
     create_dropdown(section, "Power at Startup",
@@ -755,16 +777,19 @@ void SettingMenu(lv_obj_t *parent)
     // Timer Function (feature #4)
     lv_obj_t *sub_timer = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_timer);
-    create_switch_(section, nullptr, "Enable Timer", PowerSupply.settingParameters.timerEnabled, switch_timer_enable_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+    create_switch_(section, nullptr, "Auto-Off Timer", PowerSupply.settingParameters.timerEnabled, switch_timer_enable_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
     create_slider(section, nullptr, "Timer Duration (min)", 1, 480, PowerSupply.settingParameters.timerDurationSeconds / 60, slider_timer_duration_event_cb, LV_EVENT_VALUE_CHANGED);
 
     // Power Management (features #5, #6, #7, #13 + voltage/current limits)
     lv_obj_t *sub_power_mgmt = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_power_mgmt);
     create_switch_(section, nullptr, "OVP Enable", PowerSupply.settingParameters.ovpEnabled, switch_ovp_enable_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
-    create_slider(section, nullptr, "Voltage Limit Max (V)", 0, 32, (int32_t)PowerSupply.settingParameters.voltageLimitMax, slider_voltage_limit_event_cb, LV_EVENT_VALUE_CHANGED);
+    // 0.1 V / 0.01 A steps; min above 0, where noise alone would trip it. The
+    // old whole-unit sliders also truncated a fractional limit set over SCPI
+    // when the menu was built.
+    create_slider(section, nullptr, "OVP Level", 1, 330, (int32_t)lroundf(PowerSupply.settingParameters.voltageLimitMax * 10), slider_voltage_limit_event_cb, LV_EVENT_VALUE_CHANGED);
     create_switch_(section, nullptr, "OCP Enable", PowerSupply.settingParameters.ocpEnabled, switch_ocp_enable_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
-    create_slider(section, nullptr, "Current Limit Max (A)", 0, 6, (int32_t)PowerSupply.settingParameters.currentLimitMax, slider_current_limit_event_cb, LV_EVENT_VALUE_CHANGED);
+    create_slider(section, nullptr, "OCP Level", 1, 650, (int32_t)lroundf(PowerSupply.settingParameters.currentLimitMax * 100), slider_current_limit_event_cb, LV_EVENT_VALUE_CHANGED);
     create_slider(section, nullptr, "Output Delay (ms)", 0, 5000, PowerSupply.settingParameters.outputDelayMs, slider_output_delay_event_cb, LV_EVENT_VALUE_CHANGED);
     create_slider(section, nullptr, "Auto-save Interval (min)", 0, 60, PowerSupply.settingParameters.autoSaveIntervalMinutes, slider_autosave_event_cb, LV_EVENT_VALUE_CHANGED);
     create_text(section, nullptr, "Energy Counter and Power-On\nDuration shown on main screen", 0, nullptr);
@@ -832,7 +857,7 @@ void SettingMenu(lv_obj_t *parent)
     itm = create_text(section, nullptr, "Timer", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_timer);
 
-    itm = create_text(section, nullptr, "Power M.", 1, nullptr);
+    itm = create_text(section, nullptr, "Protection", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_power_mgmt);
 
     itm = create_text(section, nullptr, "Load/Save", 1, nullptr);
@@ -844,6 +869,9 @@ void SettingMenu(lv_obj_t *parent)
     lv_menu_set_sidebar_page(PowerSupply.gui.setting_menu, root_page);
     auto *m = (lv_menu_t *)PowerSupply.gui.setting_menu;
     lv_obj_set_size(m->sidebar, LV_PCT(38), LV_PCT(100));
+    // create_slider() sends VALUE_CHANGED to show each value: nothing changed
+    PowerSupply.settingsDirtyAt = 0;
+
     // Simulate click on first item
     lv_event_send(lv_obj_get_child(lv_obj_get_child(lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu), 0), 0),
                   LV_EVENT_CLICKED, nullptr);
@@ -900,12 +928,9 @@ static void event_cb(lv_event_t *e)
                 lv_obj_add_flag(PowerSupply.gui.calibration.win_int_current_calibration, LV_OBJ_FLAG_HIDDEN);
 
             // Create log window FIRST (before blocking or modifying data)
-            create_log_window("Leakage Calibration");
+            create_log_window("Zero + Leakage");
             log_reset();
             log_clear();
-
-            // Mark leakage as unmeasured (will be updated by calibration)
-            PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[PowerSupply.mA_Active] = FLT_MAX;
 
             esp_task_wdt_reset();
 
@@ -957,6 +982,37 @@ bool calib_check_current_setpoint(float min_mA)
     return false;
 }
 
+void Message_msgbox(const char *title, const char *text)
+{
+    static const char *btn[] = {"OK", ""};
+    lv_obj_t *mbox = lv_msgbox_create(NULL, title, text, btn, false);
+    lv_obj_center(mbox);
+    lv_obj_add_event_cb(mbox, [](lv_event_t *e) {
+        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+            msgbox_close_deferred(lv_event_get_current_target(e));
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
+}
+
+bool calib_check_output_on()
+{
+    // Current zero/leakage are measured at 1..32 V. With the output off the
+    // output sits just below 0 V, where pre-tracking SMPS pulses get through to
+    // the shunt (-30..-50 uA on the mA range), so nothing useful can be measured.
+    if (PowerSupply.getStatus() != DEVICE::OFF)
+        return true;
+
+    static const char *btn[] = {"OK", ""};
+    lv_obj_t *mbox = lv_msgbox_create(NULL, "Output Off", "Turn the output ON (nothing connected) before calibrating!", btn, false);
+    lv_obj_center(mbox);
+    lv_obj_add_event_cb(mbox, [](lv_event_t *e) {
+        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
+            msgbox_close_deferred(lv_event_get_current_target(e));
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    Serial.println("[CAL] Blocked: output off");
+    return false;
+}
+
 void Warning_msgbox(const char *title, lv_event_cb_t event_cb)
 {
     esp_task_wdt_reset();
@@ -988,6 +1044,7 @@ lv_obj_t *mbox;
 static void AutoMeasureTotalRes_cb(lv_event_t *)
 {
     esp_task_wdt_reset();
+    if (!calib_check_output_on()) return;
     Warning_msgbox("Auto Measure", event_cb);
 }
 

@@ -18,6 +18,52 @@ volatile bool          g_pendingViewModeChange = false;
 volatile ChartViewMode g_pendingViewMode       = ChartViewMode::NORMAL;
 volatile int           g_pendingViewModePage   = -1;
 
+
+// ---- Graph X axis divisions ------------------------------------------------
+// The X labels must be evenly spaced in real time, so the number of divisions
+// is chosen per span such that span/divisions is a whole, "nice" step (10s ->
+// 5 x 2s, 5m -> 5 x 1m, 4h -> 4 x 1h ...). A fixed 6 divisions gave 1.67s steps
+// at a 10s span, which printed as an uneven 10 8 7 5 3 2 0.
+int graphXDivisions()
+{
+    if (!PowerSupply.settingParameters.graphXaxisTimeMode)
+        return 6; // points mode: 1200 / 6 = 200 points per division
+    static const int niceSteps[] = {1, 2, 5, 10, 15, 20, 30, 60, 120, 300, 600,
+                                    900, 1200, 1800, 3600, 7200, 10800, 14400};
+    const int span = PowerSupply.settingParameters.graphTimeSpanSeconds;
+    for (int d : {6, 5, 4, 3})
+    {
+        if (span % d)
+            continue;
+        for (int st : niceSteps)
+            if (span / d == st)
+                return d;
+    }
+    for (int d : {6, 5, 4, 3}) // any exact split beats an uneven one
+        if (span % d == 0)
+            return d;
+    return 6;
+}
+
+static lv_coord_t s_xTickMajorLen = 5, s_xTickMinorLen = 3;
+
+// Set the X tick lengths (fullscreen uses 0/0) and apply the division count.
+void setGraphXTicks(lv_coord_t majorLen, lv_coord_t minorLen)
+{
+    s_xTickMajorLen = majorLen;
+    s_xTickMinorLen = minorLen;
+    applyGraphXTicks();
+}
+
+// Re-apply the X ticks after the time span or X-axis mode changes. Core 1 only.
+void applyGraphXTicks()
+{
+    if (!PowerSupply.graph.chart)
+        return;
+    lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_X,
+                           s_xTickMajorLen, s_xTickMinorLen, graphXDivisions() + 1, 10, true, 50);
+}
+
 void drainPendingViewModeChange()
 {
     if (!g_pendingViewModeChange) return;
@@ -112,7 +158,7 @@ void applyGraphViewMode(ChartViewMode mode)
         lv_obj_align(PowerSupply.graph.chart, LV_ALIGN_DEFAULT, -12, -10);
         // Hide outward tick lines in fullscreen (lengths = 0,0); gridlines + labels carry the visual.
         lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_Y,   0, 0, 10, 4,  true, 40);
-        lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_X,   0, 0, 7,  10, true, 50);
+        setGraphXTicks(0, 0);
         lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_Y, 0, 0, 10, 10, true, 50);
         // Negative pad pulls data plot outward over the label zones — labels appear inside the plot.
         lv_obj_set_style_pad_left  (PowerSupply.graph.chart, -30, LV_PART_TICKS);
@@ -125,7 +171,7 @@ void applyGraphViewMode(ChartViewMode mode)
         lv_obj_set_size(PowerSupply.graph.chart, 242, h);
         lv_obj_align(PowerSupply.graph.chart, LV_ALIGN_DEFAULT, 22, -6);
         lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_Y,   5, 3, 10, 4,  true, 40);
-        lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_X,   5, 3, 7,  10, true, 50);
+        setGraphXTicks(5, 3);
         lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_Y, 5, 3, 10, 10, true, 50);
         // Restore default chart padding
         lv_obj_set_style_pad_left  (PowerSupply.graph.chart, 0, LV_PART_TICKS);
@@ -218,7 +264,7 @@ void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *se
     // Use global tabview_utility instead of navigating parents
     extern lv_obj_t *tabview_utility;
     int active_tab = lv_tabview_get_tab_act(tabview_utility);
-    if (active_tab != 2) { // 2 is the index for "Arbt" tab
+    if (active_tab != 2) { // 2 is the index for the "Arb" tab
         Serial.printf("plotToBucket: wrong tab %d (need 2)\n", active_tab);
         return;
     }
@@ -264,7 +310,7 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     lv_chart_set_div_line_count(PowerSupply.graph.chart, 10, 13);
     lv_obj_set_style_text_color(PowerSupply.graph.chart, lv_palette_main(LV_PALETTE_GREY), LV_PART_TICKS);
     lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_Y, 5, 3, 10, 4, true, 40);   // 10 ticks: -4V to 32V
-    lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_PRIMARY_X, 5, 3, 7, 10, true, 50);
+    setGraphXTicks(5, 3);
     lv_chart_set_axis_tick(PowerSupply.graph.chart, LV_CHART_AXIS_SECONDARY_Y, 5, 3, 10, 10, true, 50); // 10 ticks: -1A to 8A
 
     lv_chart_set_type(PowerSupply.graph.chart, LV_CHART_TYPE_LINE);
@@ -315,7 +361,7 @@ void GraphChart(lv_obj_t *parent, lv_coord_t x, lv_coord_t y)
     lv_obj_align_to(PowerSupply.graph.label_pause, PowerSupply.graph.chart, LV_ALIGN_TOP_RIGHT, 0, 0);
     lv_obj_add_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
 
-    legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V-Set", lv_palette_main(LV_PALETTE_AMBER), "I-set", 25, 0);
+    legend(parent, lv_palette_main(LV_PALETTE_BLUE), "V-Set", lv_palette_main(LV_PALETTE_AMBER), "I-Set", 25, 0);
 
     lv_obj_set_parent(PowerSupply.Voltage.statLabels.label_fft, parent);
     lv_obj_set_parent(PowerSupply.Current.statLabels.label_fft, parent);
@@ -485,18 +531,45 @@ void SaveGraphDataIfDirty()
     }
 }
 
+// Called from Task_ADC (Core 0) after every reading. BOTH modes run on Core 0
+// so that every ADC sample is seen: time mode used to be pushed from
+// GraphChartRefreshInterval() on Core 1 every 125ms, which sampled
+// measured.value once per call and stamped that single value into every point
+// it emitted - every reading the ADC produced in between was thrown away. Now
+// Core 0 accumulates each sample and emits the MEAN of the window, so no data
+// is dropped. Running it on one core also removes the old lastPushTime/buffer
+// race from both cores pushing time mode at once.
+// No LVGL here; the PAUSED label follows g_graphPaused on Core 1.
 void GraphPush()
 {
+    if (xPortGetCoreID() != 0)
+        return;
     static unsigned long lastPushTime = 0;
     static bool wasPaused = false;
+    // Accumulator for time mode: sum of every sample since the last emitted
+    // point, so the point is their mean rather than just the newest reading.
+    static double accV = 0.0, accI = 0.0;
+    static uint32_t accN = 0;
+    // Last emitted values, reused when a window genuinely had no samples
+    // (msPerPoint shorter than the ADC interval - undersampled, nothing to
+    // average) so the trace holds instead of dropping to zero.
+    static lv_coord_t heldV = 0, heldI = 0;
+
     if (g_graphPaused) { wasPaused = true; return; }
-    if (wasPaused) { g_graphPushCount = 0; lastPushTime = 0; wasPaused = false; }
+    if (wasPaused) { g_graphPushCount = 0; lastPushTime = 0; accV = accI = 0.0; accN = 0; wasPaused = false; }
 
     if (PowerSupply.settingParameters.graphXaxisTimeMode)
     {
+        // Count this sample before deciding whether a point is due, so a
+        // reading is never skipped just because the window hasn't elapsed.
+        accV += PowerSupply.Voltage.measured.value;
+        accI += PowerSupply.Current.measured.value;
+        accN++;
+
         unsigned long now = millis();
-        // graphTimeSpanSeconds is per-division; total chart = value * 24 divisions
-        unsigned long msPerPoint = (PowerSupply.settingParameters.graphTimeSpanSeconds / 24.0 * 1000UL) / CHART_SIZE;
+        // graphTimeSpanSeconds is the whole chart, as the x-axis labels and the
+        // menu show it (it was divided by 24 here: "12h" showed 30 min)
+        unsigned long msPerPoint = PowerSupply.settingParameters.graphTimeSpanSeconds * 1000UL / CHART_SIZE;
         if (msPerPoint < 1) msPerPoint = 1;
 
         if (lastPushTime == 0) { lastPushTime = now; return; }
@@ -505,13 +578,21 @@ void GraphPush()
         if (count < 1) return;
         if (count > CHART_SIZE) count = CHART_SIZE;
 
-        lv_coord_t vVal = PowerSupply.Voltage.measured.value * 1000.0;
-        // Both ranges use the same x1000 factor now: A-mode reads 0..6.5536 A
-        // and mA-mode 0..8.192 mA, so each lands in the chart's -1000..8000
-        // raw space directly (see the SECONDARY_Y tick-label comment above
-        // draw_event_cb2). Before the shunt change mA-mode spanned 0..81.92
-        // and needed x100 to fit the same ceiling.
-        lv_coord_t iVal = PowerSupply.Current.measured.value * 1000.0;
+        // Mean of everything accumulated for this window. Both ranges use the
+        // same x1000 factor: A-mode reads 0..6.5536 A and mA-mode 0..8.192 mA,
+        // so each lands in the chart's -1000..8000 raw space directly (see the
+        // SECONDARY_Y tick-label comment above draw_event_cb2). Before the
+        // shunt change mA-mode spanned 0..81.92 and needed x100 to fit.
+        lv_coord_t vVal = heldV, iVal = heldI;
+        if (accN)
+        {
+            vVal = (lv_coord_t)(accV / accN * 1000.0);
+            iVal = (lv_coord_t)(accI / accN * 1000.0);
+            heldV = vVal;
+            heldI = iVal;
+        }
+        accV = accI = 0.0;
+        accN = 0;
 
         memmove(&graph_data_V[0], &graph_data_V[count], (CHART_SIZE - count) * sizeof(graph_data_V[0]));
         memmove(&graph_data_I[0], &graph_data_I[count], (CHART_SIZE - count) * sizeof(graph_data_I[0]));
@@ -528,8 +609,6 @@ void GraphPush()
             if (g_graphPushCount >= CHART_SIZE) {
                 g_graphPaused = true;
                 g_graphPushCount = 0;
-                if (PowerSupply.graph.label_pause)
-                    lv_obj_clear_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
             }
         }
         return;
@@ -548,8 +627,6 @@ void GraphPush()
         if (g_graphPushCount >= CHART_SIZE) {
             g_graphPaused = true;
             g_graphPushCount = 0;
-            if (PowerSupply.graph.label_pause)
-                lv_obj_clear_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
         }
     }
 }
@@ -847,38 +924,32 @@ void draw_event_cb2(lv_event_t *e)
         /* Handle LV_CHART_AXIS_PRIMARY_X */
         if (dsc->id == LV_CHART_AXIS_PRIMARY_X)
         {
-            // Use dsc->value as tick index (0..NUM_LABELS-1) — no fragile static counter
+            // dsc->value is the tick index 0..div; div is chosen per span so
+            // span/div is a whole step and the labels are evenly spaced.
+            const int div = graphXDivisions();
             int idx = dsc->value;
-            if (idx < 0 || idx >= NUM_LABELS) idx = 0;
+            if (idx < 0 || idx > div) idx = 0;
 
             if (PowerSupply.settingParameters.graphXaxisTimeMode)
             {
-                uint16_t timeSpan = PowerSupply.settingParameters.graphTimeSpanSeconds;
-
-                if (idx == NUM_LABELS - 1)
-                {
-                    lv_snprintf(dsc->text, dsc->text_length, "0");
-                }
+                // Newest sample sits at the right edge: rightmost tick is "now"
+                // (0s ago), leftmost is a full span ago. graphXDivisions()
+                // guarantees span % div == 0 for the menu spans, so this is exact.
+                const int span = (int)PowerSupply.settingParameters.graphTimeSpanSeconds;
+                const int secsAgo = span * (div - idx) / div;
+                if (secsAgo < 60)
+                    lv_snprintf(dsc->text, dsc->text_length, "%ds", secsAgo);
+                else if (secsAgo < 3600)
+                    lv_snprintf(dsc->text, dsc->text_length, secsAgo % 60 ? "%d:%02d" : "%dm", secsAgo / 60, secsAgo % 60);
                 else
-                {
-                    int timeValue = timeSpan * (NUM_LABELS - 1 - idx) / (NUM_LABELS - 1);
-
-                    if (timeValue < 60)
-                        lv_snprintf(dsc->text, dsc->text_length, "%ds", timeValue);
-                    else if (timeValue < 3600)
-                        lv_snprintf(dsc->text, dsc->text_length, timeValue % 60 ? "%d:%02d" : "%dm", timeValue / 60, timeValue % 60);
-                    else
-                        lv_snprintf(dsc->text, dsc->text_length, (timeValue % 3600) / 60 ? "%d:%02d" : "%dh", timeValue / 3600, (timeValue % 3600) / 60);
-                }
+                    lv_snprintf(dsc->text, dsc->text_length, (secsAgo % 3600) / 60 ? "%d:%02d" : "%dh", secsAgo / 3600, (secsAgo % 3600) / 60);
             }
             else
             {
-                if (idx == NUM_LABELS - 1)
+                if (idx == div)
                     lv_snprintf(dsc->text, dsc->text_length, "0 pts");
-                else {
-                    int value = CHART_SIZE * (NUM_LABELS - 1 - idx) / (NUM_LABELS - 1);
-                    lv_snprintf(dsc->text, dsc->text_length, "%d", value);
-                }
+                else
+                    lv_snprintf(dsc->text, dsc->text_length, "%d", CHART_SIZE * (div - idx) / div);
             }
 
             if (dsc->label_dsc)

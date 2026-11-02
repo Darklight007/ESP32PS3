@@ -99,6 +99,10 @@ This is the standard way to add periodic behavior — do not use raw `millis()` 
 
 Calibration procedures (`calib_adc.cpp`, `calib_dac.cpp`, `calib_inl.cpp`, `calib_internal_leakage.cpp`) use a step-based sequencer (`calib_sequencer.cpp`). Define an array of `SeqStep` structs with label, timing, begin/end callbacks, then call `seq_start()`. The sequencer runs via LVGL timers on Core 1.
 
+Calibration routines call `calib_low_noise_begin()/end()` (calib_adc.cpp): ADC rate 0, current PGA x1, touch can't pause low-noise; the user's rate is restored after. Current zero and leakage are never measured at 0 V or with the output off: there pre-tracking SMPS pulses reach the shunt (~-30..-50 uA, noisy, on the mA range). "Int. Resistance"/`CAL:LEAK` fits `I = I0 + V/R` over 1-32 V from raw codes and sets both `iCal code_1` and `internalLeakage[]`; current auto-zero measures at 1 V (or V-Set) and subtracts V/R.
+
+"CC Limit (short)"/`CAL:CCLIM` (`calib_cc_limit.cpp`): with the output shorted it records the real current at limits 0.1-5 A; `DACUpdate()` inverts that table via `ccLimitCorrect()` (NVS key `cc_lim`). The current-limit loop senses the 10 mOhm A shunt in both ranges, so below ~10 mA its accuracy is set by op-amp offset (~0.1 mA), not by calibration.
+
 ### Error Handler
 
 `ErrorHandler` namespace (`error_handler.h/cpp`) provides centralized error reporting with severity levels (DEBUG through CRITICAL) and categories (HARDWARE, CALIBRATION, VALIDATION, MEMORY, SCPI, SYSTEM, USER_INPUT). Initialized in `setup()` with serial and UI reporting enabled.
@@ -138,7 +142,7 @@ src/
 
 ### Adding a New Setting
 1. Add field to `SettingParameters` struct in `device.hpp`
-2. Create UI control in `setting_menu.cpp`
+2. Create UI control in `setting_menu.cpp`; its callback calls `settingChanged()` (saved ~2 s after the last change, not on every slider step)
 3. Add save/load handlers in `memory.cpp` (use Preferences API for small data, SPIFFS for >1984 bytes)
 
 ### Adding a SCPI Command

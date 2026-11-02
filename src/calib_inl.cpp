@@ -1,4 +1,5 @@
 #include "calib_inl.h"
+#include "calib_adc.h"
 #include "setting_menu.h"
 #include "device.hpp"
 #include "spinbox_pro.h"
@@ -75,7 +76,22 @@ struct INL_FSM
     uint32_t t0;
     lv_timer_t *timer;
     double step_V;
+    bool filling; // settled; waiting for a full fresh averaging window
 } static inl;
+
+// Runs at ADC rate 0 like the other calibrations (calib_low_noise_begin);
+// tracked here because the FSM has several exits.
+static bool s_inlLowNoise = false;
+static void inlLowNoise(bool on)
+{
+    if (on == s_inlLowNoise)
+        return;
+    s_inlLowNoise = on;
+    if (on)
+        calib_low_noise_begin();
+    else
+        calib_low_noise_end();
+}
 
 static inline uint32_t now_ms() { return lv_tick_get(); }
 static inline uint32_t since(uint32_t t) { return lv_tick_elaps(t); }
@@ -185,9 +201,21 @@ static void INL_timer_cb(lv_timer_t *)
                                lv_obj_is_valid(PowerSupply.gui.calibration.inl.settle_time))
                                   ? lv_spinbox_get_value(PowerSupply.gui.calibration.inl.settle_time)
                                   : 30; // default 3.0s when GUI not open
-        if (since(inl.t0) >= (uint32_t)100 * settle_val)
+        // After settling, start the averaging window afresh: at rate 0
+        // (~8 SPS) a long window would otherwise still hold readings from
+        // before the step. Measure once it is full again (or after 20 s).
+        if (!inl.filling && since(inl.t0) >= (uint32_t)100 * settle_val)
         {
             INL_dbg("[INL] SETTLE  +%u ms", unsigned(since(inl.t0)));
+            PowerSupply.Voltage.measured.ResetStats();
+            inl.filling = true;
+            inl.t0 = now_ms();
+        }
+        else if (inl.filling &&
+                 (PowerSupply.Voltage.measured.windowSizeIndex_ >= PowerSupply.Voltage.measured.NofAvgs ||
+                  since(inl.t0) >= 20000))
+        {
+            inl.filling = false;
             inl.ph = INL_FSM::MEASURE;
         }
     }
@@ -289,6 +317,7 @@ static void INL_timer_cb(lv_timer_t *)
     case INL_FSM::DONE:
     {
         INL_dbg("[INL] DONE");
+        inlLowNoise(false);
         if (inl.timer)
         {
             lv_timer_del(inl.timer);
@@ -359,6 +388,8 @@ static void INL_start(lv_event_t *e)
             inl = INL_FSM{};
             inl.ph = INL_FSM::PREPARE;
             inl.timer = lv_timer_create(INL_timer_cb, 10, nullptr); // 10ms tick
+            if (inl.timer)
+                inlLowNoise(true);
             INL_dbg("[INL] Timer created, calibration started");
         }
         else
@@ -397,6 +428,8 @@ void start_inl_calibration()
         INL_dbg("[INL] ERROR: Failed to create INL timer");
         inl.ph = INL_FSM::DONE;
     }
+    else
+        inlLowNoise(true);
 }
 
 // Check if INL calibration is currently running
@@ -418,6 +451,7 @@ static void inl_close_window_cb(lv_event_t *e)
         lv_timer_del(inl.timer);
         inl.timer = nullptr;
     }
+    inlLowNoise(false);
 
     // Reset FSM to idle state
     inl.ph = INL_FSM::DONE;
@@ -586,6 +620,7 @@ void ADC_INL_Voltage_calibration_cb(lv_event_t *)
             // Reset FSM to idle state
             inl.ph = INL_FSM::DONE;
             g_voltINL_ready = false;
+            inlLowNoise(false);
             INL_dbg("[INL] Timer stopped, FSM reset");
         }
 

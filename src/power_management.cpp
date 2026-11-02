@@ -5,6 +5,7 @@
 #include "device.hpp"
 #include "globals.h"
 #include "buzzer.h"
+#include "calib_adc.h" // calib_low_noise_active()
 #include <Arduino.h>
 #include <Preferences.h>
 
@@ -79,7 +80,9 @@ void updateTimerDisplay()
         {
             // Timer expired - shutdown output
             lv_obj_add_flag(PowerSupply.gui.label_timer_remaining, LV_OBJ_FLAG_HIDDEN);
-            if (PowerSupply.getStatus() == DEVICE::ON)
+            // Any output-on state: while running the status is VC or CC, so
+            // checking for ON alone never switched the output off.
+            if (PowerSupply.getStatus() != DEVICE::OFF)
             {
                 PowerSupply.turn(SWITCH::OFF);
                 lv_obj_clear_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
@@ -137,6 +140,18 @@ void integrateEnergy()
 // Check and enforce voltage/current software limits
 void enforceSoftwareLimits()
 {
+    // With OVP on, a voltage setpoint above the OVP level is refused (keys,
+    // encoder, SCPI) instead of being accepted and then tripping. Not in FUN,
+    // which OVP doesn't cover and where SetUpdate runs at 200-500 Hz.
+    // Calibration sweeps to 32 V with nothing connected: neither the ceiling
+    // nor OVP/OCP may interfere with it (a refused point would corrupt it).
+    const bool calibrating = calib_low_noise_active();
+    PowerSupply.Voltage.setCeiling =
+        (PowerSupply.settingParameters.ovpEnabled && PowerSupply.getStatus() != DEVICE::FUN && !calibrating)
+            ? PowerSupply.settingParameters.voltageLimitMax : INFINITY;
+    if (calibrating)
+        return;
+
     // Skip if already triggered (prevents re-triggering loop)
     static unsigned long lastTriggerTime = 0;
     if (millis() - lastTriggerTime < 1000) return;
@@ -158,9 +173,7 @@ void enforceSoftwareLimits()
                 lv_obj_clear_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
             if (PowerSupply.settingParameters.beeperOnError)
             {
-                myTone(NOTE_C5, 200);
-                delay(100);
-                myTone(NOTE_C5, 200);
+                myTone(NOTE_C5, 400); // non-blocking; a delay() here froze input
             }
             Serial.printf("OVP triggered! Voltage %.3fV exceeded limit %.3fV\n",
                          PowerSupply.Voltage.measured.value,
@@ -189,9 +202,7 @@ void enforceSoftwareLimits()
                     lv_obj_clear_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
                 if (PowerSupply.settingParameters.beeperOnError)
                 {
-                    myTone(NOTE_C5, 200);
-                    delay(100);
-                    myTone(NOTE_C5, 200);
+                    myTone(NOTE_C5, 400); // non-blocking; a delay() here froze input
                 }
                 Serial.printf("OCP triggered! Current %.3fA exceeded limit %.3fA\n",
                              measuredCurrent_A,

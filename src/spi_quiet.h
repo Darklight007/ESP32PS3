@@ -25,6 +25,24 @@ namespace SpiQuiet
     inline std::atomic<bool> adcTurn{false};       // Core 1 drew; next slot is the ADC's
     inline unsigned long lastGrant = 0;            // Core 1 only
     inline bool frameClaimed = false;              // Core 1 only
+    inline std::atomic<uint32_t> pauseUntil{0};    // millis(): low-noise suspended until then
+    inline std::atomic<bool> pauseBlocked{false};  // calibration running: input never pauses
+}
+
+// Any touch, key or encoder use suspends low-noise mode for 3 s, so the UI
+// responds at full speed while it is being used (rate 0 otherwise allows
+// screen/touch traffic only between ADC pairs, ~9 times a second). Readings
+// taken meanwhile carry normal display interference. Called from both cores.
+// Calibration sets pauseBlocked so a touch can't spoil its measurement.
+inline void lowNoisePause()
+{
+    SpiQuiet::pauseUntil.store(millis() + 3000);
+}
+
+inline bool lowNoisePaused()
+{
+    return !SpiQuiet::pauseBlocked.load() &&
+           (int32_t)(millis() - SpiQuiet::pauseUntil.load()) < 0;
 }
 
 // Core 1: try to take the SPI slot without waiting. false = not now.

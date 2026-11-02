@@ -8,6 +8,7 @@
 #include "myFonts.h"
 #include "buzzer.h"
 #include "esp_task_wdt.h"
+#include "spi_quiet.h"
 #include <cmath>
 #include <cstring>
 
@@ -17,6 +18,53 @@ extern CalibrationGui Calib_GUI;
 
 // Global flag to prevent concurrent calibrations (defined here, declared in header)
 bool g_calibration_in_progress = false;
+
+namespace
+{
+    int s_lowNoiseDepth = 0;
+    uint8_t s_savedAdcRate = 0;
+    bool s_savedPgaX4 = false;
+
+    void setAdcRate(uint8_t v)
+    {
+        static const char *labels[] = {" ~10", " ~20", " ~70", "~200", "~500"};
+        const int rates[] = {20, 20, 90, 330, 1000};
+        if (v > 4) return;
+        PowerSupply.settingParameters.adcRate = v;
+        PowerSupply.adc.ads1219->setDataRate(rates[v]);
+        PowerSupply.adjustAdcTaskPriority();
+        PowerSupply.ResetStats();
+        // slider_adcRate is the container: child 1 = value label, child 2 = slider
+        if (lv_obj_t *c = PowerSupply.gui.slider_adcRate)
+        {
+            if (lv_obj_t *sl = lv_obj_get_child(c, 2)) lv_slider_set_value(sl, v, LV_ANIM_OFF);
+            if (lv_obj_t *lb = lv_obj_get_child(c, 1)) lv_label_set_text(lb, labels[v]);
+        }
+    }
+}
+
+bool calib_low_noise_active() { return s_lowNoiseDepth > 0; }
+
+void calib_low_noise_begin()
+{
+    if (s_lowNoiseDepth++ > 0) return;
+    s_savedAdcRate = PowerSupply.settingParameters.adcRate;
+    s_savedPgaX4 = PowerSupply.iPgaX4;
+    PowerSupply.iPgaX4 = false; // raw codes must be x1 codes (see Device::readCurrent)
+    SpiQuiet::pauseBlocked.store(true);
+    PowerSupply.Voltage.setCeiling = INFINITY; // no OVP ceiling (see enforceSoftwareLimits())
+    if (s_savedAdcRate != 0) setAdcRate(0);
+    Serial.printf("\n[Calib] low-noise: ADC rate 0 (was %d), PGA x1", s_savedAdcRate);
+}
+
+void calib_low_noise_end()
+{
+    if (s_lowNoiseDepth == 0 || --s_lowNoiseDepth > 0) return;
+    SpiQuiet::pauseBlocked.store(false);
+    PowerSupply.iPgaX4 = s_savedPgaX4;
+    if (s_savedAdcRate != 0) setAdcRate(s_savedAdcRate);
+    Serial.printf("\n[Calib] restored ADC rate %d", s_savedAdcRate);
+}
 
 namespace
 {
@@ -64,6 +112,7 @@ namespace
     static void autoZeroCurrent_cb(lv_event_t *)
     {
         if (!calib_check_current_setpoint(10.0f)) return;  // needs real load to calibrate current ADC
+        if (!calib_check_output_on()) return;               // zero is measured at 1 V
         g_autozero_context = AutoZeroContext::FOR_CURRENT;
         myTone(NOTE_A4, 200);
         Warning_msgbox("Auto Zero Current", auto_zero_event_cb);
@@ -77,12 +126,26 @@ namespace
         Warning_msgbox("Auto Zero Voltage", auto_zero_event_cb);
     }
 
-    // Dummy callback for error message boxes
-    static void error_msgbox_dummy_cb(lv_event_t *e) {
-        lv_obj_t *obj = lv_event_get_current_target(e);
-        if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED) {
-            msgbox_close_deferred(obj);
+    // Open the log window and start the selected auto-zero sequence
+    static void run_auto_zero()
+    {
+        // Reset watchdog before long operation
+        esp_task_wdt_reset();
+
+        create_log_window("Auto Zero Calibration");
+        log_reset();
+        log_clear();
+
+        // Call the appropriate calibration function based on context
+        if (g_autozero_context == AutoZeroContext::FOR_VOLTAGE) {
+            Serial.println("Starting voltage auto-zero calibration");
+            start_voltage_zero_calibration(nullptr);
+        } else {
+            Serial.println("Starting current auto-zero calibration");
+            start_current_zero_calibration(nullptr);
         }
+
+        Serial.println("Auto-zero calibration started");
     }
 
     static void auto_zero_event_cb(lv_event_t *e)
@@ -126,30 +189,44 @@ namespace
 
         if (free_heap < 30000 || largest_block < 10000) {
             Serial.println("ERROR: System resources too low for calibration");
-            Warning_msgbox("Error: Low Resources", error_msgbox_dummy_cb);
+            Message_msgbox("Calibration Error", "Not enough free memory.");
             return;
         }
 
         // Set global flag - will be cleared by calibration completion
         g_calibration_in_progress = true;
 
-        // Reset watchdog before long operation
-        esp_task_wdt_reset();
-
-        create_log_window("Auto Zero Calibration");
-        log_reset();
-        log_clear();
-
-        // Call the appropriate calibration function based on context
-        if (g_autozero_context == AutoZeroContext::FOR_VOLTAGE) {
-            Serial.println("Starting voltage auto-zero calibration");
-            start_voltage_zero_calibration(nullptr);
-        } else {
-            Serial.println("Starting current auto-zero calibration");
-            start_current_zero_calibration(nullptr);
+        if (g_autozero_context == AutoZeroContext::FOR_CURRENT)
+        {
+            // The zero current is measured at 1 V, not 0 V: near 0 V pulses
+            // from the pre-tracking SMPS get through to the shunt. The leakage V/R
+            // at the measured voltage is subtracted (calib_internal_leakage.cpp).
+            // Output is on (checked at the button). V-Set below 0.5 V: go to 1 V. Otherwise ask.
+            const double vset = (PowerSupply.Voltage.adjValue - PowerSupply.Voltage.adjOffset) / PowerSupply.Voltage.adjFactor;
+            if (vset < 0.5)
+            {
+                current_zero_set_voltage(true, "Setting voltage to 1V");
+                run_auto_zero();
+                return;
+            }
+            static const char *btns[] = {"Yes", "No", ""};
+            lv_obj_t *mb = lv_msgbox_create(NULL, "Auto Zero Current", "Set V to 1 V for the measurement?", btns, false);
+            lv_obj_center(mb);
+            lv_obj_add_event_cb(mb, [](lv_event_t *e)
+            {
+                lv_obj_t *mb = lv_event_get_current_target(e);
+                const char *t = lv_msgbox_get_active_btn_text(mb);
+                if (!t)
+                    return;
+                const bool yes = strcmp(t, "Yes") == 0;
+                msgbox_close_deferred(mb);
+                current_zero_set_voltage(yes, yes ? "Setting voltage to 1V" : "Voltage left at V-Set");
+                run_auto_zero();
+            }, LV_EVENT_VALUE_CHANGED, nullptr);
+            return;
         }
 
-        Serial.println("Auto-zero calibration started");
+        run_auto_zero();
     }
 } // end anonymous namespace
 
@@ -236,10 +313,10 @@ void build_adc_calibration_window(lv_obj_t **win_holder,
     LVButton btnSave(cont, "Save", btn_pos.x + 62, btn_pos.y, 54, 25, nullptr, save_cb);
     LVButton btnLoad(cont, "Load", btn_pos.x, btn_pos.y, 54, 25, nullptr, load_cb);
 
-    // Show "Auto zeros" button with context-specific callback
+    // Show "Auto Zero" button with context-specific callback
     if (autozero_cb)
     {
-        LVButton btnAutoZeros(cont, "Auto zeros", btn_pos.x , btn_pos.y + 28, 2 * 54+62-54, 25, nullptr, autozero_cb);
+        LVButton btnAutoZeros(cont, "Auto Zero", btn_pos.x , btn_pos.y + 28, 2 * 54+62-54, 25, nullptr, autozero_cb);
     }
 
     // m, b, and Vin_cal notes (simple labels)

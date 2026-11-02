@@ -708,6 +708,9 @@ public:
     double internalResistance = (80e3 * 80e3) / (80e3 + 80e3); // 40kOhm
 
     double maxValue;
+    // Setpoints above this (in display units) are refused like out-of-range
+    // ones: the OVP level for Voltage, see enforceSoftwareLimits()
+    volatile double setCeiling = INFINITY;
     double dac_maxValue;
     double adc_maxValue;
     double minValue;
@@ -778,6 +781,10 @@ public:
     // the lock icon is engaged to block *user* input. Defaults to false so
     // every existing call site (encoder, keypad, direct entry) is unaffected.
     void SetUpdate(int value, bool bypassLock = false);
+    // Setpoints computed as value * adjFactor + adjOffset: round to the nearest
+    // DAC code. Converting to int truncated, e.g. 1.001 V * 2000 = 2001.9999...
+    // gave 2001 (0.5 mV low), 0.0029 A * 10000 gave 28 (0.1 mA low).
+    void SetUpdate(double value, bool bypassLock = false) { SetUpdate((int)lround(value), bypassLock); }
     void Flush(void);
     // Setpoint shadow-bar width in px - single source of truth shared by
     // SetUpdate() (Core 1 direct write) and Flush() (deferred Core 0 changes),

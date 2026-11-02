@@ -1,5 +1,6 @@
 #include "calib_full_auto.h"
 #include "calib_internal_leakage.h"
+#include "calib_adc.h"
 #include "calib_inl.h"
 #include "calib_log_window.h"
 #include "setting_menu.h"
@@ -86,6 +87,7 @@ namespace
             if (PowerSupply.mA_Active != 0)
                 switch_to_range(0);
             g_calibration_in_progress = true;
+            current_zero_set_voltage(true, "Setting voltage to 1V");
             start_current_zero_calibration(nullptr);
             phase = FullAutoPhase::WAIT_ZERO_CURRENT_A;
             break;
@@ -109,6 +111,7 @@ namespace
             log_reset();
             log_clear();
             g_calibration_in_progress = true;
+            current_zero_set_voltage(true, "Setting voltage to 1V");
             start_current_zero_calibration(nullptr);
             phase = FullAutoPhase::WAIT_ZERO_CURRENT_MA;
             break;
@@ -132,7 +135,6 @@ namespace
             log_reset();
             log_clear();
             g_calibration_in_progress = true;
-            PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[0] = FLT_MAX;
             start_leakage_resistance_measurement(nullptr);
             phase = FullAutoPhase::WAIT_LEAKAGE_A;
             break;
@@ -156,7 +158,6 @@ namespace
             log_reset();
             log_clear();
             g_calibration_in_progress = true;
-            PowerSupply.CalBank[PowerSupply.bankCalibId].internalLeakage[1] = FLT_MAX;
             start_leakage_resistance_measurement(nullptr);
             phase = FullAutoPhase::WAIT_LEAKAGE_MA;
             break;
@@ -212,6 +213,7 @@ namespace
 
             // Save all calibration data
             PowerSupply.SaveCalibrationData();
+            calib_low_noise_end();
 
             // Set voltage to 0V
             PowerSupply.Voltage.SetUpdate(0.0 * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
@@ -278,6 +280,7 @@ namespace
         g_calibration_in_progress = true;
         g_log_window_keep_open = true;
         saved_mA_Active = PowerSupply.mA_Active;
+        calib_low_noise_begin(); // whole run at ADC rate 0, incl. INL
 
         // Create log window
         Serial.println("[FullAuto] Creating log window");
@@ -292,6 +295,7 @@ namespace
         if (!auto_timer)
         {
             Serial.println("[FullAuto] ERROR: Failed to create auto_timer (LVGL heap full)");
+            calib_low_noise_end();
             g_calibration_in_progress = false;
             g_log_window_keep_open = false;
             phase = FullAutoPhase::IDLE;
@@ -304,5 +308,6 @@ namespace
 
 void full_auto_calibration_cb(lv_event_t *)
 {
+    if (!calib_check_output_on()) return; // current zero/leakage need 1..32 V
     Warning_msgbox("Full Auto Calibration", full_auto_msgbox_cb);
 }

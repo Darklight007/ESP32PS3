@@ -27,6 +27,7 @@ void keyCheckLoop();
 
 // Deferred mA toggle UI update (must be called from Core 1 main loop)
 void processDeferredMaToggle();
+void setCurrentRange(bool mA); // A/mA range, as the mA key does
 
 // Deferred power on/off toggle from 'O' key (must be called from Core 1 main loop)
 void drainPendingPowerToggle();

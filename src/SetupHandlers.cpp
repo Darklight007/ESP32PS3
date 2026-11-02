@@ -4,6 +4,7 @@
 #include "esp_heap_caps.h" // heap_caps_malloc for the internal DMA band buffer
 #include "error_handler.h" // startup failure reporting (createTasks)
 #include "disp_perf.h"     // DISP:FPS frame-rate meter
+#include "calib_cc_limit.h"  // ccLimitLoad()
 // #include "calib_inl_zc.h"  // Include zero-current INL calibration for startup rebuild
 
 // Staging buffer for display DMA, in internal (DMA-capable) RAM. The LVGL draw
@@ -166,10 +167,19 @@ void initializeDisplay()
 // Initialize the touch screen
 void initializeTouch()
 {
-    // Touchscreen calibration data (rotation 3)
+    // Touchscreen calibration data (rotation 3): the one saved by Settings >
+    // Calibration > Touch Screen, else the factory values
     uint16_t calData[5] = {366, 3445, 310, 3406, 1};
+    Preferences prefs;
+    prefs.begin("my-app", true);
+    uint16_t saved[5];
+    const bool haveSaved = prefs.getBytes("touch_cal", saved, sizeof(saved)) == sizeof(saved) &&
+                           saved[1] > 1000 && saved[3] > 1000 && saved[4] < 8;
+    prefs.end();
+    if (haveSaved)
+        memcpy(calData, saved, sizeof(calData));
     tft.setTouch(calData);
-    Serial.println("Touch Screen Calibrated.");
+    Serial.printf("Touch Screen Calibrated (%s).\n", haveSaved ? "saved" : "factory");
 }
 
 // Initialize LVGL graphics library
@@ -286,6 +296,7 @@ void setupPowerSupply()
     delay(500);
     PowerSupply.dac_data = PowerSupply.LoadDACdata("dac_data_");
     delay(500);
+    ccLimitLoad();
     PowerSupply.Voltage.adjOffset = PowerSupply.dac_data.zero_voltage;
     PowerSupply.Voltage.minValue = (-PowerSupply.dac_data.zero_voltage);                                   // 2000.0;
     PowerSupply.Voltage.maxValue = (PowerSupply.dac_data.max_voltage - PowerSupply.dac_data.zero_voltage); // 2000.0;

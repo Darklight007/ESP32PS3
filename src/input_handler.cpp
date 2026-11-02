@@ -197,6 +197,7 @@ void touchSample()
     uint16_t x, y;
     if (fastTouch(&x, &y, touchCache.touched))
     {
+        lowNoisePause(); // screen in use: full-speed UI (spi_quiet.h)
         touchCache.touched = true;
         touchCache.x = x;
         touchCache.y = y;
@@ -794,6 +795,7 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
 
         rotaryOldValue2 = count;
         encoder2Flag = 0;
+        lowNoisePause(); // encoder in use: full-speed UI (spi_quiet.h)
         switch (Tabs::getCurrentPage())
         {
         case 2:
@@ -816,6 +818,7 @@ void getSettingEncoder(lv_indev_drv_t *drv, lv_indev_data_t *data)
 
         rotaryOldValue = count;
         encoder1Flag = 0;
+        lowNoisePause();
         switch (Tabs::getCurrentPage())
         {
         case 2:
@@ -1617,6 +1620,19 @@ void drainPendingKeyEvents()
         }
         lv_obj_invalidate(lv_scr_act());
     }
+}
+
+// Same as the mA key on the Main page, for SCPI (SENS:CURR:RANG). Core 1.
+void setCurrentRange(bool mA)
+{
+    if (PowerSupply.mA_Active == mA)
+        return;
+    PowerSupply.mA_Active = mA;
+    digitalWrite(PowerSupply.AmA_Pin, PowerSupply.mA_Active);
+    PowerSupply.calibrationUpdate();
+    PowerSupply.Current.oldValue = NAN;
+    mA_toggle_source_page = 2;
+    mA_toggle_pending = true;
 }
 
 void processDeferredMaToggle()
