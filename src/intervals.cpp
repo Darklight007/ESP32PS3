@@ -447,10 +447,10 @@ void GraphChartRefreshInterval(unsigned long interval)
     static unsigned long timer_ = 0;
     schedule([]
              {
-                 // In time mode, push data from Core 1 at the correct fixed rate
-                 // (independent of ADC speed — repeated values are fine)
-                 if (PowerSupply.settingParameters.graphXaxisTimeMode)
-                     GraphPush();
+                 // Time mode is pushed from Core 0 now, same as points mode, so
+                 // that every ADC sample is averaged into its point instead of
+                 // only the newest one surviving (see GraphPush in
+                 // ui_helpers.cpp). Nothing to push from here.
 
                  // Auto-stop pauses from Core 0, so the label follows here
                  if (PowerSupply.graph.label_pause &&

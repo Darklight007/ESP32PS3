@@ -4,7 +4,12 @@
 #include <TFT_eSPI.h>
 
 // Constants
-#define CHART_SIZE 240 * 5
+// Parentheses are load-bearing: unparenthesised, `x / CHART_SIZE` expanded to
+// `x / 240 * 5`, which (same precedence, left to right) is `(x / 240) * 5` -
+// 25x the intended value. GraphPush()'s time-mode msPerPoint is the one place
+// that divides by it, so a "1m" span produced 1250ms/point instead of 50 and
+// the trace crawled: 1200 points x 1.25s = 25 minutes to fill a 60s window.
+#define CHART_SIZE (240 * 5)
 #define BUCKET_COUNT 100
 #define NUM_LABELS 7
 #define RECORDING_TABLE_SIZE 250  // Number of data points in recording table

@@ -65,6 +65,8 @@ static void dbg_printf(const char *fmt, ...)
 // log_step_begin(), log_step_done(), log_step(), log_clear(), create_log_window() moved to calib_log_window.cpp
 // auto_zero_event_cb, autoZeroCurrent_cb moved to calib_adc.cpp
 
+void applyGraphXTicks(); // ui_helpers.cpp - re-applies graph X tick count
+
 namespace
 {
 }
@@ -464,6 +466,7 @@ namespace
         bool timeMode = lv_obj_has_state(sw, LV_STATE_CHECKED);
         PowerSupply.settingParameters.graphXaxisTimeMode = timeMode;
         settingChanged();
+        applyGraphXTicks(); // label count depends on the mode
         Serial.printf("\nGraph X-axis mode: %s", timeMode ? "Time" : "Points");
     }
 
@@ -491,6 +494,7 @@ namespace
         {
             PowerSupply.settingParameters.graphTimeSpanSeconds = timeSpans[v];
             settingChanged();
+            applyGraphXTicks(); // divisions are chosen per span
             lv_snprintf(buf, sizeof(buf), "%s", labels[v]);
             lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), buf);
             Serial.printf("\nGraph time span set to: %s (%d seconds)", labels[v], timeSpans[v]);

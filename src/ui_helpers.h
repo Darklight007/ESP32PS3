@@ -47,6 +47,10 @@ void plotToBucket(uint16_t x, uint16_t y, lv_obj_t *chart, lv_chart_series_t *se
 
 // Chart data update functions
 void GraphPush();
+// Graph X axis: divisions chosen so the time labels are evenly spaced.
+int graphXDivisions();
+void setGraphXTicks(lv_coord_t majorLen, lv_coord_t minorLen);
+void applyGraphXTicks(); // call (Core 1) after the time span or X-axis mode changes
 void HistPush();
 void graphReset();
 extern bool g_graphPaused;
