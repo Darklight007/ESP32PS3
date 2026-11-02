@@ -35,27 +35,38 @@ public:
     void pushColors(uint16_t *data, uint32_t len, bool swap = true) { pushPixels(data, len, swap); }
 
     // -------------------------------------------------------------- touch
-    // Raw coordinates match TFT_eSPI's (XPT2046 0xD1 = X, 0x91 = Y, 12-bit), so
-    // the stored 5-value TFT_eSPI calibration keeps working unchanged. One
-    // LovyanGFX read returns X, Y and a validated press (median of 7 samples).
-    // Its pressure scale differs from TFT_eSPI's, so getTouchRawZ() reports a
-    // press as 4095 and no press as 0 - both sides of every threshold the
-    // project uses (fastTouch: 20 / 600).
-    uint16_t getTouchRawZ() { return readRaw() ? 4095 : 0; }
-
-    // Coordinates from the most recent getTouchRawZ() read - fastTouch() always
-    // calls getTouchRawZ() first.
-    void getTouchRaw(uint16_t *x, uint16_t *y)
+    // Byte-for-byte TFT_eSPI XPT2046 reads (Processors/TFT_eSPI_ESP32*.c),
+    // done through LovyanGFX's low-level SPI on the same bus. LovyanGFX's own
+    // XPT2046 driver uses a different pressure formula and median filtering,
+    // which made presses register inconsistently against fastTouch()'s
+    // thresholds and the stored calibration - both tuned to these exact reads.
+    uint16_t getTouchRawZ()
     {
-        *x = _rawX;
-        *y = _rawY;
+        uint8_t d[5] = {0xB0, 0x00, 0xC0, 0x00, 0x00}; // Z1, then Z2
+        touchXfer(d, sizeof d);
+        int16_t tz = 0xFFF;
+        tz += ((d[1] << 8) | d[2]) >> 3;
+        tz -= ((d[3] << 8) | d[4]) >> 3;
+        if (tz == 4095)
+            tz = 0;
+        return (uint16_t)tz;
     }
 
-    bool getTouch(uint16_t *x, uint16_t *y, uint16_t /*threshold*/ = 600)
+    void getTouchRaw(uint16_t *x, uint16_t *y)
     {
-        if (!readRaw())
+        // X: 0xD0 four times, keep the last; Y: 0x90 four times, keep the last
+        uint8_t d[17] = {0xD0, 0, 0xD0, 0, 0xD0, 0, 0xD0, 0, 0x90,
+                         0, 0x90, 0, 0x90, 0, 0x90, 0, 0};
+        touchXfer(d, sizeof d);
+        *x = (uint16_t)(d[7] << 5) | (0x1F & (d[8] >> 3));
+        *y = (uint16_t)(d[15] << 5) | (0x1F & (d[16] >> 3));
+    }
+
+    bool getTouch(uint16_t *x, uint16_t *y, uint16_t threshold = 600)
+    {
+        uint16_t xr, yr;
+        if (!validTouch(&xr, &yr, threshold))
             return false;
-        uint16_t xr = _rawX, yr = _rawY;
         convertRawXY(&xr, &yr);
         if (xr >= width() || yr >= height())
             return false;
@@ -136,10 +147,11 @@ public:
                 delay(1000); // let the user release
             for (uint8_t j = 0; j < 8; j++)
             {
-                while (!readRaw())
-                    delay(1);
-                values[i * 2] += _rawX;
-                values[i * 2 + 1] += _rawY;
+                uint16_t x_tmp, y_tmp;
+                while (!validTouch(&x_tmp, &y_tmp, 350 / 2)) // Z_THRESHOLD/2, as upstream
+                    ;
+                values[i * 2] += x_tmp;
+                values[i * 2 + 1] += y_tmp;
             }
             values[i * 2] /= 8;
             values[i * 2 + 1] /= 8;
@@ -191,15 +203,48 @@ public:
 private:
     uint16_t _tcx0 = 1, _tcx1 = 1, _tcy0 = 1, _tcy1 = 1;
     bool _tcRot = false, _tcInvX = false, _tcInvY = false;
-    uint16_t _rawX = 0, _rawY = 0;
 
-    bool readRaw()
+    // Full-duplex transfer to the XPT2046 at the touch clock, exactly like
+    // LovyanGFX's own touch driver drives the shared bus. If a display write
+    // is open, close it around the read (as Panel_Device::getTouchRaw does).
+    void touchXfer(uint8_t *d, size_t n)
     {
-        lgfx::touch_point_t tp;
-        if (!LGFX_PS::getTouchRaw(&tp, 1))
+        const bool open = getStartCount() > 0;
+        if (open)
+            endTransaction();
+        lgfx::spi::beginTransaction(SPI2_HOST, SPI_TOUCH_FREQUENCY, 0);
+        lgfx::gpio_lo(TOUCH_CS);
+        lgfx::spi::readBytes(SPI2_HOST, d, n);
+        lgfx::gpio_hi(TOUCH_CS);
+        lgfx::spi::endTransaction(SPI2_HOST);
+        if (open)
+            beginTransaction();
+    }
+
+    // Port of TFT_eSPI's validTouch(): debounce on rising pressure, then two
+    // position samples that must agree within _RAWERR (20).
+    bool validTouch(uint16_t *x, uint16_t *y, uint16_t threshold)
+    {
+        uint16_t x_tmp, y_tmp, x_tmp2, y_tmp2;
+        uint16_t z1 = 1, z2 = 0;
+        while (z1 > z2)
+        {
+            z2 = z1;
+            z1 = getTouchRawZ();
+            delay(1);
+            if (z1 <= threshold)
+                return false;
+        }
+        getTouchRaw(&x_tmp, &y_tmp);
+        delay(1);
+        if (getTouchRawZ() <= threshold)
             return false;
-        _rawX = tp.x;
-        _rawY = tp.y;
+        delay(2);
+        getTouchRaw(&x_tmp2, &y_tmp2);
+        if (abs((int)x_tmp - (int)x_tmp2) > 20 || abs((int)y_tmp - (int)y_tmp2) > 20)
+            return false;
+        *x = x_tmp;
+        *y = y_tmp;
         return true;
     }
 };
