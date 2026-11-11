@@ -76,7 +76,6 @@ bool Setting_tabview_flag = false;
 // ===== DMA / buffer/sprite setup =====
 #if DMA
 TFT_eSprite spr[2] = { TFT_eSprite(&tft), TFT_eSprite(&tft) };
-bool        sprSel = false;
 lv_color_t* buf[2] = { nullptr, nullptr };  // allocate later when you know sizes
 #else
 // If you really want a static 2D buffer, make it compile-time sized:

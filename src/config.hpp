@@ -69,7 +69,6 @@ extern bool Setting_tabview_flag;
 
 #if DMA
 extern TFT_eSprite spr[2];   // sprites are defined in .cpp
-extern bool        sprSel;   // toggle buffer select
 extern lv_color_t* buf[2];   // pointers to sprite frame buffers
 #else
 extern lv_color_t  buf[2][/* line count */ 320 * 10]; // (kept as extern; sized in .cpp)

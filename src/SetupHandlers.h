@@ -100,8 +100,6 @@ void setupPowerSupply();
 void initializeTouch();
 void setupLVGL();
 void setupDMA();
-void setupTasks();
-void setupPreferences();
 void setupADC();
 void setupDAC();
 void setupBuzzer();

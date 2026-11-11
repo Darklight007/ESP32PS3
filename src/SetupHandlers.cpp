@@ -64,7 +64,7 @@ void initializeSerial()
     // and bars like clockwork. 20 ms bounds that while still letting a reading
     // host (SCPI responses) drain without truncation.
     Serial.setTxTimeoutMs(20);
-    delay(1000); // Wait for serial connection to stabilize
+    delay(100); // let the serial port settle
 
     // Use ESP_LOGI for debugging since Serial.print may not work
     ESP_LOGI("SETUP", "=== ESP32-S3 BOOT ===");
@@ -200,21 +200,17 @@ void setupLVGL()
 void setupDMA()
 {
 #if DMA
-    // Define sprite color depth
+    // Full-screen LVGL draw buffer; the sprite only allocates it (in PSRAM).
+    // One buffer: my_disp_flush() waits for every DMA band, so a second one
+    // never overlapped anything and only cost 150 KB. (Drawing into the small
+    // internal band buffer instead was tried: slower, 84 vs 65 ms per full
+    // repaint - LVGL re-walks the page for each of the 20 bands.)
     spr[0].setColorDepth(COLOR_DEPTH);
-    spr[1].setColorDepth(COLOR_DEPTH);
-
-    // Create the 2 sprites
     buf[0] = (lv_color_t *)spr[0].createSprite(IWIDTH, IHEIGHT);
-    buf[1] = (lv_color_t *)spr[1].createSprite(IWIDTH, IHEIGHT);
-
-    // Define text datum for each sprite
-    spr[0].setTextDatum(MC_DATUM);
-    spr[1].setTextDatum(MC_DATUM);
 
     // Initialize DMA
     tft.initDMA();
-    lv_disp_draw_buf_init(&draw_buf, buf[0], buf[1], IWIDTH * IHEIGHT);
+    lv_disp_draw_buf_init(&draw_buf, buf[0], nullptr, IWIDTH * IHEIGHT);
 
     // DMA staging buffer in INTERNAL (DMA-capable) RAM.
     //
@@ -246,30 +242,6 @@ void setupDMA()
 #endif
 }
 
-// Setup tasks for FreeRTOS
-void setupTasks()
-{
-    // Task creation for FreeRTOS would be done in createTasks()
-    Serial.println("Tasks Setup Completed.");
-}
-
-/* Setup preferences (non-volatile storage) */
-void setupPreferences()
-{
-    Preferences preferences;
-
-    preferences.begin("param", false);
-    preferences.putUShort("pi", 314);
-    unsigned short readBack = preferences.getUShort("pi", 0);
-
-    if (314 == readBack)
-        Serial.print("\nPreferences Memory: OK");
-    else
-        Serial.print("\nPreferences Memory: NOT OK");
-
-    preferences.end();
-}
-
 // **Setup Functions for Hardware Components**
 
 // Setup the power supply
@@ -294,9 +266,7 @@ void setupPowerSupply()
     // Setup on/off touch switch on page 3
     PowerSupply.setupSwitch(PowerSupply.page[2], 0, 240, 160, btn_event_cb);
 
-    delay(500);
     PowerSupply.dac_data = PowerSupply.LoadDACdata("dac_data_");
-    delay(500);
     ccLimitLoad();
     PowerSupply.Voltage.adjOffset = PowerSupply.dac_data.zero_voltage;
     PowerSupply.Voltage.minValue = (-PowerSupply.dac_data.zero_voltage);                                   // 2000.0;

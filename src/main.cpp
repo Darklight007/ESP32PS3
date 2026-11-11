@@ -108,7 +108,6 @@ void setup()
 
   setupPowerSupply();
   LoadGraphData(); // restore the graph trace before Task_ADC starts pushing new points
-  setupPreferences();
   setupADC();
   setupDAC();
   // SetupOVP();  // Create OVP/OCP protection
