@@ -2,6 +2,9 @@
 #include "device.hpp"
 #include "setting_menu.h"
 #include "spinbox_pro.h"
+#include "lv_gui_helper.h"
+#include "buzzer.h"
+#include <algorithm>
 #include "myFonts.h"
 
 // External references
@@ -18,6 +21,48 @@ namespace
     lv_obj_t *s_label_maxV = nullptr;
     lv_obj_t *s_label_maxC = nullptr;
 
+    // Apply a zero/max DAC calibration to V or I right away, no restart.
+    // min/maxValue are DAC counts, NOT amps/volts: every consumer (SetUpdate()
+    // range check, SCPI caps, battery charger, bar widths) divides by
+    // adjFactor itself.
+    // The DAC code for a setpoint is setpoint * adjFactor + zero. adjValue is
+    // that code, so it carried the OLD zero until the setpoint was re-entered
+    // (or the unit restarted): the output didn't follow the new zero, and the
+    // shown setpoint jumped instead. Moving adjValue by the change in zero
+    // keeps the setpoint in V/A and moves the output to the new calibration
+    // at once. cachedScaleFactor (measured bar) only refreshed on a bar resize,
+    // so the bar kept the old max until reboot.
+    static void applyDacCalibration(DispObjects &o, int zero, int max)
+    {
+        const int delta = zero - (int)o.adjOffset;
+        o.adjOffset = zero;
+        o.minValue = -zero;
+        o.maxValue = max - zero;
+        if (delta)
+        {
+            o.adjValue = (uint16_t)std::clamp((int)o.adjValue + delta, 0, 0xFFFF);
+            o.adjValueChanged = true; // Flush() redraws the setpoint label and shadow bar
+        }
+        o.cachedScaleFactor = 0;
+    }
+
+    // Edits apply live but are only stored by Save (a flash write per
+    // spinbox step stalled both cores); Load reverts to the stored values.
+    static void dac_save_cb(lv_event_t *)
+    {
+        PowerSupply.SaveDACdata("dac_data_", PowerSupply.dac_data);
+        myTone(NOTE_A4, 200);
+    }
+
+    static void dac_load_cb(lv_event_t *)
+    {
+        PowerSupply.dac_data = PowerSupply.LoadDACdata("dac_data_");
+        refreshDacCalibSpinboxes();
+        applyDacCalibration(PowerSupply.Voltage, PowerSupply.dac_data.zero_voltage, PowerSupply.dac_data.max_voltage);
+        applyDacCalibration(PowerSupply.Current, PowerSupply.dac_data.zero_current, PowerSupply.dac_data.max_current);
+        myTone(NOTE_A4, 200);
+    }
+
     // DAC handlers
     static void DAC_voltage_calib_change_event_cb(lv_event_t *e)
     {
@@ -32,11 +77,7 @@ namespace
         PowerSupply.dac_data.zero_current = lv_spinbox_get_value(s_zc);
         PowerSupply.dac_data.max_current = lv_spinbox_get_value(s_mc);
 
-        PowerSupply.Voltage.adjOffset = PowerSupply.dac_data.zero_voltage;
-        PowerSupply.Voltage.minValue = (-PowerSupply.dac_data.zero_voltage);
-        PowerSupply.Voltage.maxValue = (mv - zv);
-        PowerSupply.SaveDACdata("dac_data_", PowerSupply.dac_data);
-        PowerSupply.Voltage.SetEncoderUpdate();
+        applyDacCalibration(PowerSupply.Voltage, PowerSupply.dac_data.zero_voltage, PowerSupply.dac_data.max_voltage);
     }
 
     static void DAC_current_calib_change_event_cb(lv_event_t *e)
@@ -52,18 +93,7 @@ namespace
         PowerSupply.dac_data.zero_current = lv_spinbox_get_value(s_zc);
         PowerSupply.dac_data.max_current = lv_spinbox_get_value(s_mc);
 
-        PowerSupply.Current.adjOffset = PowerSupply.dac_data.zero_current;
-        // DAC counts, NOT amps: everywhere else (SetupHandlers.cpp:234-235,
-        // this file's refresh path below, the voltage callback above) keeps
-        // min/maxValue in DAC counts, and every consumer (SetUpdate() range
-        // check, SCPI caps, battery charger, bar widths) divides by adjFactor
-        // itself. The old /10000.0 here silently flipped maxValue to amps
-        // whenever a DAC-calib spinbox changed - after that, the shadow bar
-        // and range checks were scaled 10000x wrong until reboot.
-        PowerSupply.Current.minValue = (-PowerSupply.dac_data.zero_current);
-        PowerSupply.Current.maxValue = (mc - zc);
-        PowerSupply.SaveDACdata("dac_data_", PowerSupply.dac_data);
-        PowerSupply.Current.SetEncoderUpdate();
+        applyDacCalibration(PowerSupply.Current, PowerSupply.dac_data.zero_current, PowerSupply.dac_data.max_current);
     }
 }
 
@@ -118,6 +148,10 @@ void open_dac_calibration_cb(lv_event_t *)
     addLabel(s_zc, "%+06.4fA", 0.0);
     s_label_maxC = addLabel(s_mc, "%+06.4fA", 6.5535);
 
+    LVButton btnLoad(cont, "Load", xPos -80, 150, 60, 30, nullptr, dac_load_cb);
+    LVButton btnSave(cont, "Save", 0, 150, 60, 30, nullptr, dac_save_cb);
+    lv_obj_align(btnSave.get_lv_obj(), LV_ALIGN_TOP_RIGHT, -(xPos - 80), 150); // same margin as Load
+
     // Load persisted DAC data and update limits
     PowerSupply.dac_data = PowerSupply.LoadDACdata("dac_data_");
     lv_spinbox_set_value(s_zv, PowerSupply.dac_data.zero_voltage);
@@ -125,13 +159,8 @@ void open_dac_calibration_cb(lv_event_t *)
     lv_spinbox_set_value(s_zc, PowerSupply.dac_data.zero_current);
     lv_spinbox_set_value(s_mc, PowerSupply.dac_data.max_current);
 
-    PowerSupply.Voltage.adjOffset = PowerSupply.dac_data.zero_voltage;
-    PowerSupply.Voltage.minValue = (-PowerSupply.dac_data.zero_voltage);
-    PowerSupply.Voltage.maxValue = (PowerSupply.dac_data.max_voltage - PowerSupply.dac_data.zero_voltage);
-
-    PowerSupply.Current.adjOffset = PowerSupply.dac_data.zero_current;
-    PowerSupply.Current.minValue = (-PowerSupply.dac_data.zero_current);
-    PowerSupply.Current.maxValue = (PowerSupply.dac_data.max_current - PowerSupply.dac_data.zero_current);
+    applyDacCalibration(PowerSupply.Voltage, PowerSupply.dac_data.zero_voltage, PowerSupply.dac_data.max_voltage);
+    applyDacCalibration(PowerSupply.Current, PowerSupply.dac_data.zero_current, PowerSupply.dac_data.max_current);
 
     lv_obj_add_event_cb(s_zv, DAC_voltage_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, s_label_maxV);
     lv_obj_add_event_cb(s_mv, DAC_voltage_calib_change_event_cb, LV_EVENT_VALUE_CHANGED, s_label_maxV);
