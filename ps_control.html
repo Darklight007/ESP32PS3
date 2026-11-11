@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>Power Supply Control</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0; }
+.header { background: #1a1a2e; padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 18px; color: #4fc3f7; }
+.main { display: grid; grid-template-columns: 340px 1fr; gap: 12px; padding: 12px; height: calc(100vh - 50px); }
+.panel { background: #1e1e2e; border-radius: 8px; padding: 16px; overflow-y: auto; }
+.display { background: #0a0a1a; border-radius: 8px; padding: 12px; margin-bottom: 12px; border: 1px solid #333; }
+.meas-row { margin-bottom: 10px; }
+.meas-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+.meas-val { font-family: 'Courier New', monospace; font-size: 32px; font-weight: bold; }
+.meas-unit { font-size: 14px; color: #888; margin-left: 4px; }
+.volt { color: #4fc3f7; }
+.curr { color: #ffb74d; }
+.pwr-row { border-top: 1px solid #333; padding-top: 8px; margin-top: 4px; display: flex; justify-content: space-between; }
+.pwr-val { font-family: 'Courier New', monospace; font-size: 18px; color: #ce93d8; }
+.output-btn { width: 100%; padding: 14px; border: 2px solid #555; border-radius: 8px;
+  font-size: 16px; font-weight: bold; cursor: pointer; text-transform: uppercase;
+  letter-spacing: 2px; transition: all 0.2s; margin-bottom: 12px; }
+.out-off { background: #2a2a2a; color: #888; border-color: #555; }
+.out-on { background: #1b5e20; color: #66bb6a; border-color: #66bb6a; box-shadow: 0 0 15px rgba(102,187,106,0.3); }
+.ctrl-group { margin-bottom: 10px; }
+.ctrl-group label { display: block; font-size: 11px; color: #888; margin-bottom: 4px; text-transform: uppercase; }
+.inp-row { display: flex; gap: 6px; }
+.inp-row input { flex: 1; background: #0a0a1a; border: 1px solid #444; border-radius: 4px;
+  color: #e0e0e0; padding: 8px; font-size: 16px; font-family: 'Courier New', monospace; }
+.inp-row input:focus { border-color: #4fc3f7; outline: none; }
+.inp-row button { padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.bv { background: #4fc3f7; color: #1a1a2e; }
+.bi { background: #ffb74d; color: #1a1a2e; }
+.qbtns { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.qbtns button { flex: 1; min-width: 55px; padding: 6px; background: #2a2a3e; border: 1px solid #444;
+  border-radius: 4px; color: #ccc; cursor: pointer; font-size: 11px; }
+.qbtns button:hover { background: #3a3a4e; border-color: #4fc3f7; }
+.sbar { font-size: 11px; color: #666; margin-top: 12px; }
+/* Tabs */
+.tabs { display: flex; border-bottom: 2px solid #333; margin-bottom: 12px; }
+.tab { padding: 8px 16px; cursor: pointer; color: #888; border-bottom: 2px solid transparent;
+  margin-bottom: -2px; font-size: 13px; font-weight: bold; }
+.tab:hover { color: #ccc; }
+.tab.active { color: #4fc3f7; border-bottom-color: #4fc3f7; }
+.tab-content { display: none; flex: 1; flex-direction: column; overflow-y: auto; }
+.tab-content.active { display: flex; }
+/* Right panel */
+.right-panel { display: flex; flex-direction: column; }
+/* Graph */
+.gtoolbar { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+.gtoolbar button { padding: 6px 14px; background: #2a2a3e; border: 1px solid #444;
+  border-radius: 4px; color: #ccc; cursor: pointer; font-size: 12px; }
+.gtoolbar button:hover { border-color: #4fc3f7; }
+.gtoolbar button:disabled { opacity: 0.5; }
+.gstat { font-size: 12px; color: #666; }
+#chart { flex: 1; min-height: 300px; }
+/* Plotly rangeslider styling */
+#chart .rangeslider-container { opacity: 0.85; }
+#chart .rangeslider-grabarea { cursor: grab; }
+#chart .rangeslider-grabarea:active { cursor: grabbing; }
+#chart .rangeslider-mask-min, #chart .rangeslider-mask-max { fill: rgba(10,10,26,0.7) !important; }
+#chart .rangeslider-slidebox { fill: rgba(79,195,247,0.08) !important; }
+/* Plotly modebar dark theme */
+#chart .modebar-btn path { fill: #888 !important; }
+#chart .modebar-btn:hover path { fill: #4fc3f7 !important; }
+#chart .modebar-btn.active path { fill: #4fc3f7 !important; }
+/* Poll toggle */
+.poll-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.poll-row label { font-size: 11px; color: #888; }
+.sw { position: relative; width: 40px; height: 22px; display: inline-block; }
+.sw input { opacity: 0; width: 0; height: 0; }
+.sl { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+  background: #444; border-radius: 22px; transition: 0.3s; }
+.sl:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px;
+  background: #ccc; border-radius: 50%; transition: 0.3s; }
+.sw input:checked + .sl { background: #4fc3f7; }
+.sw input:checked + .sl:before { transform: translateX(18px); }
+/* Settings sidebar layout */
+.settings-layout { display: flex; gap: 0; flex: 1; overflow: hidden; }
+.settings-sidebar { width: 140px; min-width: 140px; border-right: 1px solid #333; overflow-y: auto; }
+.settings-sidebar .si { padding: 10px 14px; cursor: pointer; font-size: 13px; color: #888;
+  border-left: 3px solid transparent; transition: all 0.15s; }
+.settings-sidebar .si:hover { color: #ccc; background: #252538; }
+.settings-sidebar .si.active { color: #4fc3f7; border-left-color: #4fc3f7; background: #1a1a2e; }
+.settings-body { flex: 1; padding: 0 16px; overflow-y: auto; }
+/* Settings section */
+.sect { margin-bottom: 16px; }
+.sect-title { font-size: 12px; color: #4fc3f7; text-transform: uppercase; letter-spacing: 1px;
+  border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 8px; }
+.setting-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.setting-row span { font-size: 13px; }
+.setting-row input[type=number] { width: 80px; background: #0a0a1a; border: 1px solid #444;
+  border-radius: 4px; color: #e0e0e0; padding: 4px 6px; font-size: 13px; font-family: 'Courier New', monospace; }
+.setting-row select { background: #0a0a1a; border: 1px solid #444; border-radius: 4px;
+  color: #e0e0e0; padding: 4px 6px; font-size: 13px; }
+.setting-row input[type=range] { flex: 1; max-width: 140px; accent-color: #4fc3f7; }
+.btn-sm { padding: 4px 12px; background: #2a2a3e; border: 1px solid #444; border-radius: 4px;
+  color: #ccc; cursor: pointer; font-size: 12px; }
+.btn-sm:hover { border-color: #4fc3f7; }
+.btn-save { background: #1b5e20; color: #66bb6a; border-color: #388e3c; }
+/* Logger / Sequence / Console */
+.pro-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; color: #aaa; }
+.pro-bar input, .pro-bar select { background: #0a0a1a; border: 1px solid #444; border-radius: 4px; color: #e0e0e0; padding: 4px 6px; font-size: 12px; width: 70px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.kpi { background: #0a0a1a; border: 1px solid #333; border-radius: 6px; padding: 6px 8px; }
+.kpi b { display: block; font-family: 'Courier New', monospace; font-size: 15px; color: #e0e0e0; }
+.kpi span { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+.seq-tbl { border-collapse: collapse; font-size: 12px; margin-bottom: 8px; }
+.seq-tbl th { color: #888; font-weight: normal; padding: 3px 6px; text-align: left; }
+.seq-tbl td { padding: 2px 4px; }
+.seq-tbl input { width: 80px; background: #0a0a1a; border: 1px solid #444; border-radius: 3px; color: #e0e0e0; padding: 3px 5px; font-family: 'Courier New', monospace; }
+.seq-tbl tr.cur td { background: #1b3a4b; }
+#conOut { flex: 1; min-height: 240px; background: #0a0a1a; border: 1px solid #333; border-radius: 6px; padding: 8px; font-family: 'Courier New', monospace; font-size: 12px; overflow-y: auto; white-space: pre-wrap; margin-bottom: 8px; }
+#conOut .q { color: #4fc3f7; } #conOut .r { color: #e0e0e0; } #conOut .e { color: #ef5350; }
+#conIn { width: 100%; background: #0a0a1a; border: 1px solid #444; border-radius: 4px; color: #e0e0e0; padding: 8px; font-family: 'Courier New', monospace; font-size: 14px; }
+.btn-save:hover { background: #2e7d32; }
+.btn-danger { background: #b71c1c; color: #ef9a9a; border-color: #c62828; }
+.btn-danger:hover { background: #c62828; }
+.note { font-size: 11px; color: #666; margin-top: 4px; }
+/* Memory grid */
+.mem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.mem-btn { background: #0a0a1a; border: 1px solid #444; border-radius: 6px; padding: 10px 8px 8px 8px;
+  cursor: pointer; transition: all 0.2s; position: relative; user-select: none; }
+.mem-btn:hover { border-color: #4fc3f7; background: #1a1a2e; }
+.mem-btn.saving { border-color: #ffb74d; background: #1a1200; }
+.mem-btn .mv { display: block; color: #4fc3f7; font-family: 'Courier New', monospace; font-size: 13px; font-weight: bold; }
+.mem-btn .mi { display: block; color: #ffb74d; font-family: 'Courier New', monospace; font-size: 12px; margin-top: 2px; }
+.mem-btn .idx { position: absolute; top: 3px; left: 5px; color: #555; font-size: 10px; }
+.mem-btn.slot0 { grid-column: 1 / -1; max-width: 33.3%; }
+/* Memory edit popup */
+#memPopup { display:none; position:fixed; background:#111827; border:1px solid #4fc3f7;
+  border-radius:8px; padding:12px; z-index:9999; min-width:180px; box-shadow:0 4px 20px rgba(0,0,0,0.7); }
+#memPopup .mp-title { color:#888; font-size:11px; margin-bottom:8px; }
+#memPopup .mp-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+#memPopup .mp-row label { color:#aaa; font-size:12px; width:14px; }
+#memPopup .mp-row input { flex:1; background:#0a0a1a; border:1px solid #555; border-radius:4px;
+  color:#e0e0e0; padding:5px 7px; font-size:13px; font-family:'Courier New',monospace; width:90px; }
+#memPopup .mp-row input:focus { border-color:#4fc3f7; outline:none; }
+#memPopup .mp-btns { display:flex; gap:6px; margin-top:8px; }
+#memPopup .mp-btns button { flex:1; padding:5px 0; border-radius:4px; border:none;
+  cursor:pointer; font-size:12px; font-weight:bold; }
+#memPopup .mp-recall { background:#0d47a1; color:#42a5f5; }
+#memPopup .mp-recall:hover { background:#1565c0; }
+#memPopup .mp-store { background:#1a3a00; color:#aed581; border:1px solid #558b2f !important; }
+#memPopup .mp-store:hover { background:#2e7d32; }
+#memPopup .mp-close { position:absolute; top:4px; right:7px; color:#666; cursor:pointer;
+  font-size:14px; line-height:1; background:none; border:none; }
+/* Stats */
+.sstat-box { background:#0d0d1a; border:1px solid #333; border-radius:6px; padding:10px; }
+.sstat-title { font-size:11px; font-weight:bold; letter-spacing:2px; text-transform:uppercase; margin-bottom:6px; }
+.sstat-canvas { width:100%; height:110px; display:block; background:#070711; border-radius:3px; }
+.sstat-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:0; margin-top:8px; border:1px solid #222; border-radius:4px; overflow:hidden; }
+.sm { padding:5px 6px; border-right:1px solid #222; border-bottom:1px solid #222; }
+.sm:nth-child(4n) { border-right:none; }
+.sm:nth-last-child(-n+4) { border-bottom:none; }
+.sm .sl { font-size:9px; color:#555; text-transform:uppercase; letter-spacing:0.8px; }
+.sm .sv { font-family:'Courier New',monospace; font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sm.hi .sv { font-size:14px; font-weight:bold; }
+/* FGen */
+.fgen-mode-btn { padding: 10px 24px; border: 2px solid #555; border-radius: 8px;
+  font-size: 14px; font-weight: bold; cursor: pointer; text-transform: uppercase;
+  letter-spacing: 1px; transition: all 0.2s; }
+.fgen-off { background: #2a2a2a; color: #888; border-color: #555; }
+.fgen-on { background: #0d47a1; color: #42a5f5; border-color: #42a5f5; box-shadow: 0 0 12px rgba(66,165,245,0.3); }
+.fgen-param { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.fgen-param label { width: 100px; font-size: 13px; color: #aaa; }
+.fgen-param input { flex: 1; max-width: 140px; background: #0a0a1a; border: 1px solid #444;
+  border-radius: 4px; color: #e0e0e0; padding: 6px 8px; font-size: 14px; font-family: 'Courier New', monospace; }
+.fgen-param input:focus { border-color: #4fc3f7; outline: none; }
+.fgen-param .unit { font-size: 12px; color: #666; width: 30px; }
+.wave-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 12px; }
+.wave-btn { padding: 6px 4px; background: #0a0a1a; border: 1px solid #444; border-radius: 4px;
+  color: #ccc; cursor: pointer; font-size: 11px; text-align: center; transition: all 0.15s; }
+.wave-btn:hover { border-color: #42a5f5; background: #1a1a2e; }
+.wave-btn.active { border-color: #42a5f5; background: #0d47a1; color: #fff; }
+</style>
+</head><body>
+<!-- Memory edit popup -->
+<div id="memPopup">
+  <button class="mp-close" onclick="closeMemPopup()">&#x2715;</button>
+  <div class="mp-title">SLOT <span id="mpSlotNum"></span></div>
+  <div class="mp-row"><label>V</label><input id="mpV" type="number" step="0.001" min="0" max="32.768"></div>
+  <div class="mp-row"><label>I</label><input id="mpI" type="number" step="0.001" min="0" max="5"></div>
+  <div class="mp-btns">
+    <button class="mp-recall" onclick="doMemRecall()">Recall</button>
+    <button class="mp-store" onclick="doMemStore()">Store</button>
+  </div>
+</div>
+<div class="header">
+  <h1>Power Supply Remote Control</h1>
+  <span><span id="devInfo" style="font-size:11px;color:#777;margin-right:12px"></span>
+  <span id="connSt" style="font-size:12px;color:#666">Connecting...</span>
+  <button class="btn-sm" style="margin-left:10px" title="Hard-reset the PSU (turns the output OFF). Use when the USB link stops answering." onclick="resetBoard()">Reset board</button></span>
+</div>
+<div class="main">
+  <!-- Left Panel: Main Controls -->
+  <div class="panel">
+    <div class="display">
+      <div class="meas-row"><div class="meas-label">Measured Voltage</div>
+        <span class="meas-val volt" id="mV">---.---</span><span class="meas-unit">V</span></div>
+      <div class="meas-row"><div class="meas-label">Measured Current</div>
+        <span class="meas-val curr" id="mI">---.---</span><span class="meas-unit" id="mIU">A</span></div>
+      <div class="pwr-row"><span class="meas-label">Power</span>
+        <span><span class="pwr-val" id="mP">---.---</span><span class="meas-unit">W</span></span></div>
+    </div>
+    <button class="output-btn out-off" id="outBtn" onclick="togOut()">Output OFF</button>
+    <div class="poll-row">
+      <label class="sw"><input type="checkbox" id="pollCb" checked onchange="togPoll()"><span class="sl"></span></label>
+      <label>Auto-refresh 500ms</label>
+    </div>
+    <div class="ctrl-group"><label>Set Voltage (V)</label>
+      <div class="inp-row"><input type="number" id="sV" step="0.001" min="0" max="32" placeholder="0.000" onkeydown="if(event.key==='Enter')doSetV()">
+        <button class="bv" onclick="doSetV()">Set</button></div></div>
+    <div class="ctrl-group"><label>Set Current (A)</label>
+      <div class="inp-row"><input type="number" id="sI" step="0.001" min="0" max="5" placeholder="0.000" onkeydown="if(event.key==='Enter')doSetI()">
+        <button class="bi" onclick="doSetI()">Set</button></div></div>
+    <div style="font-size:11px;color:#888;margin-bottom:4px">QUICK VOLTAGE</div>
+    <div class="qbtns">
+      <button onclick="qv(1.8)">1.8V</button><button onclick="qv(3.3)">3.3V</button>
+      <button onclick="qv(5)">5V</button><button onclick="qv(9)">9V</button>
+      <button onclick="qv(12)">12V</button>
+    </div>
+    <div style="font-size:11px;color:#888;margin-bottom:4px;margin-top:8px">QUICK CURRENT</div>
+    <div class="qbtns">
+      <button onclick="qi(0.1)">100mA</button><button onclick="qi(0.5)">500mA</button>
+      <button onclick="qi(1)">1A</button><button onclick="qi(2)">2A</button>
+      <button onclick="qi(3)">3A</button>
+    </div>
+    <div class="sbar"><span id="upd">--</span> <span id="err" style="color:#ef5350"></span></div>
+  </div>
+
+  <!-- Right Panel: Tabs -->
+  <div class="panel right-panel">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('graph')">Graph</div>
+      <div class="tab" onclick="switchTab('stats')">Stats</div>
+      <div class="tab" onclick="switchTab('utility')">Utility</div>
+      <div class="tab" onclick="switchTab('settings')">Settings</div>
+      <div class="tab" onclick="switchTab('logger')">Logger</div>
+      <div class="tab" onclick="switchTab('seq')">Sequence</div>
+      <div class="tab" onclick="switchTab('console')">Console</div>
+    </div>
+
+    <!-- Logger Tab: PC-side CSV logging + live trend (drift tests) -->
+    <div class="tab-content" id="tab-logger">
+      <div class="pro-bar">
+        <button class="btn-sm" id="logBtn" onclick="toggleLog()">Start logging</button>
+        every <input id="logIv" type="number" min="0.1" step="0.1" value="1"> s
+        <span>window</span>
+        <select id="logWin" onchange="plotLog()" style="width:90px">
+          <option value="60">1 min</option><option value="600" selected>10 min</option>
+          <option value="3600">1 h</option><option value="0">all</option>
+        </select>
+        <span id="logPath" style="color:#777"></span>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><span>Samples</span><b id="kN">0</b></div>
+        <div class="kpi"><span>Elapsed</span><b id="kT">0:00</b></div>
+        <div class="kpi"><span>V mean / p-p</span><b id="kV">-</b></div>
+        <div class="kpi"><span>I mean / p-p</span><b id="kI">-</b></div>
+        <div class="kpi"><span>I drift (fit)</span><b id="kD">-</b></div>
+        <div class="kpi"><span>Energy</span><b id="kE">-</b></div>
+      </div>
+      <div id="logChart" style="flex:1;min-height:320px"></div>
+      <div style="font-size:11px;color:#777;margin-top:4px">Stats and drift use the selected window. Drift = least-squares slope of current, per minute and in ppm/min of the mean. The CSV keeps every sample even with the browser closed.</div>
+    </div>
+
+    <!-- Sequence Tab: list mode run by the PC -->
+    <div class="tab-content" id="tab-seq">
+      <div class="pro-bar">
+        <button class="btn-sm" onclick="seqAdd()">+ Step</button>
+        <span>Ramp</span> V <input id="rpV0" value="0"> to <input id="rpV1" value="12">
+        in <input id="rpN" value="13" style="width:50px"> steps of <input id="rpT" value="1" style="width:50px"> s,
+        I <input id="rpI" value="1" style="width:55px">
+        <button class="btn-sm" onclick="seqRamp()">Generate</button>
+      </div>
+      <table class="seq-tbl"><thead><tr><th>#</th><th>Voltage (V)</th><th>Current (A)</th><th>Dwell (s)</th><th>Output</th><th></th></tr></thead>
+        <tbody id="seqBody"></tbody></table>
+      <div class="pro-bar">
+        Repeat <input id="seqRep" type="number" value="1" min="0" style="width:55px"> (0 = forever)
+        <label><input type="checkbox" id="seqOff" checked style="width:auto"> output off at end</label>
+        <button class="btn-sm btn-save" id="seqBtn" onclick="seqToggle()">Run</button>
+        <button class="btn-sm" onclick="seqSave()">Save…</button>
+        <button class="btn-sm" onclick="document.getElementById('seqFile').click()">Load…</button>
+        <input type="file" id="seqFile" accept=".json" style="display:none" onchange="seqLoad(this)">
+        <span id="seqSt" style="color:#4fc3f7"></span>
+      </div>
+      <div style="font-size:11px;color:#777">Runs on the PC (the browser can be closed). Start the Logger first to record the run.</div>
+    </div>
+
+    <!-- Console Tab: raw SCPI -->
+    <div class="tab-content" id="tab-console">
+      <div class="pro-bar">
+        <button class="btn-sm" onclick="conSend('*IDN?')">*IDN?</button>
+        <button class="btn-sm" onclick="conSend('SYST:ERR:ALL?')">Errors</button>
+        <button class="btn-sm" onclick="conSend('DATA:STATS?')">Stats</button>
+        <button class="btn-sm" onclick="conSend('DISP:FPS?')">FPS</button>
+        <button class="btn-sm" onclick="document.getElementById('conOut').innerHTML=''">Clear</button>
+      </div>
+      <div id="conOut"></div>
+      <input id="conIn" placeholder="SCPI command (ends with ? = query) - Enter to send, Up/Down = history" onkeydown="conKey(event)">
+    </div>
+
+    <!-- Graph Tab -->
+    <div class="tab-content active" id="tab-graph">
+      <div class="gtoolbar">
+        <button id="gBtn" onclick="doGraph()">Capture</button>
+        <button id="recBtn" onclick="toggleRecord()" style="background:#1b5e20;border-color:#4caf50;color:#a5d6a7">Record</button>
+        <input id="recInterval" type="number" min="1" max="300" value="3" title="Snap interval (s)" style="width:42px;background:#1e1e2e;border:1px solid #444;border-radius:4px;color:#ccc;font-size:12px;padding:2px 4px;text-align:center">s
+        <button id="gSaveBtn" onclick="saveGraph()" disabled>Save</button>
+        <input type="file" id="fIn" accept=".csv" style="display:none" onchange="doCSV(this)">
+        <button onclick="document.getElementById('fIn').click()">CSV In</button>
+        <button onclick="setDrag('pan')" id="bPan" style="background:#4fc3f7;color:#1a1a2e">Pan</button>
+        <button onclick="setDrag('zoom')" id="bZoom">Zoom XY</button>
+        <button onclick="setDrag('x')" id="bZoomX">Zoom X</button>
+        <button onclick="setDrag('y')" id="bZoomY">Zoom Y</button>
+        <button onclick="resetAxes()">Reset View</button>
+        <span class="gstat" id="gSt">Click Capture or Record</span>
+      </div>
+      <div id="chart"></div>
+    </div>
+
+    <!-- Stats Tab -->
+    <div class="tab-content" id="tab-stats" style="padding:10px;flex-direction:column;gap:0">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <button onclick="loadStats()">Refresh</button>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="statsAuto" onchange="toggleStatsAuto(this.checked)"> Auto 2s
+        </label>
+        <button onclick="resetStats()" style="border-color:#ef5350;color:#ef5350">Reset</button>
+        <span id="statsSt" style="font-size:11px;color:#666;margin-left:4px"></span>
+      </div>
+      <!-- Voltage Stats -->
+      <div class="sstat-box" style="border-color:#4fc3f7aa">
+        <div class="sstat-title" style="color:#4fc3f7">&#9660; VOLTAGE</div>
+        <canvas id="sv_canvas" class="sstat-canvas"></canvas>
+        <div class="sstat-metrics" id="sv_metrics"></div>
+      </div>
+      <!-- Current Stats -->
+      <div class="sstat-box" style="border-color:#ffb74daa;margin-top:10px">
+        <div class="sstat-title" style="color:#ffb74d">&#9660; CURRENT</div>
+        <canvas id="si_canvas" class="sstat-canvas"></canvas>
+        <div class="sstat-metrics" id="si_metrics"></div>
+      </div>
+    </div>
+
+    <!-- Utility Tab (Mem / FGen / Arbt / Tabl) -->
+    <div class="tab-content" id="tab-utility">
+      <div class="settings-layout">
+        <div class="settings-sidebar">
+          <div class="si active" onclick="showUtilPage('u_mem',this)">Mem</div>
+          <div class="si" onclick="showUtilPage('u_fgen',this)">FGen</div>
+          <div class="si" onclick="showUtilPage('u_arbt',this)">Arbt</div>
+          <div class="si" onclick="showUtilPage('u_tabl',this)">Tabl</div>
+        </div>
+        <div class="settings-body">
+
+          <!-- Mem -->
+          <div class="sect" id="u_mem">
+            <div class="sect-title">Memory Presets</div>
+            <div style="font-size:11px;color:#888;margin-bottom:8px">CLICK — Edit / Recall / Store</div>
+            <div class="mem-grid" id="memGrid"></div>
+            <button class="btn-sm" onclick="loadMem()">Refresh</button>
+          </div>
+
+          <!-- FGen -->
+          <div class="sect" id="u_fgen" style="display:none">
+            <div class="sect-title">Function Generator</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+              <button class="fgen-mode-btn fgen-off" id="fgenBtn" onclick="togFgen()">FGen OFF</button>
+              <span id="fgenWaveName" style="font-size:14px;color:#42a5f5;font-weight:bold">Sine</span>
+              <button class="btn-sm" onclick="loadFgen()" style="margin-left:auto">Refresh</button>
+            </div>
+            <div style="font-size:11px;color:#888;margin-bottom:4px">WAVEFORM</div>
+            <div class="wave-grid" id="waveGrid"></div>
+            <div style="font-size:11px;color:#888;margin-bottom:4px;margin-top:12px">PARAMETERS</div>
+            <div class="fgen-param"><label>Amplitude</label>
+              <input type="number" id="fg_ampl" step="0.001" min="0" max="32.75" onchange="sendCmd('SOUR:FGEN:AMPL '+this.value)">
+              <span class="unit">V</span></div>
+            <div class="fgen-param"><label>Frequency</label>
+              <input type="number" id="fg_freq" step="0.001" min="0" max="10" onchange="sendCmd('SOUR:FGEN:FREQ '+this.value)">
+              <span class="unit">Hz</span></div>
+            <div class="fgen-param"><label>Offset</label>
+              <input type="number" id="fg_offs" step="0.001" min="-32" max="32.75" onchange="sendCmd('SOUR:FGEN:OFFS '+this.value)">
+              <span class="unit">V</span></div>
+            <div class="fgen-param"><label>Duty Cycle</label>
+              <input type="number" id="fg_duty" step="0.01" min="0" max="1" onchange="sendCmd('SOUR:FGEN:DUTY '+this.value)">
+              <span class="unit">0-1</span></div>
+          </div>
+
+          <!-- Arbt -->
+          <div class="sect" id="u_arbt" style="display:none">
+            <div class="sect-title">Arbitrary Waveform (20 points)</div>
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+              <select id="arbtBank" style="background:#0a0a1a;border:1px solid #444;border-radius:4px;color:#e0e0e0;padding:4px;font-size:13px">
+                <option value="0">Bank 0</option><option value="1">Bank 1</option>
+              </select>
+              <button class="btn-sm" onclick="loadArbt()">Load from Device</button>
+              <button class="btn-sm btn-save" onclick="sendArbt()">Send to Device</button>
+            </div>
+            <div id="arbtChart" style="height:180px;background:#0a0a1a;border:1px solid #333;border-radius:4px;margin-bottom:12px;position:relative">
+              <canvas id="arbtCanvas" style="width:100%;height:100%"></canvas>
+            </div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+              <button class="btn-sm" onclick="arbtPreset('sine')">Sine</button>
+              <button class="btn-sm" onclick="arbtPreset('square')">Square</button>
+              <button class="btn-sm" onclick="arbtPreset('tri')">Triangle</button>
+              <button class="btn-sm" onclick="arbtPreset('saw')">Sawtooth</button>
+              <button class="btn-sm" onclick="arbtPreset('zero')">Zero</button>
+            </div>
+            <div style="max-height:200px;overflow-y:auto;border:1px solid #333;border-radius:4px">
+              <table style="width:100%;font-size:12px;font-family:monospace;border-collapse:collapse" id="arbtTable">
+                <thead><tr style="background:#1a1a2e;position:sticky;top:0"><th style="padding:4px;width:40px">#</th><th style="padding:4px">Value (0-140)</th></tr></thead>
+                <tbody id="arbtBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tabl -->
+          <div class="sect" id="u_tabl" style="display:none">
+            <div class="sect-title">Table Points (250 max)</div>
+            <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+              <button class="btn-sm" onclick="loadTabl()">Load from Device</button>
+              <button class="btn-sm btn-save" onclick="sendTabl()">Send to Device</button>
+              <span style="font-size:12px;color:#888;margin-left:8px">Length:</span>
+              <input type="number" id="tablLen" min="1" max="250" value="100" style="width:60px;background:#0a0a1a;border:1px solid #444;border-radius:4px;color:#e0e0e0;padding:4px;font-size:13px;font-family:monospace">
+            </div>
+            <div id="tablChart" style="height:180px;background:#0a0a1a;border:1px solid #333;border-radius:4px;margin-bottom:12px;position:relative">
+              <canvas id="tablCanvas" style="width:100%;height:100%"></canvas>
+            </div>
+            <div style="max-height:250px;overflow-y:auto;border:1px solid #333;border-radius:4px">
+              <table style="width:100%;font-size:12px;font-family:monospace;border-collapse:collapse" id="tablTable">
+                <thead><tr style="background:#1a1a2e;position:sticky;top:0"><th style="padding:4px;width:40px">#</th><th style="padding:4px">Value (0.0-1.0)</th></tr></thead>
+                <tbody id="tablBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div class="tab-content" id="tab-settings">
+      <div class="settings-layout">
+        <div class="settings-sidebar">
+          <div class="si active" onclick="showSettPage('s_display',this)">Display</div>
+          <div class="si" onclick="showSettPage('s_measure',this)">Measure</div>
+          <div class="si" onclick="showSettPage('s_graph',this)">Graph</div>
+          <div class="si" onclick="showSettPage('s_beeper',this)">Beeper</div>
+          <div class="si" onclick="showSettPage('s_timer',this)">Timer</div>
+          <div class="si" onclick="showSettPage('s_power',this)">Power M.</div>
+          <div class="si" onclick="showSettPage('s_calibration',this)">Calibration</div>
+          <div class="si" onclick="showSettPage('s_loadsave',this)">Load/Save</div>
+          <div class="si" onclick="showSettPage('s_about',this)">About</div>
+        </div>
+        <div class="settings-body">
+
+          <!-- Display -->
+          <div class="sect" id="s_display">
+            <div class="sect-title">Display</div>
+            <div class="setting-row"><span>Backlight</span>
+              <input type="range" id="s_backlight" min="0" max="255" value="255" oninput="sendCmd('SETT:BACK '+this.value)"></div>
+          </div>
+
+          <!-- Measure -->
+          <div class="sect" id="s_measure" style="display:none">
+            <div class="sect-title">Measurement</div>
+            <div class="setting-row"><span>ADC SPS Rate</span>
+              <select id="s_adcRate" onchange="sendCmd('SETT:ADC:RATE '+this.value)">
+                <option value="0">~10</option><option value="1">~20</option>
+                <option value="2">~70</option><option value="3">~200</option><option value="4">~500</option>
+              </select></div>
+            <div class="setting-row"><span>ADC Averages (2^n)</span>
+              <select id="s_adcAvg" onchange="sendCmd('SETT:ADC:AVG '+this.value)">
+                <option value="0">1</option><option value="1">2</option><option value="2">4</option>
+                <option value="3">8</option><option value="4">16</option><option value="5">32</option>
+              </select></div>
+            <div class="setting-row"><span>Display Digits</span>
+              <select id="s_adcDig" onchange="sendCmd('SETT:ADC:DIG '+this.value)">
+                <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+              </select></div>
+          </div>
+
+          <!-- Graph -->
+          <div class="sect" id="s_graph" style="display:none">
+            <div class="sect-title">Graph</div>
+            <div class="setting-row"><span>X-axis Time Mode</span>
+              <label class="sw"><input type="checkbox" id="s_graphTime" onchange="sendCmd('SETT:GRAPH:TIME '+(this.checked?1:0))"><span class="sl"></span></label></div>
+            <div class="setting-row"><span>Time Span</span>
+              <select id="s_graphSpan" onchange="sendCmd('SETT:GRAPH:SPAN '+this.value)">
+                <option value="5">5s</option><option value="10">10s</option><option value="30">30s</option>
+                <option value="60">1m</option><option value="300">5m</option><option value="600">10m</option>
+                <option value="1800">30m</option><option value="3600">1h</option><option value="7200">2h</option>
+                <option value="14400">4h</option><option value="28800">8h</option><option value="43200">12h</option>
+              </select></div>
+            <div class="note">Time span: 5s to 12h. Only used when Time Mode enabled.</div>
+            <div class="setting-row" style="margin-top:8px"><span>Auto-Stop after Full Span</span>
+              <label class="sw"><input type="checkbox" id="s_graphStop" onchange="sendCmd('SETT:GRAPH:STOP '+(this.checked?1:0))"><span class="sl"></span></label></div>
+          </div>
+
+          <!-- Beeper -->
+          <div class="sect" id="s_beeper" style="display:none">
+            <div class="sect-title">Beeper</div>
+            <div class="setting-row"><span>Buzzer Enable</span>
+              <label class="sw"><input type="checkbox" id="s_buzzer" onchange="sendCmd('SETT:BEEP '+(this.checked?1:0))"><span class="sl"></span></label></div>
+            <div class="setting-row"><span>Beep on Power Change</span>
+              <label class="sw"><input type="checkbox" id="s_beepPwr" onchange="sendCmd('SETT:BEEP:PWR '+(this.checked?1:0))"><span class="sl"></span></label></div>
+            <div class="setting-row"><span>Beep on Error</span>
+              <label class="sw"><input type="checkbox" id="s_beepErr" onchange="sendCmd('SETT:BEEP:ERR '+(this.checked?1:0))"><span class="sl"></span></label></div>
+          </div>
+
+          <!-- Timer -->
+          <div class="sect" id="s_timer" style="display:none">
+            <div class="sect-title">Timer</div>
+            <div class="setting-row"><span>Enable Timer</span>
+              <label class="sw"><input type="checkbox" id="s_timerEn" onchange="sendCmd('SETT:TIM:EN '+(this.checked?1:0))"><span class="sl"></span></label></div>
+            <div class="setting-row"><span>Duration (seconds)</span>
+              <input type="number" id="s_timerDur" min="0" max="28800" onchange="sendCmd('SETT:TIM:DUR '+this.value)"></div>
+          </div>
+
+          <!-- Power Management -->
+          <div class="sect" id="s_power" style="display:none">
+            <div class="sect-title">Power Management</div>
+            <div class="setting-row"><span>OVP Enable</span>
+              <label class="sw"><input type="checkbox" id="s_ovpEn" onchange="sendCmd('SETT:OVP:EN '+(this.checked?1:0))"><span class="sl"></span></label></div>
+            <div class="setting-row"><span>Voltage Limit Max (V)</span>
+              <input type="number" id="s_ovpLvl" min="0" max="32" step="0.1" onchange="sendCmd('SETT:OVP:LVL '+this.value)"></div>
+            <div class="setting-row"><span>OCP Enable</span>
+              <label class="sw"><input type="checkbox" id="s_ocpEn" onchange="sendCmd('SETT:OCP:EN '+(this.checked?1:0))"><span class="sl"></span></label></div>
+            <div class="setting-row"><span>Current Limit Max (A)</span>
+              <input type="number" id="s_ocpLvl" min="0" max="6" step="0.1" onchange="sendCmd('SETT:OCP:LVL '+this.value)"></div>
+            <div class="setting-row"><span>Output Delay (ms)</span>
+              <input type="number" id="s_delay" min="0" max="5000" step="100" onchange="sendCmd('SETT:DELAY '+this.value)"></div>
+            <div class="setting-row"><span>Auto-save Interval (min)</span>
+              <input type="number" id="s_asave" min="0" max="60" onchange="sendCmd('SETT:ASAVE '+this.value)"></div>
+            <div class="note">Energy Counter and Power-On Duration shown on main screen.</div>
+          </div>
+
+          <!-- Calibration -->
+          <div class="sect" id="s_calibration" style="display:none">
+            <div class="sect-title">Calibration</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              <button class="btn-sm" onclick="sendCmd('CAL:SAVE')">Save to Device</button>
+              <button class="btn-sm btn-save" onclick="downloadCal()">Download to PC</button>
+              <button class="btn-sm" onclick="uploadCalPick()">Upload from File</button>
+              <button class="btn-sm" onclick="sendCmd('CAL:LOAD')">Load Cal</button>
+              <button class="btn-sm" onclick="sendCmd('*RST')">Reset (*RST)</button>
+              <input type="file" id="calFileInput" accept=".json" style="display:none" onchange="uploadCalFile(this)">
+            </div>
+            <div id="calStatus" style="font-size:12px;color:#888;margin-top:6px"></div>
+            <div class="note" style="margin-top:8px">ADC Voltage, ADC Current, V/I DAC, Internal Current, ADC INL, Full Auto Cal,
+              and LCD Touch calibrations are available on the device touchscreen only.</div>
+          </div>
+
+          <!-- Load/Save -->
+          <div class="sect" id="s_loadsave" style="display:none">
+            <div class="sect-title">Load / Save</div>
+            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+              <button class="btn-sm" onclick="sendCmd('SETT:LOAD')">Load Settings</button>
+              <button class="btn-sm btn-save" onclick="sendCmd('SETT:SAVE')">Save Settings</button>
+            </div>
+            <div class="setting-row"><span>Power at Startup</span>
+              <select id="s_startup" onchange="sendCmd('SETT:START '+this.value)">
+                <option value="0">Always Off</option>
+                <option value="1">Always On</option>
+                <option value="2">Last Status</option>
+              </select></div>
+          </div>
+
+          <!-- About -->
+          <div class="sect" id="s_about" style="display:none">
+            <div class="sect-title">About</div>
+            <div style="font-size:13px;line-height:1.8">
+              <div>ESP32-S3 Precision Power Supply</div>
+              <div style="color:#888">24-bit ADC (ADS1219) | 16-bit DAC (LTC2655)</div>
+              <div style="color:#888">0-32.768V / 0-5.000A</div>
+              <div style="color:#888">SCPI IEEE 488.2 / SCPI-1999</div>
+              <div style="color:#888;margin-top:8px" id="s_version">Firmware: --</div>
+              <div style="color:#888" id="s_datetime">Date/Time: --</div>
+              <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+                <button class="btn-sm" onclick="queryVersion()">Query *IDN?</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var polling = true, ptimer = null, outState = false, fgenState = false;
+var lastGraphData = null, mAmode = false;
+var waveNames = [
+  'Sine','Sawtooth','Square','Triangular','PWM','Exp Decay','Exp Rise',
+  'Full Wave Rect','Gaussian Pulse','Inv Sawtooth','Linear Chirp',
+  'Logarithmic','Parabolic','Random Noise','Sinc Function',
+  'Table Points','Arbitrary B0','Arbitrary B1'
+];
+var curWaveIdx = 0;
+
+function fmt(v, d) { var n = parseFloat(v); return isNaN(n) ? '---.---' : n.toFixed(d || 4); }
+
+// Tab switching
+function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
+    document.getElementById('tab-' + name).classList.add('active');
+    event.target.classList.add('active');
+    if (name === 'settings') loadSettings();
+    if (name === 'utility') { loadMem(); loadFgen(); }
+    if (name === 'stats') loadStats();
+    if (name === 'logger') setTimeout(plotLog, 50);
+}
+
+// Utility sidebar navigation
+function showUtilPage(id, el) {
+    document.querySelectorAll('#tab-utility .settings-body > .sect').forEach(function(s) { s.style.display = 'none'; });
+    document.querySelectorAll('#tab-utility .settings-sidebar .si').forEach(function(s) { s.classList.remove('active'); });
+    document.getElementById(id).style.display = '';
+    if (el) el.classList.add('active');
+}
+
+// Settings sidebar navigation
+function showSettPage(id, el) {
+    document.querySelectorAll('.settings-body > .sect').forEach(function(s) { s.style.display = 'none'; });
+    document.querySelectorAll('.settings-sidebar .si').forEach(function(s) { s.classList.remove('active'); });
+    document.getElementById(id).style.display = '';
+    if (el) el.classList.add('active');
+    if (id === 's_about') {
+        document.getElementById('s_datetime').textContent = 'Date/Time: ' + new Date().toLocaleString();
+        queryVersion();
+    }
+}
+
+// Status update
+function updDisp(d) {
+    document.getElementById('mV').textContent = fmt(d.meas_v, 4);
+    mAmode = (d.mA_active === '1');
+    if (mAmode) {
+        document.getElementById('mI').textContent = fmt(d.meas_i, 2);
+        document.getElementById('mIU').textContent = 'mA';
+    } else {
+        document.getElementById('mI').textContent = fmt(d.meas_i, 4);
+        document.getElementById('mIU').textContent = 'A';
+    }
+    document.getElementById('mP').textContent = fmt(d.power, 4);
+    document.getElementById('sV').placeholder = fmt(d.set_v, 3);
+    document.getElementById('sI').placeholder = fmt(d.set_i, 3);
+    outState = (d.output === '1');
+    var b = document.getElementById('outBtn');
+    b.className = outState ? 'output-btn out-on' : 'output-btn out-off';
+    b.textContent = outState ? 'OUTPUT ON' : 'OUTPUT OFF';
+    document.getElementById('upd').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+    document.getElementById('connSt').textContent = 'Connected';
+    document.getElementById('connSt').style.color = '#66bb6a';
+}
+
+// Polling
+function doPoll() {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/status', true); x.timeout = 3000;
+    x.onload = function() {
+        if (x.status === 200) { try { updDisp(JSON.parse(x.responseText)); } catch(e) { document.getElementById('err').textContent = e; } }
+    };
+    x.onerror = function() { document.getElementById('err').textContent = 'Connection error'; };
+    x.ontimeout = function() { document.getElementById('err').textContent = 'Timeout'; };
+    x.send();
+}
+function startPoll() { stopPoll(); if (polling) { doPoll(); ptimer = setInterval(doPoll, 500); } }
+function stopPoll() { if (ptimer) { clearInterval(ptimer); ptimer = null; } }
+function togPoll() { polling = document.getElementById('pollCb').checked; if (polling) startPoll(); else stopPoll(); }
+
+// Commands
+function sendCmd(c) { var x = new XMLHttpRequest(); x.open('GET', '/cmd?c=' + encodeURIComponent(c), true); x.send(); }
+function doSetV() { var v = document.getElementById('sV').value; if (v) { sendCmd('SOUR:VOLT ' + v); document.getElementById('sV').value = ''; } }
+function doSetI() { var v = document.getElementById('sI').value; if (v) { sendCmd('SOUR:CURR ' + v); document.getElementById('sI').value = ''; } }
+function qv(v) { sendCmd('SOUR:VOLT ' + v); }
+function qi(v) { sendCmd('SOUR:CURR ' + v); }
+function togOut() { sendCmd(outState ? 'OUTP:STAT OFF' : 'OUTP:STAT ON'); }
+
+// Memory — matches device slot order {7,8,9, 4,5,6, 1,2,3, 0}
+var MEM_ORDER = [7, 8, 9, 4, 5, 6, 1, 2, 3, 0];
+var memSlotData = [];
+
+function fmtMem(v) {
+    var n = parseFloat(v);
+    if (isNaN(n)) return '----.----';
+    return (n >= 0 ? '+' : '') + n.toFixed(4);
+}
+
+function loadMem() {
+    var x = new XMLHttpRequest(); x.open('GET', '/mem', true); x.timeout = 5000;
+    x.onload = function() {
+        if (x.status === 200) {
+            try {
+                var d = JSON.parse(x.responseText);
+                memSlotData = d;
+                buildMemGrid();
+            } catch(e) {}
+        }
+    };
+    x.send();
+}
+
+function buildMemGrid() {
+    var d = memSlotData;
+    if (!d || !d.length) return;
+    var grid = document.getElementById('memGrid'); grid.innerHTML = '';
+    for (var i = 0; i < MEM_ORDER.length; i++) {
+        var slot = MEM_ORDER[i];
+        var btn = document.createElement('div');
+        btn.className = 'mem-btn' + (slot === 0 ? ' slot0' : '');
+        btn.setAttribute('data-slot', slot);
+        btn.innerHTML = '<span class="idx">' + slot + '</span>' +
+            '<span class="mv">' + fmtMem(d[slot] ? d[slot].v : 0) + 'V</span>' +
+            '<span class="mi">' + fmtMem(d[slot] ? d[slot].i : 0) + 'A</span>';
+        (function(s, el) {
+            el.addEventListener('click', function(e) {
+                openMemPopup(s, el);
+            });
+            el.addEventListener('touchstart', function(e) { e.preventDefault(); openMemPopup(s, el); }, {passive:false});
+        })(slot, btn);
+        grid.appendChild(btn);
+    }
+}
+
+var _mpSlot = -1;
+
+function openMemPopup(slot, el) {
+    _mpSlot = slot;
+    var d = memSlotData && memSlotData[slot];
+    document.getElementById('mpSlotNum').textContent = slot;
+    document.getElementById('mpV').value = d ? parseFloat(d.v).toFixed(4) : '0.0000';
+    document.getElementById('mpI').value = d ? parseFloat(d.i).toFixed(4) : '0.0000';
+    var pop = document.getElementById('memPopup');
+    pop.style.display = 'block';
+    // Position near the clicked element
+    var rect = el.getBoundingClientRect();
+    var pw = 200, ph = 140;
+    var left = rect.right + 8;
+    var top = rect.top;
+    if (left + pw > window.innerWidth) left = rect.left - pw - 8;
+    if (top + ph > window.innerHeight) top = window.innerHeight - ph - 8;
+    pop.style.left = Math.max(0, left) + 'px';
+    pop.style.top = Math.max(0, top) + 'px';
+}
+
+function closeMemPopup() {
+    document.getElementById('memPopup').style.display = 'none';
+    _mpSlot = -1;
+}
+
+function doMemRecall() {
+    if (_mpSlot < 0) return;
+    sendCmd('MEM:RCL ' + _mpSlot);
+    closeMemPopup();
+}
+
+function doMemStore() {
+    if (_mpSlot < 0) return;
+    var v = parseFloat(document.getElementById('mpV').value);
+    var i = parseFloat(document.getElementById('mpI').value);
+    if (isNaN(v) || isNaN(i)) return;
+    sendCmd('MEM:STOR ' + _mpSlot + ' ' + v.toFixed(4) + ' ' + i.toFixed(4));
+    // Update local cache immediately for visual feedback
+    if (!memSlotData[_mpSlot]) memSlotData[_mpSlot] = {};
+    memSlotData[_mpSlot].v = v; memSlotData[_mpSlot].i = i;
+    closeMemPopup();
+    setTimeout(loadMem, 400);
+}
+
+// Close popup when clicking outside
+document.addEventListener('click', function(e) {
+    var pop = document.getElementById('memPopup');
+    if (pop && pop.style.display !== 'none' && !pop.contains(e.target) && !e.target.closest('.mem-btn'))
+        closeMemPopup();
+});
+
+function recallMem(slot) { sendCmd('MEM:RCL ' + slot); }
+
+// FGen
+function buildWaveGrid() {
+    var grid = document.getElementById('waveGrid');
+    grid.innerHTML = '';
+    for (var i = 0; i < waveNames.length; i++) {
+        var btn = document.createElement('div');
+        btn.className = 'wave-btn' + (i === curWaveIdx ? ' active' : '');
+        btn.textContent = waveNames[i];
+        btn.setAttribute('data-idx', i);
+        btn.onclick = function() {
+            var idx = parseInt(this.getAttribute('data-idx'));
+            sendCmd('SOUR:FGEN:WAVE ' + idx);
+            curWaveIdx = idx;
+            document.querySelectorAll('.wave-btn').forEach(function(b) { b.classList.remove('active'); });
+            this.classList.add('active');
+            document.getElementById('fgenWaveName').textContent = waveNames[idx];
+        };
+        grid.appendChild(btn);
+    }
+}
+
+function loadFgen() {
+    var x = new XMLHttpRequest(); x.open('GET', '/fgen', true); x.timeout = 5000;
+    x.onload = function() {
+        if (x.status === 200) {
+            try {
+                var d = JSON.parse(x.responseText);
+                if (d.freq !== undefined) document.getElementById('fg_freq').value = d.freq;
+                if (d.ampl !== undefined) document.getElementById('fg_ampl').value = d.ampl;
+                if (d.offset !== undefined) document.getElementById('fg_offs').value = d.offset;
+                if (d.duty !== undefined) document.getElementById('fg_duty').value = d.duty;
+                if (d.waveIdx !== undefined) {
+                    curWaveIdx = d.waveIdx;
+                    document.getElementById('fgenWaveName').textContent = d.waveName || waveNames[d.waveIdx] || '';
+                    buildWaveGrid();
+                }
+                fgenState = (d.mode === 'FGEN');
+                var b = document.getElementById('fgenBtn');
+                b.className = fgenState ? 'fgen-mode-btn fgen-on' : 'fgen-mode-btn fgen-off';
+                b.textContent = fgenState ? 'FGen ON' : 'FGen OFF';
+            } catch(e) {}
+        }
+    };
+    x.send();
+}
+
+function togFgen() {
+    fgenState = !fgenState;
+    sendCmd('SOUR:FUNC ' + (fgenState ? 'FGEN' : 'CV'));
+    var b = document.getElementById('fgenBtn');
+    b.className = fgenState ? 'fgen-mode-btn fgen-on' : 'fgen-mode-btn fgen-off';
+    b.textContent = fgenState ? 'FGen ON' : 'FGen OFF';
+}
+
+// Settings
+function loadSettings() {
+    var x = new XMLHttpRequest(); x.open('GET', '/settings', true); x.timeout = 5000;
+    x.onload = function() {
+        if (x.status === 200) {
+            try {
+                var d = JSON.parse(x.responseText);
+                document.getElementById('s_adcRate').value = d.adcRate;
+                document.getElementById('s_adcAvg').value = d.adcAvg;
+                document.getElementById('s_adcDig').value = d.adcDig;
+                document.getElementById('s_buzzer').checked = d.buzzer;
+                document.getElementById('s_beepPwr').checked = d.beepPwr;
+                document.getElementById('s_beepErr').checked = d.beepErr;
+                document.getElementById('s_timerEn').checked = d.timerEn;
+                document.getElementById('s_timerDur').value = d.timerDur;
+                document.getElementById('s_ovpEn').checked = d.ovpEn;
+                document.getElementById('s_ovpLvl').value = d.ovpLvl;
+                document.getElementById('s_ocpEn').checked = d.ocpEn;
+                document.getElementById('s_ocpLvl').value = d.ocpLvl;
+                document.getElementById('s_delay').value = d.delay;
+                document.getElementById('s_asave').value = d.asave;
+                document.getElementById('s_graphTime').checked = d.graphTime;
+                document.getElementById('s_graphSpan').value = d.graphSpan;
+                document.getElementById('s_graphStop').checked = d.graphStop;
+                if (d.startup !== undefined)
+                    document.getElementById('s_startup').value = d.startup;
+            } catch(e) {}
+        }
+    };
+    x.send();
+}
+
+// Version query
+function queryVersion() {
+    var el = document.getElementById('s_version');
+    el.textContent = 'Querying...';
+    var now = new Date();
+    document.getElementById('s_datetime').textContent = 'Date/Time: ' + now.toLocaleString();
+    var x = new XMLHttpRequest();
+    x.open('GET', '/query?c=' + encodeURIComponent('*IDN?'), true); x.timeout = 3000;
+    x.onload = function() {
+        if (x.status === 200) {
+            try {
+                var d = JSON.parse(x.responseText);
+                el.textContent = 'Firmware: ' + (d.response || '(no response)');
+            } catch(e) { el.textContent = 'Parse error'; }
+        } else { el.textContent = 'Query failed'; }
+    };
+    x.onerror = x.ontimeout = function() { el.textContent = 'Timeout / error'; };
+    x.send();
+}
+
+function uploadCalPick() {
+    document.getElementById('calFileInput').value = '';
+    document.getElementById('calFileInput').click();
+}
+
+function uploadCalFile(input) {
+    var st = document.getElementById('calStatus');
+    if (!input.files || !input.files[0]) return;
+    var file = input.files[0];
+    st.textContent = 'Reading ' + file.name + '...';
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var d;
+        try { d = JSON.parse(e.target.result); } catch(err) { st.textContent = 'Invalid JSON: ' + err; return; }
+        st.textContent = 'Uploading to device...';
+        var x = new XMLHttpRequest();
+        x.open('POST', '/upload_cal', true); x.timeout = 15000;
+        x.setRequestHeader('Content-Type', 'application/json');
+        x.onload = function() {
+            if (x.status === 200) {
+                try {
+                    var r = JSON.parse(x.responseText);
+                    if (r.error) st.textContent = 'Error: ' + r.error;
+                    else st.textContent = 'Uploaded & saved: ' + file.name;
+                } catch(err) { st.textContent = 'Parse error'; }
+            } else { st.textContent = 'Upload failed (status ' + x.status + ')'; }
+        };
+        x.onerror = x.ontimeout = function() { st.textContent = 'Timeout / error'; };
+        x.send(JSON.stringify(d));
+    };
+    reader.readAsText(file);
+}
+
+function downloadCal() {
+    var st = document.getElementById('calStatus');
+    st.textContent = 'Fetching calibration...';
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cal', true); x.timeout = 10000;
+    x.onload = function() {
+        if (x.status === 200) {
+            try {
+                var d = JSON.parse(x.responseText);
+                if (d.error) { st.textContent = 'Error: ' + d.error; return; }
+                var ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                var blob = new Blob([JSON.stringify(d, null, 2)], {type: 'application/json'});
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'calibration_' + ts + '.json';
+                a.click();
+                st.textContent = 'Downloaded: calibration_' + ts + '.json';
+            } catch(e) { st.textContent = 'Parse error'; }
+        } else { st.textContent = 'Fetch failed (status ' + x.status + ')'; }
+    };
+    x.onerror = x.ontimeout = function() { st.textContent = 'Timeout / error'; };
+    x.send();
+}
+
+// Graph
+function doGraph() {
+    var b = document.getElementById('gBtn'); b.disabled = true;
+    document.getElementById('gSt').textContent = 'Fetching...';
+    var wp = polling; stopPoll();
+    var x = new XMLHttpRequest(); x.open('GET', '/graph', true); x.timeout = 30000;
+    x.onload = function() {
+        b.disabled = false; if (wp) startPoll();
+        if (x.status === 200) {
+            try {
+                var d = JSON.parse(x.responseText);
+                if (d.error) document.getElementById('gSt').textContent = 'Error: ' + d.error;
+                else {
+                    lastGraphData = {idx:d.idx, voltage:d.voltage, current:d.current, mA_active: !!d.mA_active};
+                    document.getElementById('gSaveBtn').disabled = false;
+                    plotIt(d.idx, d.voltage, d.current, !!d.mA_active);
+                    document.getElementById('gSt').textContent = d.idx.length + ' points';
+                }
+            } catch(e) { document.getElementById('gSt').textContent = 'Parse error: ' + e; }
+        }
+    };
+    x.onerror = function() { b.disabled = false; if (wp) startPoll(); document.getElementById('gSt').textContent = 'Error'; };
+    x.ontimeout = function() { b.disabled = false; if (wp) startPoll(); document.getElementById('gSt').textContent = 'Timeout'; };
+    x.send();
+}
+function doCSV(input) {
+    var file = input.files[0]; if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var lines = e.target.result.trim().split('\n');
+        var idx = [], vol = [], cur = [];
+        for (var j = 0; j < lines.length; j++) {
+            var p = lines[j].split(',');
+            if (p.length >= 3) { var a = parseInt(p[0]), b = parseFloat(p[1]), c = parseFloat(p[2]);
+                if (!isNaN(a) && !isNaN(b) && !isNaN(c)) { idx.push(a); vol.push(b / 1000.0); cur.push(c); } }
+        }
+        lastGraphData = {idx:idx, voltage:vol, current:cur, mA_active: mAmode};
+        document.getElementById('gSaveBtn').disabled = false;
+        plotIt(idx, vol, cur, mAmode);
+        document.getElementById('gSt').textContent = idx.length + ' points from ' + file.name;
+    };
+    reader.readAsText(file); input.value = '';
+}
+function saveGraph() {
+    if (!lastGraphData) return;
+    var d = lastGraphData;
+    var lines = ['Index,Voltage_V,Current_mA'];
+    for (var i = 0; i < d.idx.length; i++)
+        lines.push(d.idx[i] + ',' + d.voltage[i].toFixed(6) + ',' + d.current[i].toFixed(4));
+    var blob = new Blob([lines.join('\n')], {type: 'text/csv'});
+    var now = new Date();
+    var ts = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' +
+        String(now.getDate()).padStart(2,'0') + '_' + String(now.getHours()).padStart(2,'0') +
+        String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0');
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'graph_' + ts + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+// ── Continuous Recording (overlap-detection) ─────────────────────────────────
+// Strategy: fetch 1200-pt snapshot periodically, detect overlap with previous
+// snapshot by fingerprinting the tail of the old data in the new data, then
+// append only the truly new points. No buffer reset needed.
+var recActive = false, recData = null, recMAactive = false;
+var recPrevSnap = null;   // last raw snapshot {voltage[], current[]}
+var recPrevTime = 0;      // wall-clock ms of last fetch
+var recTimer = null;
+var REC_FP_LEN = 40;      // fingerprint length (values to match)
+var REC_TOLERANCE = 5e-4; // match tolerance (V or A)
+
+function toggleRecord() {
+    if (recActive) stopRecord(); else startRecord();
+}
+function startRecord() {
+    recActive = true;
+    recData = {idx:[], voltage:[], current:[]};
+    recPrevSnap = null; recPrevTime = 0; recMAactive = mAmode;
+    var btn = document.getElementById('recBtn');
+    btn.textContent = 'Stop Rec';
+    btn.style.background = '#c62828'; btn.style.borderColor = '#ef9a9a'; btn.style.color = '#fff';
+    document.getElementById('gSt').textContent = 'Fetching first snapshot...';
+    recFetch();
+}
+function stopRecord() {
+    recActive = false;
+    if (recTimer) { clearTimeout(recTimer); recTimer = null; }
+    var btn = document.getElementById('recBtn');
+    btn.textContent = 'Record';
+    btn.style.background = '#1b5e20'; btn.style.borderColor = '#4caf50'; btn.style.color = '#a5d6a7';
+    document.getElementById('gSt').textContent = 'Stopped. ' + (recData ? recData.idx.length : 0) + ' pts total.';
+}
+// Find how many new points are at the tail of newVol relative to prevVol.
+// Searches for prevVol's last FP_LEN values inside newVol.
+// Returns the count of new (non-overlapping) points, or newVol.length if no match.
+function recFindNewCount(prevVol, newVol) {
+    var n = newVol.length;
+    var fp = prevVol.slice(-REC_FP_LEN);
+    // Search from position 0 up to (n - REC_FP_LEN), expect match near (n-N-FP_LEN)
+    // where N = new points. Scan backward from middle to find the latest valid match
+    // (latest = most new data, handles duplicate-looking flat signals better).
+    var bestPos = -1;
+    for (var i = n - REC_FP_LEN; i >= 0; i--) {
+        var ok = true;
+        for (var j = 0; j < REC_FP_LEN; j++) {
+            if (Math.abs(newVol[i + j] - fp[j]) > REC_TOLERANCE) { ok = false; break; }
+        }
+        if (ok) { bestPos = i; break; } // scan backward: first hit is the one with most new pts
+    }
+    if (bestPos < 0) return n;  // no overlap found → all new (gap or first fetch)
+    var newCount = n - (bestPos + REC_FP_LEN);
+    return newCount > 0 ? newCount : 0;
+}
+function recFetch() {
+    if (!recActive) return;
+    var x = new XMLHttpRequest();
+    x.open('GET', '/graph', true); x.timeout = 30000;
+    x.onload = function() {
+        if (!recActive) return;
+        if (x.status !== 200) { recScheduleNext(); return; }
+        try {
+            var d = JSON.parse(x.responseText);
+            if (d.error) { recScheduleNext(); return; }
+            var now = Date.now();
+            if (d.mA_active !== undefined) recMAactive = !!d.mA_active;
+
+            if (recPrevSnap === null) {
+                // First fetch: take all 1200 points
+                for (var i = 0; i < d.voltage.length; i++) {
+                    recData.idx.push(i);
+                    recData.voltage.push(d.voltage[i]);
+                    recData.current.push(d.current[i]);
+                }
+            } else {
+                // Subsequent fetch: find overlap and append only new points
+                var newCount = recFindNewCount(recPrevSnap.voltage, d.voltage);
+                var base = recData.idx.length;
+                var elapsed = now - recPrevTime;
+                for (var i = d.voltage.length - newCount; i < d.voltage.length; i++) {
+                    recData.idx.push(base + (i - (d.voltage.length - newCount)));
+                    recData.voltage.push(d.voltage[i]);
+                    recData.current.push(d.current[i]);
+                }
+                var note = newCount === d.voltage.length ? ' (gap/new)' : ' (+' + newCount + ')';
+                document.getElementById('gSt').textContent =
+                    'Rec ' + recData.idx.length + ' pts' + note +
+                    ' | ' + (elapsed/1000).toFixed(1) + 's/snap';
+            }
+
+            recPrevSnap = {voltage: d.voltage.slice(), current: d.current.slice()};
+            recPrevTime = now;
+            lastGraphData = {idx: recData.idx.slice(), voltage: recData.voltage.slice(),
+                             current: recData.current.slice(), mA_active: recMAactive};
+            document.getElementById('gSaveBtn').disabled = false;
+            plotIt(recData.idx, recData.voltage, recData.current, recMAactive);
+            if (recPrevSnap && recData.idx.length <= 1200)
+                document.getElementById('gSt').textContent =
+                    'Rec ' + recData.idx.length + ' pts — waiting...';
+            recScheduleNext();
+        } catch(e) { recScheduleNext(); }
+    };
+    x.onerror = x.ontimeout = function() { if (recActive) recScheduleNext(); };
+    x.send();
+}
+function recScheduleNext() {
+    if (!recActive) return;
+    var ms = (parseInt(document.getElementById('recInterval').value) || 3) * 1000;
+    recTimer = setTimeout(recFetch, ms);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+function plotIt(idx, vol, cur, mA_active) {
+    if (typeof Plotly === 'undefined') { document.getElementById('gSt').textContent = 'Plotly loading...'; return; }
+    // Convert current: mA mode → mA (range 0-8), A mode → A (divide by 1000, range 0-8)
+    var curDisp, curUnit, curMax;
+    if (mA_active) {
+        curDisp = cur;           // already in mA
+        curUnit = 'Current (mA)';
+        curMax = 8;              // 8 mA full scale → aligns with 32 V
+    } else {
+        curDisp = cur.map(function(v) { return v / 1000.0; }); // mA → A
+        curUnit = 'Current (A)';
+        curMax = 8;              // 8 A full scale → aligns with 32 V
+    }
+    Plotly.newPlot('chart', [
+        { x: idx, y: vol,     name: 'Voltage (V)', type: 'scatter', mode: 'lines+markers',
+          line: { color: '#4fc3f7', width: 1.2 }, marker: { color: '#4fc3f7', size: 3 }, yaxis: 'y1' },
+        { x: idx, y: curDisp, name: curUnit,        type: 'scatter', mode: 'lines+markers',
+          line: { color: '#ffb74d', width: 1.2 }, marker: { color: '#ffb74d', size: 3 }, yaxis: 'y2' }
+    ], {
+        paper_bgcolor: '#1e1e2e', plot_bgcolor: '#2d2d2d', font: { color: '#ccc' },
+        legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(0,0,0,0.5)' },
+        dragmode: 'pan',
+        xaxis: { title: 'Sample', gridcolor: 'rgba(255,255,255,0.08)',
+            rangeslider: { visible: true, bgcolor: '#1e1e2e', thickness: 0.12,
+                bordercolor: '#444', borderwidth: 1 } },
+        // Both axes anchored at 0 and scaled so 0 V == 0 A and 32 V == 8 A (or 8 mA)
+        yaxis:  { title: 'Voltage (V)', titlefont: { color: '#4fc3f7' }, tickfont: { color: '#4fc3f7' },
+                  range: [0, 32], gridcolor: 'rgba(79,195,247,0.15)', side: 'left',  fixedrange: false },
+        yaxis2: { title: curUnit,       titlefont: { color: '#ffb74d' }, tickfont: { color: '#ffb74d' },
+                  range: [0, curMax],   overlaying: 'y', side: 'right',
+                  gridcolor: 'rgba(255,183,77,0.08)', fixedrange: false },
+        margin: { l: 60, r: 60, t: 10, b: 40 }, hovermode: 'x unified'
+    }, { scrollZoom: true, displayModeBar: true, responsive: true,
+         modeBarButtonsToAdd: ['drawline','eraseshape'],
+         modeBarButtonsToRemove: ['lasso2d','select2d'] });
+    // Clamp zoom-out limits
+    var el = document.getElementById('chart');
+    el.on('plotly_relayout', function(ed) {
+        var fix = {};
+        if (ed['yaxis.range[0]']  !== undefined && ed['yaxis.range[0]']  < -1)     fix['yaxis.range[0]']  = 0;
+        if (ed['yaxis.range[1]']  !== undefined && ed['yaxis.range[1]']  > 35)     fix['yaxis.range[1]']  = 35;
+        if (ed['yaxis2.range[0]'] !== undefined && ed['yaxis2.range[0]'] < -1)     fix['yaxis2.range[0]'] = 0;
+        if (ed['yaxis2.range[1]'] !== undefined && ed['yaxis2.range[1]'] > curMax * 1.1) fix['yaxis2.range[1]'] = curMax * 1.1;
+        if (Object.keys(fix).length > 0) Plotly.relayout(el, fix);
+    });
+}
+
+// Graph drag mode
+function setDrag(mode) {
+    var chart = document.getElementById('chart');
+    var pmodes = {pan: 'pan', zoom: 'zoom', x: 'x', y: 'y'};
+    if (chart && chart.data) {
+        // x/y zoom: lock the other axis
+        Plotly.relayout(chart, {
+            dragmode: mode === 'x' || mode === 'y' ? 'zoom' : mode,
+            'xaxis.fixedrange': mode === 'y',
+            'yaxis.fixedrange': mode === 'x',
+            'yaxis2.fixedrange': mode === 'x'
+        });
+    }
+    ['bPan','bZoom','bZoomX','bZoomY'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var active = (id === 'bPan' && mode === 'pan') || (id === 'bZoom' && mode === 'zoom') ||
+                     (id === 'bZoomX' && mode === 'x') || (id === 'bZoomY' && mode === 'y');
+        el.style.background = active ? '#4fc3f7' : '';
+        el.style.color = active ? '#1a1a2e' : '';
+    });
+}
+function resetAxes() {
+    var chart = document.getElementById('chart');
+    if (chart && chart.data) Plotly.relayout(chart, {'xaxis.autorange': true, 'yaxis.autorange': true, 'yaxis2.autorange': true});
+}
+
+// Arbitrary waveform (20 points per bank, values 0-140 matching device chart)
+// ── Statistics Tab ────────────────────────────────────────────────────────────
+var statsAutoTimer = null;
+function loadStats() {
+    document.getElementById('statsSt').textContent = 'Fetching...';
+    var x = new XMLHttpRequest(); x.open('GET', '/stats', true); x.timeout = 5000;
+    x.onload = function() {
+        if (x.status === 200) {
+            try {
+                var d = JSON.parse(x.responseText);
+                if (d.error) { document.getElementById('statsSt').textContent = 'Error: ' + d.error; return; }
+                updateStatsUI(d);
+                document.getElementById('statsSt').textContent = new Date().toLocaleTimeString();
+            } catch(e) { document.getElementById('statsSt').textContent = 'Parse error'; }
+        }
+    };
+    x.onerror = x.ontimeout = function() { document.getElementById('statsSt').textContent = 'Timeout'; };
+    x.send();
+}
+function updateStatsUI(d) {
+    var iUnit = mAmode ? 'mA' : 'A';
+    var iPrec = mAmode ? 4 : 6;
+    if (d.V) {
+        drawGaussian('sv_canvas', d.V.min, d.V.max, d.V.mean, d.V.std, '#4fc3f7', 'V', 5);
+        renderStatsMetrics('sv_metrics', d.V, 'V', 5, '#4fc3f7');
+    }
+    if (d.I) {
+        drawGaussian('si_canvas', d.I.min, d.I.max, d.I.mean, d.I.std, '#ffb74d', iUnit, iPrec);
+        renderStatsMetrics('si_metrics', d.I, iUnit, iPrec, '#ffb74d');
+    }
+}
+function renderStatsMetrics(id, s, unit, prec, color) {
+    var pp = s.max - s.min;
+    var rows = [
+        { l:'MEAN', v: s.mean.toFixed(prec)+' '+unit, hi:true, c:color },
+        { l:'STD DEV', v: s.std.toFixed(prec)+' '+unit, hi:false },
+        { l:'PEAK-PEAK', v: pp.toFixed(prec)+' '+unit, hi:false },
+        { l:'EFF RES', v: s.er.toFixed(2)+' bit', hi:false },
+        { l:'MIN', v: s.min.toFixed(prec)+' '+unit, hi:false },
+        { l:'MAX', v: s.max.toFixed(prec)+' '+unit, hi:false },
+        { l:'RMS', v: s.rms.toFixed(prec)+' '+unit, hi:false },
+        { l:'STD/MEAN', v: (s.mean !== 0 ? (s.std/Math.abs(s.mean)*100).toFixed(3)+'%' : '---'), hi:false }
+    ];
+    var el = document.getElementById(id); el.innerHTML = '';
+    rows.forEach(function(r) {
+        var d = document.createElement('div');
+        d.className = 'sm' + (r.hi ? ' hi' : '');
+        d.innerHTML = '<div class="sl">'+r.l+'</div><div class="sv" style="'+(r.c?'color:'+r.c:'')+'">'+r.v+'</div>';
+        el.appendChild(d);
+    });
+}
+function drawGaussian(canvasId, min, max, mean, std, color, unit, prec) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    var dpr = window.devicePixelRatio || 1;
+    var rect = canvas.getBoundingClientRect();
+    var W = rect.width || 400, H = rect.height || 110;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
+    var AXISH = 16; // bottom label strip
+    var pH = H - AXISH; // plot height
+    if (std <= 0 || max < min) {
+        ctx.fillStyle = '#333'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('No data', W/2, H/2); return;
+    }
+    // X range: ±4σ from mean, expanded to include actual min/max
+    var sigma = Math.max(std, (max - min) * 0.001);
+    var xMin = Math.min(min, mean - 4.5*sigma);
+    var xMax = Math.max(max, mean + 4.5*sigma);
+    if (xMin >= xMax) return;
+    var span = xMax - xMin;
+    var toX = function(v) { return (v - xMin) / span * W; };
+    var gauss = function(v) { var z=(v-mean)/sigma; return Math.exp(-0.5*z*z); };
+    // Background grid
+    ctx.strokeStyle = '#1a1a2e'; ctx.lineWidth = 1;
+    for (var gi = 1; gi <= 4; gi++) {
+        var gx = W * gi / 5;
+        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, pH); ctx.stroke();
+    }
+    for (var gi = 1; gi <= 3; gi++) {
+        var gy = pH * gi / 4;
+        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+    }
+    // ±2σ fill (outer)
+    ctx.beginPath();
+    ctx.moveTo(toX(xMin), pH);
+    for (var px = 0; px <= W; px++) {
+        var v = xMin + px/W*span;
+        ctx.lineTo(px, pH - gauss(v) * (pH - 6));
+    }
+    ctx.lineTo(W, pH); ctx.closePath();
+    ctx.fillStyle = color + '18'; ctx.fill();
+    // ±1σ fill (inner)
+    var x1s = Math.max(0, toX(mean - sigma)), x2s = Math.min(W, toX(mean + sigma));
+    ctx.beginPath();
+    ctx.moveTo(x1s, pH);
+    for (var px = Math.floor(x1s); px <= Math.ceil(x2s); px++) {
+        var v = xMin + px/W*span;
+        ctx.lineTo(px, pH - gauss(v) * (pH - 6));
+    }
+    ctx.lineTo(x2s, pH); ctx.closePath();
+    ctx.fillStyle = color + '38'; ctx.fill();
+    // Gaussian curve
+    ctx.beginPath();
+    for (var px = 0; px <= W; px++) {
+        var v = xMin + px/W*span; var y = pH - gauss(v) * (pH - 6);
+        if (px === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+    }
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.stroke();
+    // Min/Max dashed markers
+    function vline(v, c, dash) {
+        var x = toX(v); if (x < 1 || x > W-1) return;
+        ctx.setLineDash(dash || []); ctx.strokeStyle = c; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, pH); ctx.stroke();
+        ctx.setLineDash([]);
+    }
+    vline(min, '#444', [3,4]); vline(max, '#444', [3,4]);
+    vline(mean - sigma, color + '80', [2,3]); vline(mean + sigma, color + '80', [2,3]);
+    vline(mean, color, []);
+    // X axis baseline
+    ctx.fillStyle = '#1e1e30'; ctx.fillRect(0, pH, W, AXISH);
+    ctx.strokeStyle = '#2a2a40'; ctx.lineWidth = 1; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(0, pH); ctx.lineTo(W, pH); ctx.stroke();
+    // Axis labels: min, mean, max
+    ctx.font = '9px monospace';
+    function axlabel(v, txt, align) {
+        var x = toX(v); x = Math.max(2, Math.min(W-2, x));
+        ctx.textAlign = align; ctx.fillStyle = '#666'; ctx.fillText(txt, x, H-3);
+    }
+    axlabel(min,  min.toFixed(prec < 4 ? prec : 4)+unit, 'left');
+    axlabel(mean, mean.toFixed(prec < 4 ? prec : 4)+unit, 'center');
+    axlabel(max,  max.toFixed(prec < 4 ? prec : 4)+unit, 'right');
+}
+function toggleStatsAuto(on) {
+    if (statsAutoTimer) { clearInterval(statsAutoTimer); statsAutoTimer = null; }
+    if (on) statsAutoTimer = setInterval(loadStats, 2000);
+}
+function resetStats() {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cmd?c=' + encodeURIComponent('*CLS'), true); x.send();
+    setTimeout(loadStats, 300);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+var arbtData = new Array(20).fill(70);
+function buildArbtTable() {
+    var body = document.getElementById('arbtBody'); body.innerHTML = '';
+    for (var i = 0; i < 20; i++) {
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td style="padding:2px 4px;border-bottom:1px solid #333;color:#888;text-align:center">' + i +
+            '</td><td style="padding:2px 4px;border-bottom:1px solid #333"><input type="number" min="0" max="140" value="' +
+            arbtData[i] + '" data-idx="' + i + '" style="width:80px;background:#0a0a1a;border:1px solid #444;border-radius:3px;color:#e0e0e0;padding:2px 4px;font-size:12px;font-family:monospace" onchange="arbtData[parseInt(this.dataset.idx)]=parseFloat(this.value);drawArbt()"></td>';
+        body.appendChild(tr);
+    }
+    drawArbt();
+}
+function drawArbt() {
+    var canvas = document.getElementById('arbtCanvas');
+    var rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width; canvas.height = rect.height;
+    var ctx = canvas.getContext('2d');
+    var n = arbtData.length;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#42a5f5'; ctx.lineWidth = 2; ctx.beginPath();
+    for (var i = 0; i < n; i++) {
+        var x = (i / (n - 1)) * (canvas.width - 20) + 10;
+        var y = canvas.height - 10 - (arbtData[i] / 140) * (canvas.height - 20);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#42a5f5';
+    for (var i = 0; i < n; i++) {
+        var x = (i / (n - 1)) * (canvas.width - 20) + 10;
+        var y = canvas.height - 10 - (arbtData[i] / 140) * (canvas.height - 20);
+        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+    }
+}
+function arbtPreset(type) {
+    var n = arbtData.length;
+    for (var i = 0; i < n; i++) {
+        var t = i / (n - 1);
+        if (type === 'sine') arbtData[i] = Math.round(70 + 70 * Math.sin(t * Math.PI * 2));
+        else if (type === 'square') arbtData[i] = t < 0.5 ? 140 : 0;
+        else if (type === 'tri') arbtData[i] = Math.round(t < 0.5 ? t * 2 * 140 : (1 - t) * 2 * 140);
+        else if (type === 'saw') arbtData[i] = Math.round(t * 140);
+        else arbtData[i] = 0;
+    }
+    buildArbtTable();
+}
+function loadArbt() {
+    var bank = document.getElementById('arbtBank').value;
+    var x = new XMLHttpRequest(); x.open('GET', '/arbt?bank=' + bank, true); x.timeout = 5000;
+    x.onload = function() {
+        if (x.status === 200) {
+            try { var d = JSON.parse(x.responseText); if (d.points) { arbtData = d.points; buildArbtTable(); } } catch(e) {}
+        }
+    }; x.send();
+}
+function sendArbt() {
+    var bank = document.getElementById('arbtBank').value;
+    var x = new XMLHttpRequest(); x.open('POST', '/arbt?bank=' + bank, true);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.send(JSON.stringify({points: arbtData}));
+}
+
+// Table points (250 points, values 0.0-1.0)
+var tablData = new Array(250).fill(0);
+var tablLen = 100;
+function buildTablTable() {
+    var body = document.getElementById('tablBody'); body.innerHTML = '';
+    var len = parseInt(document.getElementById('tablLen').value) || 100;
+    for (var i = 0; i < len; i++) {
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td style="padding:2px 4px;border-bottom:1px solid #333;color:#888;text-align:center">' + i +
+            '</td><td style="padding:2px 4px;border-bottom:1px solid #333"><input type="number" min="0" max="1" step="0.0001" value="' +
+            tablData[i].toFixed(4) + '" data-idx="' + i + '" style="width:100px;background:#0a0a1a;border:1px solid #444;border-radius:3px;color:#e0e0e0;padding:2px 4px;font-size:12px;font-family:monospace" onchange="tablData[parseInt(this.dataset.idx)]=parseFloat(this.value);drawTabl()"></td>';
+        body.appendChild(tr);
+    }
+    drawTabl();
+}
+function drawTabl() {
+    var canvas = document.getElementById('tablCanvas');
+    var rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width; canvas.height = rect.height;
+    var ctx = canvas.getContext('2d');
+    var len = parseInt(document.getElementById('tablLen').value) || 100;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#ce93d8'; ctx.lineWidth = 1.5; ctx.beginPath();
+    for (var i = 0; i < len; i++) {
+        var x = (i / Math.max(len - 1, 1)) * (canvas.width - 20) + 10;
+        var y = canvas.height - 10 - tablData[i] * (canvas.height - 20);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+}
+function loadTabl() {
+    var x = new XMLHttpRequest(); x.open('GET', '/tabl', true); x.timeout = 10000;
+    x.onload = function() {
+        if (x.status === 200) {
+            try {
+                var d = JSON.parse(x.responseText);
+                if (d.points) tablData = d.points;
+                if (d.length) { tablLen = d.length; document.getElementById('tablLen').value = d.length; }
+                buildTablTable();
+            } catch(e) {}
+        }
+    }; x.send();
+}
+function sendTabl() {
+    var len = parseInt(document.getElementById('tablLen').value) || 100;
+    var x = new XMLHttpRequest(); x.open('POST', '/tabl', true);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.send(JSON.stringify({points: tablData.slice(0, len), length: len}));
+}
+
+
+// ------------------------------------------------------------ device info
+function getJSON(url, cb) {
+    var x = new XMLHttpRequest(); x.open('GET', url, true); x.timeout = 15000;
+    x.onload = function() { try { cb(JSON.parse(x.responseText)); } catch(e) {} };
+    x.send();
+}
+function loadInfo() {
+    getJSON('/info', function(d) {
+        var idn = (d.idn || '').split(',');
+        document.getElementById('devInfo').textContent =
+            (idn[1] || 'PSU') + '  fw ' + (idn[3] || '?') + '  ' + (d.driver || '') + '  ' + (d.port || '');
+    });
+}
+function resetBoard() {
+    if (!confirm('Hard-reset the power supply? The output turns OFF.')) return;
+    document.getElementById('connSt').textContent = 'Resetting...';
+    getJSON('/reset_board', function(d) {
+        document.getElementById('connSt').textContent = d.error ? ('Reset: ' + d.error) : 'Connected';
+        loadInfo();
+    });
+}
+
+// ------------------------------------------------------------ logger
+var logData = [], logTimer = null, logRunning = false;
+function toggleLog() {
+    if (logRunning) getJSON('/log/stop', logStatus);
+    else { logData = []; getJSON('/log/start?interval=' + (parseFloat(document.getElementById('logIv').value) || 1), logStatus); }
+}
+function logStatus(st) {
+    logRunning = st.running;
+    var b = document.getElementById('logBtn');
+    b.textContent = logRunning ? 'Stop logging' : 'Start logging';
+    b.className = logRunning ? 'btn-sm btn-save' : 'btn-sm';
+    document.getElementById('logPath').textContent = st.path ? ((logRunning ? 'writing ' : 'saved ') + st.path + (st.errors ? '  (' + st.errors + ' missed)' : '')) : '';
+    var e = Math.round(st.elapsed || 0);
+    document.getElementById('kT').textContent = Math.floor(e / 3600) + ':' + ('0' + Math.floor(e / 60) % 60).slice(-2) + ':' + ('0' + e % 60).slice(-2);
+    if (logRunning && !logTimer) logTimer = setInterval(logPoll, 1000);
+    if (!logRunning && logTimer) { clearInterval(logTimer); logTimer = null; logPoll(); }
+}
+function logPoll() {
+    getJSON('/log/data?since=' + logData.length, function(d) {
+        if (d.from === logData.length) logData = logData.concat(d.samples);
+        plotLog();
+    });
+    getJSON('/log/status', logStatus);
+}
+function fitSlope(xs, ys) {
+    var n = xs.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (var k = 0; k < n; k++) { sx += xs[k]; sy += ys[k]; sxx += xs[k] * xs[k]; sxy += xs[k] * ys[k]; }
+    var den = n * sxx - sx * sx;
+    return den ? (n * sxy - sx * sy) / den : 0;
+}
+function siI(a) { return Math.abs(a) < 0.1 ? (a * 1000).toFixed(3) + ' mA' : a.toFixed(5) + ' A'; }
+function plotLog() {
+    document.getElementById('kN').textContent = logData.length;
+    if (!logData.length || typeof Plotly === 'undefined') return;
+    var win = parseFloat(document.getElementById('logWin').value), tEnd = logData[logData.length - 1].t;
+    var d = win > 0 ? logData.filter(function(s) { return s.t >= tEnd - win; }) : logData;
+    var t = d.map(function(s) { return s.t; }), v = d.map(function(s) { return s.v; }), i = d.map(function(s) { return s.i; });
+    var mean = function(a) { return a.reduce(function(p, c) { return p + c; }, 0) / a.length; };
+    var vm = mean(v), im = mean(i);
+    document.getElementById('kV').textContent = vm.toFixed(5) + ' / ' + ((Math.max.apply(null, v) - Math.min.apply(null, v)) * 1000).toFixed(2) + ' mV';
+    document.getElementById('kI').textContent = siI(im) + ' / ' + siI(Math.max.apply(null, i) - Math.min.apply(null, i));
+    if (d.length > 5) {
+        var sl = fitSlope(t, i) * 60;
+        document.getElementById('kD').textContent = siI(sl) + '/min' + (Math.abs(im) > 1e-6 ? '  ' + (sl / im * 1e6).toFixed(0) + ' ppm' : '');
+    }
+    var wh = 0;
+    for (var k = 1; k < logData.length; k++) wh += logData[k].p * (logData[k].t - logData[k - 1].t) / 3600;
+    document.getElementById('kE').textContent = wh < 1 ? (wh * 1000).toFixed(2) + ' mWh' : wh.toFixed(4) + ' Wh';
+    var lay = { paper_bgcolor: '#0a0a1a', plot_bgcolor: '#0a0a1a', font: { color: '#aaa', size: 11 },
+        margin: { l: 60, r: 60, t: 10, b: 36 }, showlegend: false,
+        xaxis: { title: 't (s)', gridcolor: '#222' },
+        yaxis: { title: 'V', color: '#4fc3f7', gridcolor: '#222' },
+        yaxis2: { title: 'A', color: '#ffb74d', overlaying: 'y', side: 'right', showgrid: false } };
+    Plotly.react('logChart', [
+        { x: t, y: v, name: 'V', line: { color: '#4fc3f7', width: 1.5 } },
+        { x: t, y: i, name: 'I', yaxis: 'y2', line: { color: '#ffb74d', width: 1.5 } }
+    ], lay, { displaylogo: false, responsive: true });
+}
+
+// ------------------------------------------------------------ sequence
+var seqSteps = [{v: 5, i: 1, t: 2, out: true}, {v: 12, i: 1, t: 2, out: true}], seqTimer = null, seqRunning = false;
+function seqRender() {
+    var b = document.getElementById('seqBody'), h = '';
+    seqSteps.forEach(function(s, k) {
+        h += '<tr id="sq' + k + '"><td>' + (k + 1) + '</td>' +
+            ['v', 'i', 't'].map(function(f) { return '<td><input value="' + s[f] + '" onchange="seqSteps[' + k + '].' + f + '=parseFloat(this.value)||0"></td>'; }).join('') +
+            '<td><input type="checkbox" style="width:auto"' + (s.out ? ' checked' : '') + ' onchange="seqSteps[' + k + '].out=this.checked"></td>' +
+            '<td><button class="btn-sm" onclick="seqSteps.splice(' + k + ',1);seqRender()">x</button></td></tr>';
+    });
+    b.innerHTML = h;
+}
+function seqAdd() { var l = seqSteps[seqSteps.length - 1] || {v: 0, i: 0.1, t: 1, out: true}; seqSteps.push({v: l.v, i: l.i, t: l.t, out: l.out}); seqRender(); }
+function seqRamp() {
+    var g = function(id) { return parseFloat(document.getElementById(id).value); };
+    var v0 = g('rpV0'), v1 = g('rpV1'), n = Math.max(2, Math.round(g('rpN'))), t = g('rpT') || 1, i = g('rpI') || 0.1;
+    seqSteps = [];
+    for (var k = 0; k < n; k++) seqSteps.push({v: +(v0 + (v1 - v0) * k / (n - 1)).toFixed(4), i: i, t: t, out: true});
+    seqRender();
+}
+function seqToggle() {
+    if (seqRunning) { getJSON('/seq/stop', seqShow); return; }
+    var x = new XMLHttpRequest(); x.open('POST', '/seq/start', true);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.onload = function() { var d = JSON.parse(x.responseText); if (d.error) alert(d.error); else seqShow(d); };
+    x.send(JSON.stringify({steps: seqSteps, repeat: parseInt(document.getElementById('seqRep').value) || 0,
+                           off_at_end: document.getElementById('seqOff').checked}));
+}
+function seqShow(st) {
+    seqRunning = st.running;
+    var b = document.getElementById('seqBtn');
+    b.textContent = seqRunning ? 'Stop' : 'Run';
+    document.getElementById('seqSt').textContent = seqRunning
+        ? 'step ' + (st.step + 1) + '/' + st.steps + ', pass ' + st.rep + (st.repeat > 0 ? '/' + st.repeat : '')
+        : (st.msg || '');
+    document.querySelectorAll('#seqBody tr').forEach(function(r, k) { r.className = (seqRunning && k === st.step) ? 'cur' : ''; });
+    if (seqRunning && !seqTimer) seqTimer = setInterval(function() { getJSON('/seq/status', seqShow); }, 500);
+    if (!seqRunning && seqTimer) { clearInterval(seqTimer); seqTimer = null; }
+}
+function seqSave() {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({steps: seqSteps}, null, 1)], {type: 'application/json'}));
+    a.download = 'sequence.json'; a.click();
+}
+function seqLoad(inp) {
+    var f = inp.files[0]; if (!f) return;
+    var r = new FileReader();
+    r.onload = function() { try { seqSteps = JSON.parse(r.result).steps || []; seqRender(); } catch(e) { alert('Bad file: ' + e); } };
+    r.readAsText(f); inp.value = '';
+}
+
+// ------------------------------------------------------------ console
+var conHist = [], conPos = 0;
+function conLine(cls, txt) {
+    var o = document.getElementById('conOut'), d = document.createElement('div');
+    d.className = cls; d.textContent = txt; o.appendChild(d); o.scrollTop = o.scrollHeight;
+}
+function conSend(c) {
+    c = c.trim(); if (!c) return;
+    conHist.push(c); conPos = conHist.length;
+    conLine('q', '> ' + c);
+    var isQ = c.indexOf('?') >= 0;
+    getJSON((isQ ? '/query?c=' : '/cmd?c=') + encodeURIComponent(c), function(d) {
+        if (isQ) conLine(d.response ? 'r' : 'e', d.response || '(no reply)');
+        else conLine('r', 'ok');
+    });
+}
+function conKey(e) {
+    var el = e.target;
+    if (e.key === 'Enter') { conSend(el.value); el.value = ''; }
+    else if (e.key === 'ArrowUp' && conPos > 0) { el.value = conHist[--conPos]; e.preventDefault(); }
+    else if (e.key === 'ArrowDown') { conPos = Math.min(conHist.length, conPos + 1); el.value = conHist[conPos] || ''; }
+}
+
+// Init
+seqRender();
+loadInfo();
+getJSON('/log/status', logStatus);
+getJSON('/seq/status', seqShow);
+buildWaveGrid();
+buildArbtTable();
+buildTablTable();
+startPoll();
+</script>
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js" async></script>
+</body></html>

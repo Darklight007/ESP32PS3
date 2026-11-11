@@ -19,3 +19,4 @@ graph_dump.html
 
 # Editor/font backup files
 *.c.bak
+logs/
