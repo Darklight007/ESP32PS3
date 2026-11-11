@@ -195,6 +195,8 @@ Waveform waveforms[] = {
 
 int numWaveforms = sizeof(waveforms) / sizeof(waveforms[0]);
 
+volatile float g_funSetPeakV = -INFINITY, g_funMeasPeakV = -INFINITY;
+
 // Function to generate waveform based on parameters
 bool functionGenerator()
 {
@@ -221,6 +223,12 @@ bool functionGenerator()
     // ALWAYS update DAC - no change detection!
     // Change detection was causing stepped/choppy waveforms
     PowerSupply.Voltage.SetUpdate(outputValue * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+
+    if (outputValue > g_funSetPeakV)
+        g_funSetPeakV = outputValue;
+    const float vMeas = PowerSupply.Voltage.measured.value;
+    if (vMeas > g_funMeasPeakV)
+        g_funMeasPeakV = vMeas;
 
     // Track minimal change intervals
     //  Serial.printf("\nmonitor output: %1.3f ", monitorMinChanges(value, t) );

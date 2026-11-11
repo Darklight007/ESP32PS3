@@ -402,6 +402,10 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 :SYST:BEEP
 ```
 
+### :SYSTem:BEEPer:SIRen - Siren Demo
+**Description:** Start the Beeper page's tornado-siren demo (two wails, ~22 s); sent while playing, stops it. Silent when the buzzer is off.
+**Syntax:** `:SYST:BEEP:SIR`
+
 ### :SYSTem:LOCal - Return to Local Control
 **Description:** Return to front panel local control mode
 **Syntax:** `:SYST:LOC`
@@ -421,6 +425,14 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 ---
 
 ## DISPlay Subsystem (Display Performance)
+
+### :DISPlay:BENCH? - Full-Screen Repaint Time
+**Description:** Repaints the whole current page 10 times; returns ms per frame (render + flush)
+**Syntax:** `:DISP:BENCH?`
+
+### :DISPlay:PROF? - Per-Widget Repaint Cost
+**Description:** For each child of the current page: size, position and the ms it adds to a full repaint (hides it, times 3 frames, shows it again). Takes several seconds.
+**Syntax:** `:DISP:PROF?`
 
 ### :DISPlay:FPS? - Frame-Rate Meter
 **Description:** Display statistics over the last second

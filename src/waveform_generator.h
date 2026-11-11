@@ -7,6 +7,10 @@
 #define PI 3.14159265358979323846
 #define CHART_POINTS 20
 
+// FUN peaks of set and measured voltage, max-held on Core 0 and taken (reset)
+// by the output-collapse check in enforceSoftwareLimits() on Core 1.
+extern volatile float g_funSetPeakV, g_funMeasPeakV;
+
 // Waveform function declarations
 double sineWave(double t);
 double squareWave(double t);

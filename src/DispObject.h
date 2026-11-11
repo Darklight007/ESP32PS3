@@ -53,8 +53,8 @@ public:
     lv_obj_t *label_numberOfBin;
     lv_obj_t *label_binWidth;
 
-    uint16_t binMax = -INFINITY;
-    uint16_t binMin = INFINITY;
+    uint16_t binMax = 0;      // running max starts at the bottom
+    uint16_t binMin = UINT16_MAX; // running min starts at the top
     uint16_t numberOfBin;
     // double binWidth;
     int maxHist;
@@ -723,6 +723,7 @@ public:
 
     double oldValue;        // last sample (Core 0, measureUpdate) - drives `changed`
     double shownValue{NAN}; // last mean written to label_measureValue (Core 1, displayUpdate)
+    bool overRange = false; // range saturated: label shows "OL" instead of a number (Core 1)
     unsigned long timeKeeper{0};
     bool changed;
     uint32_t sampleCountSinceDisplay{0};  // Counter for proportional display update

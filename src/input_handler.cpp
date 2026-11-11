@@ -46,6 +46,7 @@ volatile bool g_keyVoltEntryMilliPending = false;
 volatile bool g_keyCurrEntryPending = false;
 volatile bool g_keyCurrEntryMilliPending = false;
 volatile bool g_keyHomePending = false;
+volatile bool g_keyMemPending = false; // 'm': Utility page, "Mem" sub-tab
 volatile bool g_keyZPending = false;
 volatile int  g_keyZ_w = 0;
 volatile bool g_keyGraphPauseTogglePending = false;
@@ -301,7 +302,10 @@ static inline UIMode detect_mode()
         // (PowerSupply.gui.calibration.win_ADC_INL_ZC_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_ADC_INL_ZC_calibration)) ||
         (PowerSupply.gui.calibration.win_int_current_calibration && lv_obj_is_visible(PowerSupply.gui.calibration.win_int_current_calibration)); // NEW
 
-    return (!dac && !adc) ? UIMode::Menu : (dac ? UIMode::DAC : UIMode::ADC);
+    // A spinbox selected on a settings page (siren shape): the encoders edit
+    // it like in the DAC window until it's off screen or deselected
+    const bool menuSpin = get_selected_spinbox() && lv_obj_is_visible(get_selected_spinbox());
+    return (!dac && !adc) ? (menuSpin ? UIMode::DAC : UIMode::Menu) : (dac ? UIMode::DAC : UIMode::ADC);
 }
 
 // ----- handlers (no binding, pure polling) -----
@@ -973,7 +977,7 @@ void keyCheckLoop()
              {
                  if (!lv_obj_has_flag(PowerSupply.gui.textarea_set_value, LV_OBJ_FLAG_HIDDEN))
                      return;
-                 Tabs::setCurrentPage(3);
+                 g_keyMemPending = true; // sub-tab select is LVGL: Core 1
              });
 
     // Full screen refresh - press 'r' to clear any dirty pixels
@@ -1492,6 +1496,13 @@ void drainPendingKeyEvents()
         hide(PowerSupply.gui.calibration.win_ADC_INL_Voltage_calibration);
         hide(PowerSupply.gui.calibration.win_DAC_calibration);
         lv_obj_invalidate(lv_scr_act());
+    }
+
+    if (g_keyMemPending)
+    {
+        g_keyMemPending = false;
+        Tabs::setCurrentPage(3);
+        lv_tabview_set_act(tabview_utility, 0, LV_ANIM_OFF); // "Mem"
     }
 
     if (g_keyZPending)

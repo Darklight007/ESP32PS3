@@ -148,10 +148,32 @@ SettingParameters Device::LoadSettingData(const String &key)
     return settingParameters;
 }
 
+// Calibration is stored as raw bytes, and its macAdd is an Arduino String.
+// A String of up to 14 chars lives inside the object (SSO) and survives that;
+// a longer one (a MAC with colons is 17) is a heap pointer, which was saved as
+// is and dereferenced/freed on the next boot - heap corruption. Keep the layout
+// (existing calibrations must still load) and keep macAdd inline on save, and
+// drop a stored heap pointer on load.
+namespace
+{
+struct StringPeek : String // isSSO()/buffer() are protected
+{
+    bool heapPointer() const { return !isSSO() && buffer() != nullptr; }
+};
+constexpr unsigned kSsoMaxLen = 14;
+}
+
 void Device::SaveCalibData(const String &key, const Calibration &data)
 {
+    Calibration out = data;
+    if (out.macAdd.length() > kSsoMaxLen)
+    {
+        out.macAdd.replace(":", "");
+        if (out.macAdd.length() > kSsoMaxLen)
+            out.macAdd.remove(kSsoMaxLen);
+    }
     StoreMem.begin("my-app", false);
-    StoreMem.putBytes(key.c_str(), &data, sizeof(Calibration));
+    StoreMem.putBytes(key.c_str(), &out, sizeof(Calibration));
     StoreMem.end();
 }
 
@@ -160,6 +182,8 @@ Calibration Device::LoadCalibData(const String &key)
     StoreMem.begin("my-app", false);
     ssize_t bytesRead = StoreMem.getBytes(key.c_str(), &StoreData, sizeof(Calibration));
     StoreMem.end();
+    if (static_cast<const StringPeek &>(static_cast<const String &>(StoreData.macAdd)).heapPointer())
+        memset((void *)&StoreData.macAdd, 0, sizeof(String)); // == String::init(): empty, no buffer
     return StoreData;
 }
 
@@ -187,7 +211,7 @@ void Device::SaveCalibrationData()
     calibrationUpdate();
 
     Serial.printf("\nSaved calibration data:%s {%+08.4f %+08i %+08.4f %+08i}, {%+08.4f %+08i %+08.4f %+08i}, %4.4f",
-                  outputData.macAdd,
+                  outputData.macAdd.length() ? outputData.macAdd.c_str() : "", // c_str() is NULL for an unallocated String
                   outputData.vCal.value_1, outputData.vCal.code_1, outputData.vCal.value_2, outputData.vCal.code_2,
                   outputData.iCal[mA_Active].value_1, outputData.iCal[mA_Active].code_1, outputData.iCal[mA_Active].value_2, outputData.iCal[mA_Active].code_2,
                   outputData.internalLeakage[mA_Active]);
@@ -215,7 +239,7 @@ void Device::LoadCalibrationData()
     calibrationUpdate();
 
     Serial.printf("\nCalibration data loaded:%s {%+08.4f %+08i %+08.4f %+08i}, {%+08.4f %+08i %+08.4f %+08i}, %4.4f",
-                  outputData.macAdd,
+                  outputData.macAdd.length() ? outputData.macAdd.c_str() : "", // c_str() is NULL for an unallocated String
                   outputData.vCal.value_1, outputData.vCal.code_1, outputData.vCal.value_2, outputData.vCal.code_2,
                   outputData.iCal[mA_Active].value_1, outputData.iCal[mA_Active].code_1, outputData.iCal[mA_Active].value_2, outputData.iCal[mA_Active].code_2,
                   outputData.internalLeakage[mA_Active]);
@@ -266,6 +290,8 @@ void Device::LoadSetting(void)
 
     // Make sure loaded data is not out of range
     settingParameters.adcRate = std::clamp((int)settingParameters.adcRate, 0, 4);
+    if (settingParameters.adcRateFUN > 4) // was a "nothing saved" marker (255)
+        settingParameters.adcRateFUN = 4;
     settingParameters.adcNumberOfAvgs = std::clamp((int)settingParameters.adcNumberOfAvgs, 0, 12);
     settingParameters.adcNumberOfDigits = std::clamp((int)settingParameters.adcNumberOfDigits, 1, 4);
     Voltage.adjValue = settingParameters.SetVoltage;
@@ -285,6 +311,7 @@ void Device::LoadSetting(void)
         ERROR_REPORT(WARNING, MEMORY, "Settings validation failed - loading defaults");
 
         settingParameters.adcRate = 0;
+        settingParameters.adcRateFUN = 4;
         settingParameters.adcNumberOfAvgs = 1;
         settingParameters.adcNumberOfDigits = 4;
 
@@ -322,7 +349,7 @@ void Device::LoadSetting(void)
     Serial.printf("\nadcRate:           %sSPS", ADC_SPS[settingParameters.adcRate]);
     Serial.printf("\nadcNumberOfAvgs:   %f", pow(2, settingParameters.adcNumberOfAvgs));
     Serial.printf("\nadcNumberOfDigits: %i", settingParameters.adcNumberOfDigits);
-    Serial.printf("\nSetVoltage: %f", settingParameters.SetVoltage);
+    Serial.printf("\nSetVoltage: %u", settingParameters.SetVoltage);
 
     switch (settingParameters.adcRate)
     {
@@ -544,7 +571,7 @@ void Device::readVoltage()
                                     /*
                                     to avoid spi during conversion but after
                                     adding 10uf cap to ref SPI noise gone
-                                    && (!lvglIsBusy  || settingParameters.adcRate!=0 )
+                                    && (!lvglIsBusy  || activeAdcRate()!=0 )
                                     */
                                     ))
 
@@ -592,7 +619,7 @@ void Device::readVoltage()
         adc.startConversion(CURRENT, REF_EXTERNAL);
 
         // OPTIMIZED: Single line calculation for speed
-        double v_corrected = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m * adcRateCompensation[settingParameters.adcRate];
+        double v_corrected = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m * adcRateCompensation[activeAdcRate()];
 
         // Apply INL correction if calibration data is available
         if (g_voltINL_ready)
@@ -781,20 +808,27 @@ void Device::toggle_measure_unit()
     // UI updates (LVGL calls) are handled by processDeferredMaToggle() on Core 1
 }
 
-void Device::restoreAdcRateFromFUN()
+uint8_t Device::activeAdcRate() const
 {
-    // Restore ADC rate from saved value when exiting FUN mode
-    if (settingParameters.adcRateSavedForFUN <= 4)
+    return status == DEVICE::FUN ? settingParameters.adcRateFUN : settingParameters.adcRate;
+}
+
+// The one place the ADC rate reaches the hardware (Core 1). adcRate is the
+// rate for normal use and adcRateFUN the one while the function generator
+// runs; the Measure slider edits whichever is in use and always shows it.
+void Device::applyAdcRate()
+{
+    static const int rates[] = {20, 20, 90, 330, 1000};
+    static const char *labels[] = {" ~10", " ~20", " ~70", "~200", "~500"};
+    const uint8_t v = activeAdcRate();
+    adc.ads1219->setDataRate(rates[v]);
+    adjustAdcTaskPriority();
+    ResetStats();
+    // slider_adcRate is the container: child 1 = value label, child 2 = slider
+    if (lv_obj_t *c = gui.slider_adcRate)
     {
-        settingParameters.adcRate = settingParameters.adcRateSavedForFUN;
-        const int rates[] = {20, 20, 90, 330, 1000};
-        adc.ads1219->setDataRate(rates[settingParameters.adcRateSavedForFUN]);
-
-        // Clear the saved value to prevent accidental reuse
-        settingParameters.adcRateSavedForFUN = 255;  // Invalid value marker
-
-        // Adjust task priority based on restored rate
-        adjustAdcTaskPriority();
+        if (lv_obj_t *sl = lv_obj_get_child(c, 2)) lv_slider_set_value(sl, v, LV_ANIM_OFF);
+        if (lv_obj_t *lb = lv_obj_get_child(c, 1)) lv_label_set_text(lb, labels[v]);
     }
 }
 
@@ -807,7 +841,7 @@ void Device::adjustAdcTaskPriority()
     UBaseType_t newPriority_bargraph;
 
 
-    switch (settingParameters.adcRate)
+    switch (activeAdcRate())
     {
         case 0:  // 20 SPS - very slow, low priority (low noise mode)
         case 1:  // 20 SPS - very slow, low priority
@@ -837,7 +871,7 @@ void Device::adjustAdcTaskPriority()
     {
         vTaskPrioritySet(Task_adc, newPriority);
         Serial.printf("\n[Task Priority] Task_ADC priority set to %d (ADC rate: %d)\n",
-                      newPriority, settingParameters.adcRate);
+                      newPriority, activeAdcRate());
         // Task_bargraph no longer exists (bars render on Core 1). Guard anyway:
         // vTaskPrioritySet(NULL, ...) would change the CALLING task's priority.
         if (Task_bargraph != nullptr)
@@ -1150,11 +1184,6 @@ void Device::setStatus(DEVICE status_)
         lv_obj_add_state(btn_function_gen, LV_STATE_DISABLED);
         lv_label_set_text(lv_obj_get_child(btn_function_gen, 0), "OFF");
 
-        // Only restore ADC rate if transitioning FROM FUN mode
-        if (oldStatus == DEVICE::FUN) {
-            restoreAdcRateFromFUN();  // Restore ADC rate if it was changed by FUN mode
-        }
-
         lv_label_set_text(controlMode, "OFF");
         lv_label_set_text(lv_obj_get_child(powerSwitch.btn, 0), "OFF");
 
@@ -1171,11 +1200,6 @@ void Device::setStatus(DEVICE status_)
         // PowerSupply.setStatus(DEVICE::FUN);
         // }
 
-        // If transitioning FROM FUN mode to another state (VC/CC/ON), restore ADC rate
-        if (oldStatus == DEVICE::FUN && status_ != DEVICE::FUN) {
-            restoreAdcRateFromFUN();
-        }
-
         // myTone(NOTE_A5, 200);
         settingParameters.isPowerSupplyOn = true;
         lv_label_set_text(lv_obj_get_child(powerSwitch.btn, 0), "ON");
@@ -1184,6 +1208,10 @@ void Device::setStatus(DEVICE status_)
     }
 
     status = status_;
+
+    // FUN has its own ADC rate: switch to it, or back to the normal one
+    if ((oldStatus == DEVICE::FUN) != (status_ == DEVICE::FUN))
+        applyAdcRate();
 
     // Re-enable invalidation and trigger single batched redraw
     lv_disp_enable_invalidation(NULL, true);
@@ -1235,45 +1263,31 @@ void Device::FlushMeasures(void)
         // release only when value drops below 1.000 — so once we latch overrange we
         // keep blinking through the phase-reversed regime no matter how low the
         // calibration math projects the saturated code.
+        // mA range overload. Only the mA range saturates within the supply's
+        // current range; leaving it (key back to A) clears the indication.
+        bool isOverRange = false;
         if (mA_Active)
         {
-            static bool wasOverRange = false;
             const double curMean = Current.measured.Mean();
             // Thresholds scale with the PGA: at x4 the converter saturates at a
             // quarter of the input current, so full scale drops 8.192 -> 2.048 mA
-            // and these come down with it (7.000/6.500 -> 1.750/1.625), keeping
+            // and these come down with it (8.000/7.500 -> 2.000/1.875), keeping
             // the same position relative to the usable range.
             const double pgaDiv  = iPgaX4 ? 4.0 : 1.0;
-            const double TRIG_ON  = 7.000 / pgaDiv; // mA — start blinking (shunt change took full scale 81.92 -> 8.192 mA, so these scale /10 from the old 70/65 and keep the same position relative to the ~7.5mA usable range)
-            const double TRIG_OFF = 6.500 / pgaDiv; // mA — stop blinking (hysteresis)
-            const bool isOverRange = wasOverRange ? (curMean > TRIG_OFF)
-                                                  : (curMean >= TRIG_ON);
-
-            if (isOverRange)
+            const double TRIG_ON  = 8.000 / pgaDiv; // mA — show OL (full scale 8.192 mA)
+            const double TRIG_OFF = 7.500 / pgaDiv; // mA — clear OL (hysteresis)
+            isOverRange = Current.overRange ? (curMean > TRIG_OFF) : (curMean >= TRIG_ON);
+        }
+        if (isOverRange != Current.overRange)
+        {
+            Current.overRange = isOverRange;
+            Current.shownValue = NAN; // rewrite the label with the new form
+            if (gui.label_current_ovl)
             {
-                // 4 Hz blink like multimeter "OL"
-                static bool blinkState = false;
-                static unsigned long lastBlink = 0;
-                if (millis() - lastBlink >= 250)
-                {
-                    blinkState = !blinkState;
-                    lastBlink = millis();
-                }
-                if (blinkState)
-                    lv_obj_add_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
-                else
-                    lv_obj_clear_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
-                if (gui.label_current_ovl)
+                if (isOverRange)
                     lv_obj_clear_flag(gui.label_current_ovl, LV_OBJ_FLAG_HIDDEN);
-                wasOverRange = true;
-            }
-            else if (wasOverRange)
-            {
-                // Clear once on transition back to in-range
-                lv_obj_clear_flag(Current.label_measureValue, LV_OBJ_FLAG_HIDDEN);
-                if (gui.label_current_ovl)
+                else
                     lv_obj_add_flag(gui.label_current_ovl, LV_OBJ_FLAG_HIDDEN);
-                wasOverRange = false;
             }
         }
 

@@ -27,19 +27,9 @@ namespace
 
     void setAdcRate(uint8_t v)
     {
-        static const char *labels[] = {" ~10", " ~20", " ~70", "~200", "~500"};
-        const int rates[] = {20, 20, 90, 330, 1000};
         if (v > 4) return;
         PowerSupply.settingParameters.adcRate = v;
-        PowerSupply.adc.ads1219->setDataRate(rates[v]);
-        PowerSupply.adjustAdcTaskPriority();
-        PowerSupply.ResetStats();
-        // slider_adcRate is the container: child 1 = value label, child 2 = slider
-        if (lv_obj_t *c = PowerSupply.gui.slider_adcRate)
-        {
-            if (lv_obj_t *sl = lv_obj_get_child(c, 2)) lv_slider_set_value(sl, v, LV_ANIM_OFF);
-            if (lv_obj_t *lb = lv_obj_get_child(c, 1)) lv_label_set_text(lb, labels[v]);
-        }
+        PowerSupply.applyAdcRate();
     }
 }
 

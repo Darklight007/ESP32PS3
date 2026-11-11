@@ -78,6 +78,12 @@ void btn_close_hide_obj_cb(lv_event_t *e);
 void Warning_msgbox(const char *title, lv_event_cb_t event_cb);
 void Message_msgbox(const char *title, const char *text); // OK-only notice
 void msgbox_close_deferred(lv_obj_t *mbox);  // Safe close from inside event callbacks
+void sirenDemoToggle(); // Beeper page siren demo: start, or stop if playing
+// Tornado-siren wail(s); onDone runs when it ends (finished = true) or is
+// stopped early (false), or at once if the buzzer is off (true). A siren
+// already playing is stopped first.
+void sirenPlay(uint8_t cycles, void (*onDone)(bool finished) = nullptr);
+void sirenCancel(); // stop the siren, if playing (onDone gets false)
 
 // Returns true if current setpoint >= min_mA; otherwise shows an error msgbox and returns false.
 // Only use for calibrations that require a physical load (e.g. Full Auto Cal).

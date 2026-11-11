@@ -14,6 +14,8 @@
 #include "calib_internal_leakage.h"
 #include "calib_cc_limit.h"
 #include "calib_log_window.h"
+#include "setting_menu.h"
+#include "tabs.h"
 #include <Wire.h>
 #include <cstring>
 #include <cmath>
@@ -199,6 +201,7 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("VERS?") > 0) cmd_SYST_VERS_Q();
         else if (cmdPart.indexOf("DISP?") > 0) sendResponse(DISPLAY_DRIVER_NAME); // display driver built in
         else if (cmdPart.indexOf("CAP?") > 0) cmd_SYST_CAP_Q();
+        else if (cmdPart.indexOf("BEEP:SIR") > 0) sirenDemoToggle();
         else if (cmdPart.indexOf("BEEP") > 0) cmd_SYST_BEEP();
         else if (cmdPart.indexOf("LOC") > 0) cmd_SYST_LOC();
         else if (cmdPart.indexOf("REM") > 0) cmd_SYST_REM();
@@ -297,7 +300,49 @@ void SCPIParser::executeCommand(const String& command)
     // SCPI DISPlay subsystem: frame-rate meter
     if (cmdPart.startsWith("DISP"))
     {
-        if (cmdPart.indexOf("FPS?") > 0)
+        if (cmdPart.indexOf("PROF?") > 0)
+        {
+            // Full-repaint cost of each child of the current page: hide it,
+            // time 3 frames, show it again. "saves" = ms it adds per frame.
+            auto frameMs = []() {
+                const uint32_t t0 = micros();
+                for (int i = 0; i < 3; i++)
+                {
+                    lv_obj_invalidate(lv_scr_act());
+                    lv_refr_now(NULL);
+                }
+                return (micros() - t0) / 3000.0f;
+            };
+            lv_obj_t *pg = PowerSupply.page[Tabs::getCurrentPage()];
+            const float all = frameMs();
+            Serial.printf("all %.1f ms, %u children\n", all, (unsigned)lv_obj_get_child_cnt(pg));
+            for (uint32_t i = 0; i < lv_obj_get_child_cnt(pg); i++)
+            {
+                lv_obj_t *c = lv_obj_get_child(pg, i);
+                if (lv_obj_has_flag(c, LV_OBJ_FLAG_HIDDEN))
+                    continue;
+                lv_obj_add_flag(c, LV_OBJ_FLAG_HIDDEN);
+                const float ms = frameMs();
+                lv_obj_clear_flag(c, LV_OBJ_FLAG_HIDDEN);
+                Serial.printf("%u %dx%d @%d,%d kids %u saves %.1f\n", (unsigned)i, lv_obj_get_width(c), lv_obj_get_height(c),
+                              lv_obj_get_x(c), lv_obj_get_y(c), (unsigned)lv_obj_get_child_cnt(c), all - ms);
+            }
+            lv_obj_add_flag(pg, LV_OBJ_FLAG_HIDDEN);
+            Serial.printf("page hidden %.1f ms\n", frameMs());
+            lv_obj_clear_flag(pg, LV_OBJ_FLAG_HIDDEN);
+        }
+        else if (cmdPart.indexOf("BENCH?") > 0)
+        {
+            // Full-screen repaint cost of the page shown: ms per frame, 10 frames
+            const uint32_t t0 = micros();
+            for (int i = 0; i < 10; i++)
+            {
+                lv_obj_invalidate(lv_scr_act());
+                lv_refr_now(NULL);
+            }
+            Serial.printf("%.1f\n", (micros() - t0) / 10000.0f);
+        }
+        else if (cmdPart.indexOf("FPS?") > 0)
         {
             const DispPerfStats &st = dispPerfStats();
             Serial.printf("%.1f,%lu,%.2f,%.2f,%.0f,%u\n", st.fps, (unsigned long)st.pxPerFrame,
@@ -953,14 +998,17 @@ void SCPIParser::cmd_DATA_STATS_Q()
 {
     // Returns two CSV lines: V then I stats
     // Format: mean,stddev,min,max,rms,er_bits
-    auto& V = PowerSupply.Voltage.measured;
-    auto& I = PowerSupply.Current.measured;
-    double vFSR = 32.768;
-    double iFSR = PowerSupply.mA_Active ? 5.0 : 5000.0;
+    // Same window and ER full scale as the Stats page (DispObject.cpp). The
+    // `measured` window is only the reading average (1 sample at Avg 0), so
+    // its stddev was always 0. min/max stay the lifetime peaks from `measured`.
+    auto& V = PowerSupply.Voltage.Statistics;
+    auto& I = PowerSupply.Current.Statistics;
+    auto& Vm = PowerSupply.Voltage.measured;
+    auto& Im = PowerSupply.Current.measured;
     Serial.printf("V,%.6f,%.6f,%.6f,%.6f,%.6f,%.3f\n",
-        V.Mean(), V.StandardDeviation(), V.absMin, V.absMax, V.Rms(), V.ER(vFSR));
+        V.Mean(), V.StandardDeviation(), Vm.absMin, Vm.absMax, V.Rms(), V.ER(2 * PowerSupply.Voltage.adc_maxValue));
     Serial.printf("I,%.6f,%.6f,%.6f,%.6f,%.6f,%.3f\n",
-        I.Mean(), I.StandardDeviation(), I.absMin, I.absMax, I.Rms(), I.ER(iFSR));
+        I.Mean(), I.StandardDeviation(), Im.absMin, Im.absMax, I.Rms(), I.ER(2 * PowerSupply.Current.adc_maxValue));
 }
 
 void SCPIParser::cmd_DATA_GRAPH_RST()
@@ -1096,7 +1144,7 @@ void SCPIParser::cmd_DATA_CAL_Q()
 {
     // Dump calibration data in CSV format for PC download
     auto& cal = PowerSupply.CalBank[PowerSupply.bankCalibId];
-    Serial.printf("MAC,%s\n", cal.macAdd.c_str());
+    Serial.printf("MAC,%s\n", cal.macAdd.length() ? cal.macAdd.c_str() : "");
     Serial.printf("VCAL,%.6f,%d,%.6f,%d\n", cal.vCal.value_1, cal.vCal.code_1, cal.vCal.value_2, cal.vCal.code_2);
     Serial.printf("ICAL0,%.6f,%d,%.6f,%d\n", cal.iCal[0].value_1, cal.iCal[0].code_1, cal.iCal[0].value_2, cal.iCal[0].code_2);
     Serial.printf("ICAL1,%.6f,%d,%.6f,%d\n", cal.iCal[1].value_1, cal.iCal[1].code_1, cal.iCal[1].value_2, cal.iCal[1].code_2);
@@ -1198,11 +1246,11 @@ void SCPIParser::cmd_SETT_ADC_RATE(const String& param)
 {
     int val = param.toInt();
     if (val >= 0 && val <= 4) {
-        const int rates[] = {20, 20, 90, 330, 1000};
-        PowerSupply.settingParameters.adcRate = val;
-        PowerSupply.adc.ads1219->setDataRate(rates[val]);
-        PowerSupply.adjustAdcTaskPriority();
-        PowerSupply.ResetStats();
+        // Same as the Measure slider: sets the rate in use (FUN keeps its own)
+        auto &s = PowerSupply.settingParameters;
+        (PowerSupply.getStatus() == DEVICE::FUN ? s.adcRateFUN : s.adcRate) = val;
+        PowerSupply.applyAdcRate();
+        PowerSupply.settingsDirtyAt = millis() | 1; // saved ~2 s later, like a slider change
         sendResponse("OK");
     } else addError(ERR_DATA_OUT_OF_RANGE);
 }

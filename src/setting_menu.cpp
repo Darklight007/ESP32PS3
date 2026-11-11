@@ -218,14 +218,10 @@ namespace
     {
         auto *slider = lv_event_get_target(e);
         uint8_t v = lv_slider_get_value(slider);
-        static std::map<int, const char *> ADC_SPS{
-            {0, " ~10"}, {1, " ~20"}, {2, " ~70"}, {3, "~200"}, {4, "~500"}};
-        const int rates[] = {20, 20, 90, 330, 1000};
-        lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(slider), 1), ADC_SPS.at(v));
-        PowerSupply.adc.ads1219->setDataRate(rates[v]);
-        PowerSupply.settingParameters.adcRate = v;
-        PowerSupply.adjustAdcTaskPriority();  // Adjust task priority based on new rate
-        PowerSupply.ResetStats();
+        // Edits the rate in use: FUN keeps its own (see Device::applyAdcRate)
+        auto &s = PowerSupply.settingParameters;
+        (PowerSupply.getStatus() == DEVICE::FUN ? s.adcRateFUN : s.adcRate) = v;
+        PowerSupply.applyAdcRate();
         settingChanged();
     }
 
@@ -423,6 +419,13 @@ namespace
         PowerSupply.settingParameters.ovpEnabled = enabled;
         settingChanged();
         Serial.printf("\nOVP enabled: %d", enabled);
+    }
+
+    static void switch_output_fault_event_cb(lv_event_t *e)
+    {
+        const bool enabled = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
+        PowerSupply.settingParameters.outputFaultProtOff = enabled ? 0 : 1;
+        settingChanged();
     }
 
     static void switch_ocp_enable_event_cb(lv_event_t *e)
@@ -678,6 +681,114 @@ namespace
         return dropdown;
     }
 
+    // Classic tornado-siren wail: motor spin-up, hold at top pitch,
+    // coast-down. Pitch follows the rotor's exponential speed curve.
+    // Siren shape, edited live from the Beeper page spinboxes (not saved:
+    // back to these defaults after a restart)
+    struct SirenParams
+    {
+        int32_t fLo = 400, fHi = 1100;               // Hz
+        int32_t rise = 4000, hold = 2000, fall = 5000; // ms
+        int32_t riseTau = 1000;                      // ms, spin-up time constant
+        int32_t fallK = 30;                          // x0.1, coast-down decay over the fall
+        int32_t cycles = 2;                          // wails per demo press
+    } s_siren;
+
+    lv_timer_t *s_sirenTimer = nullptr;
+    uint32_t s_sirenStart = 0;
+    uint8_t s_sirenCycles = 0;
+    void (*s_sirenDone)(bool) = nullptr;
+
+    static void sirenStop(bool finished = false)
+    {
+        if (!s_sirenTimer)
+            return;
+        lv_timer_del(s_sirenTimer);
+        s_sirenTimer = nullptr;
+        sweepStop();
+        auto done = s_sirenDone;
+        s_sirenDone = nullptr;
+        if (done)
+            done(finished);
+    }
+
+    static void siren_timer_cb(lv_timer_t *)
+    {
+        const float fLo = s_siren.fLo, fHi = s_siren.fHi;
+        const uint32_t rise = s_siren.rise, hold = s_siren.hold, fall = s_siren.fall;
+        const float tau = s_siren.riseTau, k = s_siren.fallK / 10.0f;
+        const uint32_t cycle = rise + hold + fall;
+        uint32_t ms = millis() - s_sirenStart;
+        if (ms >= s_sirenCycles * cycle || !buzzerSound)
+        {
+            sirenStop(ms >= s_sirenCycles * cycle);
+            return;
+        }
+        ms %= cycle;
+        // (float) first: -rise on the unsigned wrapped to ~4e9, fTop was -inf
+        // and the hold and fall played a 100 Hz buzz (sweepSet's floor).
+        const float fTop = fLo + (fHi - fLo) * (1 - expf(-(float)rise / tau));
+        float f;
+        if (ms < rise)
+            f = fLo + (fHi - fLo) * (1 - expf(-(float)ms / tau));
+        else if (ms < rise + hold)
+            f = fTop;
+        else
+        {
+            // coast-down
+            const float x = (float)(ms - rise - hold) / fall; // 0..1
+            f = fLo + (fTop - fLo) * expf(-k * x);
+        }
+        sweepSet(f);
+    }
+
+    // Demo button: two wails; press again to stop.
+    static void btn_siren_demo_cb(lv_event_t *)
+    {
+        remove_selected_spinbox(); // hand the encoders back to page scrolling
+        sirenDemoToggle();
+    }
+
+    static void siren_spin_cb(lv_event_t *e)
+    {
+        *static_cast<int32_t *>(lv_event_get_user_data(e)) = lv_spinbox_get_value(lv_event_get_target(e));
+    }
+
+    // One row per siren parameter: label left, spinbox right. Touch a spinbox
+    // to select it; encoder 1 changes the value, encoder 2 the digit.
+    static void create_siren_spinboxes(lv_obj_t *section)
+    {
+        struct Row { const char *label; int32_t *val; int32_t min, max; uint8_t digits, sep; };
+        const Row rows[] = {
+            {"Low Hz", &s_siren.fLo, 100, 5000, 4, 0},
+            {"High Hz", &s_siren.fHi, 100, 9999, 4, 0},
+            {"Rise ms", &s_siren.rise, 100, 30000, 5, 0},
+            {"Rise tau ms", &s_siren.riseTau, 50, 9999, 4, 0},
+            {"Hold ms", &s_siren.hold, 0, 30000, 5, 0},
+            {"Fall ms", &s_siren.fall, 100, 30000, 5, 0},
+            {"Fall decay", &s_siren.fallK, 1, 99, 2, 1},
+            {"Wails", &s_siren.cycles, 1, 20, 2, 0},
+        };
+        constexpr lv_coord_t rowH = 28;
+        lv_obj_t *cont = lv_obj_create(section);
+        lv_obj_remove_style_all(cont);
+        lv_obj_set_size(cont, LV_PCT(100), rowH * (sizeof(rows) / sizeof(rows[0])) + 6);
+        lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+        uint8_t id = 40;
+        lv_coord_t y = 4;
+        for (const Row &r : rows)
+        {
+            lv_obj_t *sb = spinbox_pro(cont, "", r.min, r.max, r.digits, r.sep, LV_ALIGN_TOP_RIGHT, -6, y, 64, id++, &graph_R_16);
+            lv_obj_align(sb, LV_ALIGN_TOP_RIGHT, -6, y); // align_to ran before cont had its width
+            lv_spinbox_set_value(sb, *r.val);
+            lv_obj_add_event_cb(sb, siren_spin_cb, LV_EVENT_VALUE_CHANGED, r.val);
+            lv_obj_t *lbl = lv_label_create(cont);
+            lv_label_set_text(lbl, r.label);
+            lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, 8, y + 4);
+            y += rowH;
+        }
+    }
+
     static lv_obj_t *create_button_item(lv_obj_t *parent, lv_event_cb_t cb, const char *buttonTxt)
     {
         lv_obj_t *obj = lv_menu_cont_create(parent);
@@ -704,6 +815,33 @@ namespace
     }
 
 } // namespace
+
+void sirenPlay(uint8_t cycles, void (*onDone)(bool))
+{
+    sirenStop();
+    if (!buzzerSound)
+    {
+        if (onDone)
+            onDone(true);
+        return;
+    }
+    s_sirenStart = millis();
+    s_sirenCycles = cycles;
+    s_sirenDone = onDone;
+    sweepStart(s_siren.fLo);
+    s_sirenTimer = lv_timer_create(siren_timer_cb, 20, nullptr);
+}
+
+void sirenCancel() { sirenStop(); }
+
+// Beeper page button and SYST:BEEP:SIR
+void sirenDemoToggle()
+{
+    if (s_sirenTimer)
+        sirenStop();
+    else
+        sirenPlay(s_siren.cycles);
+}
 
 // ---------- small helpers exported ----------
 double get_m(double code1, double code2, double vin1, double vin2) { return (code2 - code1) / (vin2 - vin1); }
@@ -790,6 +928,7 @@ void SettingMenu(lv_obj_t *parent)
     create_slider(section, nullptr, "OVP Level", 1, 330, (int32_t)lroundf(PowerSupply.settingParameters.voltageLimitMax * 10), slider_voltage_limit_event_cb, LV_EVENT_VALUE_CHANGED);
     create_switch_(section, nullptr, "OCP Enable", PowerSupply.settingParameters.ocpEnabled, switch_ocp_enable_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
     create_slider(section, nullptr, "OCP Level", 1, 650, (int32_t)lroundf(PowerSupply.settingParameters.currentLimitMax * 100), slider_current_limit_event_cb, LV_EVENT_VALUE_CHANGED);
+    create_switch_(section, nullptr, "Power Lost / Thermal", PowerSupply.settingParameters.outputFaultProtOff != 1, switch_output_fault_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
     create_slider(section, nullptr, "Output Delay (ms)", 0, 5000, PowerSupply.settingParameters.outputDelayMs, slider_output_delay_event_cb, LV_EVENT_VALUE_CHANGED);
     create_slider(section, nullptr, "Auto-save Interval (min)", 0, 60, PowerSupply.settingParameters.autoSaveIntervalMinutes, slider_autosave_event_cb, LV_EVENT_VALUE_CHANGED);
     create_text(section, nullptr, "Energy Counter and Power-On\nDuration shown on main screen", 0, nullptr);
@@ -820,6 +959,9 @@ void SettingMenu(lv_obj_t *parent)
     create_switch_(section, nullptr, "Buzzer Enable", buzzerSound, switch_buzzer_event_cb, LV_EVENT_SHORT_CLICKED, nullptr);
     create_switch_(section, nullptr, "Beep on Power Change", PowerSupply.settingParameters.beeperOnPowerChange, switch_beep_flag_event_cb, LV_EVENT_VALUE_CHANGED, &PowerSupply.settingParameters.beeperOnPowerChange);
     create_switch_(section, nullptr, "Beep on Error", PowerSupply.settingParameters.beeperOnError, switch_beep_flag_event_cb, LV_EVENT_VALUE_CHANGED, &PowerSupply.settingParameters.beeperOnError);
+    create_text(section, nullptr, "Tornado Siren Demo", 0, nullptr);
+    create_button_item(section, btn_siren_demo_cb, "Play / Stop");
+    create_siren_spinboxes(section);
 
     // Version/About/Sidebar
     lv_obj_t *sub_software_info_page = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);

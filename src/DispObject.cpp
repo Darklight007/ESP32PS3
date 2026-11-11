@@ -222,6 +222,21 @@ void DispObjects::displayUpdate(void)
     displayReady = false;
 
     double mean_ = measured.Mean();
+    if (overRange)
+    {
+        // Saturated range: "+08.004" -> "+OL.   " like a DMM, same width
+        // (DSEG letters and '!' blank are digit-wide), so nothing shifts.
+        char buf[24];
+        lv_snprintf(buf, sizeof(buf), restrict, mean_);
+        int d = 0;
+        for (char *c = buf; *c; c++)
+            if (isdigit((unsigned char)*c))
+                *c = d < 2 ? "OL"[d++] : '!';
+        if (!blockAll)
+            setLabelTextChangedOnly(label_measureValue, buf);
+        shownValue = NAN; // repaint the number once back in range
+        return;
+    }
     // Own "last shown" value: oldValue is Core 0's last sample, so comparing
     // the mean against it skipped every redraw whenever mean == last sample
     // (always at avg 1) and froze the label.

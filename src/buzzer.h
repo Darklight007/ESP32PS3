@@ -21,6 +21,11 @@ struct Buzzer
 void initBuzzer();
 void myTone(int &&frequency, int &&duration);
 void myTone(int frequency, int duration, bool blockingDelay);
+// Sweeps (siren): glitch-free pitch changes. Start, set as often as needed
+// (volume 0..1), stop to give the buzzer back to myTone().
+void sweepStart(float frequency);
+void sweepSet(float frequency, float volume = 1);
+void sweepStop();
 void toneOff();
 
 #define NOTE_B0 31

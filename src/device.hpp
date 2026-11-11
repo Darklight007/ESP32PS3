@@ -120,7 +120,7 @@ enum class StartupBehavior : uint8_t
 struct SettingParameters
 {
     uint8_t adcRate;
-    uint8_t adcRateSavedForFUN = 0;  // Saved ADC rate when FUN mode activated
+    uint8_t adcRateFUN = 4;  // ADC rate while FUN runs (the Measure slider edits it during FUN)
     uint16_t adcNumberOfAvgs;
     uint8_t adcNumberOfDigits;
     uint8_t adcNumberOfDigits_mA = 2;  // Decimal places for the mA current range (independent of adcNumberOfDigits)
@@ -165,6 +165,10 @@ struct SettingParameters
     // Frame-rate overlay (DISP:FPS) shown at boot. uint8_t, not bool: blobs
     // saved before this field may hold struct padding here - only 1 means on.
     uint8_t showFps = 0;
+    // Output-fault protection (power lost / SIC461 thermal shutdown, see
+    // checkOutputCollapse). Stored as "off" so older blobs, which may hold
+    // padding here, keep it on: only 1 means off.
+    uint8_t outputFaultProtOff = 0;
 };
 
 class LVLabel_class; // Forward declaration
@@ -649,7 +653,8 @@ public:
     void SaveSetting(void);
 
     void toggle_measure_unit(void);
-    void restoreAdcRateFromFUN(void);  // Restore ADC rate after FUN mode
+    uint8_t activeAdcRate(void) const; // adcRateFUN during FUN, else adcRate
+    void applyAdcRate(void);           // Core 1: active rate -> ADC, task priority, slider
     void adjustAdcTaskPriority(void);  // Adjust Task_ADC priority based on ADC rate
 
     void SaveCalibData(const String &key, const Calibration &data);
