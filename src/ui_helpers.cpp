@@ -646,11 +646,14 @@ void GraphPush()
     }
 }
 
+volatile uint32_t g_histSeq = 0; // bumped per sample; the Stats page redraws when it moves
+
 void HistPush()
 {
     // Histogram
     PowerSupply.Current.hist[PowerSupply.Current.measured.Mean()];
     PowerSupply.Voltage.hist[PowerSupply.Voltage.measured.Mean()];
+    g_histSeq++;
 }
 
 void legend(lv_obj_t *parent, lv_color16_t c1, const char *ser1, lv_color16_t c2, const char *ser2, int x, int y)

@@ -429,13 +429,32 @@ void HistogramChartRefreshInterval(unsigned long interval)
     static unsigned long timer_ = 0;
     schedule([]
              {
-                 // Only refresh when on histogram page (page 0)
-                 if (Tabs::getCurrentPage() == 0 && !lvglChartIsBusy && !blockAll)
+                 // Same scheme as the Graph page: redraw when new samples
+                 // arrived, no fixed period, plot area only. A full redraw (axis
+                 // labels too) on page entry and when the histogram window moved.
+                 extern volatile uint32_t g_histSeq;
+                 static uint32_t shownSeq = 0;
+                 static int lastPage = -1;
+                 static double lastWin[4] = {0, 0, 0, 0};
+                 const int page = Tabs::getCurrentPage();
+                 if (page == 0 && (g_histSeq != shownSeq || lastPage != 0) && !lvglChartIsBusy && !blockAll)
                  {
+                     const double win[4] = {PowerSupply.Voltage.hist.histWinMin, PowerSupply.Voltage.hist.histWinMax,
+                                            PowerSupply.Current.hist.histWinMin, PowerSupply.Current.hist.histWinMax};
+                     const bool full = lastPage != 0 || memcmp(win, lastWin, sizeof(win)) != 0;
+                     memcpy(lastWin, win, sizeof(win));
                      lvglChartIsBusy = true;
-                     lv_chart_refresh(PowerSupply.stats.chart);
+                     if (full)
+                         lv_chart_refresh(PowerSupply.stats.chart);
+                     else
+                     {
+                         lv_area_t a = PowerSupply.stats.chart->coords;
+                         lv_obj_invalidate_area(PowerSupply.stats.chart, &a);
+                     }
+                     shownSeq = g_histSeq;
                      lvglChartIsBusy = false;
-                 } },
+                 }
+                 lastPage = page; },
              interval, timer_);
 }
 

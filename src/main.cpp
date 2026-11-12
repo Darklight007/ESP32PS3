@@ -261,7 +261,7 @@ void loop()
   // TIME_SECTION("p2clean", Page2RightSideCleanup(1000));
 
   // Chart refresh (Core 1 only - LVGL thread-safe)
-  TIME_SECTION("histChart", HistogramChartRefreshInterval(125));
+  TIME_SECTION("histChart", HistogramChartRefreshInterval(0)); // redraws on new data, see intervals.cpp
   TIME_SECTION("graphChart", GraphChartRefreshInterval(0)); // redraws on new data, see intervals.cpp
 
   // Flush measures - gated by displayReady (NofAvgs-driven, DispObject.cpp) so
