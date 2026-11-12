@@ -10,6 +10,7 @@ static int64_t flushStartUs = 0;
 static uint32_t frames = 0, px = 0;
 static int64_t frameUs = 0, flushUs = 0;
 static int64_t windowStartUs = 0;
+static int64_t lastFrameEndUs = 0, maxGapUs = 0; // longest wait between two frames = visible stutter
 static DispPerfStats stats{};
 static lv_obj_t *overlay = nullptr;
 
@@ -22,7 +23,11 @@ static void monitor(lv_disp_drv_t *, uint32_t, uint32_t pxNum)
 {
     if (!frameStartUs)
         return;
-    frameUs += esp_timer_get_time() - frameStartUs;
+    const int64_t now = esp_timer_get_time();
+    if (lastFrameEndUs && now - lastFrameEndUs > maxGapUs)
+        maxGapUs = now - lastFrameEndUs;
+    lastFrameEndUs = now;
+    frameUs += now - frameStartUs;
     frameStartUs = 0;
     frames++;
     px += pxNum;
@@ -51,6 +56,8 @@ void dispPerfUpdate()
     stats.flushMs = frames ? flushUs / 1000.0f / frames : 0;
     stats.renderMs = frames ? (frameUs - flushUs) / 1000.0f / frames : 0;
     stats.busyPct = frameUs * 100.0f / span;
+    stats.maxGapMs = maxGapUs / 1000.0f;
+    maxGapUs = 0;
     frames = px = 0;
     frameUs = flushUs = 0;
     windowStartUs = now;

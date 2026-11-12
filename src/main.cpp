@@ -270,7 +270,7 @@ void loop()
   // instead of flooding.
   {
     static unsigned long lastFlushMeasuresMs = 0;
-    if (millis() - lastFlushMeasuresMs >= 20) // ~50Hz ceiling, safely under the ~65-100Hz physical limit
+    if (millis() - lastFlushMeasuresMs >= 16) // ~60 Hz: a frame costs ~6.5 ms, the LCD itself refreshes ~70 Hz
     {
       TIME_SECTION("flushMeas", PowerSupply.FlushMeasures());
       lastFlushMeasuresMs = millis();

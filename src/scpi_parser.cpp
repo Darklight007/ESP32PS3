@@ -273,7 +273,10 @@ void SCPIParser::executeCommand(const String& command)
     // SCPI SETT subsystem (settings write)
     if (cmdPart.startsWith("SETT"))
     {
-        if (cmdPart.indexOf("ADC:RATE") > 0) cmd_SETT_ADC_RATE(paramPart);
+        // A query must never change a setting ("SETT:ADC:RATE?" used to set rate 0)
+        if (cmdPart.indexOf("ADC:RATE?") > 0) sendResponse(String(PowerSupply.settingParameters.adcRate));
+        else if (cmdPart.endsWith("?") && cmdPart.indexOf("PROT:FAUL?") < 0) addError(ERR_UNDEFINED_HEADER);
+        else if (cmdPart.indexOf("ADC:RATE") > 0) cmd_SETT_ADC_RATE(paramPart);
         else if (cmdPart.indexOf("ADC:AVG") > 0) cmd_SETT_ADC_AVG(paramPart);
         else if (cmdPart.indexOf("ADC:DIG") > 0) cmd_SETT_ADC_DIG(paramPart);
         else if (cmdPart.indexOf("ADC:DISC") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.adcDiscardFirst);
@@ -357,8 +360,8 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("FPS?") > 0)
         {
             const DispPerfStats &st = dispPerfStats();
-            Serial.printf("%.1f,%lu,%.2f,%.2f,%.0f,%u\n", st.fps, (unsigned long)st.pxPerFrame,
-                          st.renderMs, st.flushMs, st.busyPct, PowerSupply.adc.realADCSpeed);
+            Serial.printf("%.1f,%lu,%.2f,%.2f,%.0f,%u,%.0f\n", st.fps, (unsigned long)st.pxPerFrame,
+                          st.renderMs, st.flushMs, st.busyPct, PowerSupply.adc.realADCSpeed, st.maxGapMs);
         }
         else if (cmdPart.indexOf("FPS") > 0)
         {
