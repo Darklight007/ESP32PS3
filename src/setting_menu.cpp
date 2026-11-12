@@ -12,6 +12,7 @@
 
 // heavy/private includes live ONLY in the .cpp
 #include "spinbox_pro.h"
+#include <Preferences.h>
 #include "version.h"
 #include "buzzer.h"   // provides buzzerSound and myTone()
 #include "TFT_eSPI.h" // tft instance
@@ -683,8 +684,8 @@ namespace
 
     // Classic tornado-siren wail: motor spin-up, hold at top pitch,
     // coast-down. Pitch follows the rotor's exponential speed curve.
-    // Siren shape, edited live from the Beeper page spinboxes (not saved:
-    // back to these defaults after a restart)
+    // Siren shape, edited live from the Beeper page spinboxes; stored (NVS
+    // "siren") when Play/Stop is pressed, not per spinbox step
     struct SirenParams
     {
         int32_t fLo = 400, fHi = 1100;               // Hz
@@ -743,9 +744,31 @@ namespace
     }
 
     // Demo button: two wails; press again to stop.
+    SirenParams s_sirenSaved;
+
+    static void sirenParamsLoad()
+    {
+        Preferences p;
+        p.begin("siren", true);
+        SirenParams tmp;
+        if (p.getBytes("p", &tmp, sizeof(tmp)) == sizeof(tmp) && tmp.fLo >= 100 && tmp.fHi <= 9999 &&
+            tmp.rise >= 100 && tmp.fall >= 100 && tmp.riseTau >= 50 && tmp.fallK >= 1 && tmp.cycles >= 1)
+            s_siren = tmp;
+        p.end();
+        s_sirenSaved = s_siren;
+    }
+
     static void btn_siren_demo_cb(lv_event_t *)
     {
         remove_selected_spinbox(); // hand the encoders back to page scrolling
+        if (memcmp(&s_siren, &s_sirenSaved, sizeof(s_siren)) != 0)
+        {
+            Preferences p;
+            p.begin("siren", false);
+            p.putBytes("p", &s_siren, sizeof(s_siren));
+            p.end();
+            s_sirenSaved = s_siren;
+        }
         sirenDemoToggle();
     }
 
@@ -769,6 +792,7 @@ namespace
             {"Fall decay", &s_siren.fallK, 1, 99, 2, 1},
             {"Wails", &s_siren.cycles, 1, 20, 2, 0},
         };
+        sirenParamsLoad();
         constexpr lv_coord_t rowH = 28;
         lv_obj_t *cont = lv_obj_create(section);
         lv_obj_remove_style_all(cont);

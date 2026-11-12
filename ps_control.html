@@ -190,7 +190,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0;
 <div class="header">
   <h1>Power Supply Remote Control</h1>
   <span><span id="devInfo" style="font-size:11px;color:#777;margin-right:12px"></span>
-  <span id="connSt" style="font-size:12px;color:#666">Connecting...</span>
+  <span id="connSt" style="font-size:13px;font-weight:bold;padding:3px 10px;border-radius:10px;background:#555;color:#fff">Connecting...</span>
   <button class="btn-sm" style="margin-left:10px" title="Hard-reset the PSU (turns the output OFF). Use when the USB link stops answering." onclick="resetBoard()">Reset board</button></span>
 </div>
 <div class="main">
@@ -476,11 +476,14 @@ body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0;
               <select id="s_adcAvg" onchange="sendCmd('SETT:ADC:AVG '+this.value)">
                 <option value="0">1</option><option value="1">2</option><option value="2">4</option>
                 <option value="3">8</option><option value="4">16</option><option value="5">32</option>
+                <option value="6">64</option><option value="7">128</option>
               </select></div>
             <div class="setting-row"><span>Display Digits</span>
               <select id="s_adcDig" onchange="sendCmd('SETT:ADC:DIG '+this.value)">
                 <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
               </select></div>
+            <div class="setting-row"><span>Discard 1st Conversion</span>
+              <label class="sw"><input type="checkbox" id="s_adcDisc" onchange="sendCmd('SETT:ADC:DISC '+(this.checked?1:0))"><span class="sl"></span></label></div>
           </div>
 
           <!-- Graph -->
@@ -509,6 +512,8 @@ body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0;
               <label class="sw"><input type="checkbox" id="s_beepPwr" onchange="sendCmd('SETT:BEEP:PWR '+(this.checked?1:0))"><span class="sl"></span></label></div>
             <div class="setting-row"><span>Beep on Error</span>
               <label class="sw"><input type="checkbox" id="s_beepErr" onchange="sendCmd('SETT:BEEP:ERR '+(this.checked?1:0))"><span class="sl"></span></label></div>
+            <div class="setting-row"><span>Tornado Siren Demo</span>
+              <button class="btn-sm" onclick="sendCmd('SYST:BEEP:SIR')">Play / Stop</button></div>
           </div>
 
           <!-- Timer -->
@@ -526,11 +531,13 @@ body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0;
             <div class="setting-row"><span>OVP Enable</span>
               <label class="sw"><input type="checkbox" id="s_ovpEn" onchange="sendCmd('SETT:OVP:EN '+(this.checked?1:0))"><span class="sl"></span></label></div>
             <div class="setting-row"><span>Voltage Limit Max (V)</span>
-              <input type="number" id="s_ovpLvl" min="0" max="32" step="0.1" onchange="sendCmd('SETT:OVP:LVL '+this.value)"></div>
+              <input type="number" id="s_ovpLvl" min="0.1" max="33" step="0.1" onchange="sendCmd('SETT:OVP:LVL '+this.value)"></div>
             <div class="setting-row"><span>OCP Enable</span>
               <label class="sw"><input type="checkbox" id="s_ocpEn" onchange="sendCmd('SETT:OCP:EN '+(this.checked?1:0))"><span class="sl"></span></label></div>
             <div class="setting-row"><span>Current Limit Max (A)</span>
-              <input type="number" id="s_ocpLvl" min="0" max="6" step="0.1" onchange="sendCmd('SETT:OCP:LVL '+this.value)"></div>
+              <input type="number" id="s_ocpLvl" min="0.01" max="6.5" step="0.01" onchange="sendCmd('SETT:OCP:LVL '+this.value)"></div>
+            <div class="setting-row"><span>Power Lost / Thermal Protection</span>
+              <label class="sw"><input type="checkbox" id="s_faultProt" onchange="sendCmd('SETT:PROT:FAUL '+(this.checked?1:0))"><span class="sl"></span></label></div>
             <div class="setting-row"><span>Output Delay (ms)</span>
               <input type="number" id="s_delay" min="0" max="5000" step="100" onchange="sendCmd('SETT:DELAY '+this.value)"></div>
             <div class="setting-row"><span>Auto-save Interval (min)</span>
@@ -589,6 +596,19 @@ body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0;
       </div>
     </div>
   </div>
+</div>
+
+<div class="panel" style="margin:10px">
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+    <b>Terminal</b>
+    <button class="btn-sm" onclick="termSend('SYST:LOG?')">Event log</button>
+    <button class="btn-sm" onclick="termSend('*IDN?')">Identify</button>
+    <button class="btn-sm" onclick="termSend('SYST:ERR:ALL?')">Errors</button>
+    <button class="btn-sm" onclick="termSend('DISP:FPS?')">FPS</button>
+    <button class="btn-sm" onclick="document.getElementById('termOut').innerHTML=''">Clear</button>
+  </div>
+  <input id="termIn" onkeydown="termKey(event)" placeholder="Type a command, e.g. SYST:LOG?  then Enter (Up/Down = history)" style="width:100%;box-sizing:border-box;margin-bottom:6px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;padding:6px;font:13px monospace">
+  <div id="termOut" style="height:180px;overflow-y:auto;background:#111;color:#cfd8dc;font:12px monospace;padding:6px;border-radius:4px;white-space:pre-wrap"></div>
 </div>
 
 <script>
@@ -655,8 +675,48 @@ function updDisp(d) {
     b.className = outState ? 'output-btn out-on' : 'output-btn out-off';
     b.textContent = outState ? 'OUTPUT ON' : 'OUTPUT OFF';
     document.getElementById('upd').textContent = 'Updated: ' + new Date().toLocaleTimeString();
-    document.getElementById('connSt').textContent = 'Connected';
-    document.getElementById('connSt').style.color = '#66bb6a';
+    setConn(d.ok !== false, d.ok !== false ? 'CONNECTED  ' + (d.port || '') : 'PSU NOT ANSWERING  ' + (d.port || 'no port'));
+}
+
+// Connection badge: green = the PSU answered the last poll, red = it did not
+function setConn(ok, text) {
+    var c = document.getElementById('connSt');
+    c.textContent = text;
+    c.style.background = ok ? '#2e7d32' : '#c62828';
+}
+
+// Terminal box: any command, every reply line
+var termHist = [], termPos = 0;
+function termPrint(t, color) {
+    var o = document.getElementById('termOut'), d = document.createElement('div');
+    d.textContent = t; if (color) d.style.color = color;
+    o.appendChild(d); o.scrollTop = o.scrollHeight;
+}
+function termSend(c) {
+    c = (c || document.getElementById('termIn').value).trim();
+    if (!c) return;
+    document.getElementById('termIn').value = '';
+    if (termHist[termHist.length - 1] !== c) termHist.push(c);
+    termPos = termHist.length;
+    termPrint('> ' + c, '#ffd54f');
+    var x = new XMLHttpRequest();
+    x.open('GET', '/term?c=' + encodeURIComponent(c), true); x.timeout = 12000;
+    x.onload = function() {
+        try {
+            var d = JSON.parse(x.responseText);
+            if (!d.ok) termPrint('(not connected to the PSU)', '#ef5350');
+            else if (!d.lines.length) termPrint('(no reply)', '#888');
+            else d.lines.forEach(function(l) { termPrint(l); });
+        } catch (e) { termPrint('(bad reply)', '#ef5350'); }
+    };
+    x.onerror = x.ontimeout = function() { termPrint('(PC app not answering)', '#ef5350'); };
+    x.send();
+}
+function termKey(e) {
+    var i = document.getElementById('termIn');
+    if (e.key === 'Enter') termSend();
+    else if (e.key === 'ArrowUp' && termPos > 0) { i.value = termHist[--termPos]; e.preventDefault(); }
+    else if (e.key === 'ArrowDown') { termPos = Math.min(termPos + 1, termHist.length); i.value = termHist[termPos] || ''; }
 }
 
 // Polling
@@ -666,8 +726,8 @@ function doPoll() {
     x.onload = function() {
         if (x.status === 200) { try { updDisp(JSON.parse(x.responseText)); } catch(e) { document.getElementById('err').textContent = e; } }
     };
-    x.onerror = function() { document.getElementById('err').textContent = 'Connection error'; };
-    x.ontimeout = function() { document.getElementById('err').textContent = 'Timeout'; };
+    x.onerror = function() { document.getElementById('err').textContent = 'Connection error'; setConn(false, 'PC APP NOT RUNNING'); };
+    x.ontimeout = function() { document.getElementById('err').textContent = 'Timeout'; setConn(false, 'PC APP NOT ANSWERING'); };
     x.send();
 }
 function startPoll() { stopPoll(); if (polling) { doPoll(); ptimer = setInterval(doPoll, 500); } }
@@ -849,6 +909,8 @@ function loadSettings() {
                 document.getElementById('s_buzzer').checked = d.buzzer;
                 document.getElementById('s_beepPwr').checked = d.beepPwr;
                 document.getElementById('s_beepErr').checked = d.beepErr;
+                if (d.adcDisc !== undefined) document.getElementById('s_adcDisc').checked = d.adcDisc;
+                if (d.faultProt !== undefined) document.getElementById('s_faultProt').checked = d.faultProt;
                 document.getElementById('s_timerEn').checked = d.timerEn;
                 document.getElementById('s_timerDur').value = d.timerDur;
                 document.getElementById('s_ovpEn').checked = d.ovpEn;
@@ -1591,9 +1653,11 @@ function conSend(c) {
     conHist.push(c); conPos = conHist.length;
     conLine('q', '> ' + c);
     var isQ = c.indexOf('?') >= 0;
-    getJSON((isQ ? '/query?c=' : '/cmd?c=') + encodeURIComponent(c), function(d) {
-        if (isQ) conLine(d.response ? 'r' : 'e', d.response || '(no reply)');
-        else conLine('r', 'ok');
+    // /term returns every reply line (e.g. SYST:LOG?), not just the first
+    getJSON('/term?c=' + encodeURIComponent(c), function(d) {
+        if (!d.ok) conLine('e', '(not connected to the PSU)');
+        else if (!d.lines.length) conLine(isQ ? 'e' : 'r', isQ ? '(no reply)' : 'ok');
+        else d.lines.forEach(function(l) { conLine('r', l); });
     });
 }
 function conKey(e) {

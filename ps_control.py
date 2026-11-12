@@ -186,6 +186,38 @@ def _scpi_query_locked(cmd):
         return None
 
 
+def scpi_terminal(cmd):
+    """Send any line and return every line that comes back (terminal box).
+    None if the port is not open."""
+    global ser
+    if not (ser and ser.is_open) and not connect_serial():
+        return None
+    with ser_lock:
+        try:
+            ser.timeout = 0.05
+            while ser.readline():
+                pass
+            ser.write((cmd + "\n").encode())
+            ser.flush()
+            lines, quiet, t0 = [], 0, time.time()
+            ser.timeout = 0.15
+            # until 0.45 s of silence (0.6 s if nothing came at all), 8 s at most
+            while quiet < (3 if lines else 4) and time.time() - t0 < 8:
+                raw = ser.readline()
+                if raw:
+                    quiet = 0
+                    line = raw.decode(errors="ignore").rstrip()
+                    if line:
+                        lines.append(line)
+                else:
+                    quiet += 1
+            return lines
+        except Exception as e:
+            print(f"  ERR {cmd}: {e}")
+            ser = None
+            return None
+
+
 def scpi_command(cmd):
     with ser_lock:
         if not ser or not ser.is_open:
@@ -242,6 +274,7 @@ def fetch_status():
             "meas_v": str(s["v"]), "meas_i": str(s["i"] * 1000.0 if s["mA"] else s["i"]),
             "set_v": str(s["set_v"]), "set_i": str(s["set_i"]),
             "output": str(s["output"]), "power": str(s["p"]), "mA_active": str(s["mA"]),
+            "ok": True, "port": SERIAL_PORT,
         }
     # Single query returns: meas_v,meas_i,set_v,set_i,output,power,mA_active
     resp = scpi_query("DATA:STAT?")
@@ -256,10 +289,12 @@ def fetch_status():
                 "output": parts[4],
                 "power": parts[5],
                 "mA_active": parts[6] if len(parts) >= 7 else "0",
+                "ok": True, "port": SERIAL_PORT,
             }
     return {
         "meas_v": "0", "meas_i": "0", "set_v": "0",
         "set_i": "0", "output": "0", "power": "0", "mA_active": "0",
+        "ok": False, "port": SERIAL_PORT,  # no reply from the PSU
     }
 
 
@@ -469,6 +504,9 @@ def fetch_settings():
         }
         if len(parts) >= 20:
             d["startup"] = int(parts[19])
+        if len(parts) >= 22:  # newer firmware
+            d["adcDisc"] = parts[20] == "1"
+            d["faultProt"] = parts[21] == "1"
         return d
     except (ValueError, IndexError) as e:
         print(f"  ERR parsing settings: {e}")
@@ -918,6 +956,10 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/tabl":
             self._json(fetch_tabl())
+
+        elif path.startswith("/term?c="):
+            lines = scpi_terminal(unquote(path[8:]))
+            self._json({"ok": lines is not None, "lines": lines or []})
 
         elif path.startswith("/query?c="):
             cmd = unquote(path[9:])

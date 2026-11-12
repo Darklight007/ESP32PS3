@@ -8,6 +8,7 @@
 #include "calib_adc.h" // calib_low_noise_active()
 #include "waveform_generator.h" // g_funSetPeakV, g_funMeasPeakV
 #include "setting_menu.h"       // sirenPlay()
+#include "event_log.h"
 #include <Arduino.h>
 #include <Preferences.h>
 
@@ -240,6 +241,7 @@ static void checkOutputCollapse(DEVICE status)
     badChecks = 0;
 
     const bool hot = iAvg1min > 2.5;
+    eventLog(hot ? Event::OUTPUT_LOST_THERMAL : Event::OUTPUT_LOST_POWER, iAvg1min);
     snprintf(s_faultMsg, sizeof(s_faultMsg),
              "Output lost: %.3f V of %.3f V set, %.3f A of %.3f A limit.\n"
              "Likely %s (1 min avg %.2f A).\nOutput turned OFF.",
@@ -289,6 +291,7 @@ void enforceSoftwareLimits()
             lastTriggerTime = millis();
             PowerSupply.turn(SWITCH::OFF);
             PowerSupply.settingParameters.ovpTriggered = true;
+            eventLog(Event::OVP, PowerSupply.Voltage.measured.value);
             if (PowerSupply.powerSwitch.btn)
                 lv_obj_clear_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
             if (PowerSupply.settingParameters.beeperOnError)
@@ -318,6 +321,7 @@ void enforceSoftwareLimits()
                 lastTriggerTime = millis();
                 PowerSupply.turn(SWITCH::OFF);
                 PowerSupply.settingParameters.ocpTriggered = true;
+                eventLog(Event::OCP, measuredCurrent_A);
                 if (PowerSupply.powerSwitch.btn)
                     lv_obj_clear_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED);
                 if (PowerSupply.settingParameters.beeperOnError)

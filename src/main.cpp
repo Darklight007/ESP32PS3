@@ -1,4 +1,5 @@
 // Standard libraries
+#include "event_log.h"
 #include <map>
 #include <mutex>
 #include <complex>
@@ -114,6 +115,7 @@ void setup()
 
   setupCalibPage();
   dropIdleScrollbars(); // after the UI exists; render-time saving, no visual change
+  eventLogBegin(); // fault history: logs this boot and its reset reason
   dispPerfShow(PowerSupply.settingParameters.showFps == 1); // DISP:FPS overlay, if saved on
   PowerSupply.Voltage.opaqueMeasureBackground(); // faster digit redraws, same pixels
   PowerSupply.Current.opaqueMeasureBackground();

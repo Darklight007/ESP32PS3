@@ -15,6 +15,7 @@
 #include "calib_cc_limit.h"
 #include "calib_log_window.h"
 #include "setting_menu.h"
+#include "event_log.h"
 #include "tabs.h"
 #include <Wire.h>
 #include <cstring>
@@ -199,6 +200,8 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("ERR:ALL?") > 0) cmd_SYST_ERR_ALL_Q();
         else if (cmdPart.indexOf("ERR?") > 0) cmd_SYST_ERR_Q();
         else if (cmdPart.indexOf("VERS?") > 0) cmd_SYST_VERS_Q();
+        else if (cmdPart.indexOf("LOG:CLE") > 0) { eventLogClear(); sendResponse("OK"); }
+        else if (cmdPart.indexOf("LOG?") > 0) eventLogPrint();
         else if (cmdPart.indexOf("DISP?") > 0) sendResponse(DISPLAY_DRIVER_NAME); // display driver built in
         else if (cmdPart.indexOf("CAP?") > 0) cmd_SYST_CAP_Q();
         else if (cmdPart.indexOf("BEEP:SIR") > 0) sirenDemoToggle();
@@ -275,6 +278,15 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("ADC:DIG") > 0) cmd_SETT_ADC_DIG(paramPart);
         else if (cmdPart.indexOf("ADC:DISC") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.adcDiscardFirst);
         else if (cmdPart.indexOf("BEEP:PWR") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.beeperOnPowerChange);
+        else if (cmdPart.indexOf("PROT:FAUL?") > 0) sendResponse(PowerSupply.settingParameters.outputFaultProtOff == 1 ? "0" : "1");
+        else if (cmdPart.indexOf("PROT:FAUL") > 0)
+        {
+            // power lost / thermal protection; stored inverted (see device.hpp)
+            bool on = true;
+            cmd_SETT_BOOL(paramPart, on);
+            PowerSupply.settingParameters.outputFaultProtOff = on ? 0 : 1;
+            PowerSupply.settingsDirtyAt = millis() | 1;
+        }
         else if (cmdPart.indexOf("BEEP:ERR") > 0) cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.beeperOnError);
         else if (cmdPart.indexOf("BEEP:KEY") > 0 || cmdPart.indexOf("BEEP:VOL") > 0) addError(ERR_UNDEFINED_HEADER); // removed: did nothing
         else if (cmdPart.indexOf("BEEP") > 0) { cmd_SETT_BOOL(paramPart, PowerSupply.settingParameters.buzzer); buzzerSound = PowerSupply.settingParameters.buzzer; }
@@ -1040,10 +1052,10 @@ void SCPIParser::cmd_DATA_SETTINGS_Q()
     auto &s = PowerSupply.settingParameters;
     // adcRate,adcAvgs,adcDigits,buzzer,beepPwr,beepErr,beepKey,timerEn,timerDur,
     // ovpEn,ovpLvl,ocpEn,ocpLvl,delay,autoSave,graphTime,graphSpan,graphStop,
-    // beepVol,startup
+    // beepVol,startup,adcDiscardFirst,outputFaultProt
     // beepKey and beepVol no longer do anything; still sent so ps_control.py's
     // field positions stay the same.
-    Serial.printf("%d,%d,%d,%d,%d,%d,%d,%d,%u,%d,%.1f,%d,%.1f,%u,%u,%d,%u,%d,%d,%d\n",
+    Serial.printf("%d,%d,%d,%d,%d,%d,%d,%d,%u,%d,%.1f,%d,%.2f,%u,%u,%d,%u,%d,%d,%d,%d,%d\n",
         s.adcRate, s.adcNumberOfAvgs, s.adcNumberOfDigits,
         s.buzzer ? 1 : 0, s.beeperOnPowerChange ? 1 : 0,
         s.beeperOnError ? 1 : 0, s.beeperOnKeypress ? 1 : 0,
@@ -1053,7 +1065,8 @@ void SCPIParser::cmd_DATA_SETTINGS_Q()
         s.outputDelayMs, s.autoSaveIntervalMinutes,
         s.graphXaxisTimeMode ? 1 : 0, s.graphTimeSpanSeconds,
         s.graphAutoStop ? 1 : 0,
-        s.beeperVolume, static_cast<int>(s.startupBehavior));
+        s.beeperVolume, static_cast<int>(s.startupBehavior),
+        s.adcDiscardFirst ? 1 : 0, s.outputFaultProtOff == 1 ? 0 : 1);
 }
 
 void SCPIParser::cmd_DATA_MEM_Q()
@@ -1258,7 +1271,7 @@ void SCPIParser::cmd_SETT_ADC_RATE(const String& param)
 void SCPIParser::cmd_SETT_ADC_AVG(const String& param)
 {
     int val = param.toInt();
-    if (val >= 0 && val <= 5) {
+    if (val >= 0 && val <= 7) { // 1..128 samples, same range as the menu slider
         PowerSupply.settingParameters.adcNumberOfAvgs = val;
         int ws = (int)std::pow(2, val);
         PowerSupply.Voltage.measured.SetWindowSize(ws);

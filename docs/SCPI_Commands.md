@@ -426,6 +426,14 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 
 ## DISPlay Subsystem (Display Performance)
 
+### :SYSTem:LOG? - Event Log
+**Description:** Fault/event history kept across restarts (last 40): boots with reset reason, output lost (power/thermal), OVP, OCP. One line per event: `boot,uptime_s,event,value,arg`. `:SYST:LOG:CLE` clears it.
+**Syntax:** `:SYST:LOG?`, `:SYST:LOG:CLE`
+
+### :SETTing:PROT:FAULt - Power Lost / Thermal Protection
+**Description:** Turn the output-lost protection on or off (Protection page switch)
+**Syntax:** `:SETT:PROT:FAUL {0|1}`, `:SETT:PROT:FAUL?`
+
 ### :DISPlay:BENCH? - Full-Screen Repaint Time
 **Description:** Repaints the whole current page 10 times; returns ms per frame (render + flush)
 **Syntax:** `:DISP:BENCH?`
