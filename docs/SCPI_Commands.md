@@ -450,6 +450,10 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Syntax:** `DIAG:ADC:FAST <0-7>`, `DIAG:ADC:FAST?`
 **Returns:** `mode,late_reads_redone,ready_glitches_ignored,stalls_recovered` (counts since boot)
 
+### :DISPlay:SHOT? - Screenshot
+**Description:** Repaints the screen and sends it: 240 lines, each 320 pixels as RGB565 hex (4 digits per pixel), then `END`. About 310 KB of text.
+**Syntax:** `:DISP:SHOT?`
+
 ### :DISPlay:AREA - Redraw Time of One Rectangle
 **Description:** Redraws one screen rectangle 100 times; returns ms per redraw (render + flush)
 **Syntax:** `:DISP:AREA <x1>,<y1>,<x2>,<y2>`

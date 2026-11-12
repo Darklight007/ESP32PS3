@@ -210,7 +210,6 @@ struct GUI
     Calibration_gui calibration;
 
     // Display labels for new features
-    lv_obj_t *label_power_on_time = nullptr;   // Power-On Duration display
     lv_obj_t *label_energy_counter = nullptr;  // Energy Counter display
     lv_obj_t *label_timer_remaining = nullptr; // Timer countdown display
     lv_obj_t *label_current_rel = nullptr;     // REL indicator for current

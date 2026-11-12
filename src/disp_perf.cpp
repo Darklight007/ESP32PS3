@@ -68,7 +68,7 @@ void dispPerfUpdate()
         // Two short lines at the top right, under the tab bar and above the
         // "V" unit: frames/s, then draw ms + send ms per frame. Kept off the
         // status bar. The full set is on DISP:FPS?.
-        lv_label_set_text_fmt(overlay, "%d fps\n%.1f+%.1fms", (int)(stats.fps + 0.5f), stats.renderMs, stats.flushMs);
+        lv_label_set_text_fmt(overlay, "%d fps\n%.1f+%.1f", (int)(stats.fps + 0.5f), stats.renderMs, stats.flushMs);
 }
 
 void dispPerfShow(bool on)

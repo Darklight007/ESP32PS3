@@ -29,8 +29,21 @@ void formatTime(unsigned long seconds, char *buffer, size_t bufSize)
 // Update Energy Counter and Power-On Duration displays
 void updateEnergyAndTimeDisplays()
 {
-    if (!PowerSupply.gui.label_energy_counter || !PowerSupply.gui.label_power_on_time)
+    if (!PowerSupply.gui.label_energy_counter)
         return;
+
+    // Energy line: centred on the power digits alone, moved up when the timer
+    // countdown is shown under it.
+    {
+        const bool timerShown = PowerSupply.gui.label_timer_remaining &&
+                                !lv_obj_has_flag(PowerSupply.gui.label_timer_remaining, LV_OBJ_FLAG_HIDDEN);
+        static int last = -1;
+        if ((int)timerShown != last)
+        {
+            lv_obj_set_y(PowerSupply.gui.label_energy_counter, timerShown ? 162 : 168);
+            last = timerShown;
+        }
+    }
 
     // Update energy counter
     if (PowerSupply.energyAccumulatedWh < 1.0)
@@ -46,18 +59,6 @@ void updateEnergyAndTimeDisplays()
                              PowerSupply.energyAccumulatedWh);
     }
 
-    // Update power-on duration
-    if (PowerSupply.powerOnStartTime > 0)
-    {
-        unsigned long elapsedSeconds = (millis() - PowerSupply.powerOnStartTime) / 1000;
-        char timeStr[16];
-        formatTime(elapsedSeconds, timeStr, sizeof(timeStr));
-        lv_label_set_text(PowerSupply.gui.label_power_on_time, timeStr);
-    }
-    else
-    {
-        lv_label_set_text(PowerSupply.gui.label_power_on_time, "00:00:00");
-    }
 }
 
 // Update timer countdown display

@@ -1,3 +1,4 @@
+#include "disp_perf.h"
 #include "ui_creation.h"
 #include "config.hpp"
 #include "input_device.h"
@@ -927,7 +928,7 @@ void StatusBar()
         lv_style_set_text_font(&style_font, &graph_R_8);                        // graph_R_8 lv_font_montserrat_12
         lv_style_set_text_color(&style_font, lv_palette_main(LV_PALETTE_GREY)); //) lv_color_hex(0xFFFFFF)  lv_palette_darken(LV_PALETTE_RED,4));
         lv_obj_t *status = lv_obj_create(lv_scr_act());
-        lv_obj_set_size(status, 314, 14);
+        lv_obj_set_size(status, 320, 14); // full screen width: the bar is full with FPS:209 SPS:800 Avg:128
 
         lv_obj_align(status, LV_ALIGN_TOP_MID, 0, 226);
         lv_obj_set_scrollbar_mode(status, LV_SCROLLBAR_MODE_OFF);
@@ -948,8 +949,8 @@ void StatusBar()
         lv_obj_set_style_text_font(statusLabel_wifi, &lv_font_montserrat_10, LV_STATE_DEFAULT);
 
         lv_obj_align(statusLabel_time, LV_ALIGN_LEFT_MID, -12, 0);
-        lv_obj_align(statusLabel_wifi, LV_ALIGN_CENTER, -30, 0);
-        lv_obj_align(statusLabel_avg, LV_ALIGN_RIGHT_MID, 0, 0);
+        lv_obj_align(statusLabel_wifi, LV_ALIGN_LEFT_MID, 40, 0); // right after the time
+        lv_obj_align(statusLabel_avg, LV_ALIGN_RIGHT_MID, 14, 0); // to the bar's right edge
         statusCreationFlag = true;
     }
 
@@ -977,29 +978,38 @@ void StatusBar()
         strcpy(lastProtStatus, protStatus);
     }
 
-    static time_t now;
-    char strftime_buf[16];
-    struct tm timeinfo;
-
-    time(&now);
-    localtime_r(&now, &timeinfo);
-    strftime(strftime_buf, sizeof(strftime_buf), "%H:%M:%S", &timeinfo);
-    static char lastTimeStr[16] = {0};
-    if (strcmp(strftime_buf, lastTimeStr) != 0)
+    // Left of the status bar: time the output has been on (green) or, while it
+    // is off, time since power-up (grey). There is no real-time clock.
     {
-        lv_label_set_text_fmt(statusLabel_time, "%s", strftime_buf);
-        strcpy(lastTimeStr, strftime_buf);
+        const bool outOn = PowerSupply.powerOnStartTime > 0;
+        const unsigned long sec = (outOn ? millis() - PowerSupply.powerOnStartTime : millis()) / 1000;
+        static unsigned long lastSec = ~0UL;
+        static int lastOn = -1;
+        if (sec != lastSec || (int)outOn != lastOn)
+        {
+            if ((int)outOn != lastOn)
+                lv_obj_set_style_text_color(statusLabel_time, lv_palette_main(outOn ? LV_PALETTE_LIGHT_GREEN : LV_PALETTE_GREY), 0);
+            if (sec < 86400UL)
+                lv_label_set_text_fmt(statusLabel_time, "%02lu:%02lu:%02lu", sec / 3600, (sec / 60) % 60, sec % 60);
+            else // a day or more: days, then HH:MM - "1d02:03" can't be misread as H:M:S
+                lv_label_set_text_fmt(statusLabel_time, "%lud%02lu:%02lu", sec / 86400UL, (sec / 3600) % 24, (sec / 60) % 60);
+            lastSec = sec;
+            lastOn = outOn;
+        }
     }
 
-    static char str[35];
-    static int lastSps = -1, lastAvgs = -1;
-    if (PowerSupply.adc.realADCSpeed != lastSps || PowerSupply.Voltage.measured.NofAvgs != lastAvgs)
     {
-        sprintf(str, "SPS:%3i;#Avgs ", PowerSupply.adc.realADCSpeed);
-        strcat(str, "%i");
-        lv_label_set_text_fmt(statusLabel_avg, str, PowerSupply.Voltage.measured.NofAvgs);
-        lastSps = PowerSupply.adc.realADCSpeed;
-        lastAvgs = PowerSupply.Voltage.measured.NofAvgs;
+        static int lastSps = -1, lastAvgs = -1, lastFps = -1;
+        const int fps = (int)(dispPerfStats().fps + 0.5f);
+        if (PowerSupply.adc.realADCSpeed != lastSps || PowerSupply.Voltage.measured.NofAvgs != lastAvgs || fps != lastFps)
+        {
+            // same "name:value" style as the OVP/OCP text beside it
+            lv_label_set_text_fmt(statusLabel_avg, "FPS:%i SPS:%i Avg:%i", fps, PowerSupply.adc.realADCSpeed,
+                                  PowerSupply.Voltage.measured.NofAvgs);
+            lastSps = PowerSupply.adc.realADCSpeed;
+            lastAvgs = PowerSupply.Voltage.measured.NofAvgs;
+            lastFps = fps;
+        }
     }
 
     auto StatsPositions = [&](lv_obj_t *parent, DispObjects &dObj, lv_style_t *style_, lv_coord_t x, lv_coord_t y)

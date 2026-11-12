@@ -381,6 +381,32 @@ void SCPIParser::executeCommand(const String& command)
             }
             Serial.printf("%.1f\n", (micros() - t0) / 10000.0f);
         }
+        else if (cmdPart.indexOf("SHOT?") > 0)
+        {
+            // Screenshot: full repaint into the full-screen buffer, then 240
+            // lines of 320 RGB565 pixels as hex (high byte first), then END.
+            extern lv_color_t *buf[2];
+            lv_obj_invalidate(lv_scr_act());
+            lv_refr_now(NULL);
+            const uint8_t *px = (const uint8_t *)buf[0];
+            static const char hex[] = "0123456789abcdef";
+            char line[IWIDTH * 4 + 2];
+            for (int y = 0; y < IHEIGHT && px; y++)
+            {
+                for (int i = 0; i < IWIDTH * 2; i++)
+                {
+                    const uint8_t b = px[y * IWIDTH * 2 + i]; // LV_COLOR_16_SWAP: already high byte first
+                    line[2 * i] = hex[b >> 4];
+                    line[2 * i + 1] = hex[b & 15];
+                }
+                line[IWIDTH * 4] = '\n';
+                Serial.write((const uint8_t *)line, IWIDTH * 4 + 1);
+                Serial.flush();
+                if (y % 8 == 7)
+                    delay(2);
+            }
+            Serial.println("END");
+        }
         else if (cmdPart.indexOf("AREA") > 0)
         {
             // Cost of redrawing one screen rectangle: "DISP:AREA x1,y1,x2,y2" -> ms

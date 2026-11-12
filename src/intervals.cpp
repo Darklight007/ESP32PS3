@@ -163,8 +163,6 @@ void Page2RightSideCleanup(unsigned long interval)
                      lv_obj_invalidate(PowerSupply.Power.label_unit);
                  if (PowerSupply.gui.label_energy_counter)
                      lv_obj_invalidate(PowerSupply.gui.label_energy_counter);
-                 if (PowerSupply.gui.label_power_on_time)
-                     lv_obj_invalidate(PowerSupply.gui.label_power_on_time);
                  if (PowerSupply.gui.label_timer_remaining)
                      lv_obj_invalidate(PowerSupply.gui.label_timer_remaining);
                  if (PowerSupply.powerSwitch.btn)

@@ -1,6 +1,6 @@
 #ifndef VERSION_H
 #define VERSION_H
 
-#define SOFTWARE_VERSION "v0.0.2-380-g2a63350"
+#define SOFTWARE_VERSION "v0.0.2-381-g96b49b3"
 
 #endif // VERSION_H
