@@ -21,6 +21,22 @@
 #include <cstring>
 #include <cmath>
 
+// Sampling profiler (DISP:SAMPRUN, DISP:SAMP?, DISP:SAMP x1,y1,x2,y2): a 3 kHz
+// timer interrupt on Core 1 records the interrupted program counter. Resolve
+// the addresses with addr2line against firmware.elf to see where time goes.
+#include "freertos/xtensa_context.h"
+static const int SAMP_MAX = 6000;
+static volatile uint32_t s_samp[SAMP_MAX];
+static volatile int s_sampN = 0;
+static void IRAM_ATTR sampIsr()
+{
+    if (s_sampN < SAMP_MAX)
+    {
+        void **tcb = (void **)xTaskGetCurrentTaskHandle();
+        s_samp[s_sampN++] = ((XtExcFrame *)(*tcb))->pc;
+    }
+}
+
 extern Device PowerSupply;
 extern lv_obj_t *btn_function_gen;
 
@@ -357,11 +373,82 @@ void SCPIParser::executeCommand(const String& command)
             }
             Serial.printf("%.1f\n", (micros() - t0) / 10000.0f);
         }
+        else if (cmdPart.indexOf("AREA") > 0)
+        {
+            // Cost of redrawing one screen rectangle: "DISP:AREA x1,y1,x2,y2" -> ms
+            int v[4] = {0, 0, 0, 0};
+            sscanf(paramPart.c_str(), "%d,%d,%d,%d", &v[0], &v[1], &v[2], &v[3]);
+            lv_area_t a = {(lv_coord_t)v[0], (lv_coord_t)v[1], (lv_coord_t)v[2], (lv_coord_t)v[3]};
+            lv_refr_now(NULL);
+            const uint32_t t0 = micros();
+            for (int i = 0; i < 100; i++)
+            {
+                _lv_inv_area(NULL, &a);
+                lv_refr_now(NULL);
+            }
+            Serial.printf("%.3f\n", (micros() - t0) / 100000.0f);
+        }
+        else if (cmdPart.indexOf("SAMP?") > 0)
+        {
+            // dump the PCs sampled from the running main loop (started by DISP:SAMPRUN)
+            for (int i = 0; i < s_sampN; i++)
+            {
+                Serial.printf("%08x\n", (unsigned)s_samp[i]);
+                if (i % 40 == 39) { Serial.flush(); delay(5); }
+            }
+            Serial.println("END");
+        }
+        else if (cmdPart.indexOf("SAMPRUN") > 0)
+        {
+            static hw_timer_t *t = nullptr;
+            s_sampN = 0;
+            if (!t)
+            {
+                t = timerBegin(0, 80, true);
+                timerAttachInterrupt(t, &sampIsr, true);
+                timerAlarmWrite(t, 337, true);
+                timerAlarmEnable(t);
+            }
+            sendResponse("OK");
+        }
+        else if (cmdPart.indexOf("SAMP") > 0)
+        {
+            // sample Core 1 while redrawing one rectangle over and over
+            int v[4] = {0, 0, 0, 0};
+            sscanf(paramPart.c_str(), "%d,%d,%d,%d", &v[0], &v[1], &v[2], &v[3]);
+            lv_area_t a = {(lv_coord_t)v[0], (lv_coord_t)v[1], (lv_coord_t)v[2], (lv_coord_t)v[3]};
+            s_sampN = 0;
+            hw_timer_t *t = timerBegin(0, 80, true);
+            timerAttachInterrupt(t, &sampIsr, true);
+            timerAlarmWrite(t, 53, true);
+            timerAlarmEnable(t);
+            while (s_sampN < SAMP_MAX)
+            {
+                _lv_inv_area(NULL, &a);
+                lv_refr_now(NULL);
+            }
+            timerAlarmDisable(t);
+            timerDetachInterrupt(t);
+            timerEnd(t);
+            for (int i = 0; i < SAMP_MAX; i++)
+            {
+                Serial.printf("%08x\n", (unsigned)s_samp[i]);
+                if (i % 40 == 39) { Serial.flush(); delay(5); }
+            }
+            Serial.println("END");
+        }
+        else if (cmdPart.indexOf("MEM?") > 0)
+        {
+            // internal RAM free, its largest block, PSRAM free, UI task stack never used (bytes)
+            Serial.printf("%u,%u,%u,%u\n", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                          (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+                          (unsigned)uxTaskGetStackHighWaterMark(NULL));
+        }
         else if (cmdPart.indexOf("FPS?") > 0)
         {
             const DispPerfStats &st = dispPerfStats();
-            Serial.printf("%.1f,%lu,%.2f,%.2f,%.0f,%u,%.0f\n", st.fps, (unsigned long)st.pxPerFrame,
-                          st.renderMs, st.flushMs, st.busyPct, PowerSupply.adc.realADCSpeed, st.maxGapMs);
+            Serial.printf("%.1f,%lu,%.2f,%.2f,%.0f,%u,%.0f,%.1f\n", st.fps, (unsigned long)st.pxPerFrame,
+                          st.renderMs, st.flushMs, st.busyPct, PowerSupply.adc.realADCSpeed, st.maxGapMs, st.areasPerFrame);
         }
         else if (cmdPart.indexOf("FPS") > 0)
         {

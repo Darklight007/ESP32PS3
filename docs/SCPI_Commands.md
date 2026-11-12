@@ -442,10 +442,24 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Description:** For each child of the current page: size, position and the ms it adds to a full repaint (hides it, times 3 frames, shows it again). Takes several seconds.
 **Syntax:** `:DISP:PROF?`
 
+### :DISPlay:AREA - Redraw Time of One Rectangle
+**Description:** Redraws one screen rectangle 100 times; returns ms per redraw (render + flush)
+**Syntax:** `:DISP:AREA <x1>,<y1>,<x2>,<y2>`
+
+### :DISPlay:MEM? - Memory Headroom
+**Syntax:** `:DISP:MEM?`
+**Returns:** `internal_free,internal_largest_block,psram_free,ui_stack_unused` (bytes)
+
+### :DISPlay:SAMPRUN / :DISPlay:SAMP? - Sampling Profiler
+**Description:** `SAMPRUN` records 6000 program-counter samples of the UI core (about 2 s); `SAMP?` prints them as hex, one per line, then `END`. `SAMP <x1>,<y1>,<x2>,<y2>` samples while redrawing one rectangle. Resolve with `addr2line -f -e firmware.elf`.
+**Syntax:** `:DISP:SAMPRUN`, `:DISP:SAMP?`
+
 ### :DISPlay:FPS? - Frame-Rate Meter
 **Description:** Display statistics over the last second
 **Syntax:** `:DISP:FPS?`
-**Returns:** `fps,px_per_frame,render_ms,flush_ms,busy_pct,adc_sps`
+**Returns:** `fps,px_per_frame,render_ms,flush_ms,busy_pct,adc_sps,max_gap_ms,areas_per_frame`
+- `max_gap_ms` - longest wait between two frames (stutter)
+- `areas_per_frame` - separate rectangles drawn and sent per frame
 - `render_ms` - LVGL drawing per frame (in low-noise mode, rate 0, includes waiting for the ADC)
 - `flush_ms` - SPI/DMA transfer per frame
 - `busy_pct` - share of Core 1 spent on frames

@@ -181,7 +181,11 @@ Frame cost is dominated by how many pixels are invalidated, so frequently-changi
 - Avoid `LV_OBJ_FLAG_OVERFLOW_VISIBLE` on main-page objects: LVGL 8 draws such objects for every invalidated area.
 - `dropIdleScrollbars()` (ui_creation.cpp, once after UI setup): labels made non-scrollable, Main page scrollbars off where none shows. Every LVGL 8 object is scrollable by default and its post-draw scrollbar check re-measured label text, ~0.3 ms per object per redraw.
 - `patch_lvgl.py` (pre-build, like `patch_tft_espi.py`): LVGL 8.4 padded every invalidated area by 5 px per side even without transforms; the patch skips that.
-- Measure with `DISP:FPS?` / `DISP:FPS 1` (`disp_perf.cpp`): fps, px/frame, render and flush ms.
+- Hot LVGL code runs from internal RAM (`ld_iram_hot.py`, post-build script, ~67 KB): the S3's 16 KB instruction cache made every small redraw stall on flash fetches (1.6 ms per pixel-sized area, now 0.4 ms). Add an object file there only after profiling.
+- LVGL's heap is in PSRAM (`lv_mem_psram.cpp`): same speed, and internal RAM free went 12 KB -> ~105 KB. Task_ADC's stack and the RAM-resident code depend on that.
+- `pickDrawBuffer()` (SetupHandlers.cpp): frames whose areas fit the 320x48 internal buffer are drawn and sent from it; larger ones use the PSRAM buffer.
+- Measure with `DISP:FPS?` / `DISP:FPS 1` (`disp_perf.cpp`): fps, px/frame, render ms, flush ms, load %, ADC SPS, worst frame gap ms, areas/frame. `DISP:AREA x1,y1,x2,y2` times one rectangle; `DISP:MEM?` gives internal free, largest block, PSRAM free.
+- Profile with `DISP:SAMPRUN` then `DISP:SAMP?` (Core 1 program-counter samples; resolve with addr2line on firmware.elf).
 
 ### ADC Timing Sensitivity
 ADC DRDY interrupt (GPIO9) drives the entire measurement loop. Don't block this interrupt. Keep ISR handlers minimal.
@@ -216,7 +220,7 @@ Container (returned object, e.g., gui.slider_adcRate)
 
 ## Development Workflow Notes
 
-- Build optimization: `-O3` for release builds (warnings suppressed with `-w`)
+- Build optimization: `-O2` (warnings suppressed with `-w`). `build_unflags = -Os` is required: the platform appends `-Os` after `build_flags`, which silently overrode the old `-O3`.
 - Logging: Adjust `CORE_DEBUG_LEVEL` in platformio.ini (currently 4 = INFO). Use `ESP_LOGI`/`ESP_LOGW`/`ESP_LOGE` macros.
 - Partitions: Using `par/default_16MB_2.csv` (huge_app configuration)
 - Upload speed: 921600 baud

@@ -7,7 +7,7 @@ extern Device PowerSupply;
 // All counters are touched only on Core 1 (LVGL refresh + main loop).
 static int64_t frameStartUs = 0;
 static int64_t flushStartUs = 0;
-static uint32_t frames = 0, px = 0;
+static uint32_t frames = 0, px = 0, areas = 0;
 static int64_t frameUs = 0, flushUs = 0;
 static int64_t windowStartUs = 0;
 static int64_t lastFrameEndUs = 0, maxGapUs = 0; // longest wait between two frames = visible stutter
@@ -39,7 +39,7 @@ void dispPerfAttach(lv_disp_drv_t *drv)
     drv->monitor_cb = monitor;
 }
 
-void dispPerfFlushBegin() { flushStartUs = esp_timer_get_time(); }
+void dispPerfFlushBegin() { flushStartUs = esp_timer_get_time(); areas++; }
 void dispPerfFlushEnd() { flushUs += esp_timer_get_time() - flushStartUs; }
 
 void dispPerfUpdate()
@@ -56,6 +56,8 @@ void dispPerfUpdate()
     stats.flushMs = frames ? flushUs / 1000.0f / frames : 0;
     stats.renderMs = frames ? (frameUs - flushUs) / 1000.0f / frames : 0;
     stats.busyPct = frameUs * 100.0f / span;
+    stats.areasPerFrame = frames ? (float)areas / frames : 0;
+    areas = 0;
     stats.maxGapMs = maxGapUs / 1000.0f;
     maxGapUs = 0;
     frames = px = 0;

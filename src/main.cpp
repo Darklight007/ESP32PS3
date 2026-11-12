@@ -139,6 +139,11 @@ void setup()
 
 bool oneTimeCommandDone = false;
 
+// Main-loop (UI) task stack. The 8 KB default overflowed at -O2 on a page
+// change with a full repaint (Home key): bigger inlined frames in LVGL's draw
+// path. Check the remaining margin with DISP:MEM? (4th value).
+SET_LOOP_TASK_STACK_SIZE(24 * 1024);
+
 void loop()
 {
   // static unsigned long loopCounter = 0;

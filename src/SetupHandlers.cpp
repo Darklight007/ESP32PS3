@@ -8,15 +8,12 @@
 #include "calib_cc_limit.h"  // ccLimitLoad()
 // #include "calib_inl_zc.h"  // Include zero-current INL calibration for startup rebuild
 
-// Staging buffer for display DMA, in internal (DMA-capable) RAM. The LVGL draw
-// buffers live in PSRAM, which SPI master cannot DMA from - see the detailed
-// note in setupDMA(). my_disp_flush() pushes through this in bands.
-// 320 x 12 px = 7680 bytes. Internal RAM is tight: LV_ATTRIBUTE_FAST_MEM puts
-// LVGL's draw code in IRAM (~13KB of the same SRAM), and Task_ADC's 14KB stack
-// is created after the UI - when it didn't fit, xTaskCreatePinnedToCore failed
-// silently and the unit ran with no ADC and no keypad. 12 rows costs ~3ms per
-// full-screen flush vs 24.
-static constexpr size_t DMA_BAND_ROWS = 12;
+// Internal (DMA-capable) display buffer, 320 x 48 px = 30 KB. Two jobs:
+// - small updates are drawn straight into it and sent from it (pickDrawBuffer)
+// - larger ones are drawn in the full-screen PSRAM buffer, which SPI cannot
+//   DMA from, and my_disp_flush() copies them through it in bands.
+// Internal RAM has room since LVGL's heap moved to PSRAM (lv_mem_psram.cpp).
+static constexpr size_t DMA_BAND_ROWS = 48;
 static constexpr size_t DMA_BAND_PIXELS = (size_t)IWIDTH * DMA_BAND_ROWS;
 static uint16_t *dmaBandBuf = nullptr;
 
@@ -637,7 +634,9 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
             // memory instead of a PSRAM pointer it has to bounce (and fail on
             // with ESP_ERR_NO_MEM). nullptr falls back to DMA straight from the
             // source, i.e. the old behaviour, if the alloc ever failed.
-            tft.pushImageDMA(x, yy, w, rows, src, dmaBandBuf);
+            // Drawn straight into the internal buffer (see pickDrawBuffer): send
+            // it as is, no staging copy.
+            tft.pushImageDMA(x, yy, w, rows, src, src == dmaBandBuf ? nullptr : dmaBandBuf);
             tft.dmaWait(); // must complete before the next band overwrites the
                            // staging buffer / reuses the library's static
                            // spi_transaction_t
@@ -668,6 +667,24 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
     lv_disp_flush_ready(disp); // Indicate that flushing is done
 }
 
+// Per frame: small updates (digits, bar strips) are drawn in the internal DMA
+// buffer and sent from it directly; anything larger uses the full-screen PSRAM
+// buffer, which LVGL fills in one pass.
+static void (*prevRenderStart)(lv_disp_drv_t *) = nullptr;
+static void pickDrawBuffer(lv_disp_drv_t *drv)
+{
+    lv_disp_t *d = lv_disp_get_default();
+    bool small = dmaBandBuf && d;
+    for (uint16_t i = 0; small && i < d->inv_p; i++)
+        if (!d->inv_area_joined[i] && lv_area_get_size(&d->inv_areas[i]) > DMA_BAND_PIXELS)
+            small = false;
+    lv_disp_draw_buf_t *b = drv->draw_buf;
+    b->buf1 = b->buf_act = small ? (void *)dmaBandBuf : (void *)buf[0];
+    b->size = small ? DMA_BAND_PIXELS : (uint32_t)IWIDTH * IHEIGHT;
+    if (prevRenderStart)
+        prevRenderStart(drv);
+}
+
 // Initialize the display driver for LVGL
 void init_display()
 {
@@ -678,6 +695,8 @@ void init_display()
     disp_drv.hor_res = screenWidth;    // Set horizontal resolution
     disp_drv.ver_res = screenHeight;   // Set vertical resolution
     dispPerfAttach(&disp_drv);         // frame-rate meter (DISP:FPS?)
+    prevRenderStart = disp_drv.render_start_cb;
+    disp_drv.render_start_cb = pickDrawBuffer;
     lv_disp_drv_register(&disp_drv);   // Finally register the driver
 
     lv_disp = lv_disp_get_default(); // Get the default display

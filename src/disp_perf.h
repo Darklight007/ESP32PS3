@@ -13,6 +13,7 @@ struct DispPerfStats
     float renderMs;   // per frame, LVGL drawing (frame time minus flush)
     float flushMs;    // per frame, SPI/DMA push
     float busyPct;    // share of Core 1 spent in frames
+    float areasPerFrame; // separate rectangles drawn and sent per frame
     float maxGapMs;   // longest gap between two frames in the window (stutter)
 };
 
