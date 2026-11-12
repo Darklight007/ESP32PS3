@@ -521,6 +521,21 @@ void handleGraphPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_value)
 {
     bool histogramUpdated = false; // Flag to indicate if histogram needs to be reset
+    // Window before any change. On every exit (the limit checks below return
+    // early), counts are re-sorted into whatever window results.
+    struct KeepData
+    {
+        const float vMin0 = PowerSupply.Voltage.hist.histWinMin, vMax0 = PowerSupply.Voltage.hist.histWinMax;
+        const float iMin0 = PowerSupply.Current.hist.histWinMin, iMax0 = PowerSupply.Current.hist.histWinMax;
+        ~KeepData()
+        {
+            Histogram &hv = PowerSupply.Voltage.hist, &hi = PowerSupply.Current.hist;
+            if (hv.histWinMin != vMin0 || hv.histWinMax != vMax0)
+                hv.remap(vMin0, vMax0);
+            if (hi.histWinMin != iMin0 || hi.histWinMax != iMax0)
+                hi.remap(iMin0, iMax0);
+        }
+    } keepData;
 
     // **Handle Vertical Shift/Zoom with Encoder 1**
     if (encoder1_last_value != encoder1_value)
@@ -675,15 +690,7 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
         histogramUpdated = true; // Mark histogram as updated
     }
 
-    // **Reset Histograms if Updated**
-    if (histogramUpdated)
-    {
-        // Reset histograms to apply new window settings
-        if (PowerSupply.stats.serV->hidden == 0)
-            PowerSupply.Voltage.hist.Reset();
-        if (PowerSupply.stats.serI->hidden == 0)
-            PowerSupply.Current.hist.Reset();
-    }
+    // Window moved or zoomed: keepData re-sorts the counts as this returns
 }
 
 void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value)

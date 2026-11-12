@@ -45,7 +45,13 @@ class Histogram
 {
 public:
     const int length_ = 350;
-    lv_coord_t data[350] = {0};
+    lv_coord_t data[350] = {0}; // what the chart draws: counts scaled to fit `cap`
+    // True sample counts per bin. The display is scaled from these, so once the
+    // tallest bar reaches the top it stays there and the shape holds still.
+    // (Before, every bar dropped by 3 whenever one hit the top - the whole
+    // histogram kept jumping down and growing back.)
+    uint32_t counts[350] = {0};
+    uint32_t maxCount = 0;
     // double m = 50;
     // double b = 0;
     lv_obj_t *label_binMax;
@@ -73,28 +79,61 @@ public:
             binMax = index;
     }
 
+    // Redraw every bar from its count: scaled down once the tallest exceeds cap
     void rescaleHistogram()
     {
-        maxHist = *std::max_element(data, data + length_);
-        binMin = length_; // Reset binMin to maximum possible value
-        binMax = -1;      // Reset binMax to minimum possible value
-
         for (int i = 0; i < length_; ++i)
-        {
-            // data[i] = static_cast<int>(data[i] * cap / maxHist);
-            // data[i] = data[i] * cap / maxHist;
-            // data[i] -= 10;
-            //  if (data[i] < 0) data[i]=0;
-            data[i] = std::max(0, data[i] - 3); // Decrement by 3 and clamp to 0 in one step
+            data[i] = scaled(counts[i]);
+    }
+    lv_coord_t scaled(uint32_t c) const
+    {
+        return maxCount <= cap ? (lv_coord_t)c : (lv_coord_t)((uint64_t)c * cap / maxCount);
+    }
 
-            if (data[i] != 0)
+    // The window moved or zoomed: re-sort the counts into the new bins instead
+    // of clearing them. Each old bin's count is spread over the new bins its
+    // value range covers (zoom in spreads, zoom out merges, pan just moves).
+    // Counts that fall outside the new window are dropped.
+    // Bin i covers value (i - 10 - 0.5 .. i - 10 + 0.5) * span / 328 + min,
+    // the inverse of operator[] below.
+    void remap(float oldMin, float oldMax)
+    {
+        const double oldStep = (oldMax - oldMin) / 328.0, newStep = (histWinMax - histWinMin) / 328.0;
+        if (!(oldStep > 0) || !(newStep > 0))
+            return;
+        static float acc[350];
+        for (int i = 0; i < length_; ++i)
+            acc[i] = 0;
+        for (int j = 0; j < length_; ++j)
+        {
+            if (!counts[j])
+                continue;
+            // old bin edges in new-bin units
+            const double v0 = oldMin + (j - 10 - 0.5) * oldStep, v1 = v0 + oldStep;
+            const double p0 = 10 + (v0 - histWinMin) / newStep + 0.5, p1 = 10 + (v1 - histWinMin) / newStep + 0.5;
+            const double perUnit = counts[j] / (p1 - p0);
+            for (int k = (int)std::floor(p0); k < p1 && k < length_; ++k)
             {
-                if (i < binMin)
-                    binMin = i;
-                if (i > binMax)
-                    binMax = i;
+                if (k < 0)
+                    continue;
+                const double lo = std::max(p0, (double)k), hi = std::min(p1, (double)k + 1);
+                if (hi > lo)
+                    acc[k] += perUnit * (hi - lo);
             }
         }
+        maxCount = 0;
+        binMin = UINT16_MAX;
+        binMax = 0;
+        for (int i = 0; i < length_; ++i)
+        {
+            counts[i] = (uint32_t)(acc[i] + 0.5f);
+            if (counts[i])
+            {
+                updateMinMax(i);
+                maxCount = std::max(maxCount, counts[i]);
+            }
+        }
+        rescaleHistogram();
     }
 
     void operator[](const double &value)
@@ -105,13 +144,19 @@ public:
         if (index < 0 || index >= length_)
             return;
 
-        data[index]++;
+        const uint32_t c = ++counts[index];
         updateMinMax(index);
 
-        if (data[index] > (cap + 3))
+        if (c > maxCount)
         {
-            rescaleHistogram();
+            maxCount = c;
+            if (maxCount > cap)
+            {
+                rescaleHistogram(); // new tallest bar: every bar's scale changed
+                return;
+            }
         }
+        data[index] = scaled(c);
     }
     void Reset()
     {
@@ -131,6 +176,9 @@ public:
 
         for (auto &val : data)
             val = 0;
+        for (auto &c : counts)
+            c = 0;
+        maxCount = 0;
     }
     int RangeMin()
     {

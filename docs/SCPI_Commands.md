@@ -453,6 +453,10 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 ### :DISPlay:PAGE - Show a Page
 **Syntax:** `:DISP:PAGE <0-4>` (0 Stats, 1 Graph, 2 Main, 3 Utility, 4 Setting), `:DISP:PAGE?`
 
+### :DISPlay:HIST:FIT - Re-centre the Histogram
+**Description:** Same as the stats-reset key on the Stats page: histogram window = mean ±6σ for V and I, statistics cleared.
+**Syntax:** `:DISP:HIST:FIT`
+
 ### :DISPlay:GRAPH:FIT - Fit the Graph Vertically
 **Description:** Same as the Y key on the Graph page: zooms and scrolls the Y axis so the visible part of the V and/or I trace fills the view (both shown together when both are on).
 **Syntax:** `:DISP:GRAPH:FIT`

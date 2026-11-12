@@ -381,6 +381,35 @@ void SCPIParser::executeCommand(const String& command)
             }
             Serial.printf("%.1f\n", (micros() - t0) / 10000.0f);
         }
+        else if (cmdPart.indexOf("HIST:PAN") > 0 || cmdPart.indexOf("HIST:ZOOM") > 0)
+        {
+            // Test hook for the encoder pan/zoom: DISP:HIST:PAN f (fraction of
+            // the window), DISP:HIST:ZOOM f (span factor), V and I, data kept
+            const bool pan = cmdPart.indexOf("PAN") > 0;
+            const double f = paramPart.toFloat();
+            for (DispObjects *d : {&PowerSupply.Voltage, &PowerSupply.Current})
+            {
+                Histogram &h = d->hist;
+                const float m0 = h.histWinMin, m1 = h.histWinMax;
+                const double span = m1 - m0, mid = (m0 + m1) / 2;
+                if (pan) { h.histWinMin = m0 + f * span; h.histWinMax = m1 + f * span; }
+                else { h.histWinMin = mid - span * f / 2; h.histWinMax = mid + span * f / 2; }
+                h.remap(m0, m1);
+            }
+            sendResponse("OK");
+        }
+        else if (cmdPart.indexOf("HIST:FIT") > 0)
+        {
+            // same as the stats-reset key on the Stats page: window = mean +-6 sigma
+            for (DispObjects *d : {&PowerSupply.Voltage, &PowerSupply.Current})
+            {
+                const double m = d->measured.Mean(), sd = d->Statistics.StandardDeviation();
+                d->hist.histWinMin = m - sd * 6;
+                d->hist.histWinMax = m + sd * 6;
+            }
+            PowerSupply.ResetStats();
+            sendResponse("OK");
+        }
         else if (cmdPart.indexOf("GRAPH:FIT") > 0)
         {
             // same as the Y key on the Graph page
