@@ -843,12 +843,13 @@ void draw_event_stat_chart_cb(lv_event_t *e)
 
             switch (VI_hidden)
             {
+            // the series' own colour: it follows the theme (FUN mode differs)
             case 1:
-                dsc->label_dsc->color = lv_palette_main(LV_PALETTE_BLUE);
+                dsc->label_dsc->color = PowerSupply.stats.serV->color;
                 break;
 
             case 2:
-                dsc->label_dsc->color = lv_palette_main(LV_PALETTE_AMBER);
+                dsc->label_dsc->color = PowerSupply.stats.serI->color;
                 break;
 
             case 3:
