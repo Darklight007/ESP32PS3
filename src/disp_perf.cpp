@@ -65,9 +65,10 @@ void dispPerfUpdate()
     windowStartUs = now;
 
     if (overlay)
-        lv_label_set_text_fmt(overlay, "%2d fps %5lu px  R %4.1f  F %3.1f ms  %2d%%",
-                              (int)(stats.fps + 0.5f), (unsigned long)stats.pxPerFrame,
-                              stats.renderMs, stats.flushMs, (int)(stats.busyPct + 0.5f));
+        // Two short lines at the top right, under the tab bar and above the
+        // "V" unit: frames/s, then draw ms + send ms per frame. Kept off the
+        // status bar. The full set is on DISP:FPS?.
+        lv_label_set_text_fmt(overlay, "%d fps\n%.1f+%.1fms", (int)(stats.fps + 0.5f), stats.renderMs, stats.flushMs);
 }
 
 void dispPerfShow(bool on)
@@ -80,8 +81,9 @@ void dispPerfShow(bool on)
         lv_obj_set_style_bg_color(overlay, lv_color_black(), 0);
         lv_obj_set_style_bg_opa(overlay, LV_OPA_COVER, 0);
         lv_obj_set_style_pad_all(overlay, 1, 0);
-        lv_obj_align(overlay, LV_ALIGN_BOTTOM_LEFT, 0, 0);
-        lv_label_set_text(overlay, "measuring...");
+        lv_obj_set_style_text_align(overlay, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_align(overlay, LV_ALIGN_TOP_RIGHT, 0, 16);
+        lv_label_set_text(overlay, "...");
     }
     else if (!on && overlay)
     {
