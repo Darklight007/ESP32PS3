@@ -437,6 +437,13 @@ void HistogramChartRefreshInterval(unsigned long interval)
                  static int lastPage = -1;
                  static double lastWin[4] = {0, 0, 0, 0};
                  const int page = Tabs::getCurrentPage();
+                 // First visit after boot: the window is still in DAC codes
+                 static bool fitted = false;
+                 if (page == 0 && !fitted && PowerSupply.Voltage.Statistics.StandardDeviation() > 0)
+                 {
+                     fitted = true;
+                     histFit();
+                 }
                  if (page == 0 && (g_histSeq != shownSeq || lastPage != 0) && !lvglChartIsBusy && !blockAll)
                  {
                      const double win[4] = {PowerSupply.Voltage.hist.histWinMin, PowerSupply.Voltage.hist.histWinMax,

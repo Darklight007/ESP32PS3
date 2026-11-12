@@ -100,6 +100,7 @@ extern ChartViewMode g_histViewMode;
 void applyGraphStatsVisibility(bool visible);
 void applyGraphViewMode(ChartViewMode mode);
 void syncGraphLegend(bool fullscreen);
+void histFit();
 void applyHistViewMode(ChartViewMode mode);
 
 // =====================================================================

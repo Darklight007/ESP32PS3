@@ -400,14 +400,7 @@ void SCPIParser::executeCommand(const String& command)
         }
         else if (cmdPart.indexOf("HIST:FIT") > 0)
         {
-            // same as the stats-reset key on the Stats page: window = mean +-6 sigma
-            for (DispObjects *d : {&PowerSupply.Voltage, &PowerSupply.Current})
-            {
-                const double m = d->measured.Mean(), sd = d->Statistics.StandardDeviation();
-                d->hist.histWinMin = m - sd * 6;
-                d->hist.histWinMax = m + sd * 6;
-            }
-            PowerSupply.ResetStats();
+            histFit(); // same as the stats-reset key on the Stats page
             sendResponse("OK");
         }
         else if (cmdPart.indexOf("GRAPH:FIT") > 0)

@@ -710,6 +710,45 @@ void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_color16_t 
 
 // UI event callbacks (moved from globalFunctions.h)
 
+// One histogram axis value, at most 2 decimals. Unit chosen from the tick
+// step so all three labels share it: V/A for steps of 0.1 and up, mV/mA
+// below. Decimals follow the step: >=10 -> 0, >=1 -> 1, else 2.
+static void axisLabel(double value, double step, char base, char *out, size_t n, char *unit)
+{
+    step = fabs(step);
+    if (step < 0.1)
+    {
+        value *= 1000;
+        step *= 1000;
+        unit[0] = 'm';
+        unit[1] = base;
+        unit[2] = 0;
+    }
+    else
+    {
+        unit[0] = base;
+        unit[1] = 0;
+    }
+    const int dec = step >= 10 ? 0 : step >= 1 ? 1 : 2;
+    if (fabs(value) < 0.5 * pow(10, -dec))
+        value = 0; // no "-0.00"
+    snprintf(out, n, "%.*f", dec, value);
+}
+
+// Histogram window = mean +-6 sigma for V and I (the stats-reset key, and the
+// first time the Stats page opens: the boot window is in DAC codes).
+void histFit()
+{
+    for (DispObjects *d : {&PowerSupply.Voltage, &PowerSupply.Current})
+    {
+        const double m = d->measured.Mean(), sd = d->Statistics.StandardDeviation();
+        const double half = std::max(sd * 6, d == &PowerSupply.Voltage ? 0.0005 : 0.0001); // flat signal: still a usable window
+        d->hist.histWinMin = m - half;
+        d->hist.histWinMax = m + half;
+    }
+    PowerSupply.ResetStats();
+}
+
 void draw_event_stat_chart_cb(lv_event_t *e)
 {
     lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
@@ -752,41 +791,9 @@ void draw_event_stat_chart_cb(lv_event_t *e)
             double voltageValue = PowerSupply.Voltage.hist.histWinMin + i * voltageStep;
             double currentValue = PowerSupply.Current.hist.histWinMin + i * currentStep;
 
-            // Initialize units as empty strings
-            char v_unit[3] = "V";
-            char c_unit[3] = "A";
-
-            // Format the voltage value with appropriate precision
-            char voltageStr[20];
-            if (fabs(voltageStep) >= 1.0)
-                snprintf(voltageStr, sizeof(voltageStr), "%3.4f", voltageValue);
-            else if (fabs(voltageStep) >= 0.1)
-                snprintf(voltageStr, sizeof(voltageStr), "%3.1f", voltageValue);
-            else if (fabs(voltageStep) >= 0.01)
-                snprintf(voltageStr, sizeof(voltageStr), "%3.2f", voltageValue);
-            else
-            {
-                // Convert to millivolts if the step is very small
-                voltageValue *= 1000;
-                snprintf(voltageStr, sizeof(voltageStr), "%3.2f", voltageValue);
-                strcpy(v_unit, "mV");
-            }
-
-            // Format the current value with appropriate precision
-            char currentStr[20];
-            if (fabs(currentStep) >= 1.0)
-                snprintf(currentStr, sizeof(currentStr), "%3.0f", currentValue);
-            else if (fabs(currentStep) >= 0.1)
-                snprintf(currentStr, sizeof(currentStr), "%3.1f", currentValue);
-            else if (fabs(currentStep) >= 0.01)
-                snprintf(currentStr, sizeof(currentStr), "%3.2f", currentValue);
-            else
-            {
-                // Convert to milliamps if the step is very small
-                currentValue *= 1000;
-                snprintf(currentStr, sizeof(currentStr), "%3.2f", currentValue);
-                strcpy(c_unit, "mA");
-            }
+            char voltageStr[20], currentStr[20], v_unit[3], c_unit[3];
+            axisLabel(voltageValue, voltageStep, 'V', voltageStr, sizeof(voltageStr), v_unit);
+            axisLabel(currentValue, currentStep, 'A', currentStr, sizeof(currentStr), c_unit);
 
             // **Add units only to the middle tick label (position 3)**
             if (i == 1)
