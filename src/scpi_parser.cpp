@@ -381,6 +381,26 @@ void SCPIParser::executeCommand(const String& command)
             }
             Serial.printf("%.1f\n", (micros() - t0) / 10000.0f);
         }
+        else if (cmdPart.indexOf("GRAPH:FIT") > 0)
+        {
+            // same as the Y key on the Graph page
+            if (!lvglChartIsBusy)
+            {
+                lvglChartIsBusy = true;
+                fitGraphY();
+                lvglChartIsBusy = false;
+            }
+            sendResponse("OK");
+        }
+        else if (cmdPart.indexOf("PAGE?") > 0)
+            sendResponse(String(Tabs::getCurrentPage()));
+        else if (cmdPart.indexOf("PAGE") > 0)
+        {
+            // 0 Stats, 1 Graph, 2 Main, 3 Utility, 4 Setting
+            const int pg = paramPart.toInt();
+            if (pg < 0 || pg > 4) addError(ERR_DATA_OUT_OF_RANGE);
+            else { Tabs::setCurrentPage(pg); sendResponse("OK"); }
+        }
         else if (cmdPart.indexOf("SHOT?") > 0)
         {
             // Screenshot: full repaint into the full-screen buffer, then 240

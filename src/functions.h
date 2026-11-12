@@ -22,6 +22,7 @@ void overlay(lv_obj_t *label, const char *text, lv_style_t *style, lv_color16_t 
 void draw_event_cb2(lv_event_t *e);
 void draw_event_stat_chart_cb(lv_event_t *e);
 void autoScrollY();
+void fitGraphY(); // Graph page: zoom + scroll Y so the visible V and/or I trace fills the view
 
 // External variables from globalFunctions.h
 extern lv_obj_t *label_legend1;

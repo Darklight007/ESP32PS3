@@ -450,6 +450,13 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Syntax:** `DIAG:ADC:FAST <0-7>`, `DIAG:ADC:FAST?`
 **Returns:** `mode,late_reads_redone,ready_glitches_ignored,stalls_recovered` (counts since boot)
 
+### :DISPlay:PAGE - Show a Page
+**Syntax:** `:DISP:PAGE <0-4>` (0 Stats, 1 Graph, 2 Main, 3 Utility, 4 Setting), `:DISP:PAGE?`
+
+### :DISPlay:GRAPH:FIT - Fit the Graph Vertically
+**Description:** Same as the Y key on the Graph page: zooms and scrolls the Y axis so the visible part of the V and/or I trace fills the view (both shown together when both are on).
+**Syntax:** `:DISP:GRAPH:FIT`
+
 ### :DISPlay:SHOT? - Screenshot
 **Description:** Repaints the screen and sends it: 240 lines, each 320 pixels as RGB565 hex (4 digits per pixel), then `END`. About 310 KB of text.
 **Syntax:** `:DISP:SHOT?`

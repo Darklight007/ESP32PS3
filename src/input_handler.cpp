@@ -50,6 +50,7 @@ volatile bool g_keyMemPending = false; // 'm': Utility page, "Mem" sub-tab
 volatile bool g_keyZPending = false;
 volatile int  g_keyZ_w = 0;
 volatile bool g_keyGraphPauseTogglePending = false;
+volatile bool g_keyGraphFitPending = false;
 volatile bool g_keyChartModeTogglePending = false;
 volatile bool g_keyMemLoadPending = false;
 volatile bool g_keyMemSavePending = false;
@@ -1365,6 +1366,10 @@ void keyCheckLoop()
                    g_keyGraphPauseTogglePending = true;
                    Serial.printf("[Graph] %s\n", g_graphPaused ? "Paused" : "Resumed"); });
 
+    // Graph page: fit the vertical zoom/scroll to the visible V and/or I trace
+    keyMenusPage('Y', " RELEASED.", 1, []
+                 { g_keyGraphFitPending = true; });
+
     keyMenusPage('X', " RELEASED.", 2, []
                  { g_keyRotaryStepFinePending = true; });
 
@@ -1510,6 +1515,17 @@ void drainPendingKeyEvents()
         g_keyZPending = false;
         lv_slider_set_value(lv_obj_get_child(PowerSupply.gui.slider_Avgs, -1), log2((double)g_keyZ_w), LV_ANIM_OFF);
         lv_event_send(lv_obj_get_child(PowerSupply.gui.slider_Avgs, -1), LV_EVENT_VALUE_CHANGED, NULL);
+    }
+
+    if (g_keyGraphFitPending)
+    {
+        g_keyGraphFitPending = false;
+        if (!lvglChartIsBusy)
+        {
+            lvglChartIsBusy = true;
+            fitGraphY();
+            lvglChartIsBusy = false;
+        }
     }
 
     if (g_keyGraphPauseTogglePending)

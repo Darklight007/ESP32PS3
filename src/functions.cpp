@@ -85,6 +85,73 @@ void autoScrollY()
     lv_obj_scroll_to_y(PowerSupply.graph.chart, lv_coord_t(calc), LV_ANIM_OFF);
 }
 
+// Graph page, Y key: set the vertical zoom and scroll so the visible part of
+// the trace fills the view - V alone, I alone, or both (zoomed out as far as
+// needed to show both). V and I have their own axes (-4..32 V, -1..8 A), so
+// each point is first mapped to its 0..1 height on the chart.
+// Core 1 only (LVGL).
+extern lv_obj_t *slider_y;
+void fitGraphY()
+{
+    lv_obj_t *chart = PowerSupply.graph.chart;
+    if (!chart)
+        return;
+    lv_obj_update_layout(chart);
+
+    const uint16_t n = lv_chart_get_point_count(chart);
+    const lv_coord_t cw = lv_obj_get_content_width(chart);
+    const lv_coord_t ch = lv_obj_get_content_height(chart);
+    if (n < 2 || cw <= 0 || ch <= 0)
+        return;
+
+    // Points currently on screen horizontally (the X zoom/scroll window)
+    const int32_t fullW = (int32_t)cw * lv_chart_get_zoom_x(chart) / 256;
+    const int32_t sx = lv_obj_get_scroll_x(chart);
+    int32_t i0 = (int64_t)sx * (n - 1) / fullW;
+    int32_t i1 = (int64_t)(sx + cw) * (n - 1) / fullW + 1;
+    i0 = LV_CLAMP(0, i0, n - 1);
+    i1 = LV_CLAMP(0, i1, n - 1);
+
+    float lo = 2.0f, hi = -1.0f;
+    auto scan = [&](lv_chart_series_t *ser, float min, float max)
+    {
+        if (!ser || ser->hidden)
+            return;
+        const lv_coord_t *y = lv_chart_get_y_array(chart, ser);
+        const uint16_t start = lv_chart_get_x_start_point(chart, ser);
+        for (int32_t p = i0; p <= i1; p++)
+        {
+            const lv_coord_t v = y[(start + p) % n];
+            if (v == LV_CHART_POINT_NONE)
+                continue;
+            const float f = (v - min) / (max - min);
+            lo = f < lo ? f : lo;
+            hi = f > hi ? f : hi;
+        }
+    };
+    scan(PowerSupply.graph.serV, -4000.0f, 32000.0f); // ranges as set in ui_helpers.cpp
+    scan(PowerSupply.graph.serI, -1000.0f, 8000.0f);
+    if (hi < lo)
+        return; // nothing visible
+
+    // Zoom: the trace's height plus 10% margin each side fills the view.
+    // Slider range 256 (1x) .. 5120 (20x).
+    const float span = (hi - lo) * 1.2f;
+    int32_t zoom = span > 0.0f ? (int32_t)(256.0f / span) : 5120;
+    zoom = LV_CLAMP(256, zoom, 5120);
+
+    if (slider_y)
+        lv_slider_set_value(slider_y, zoom, LV_ANIM_OFF);
+    lv_chart_set_zoom_y(chart, (uint16_t)zoom);
+    lv_obj_update_layout(chart);
+
+    // Scroll: put the middle of the trace in the middle of the view
+    const int32_t fullH = (int32_t)ch * zoom / 256;
+    int32_t top = (int32_t)(fullH * (1.0f - (lo + hi) / 2.0f)) - ch / 2;
+    top = LV_CLAMP(0, top, fullH - ch);
+    lv_obj_scroll_to_y(chart, top, LV_ANIM_OFF);
+}
+
 void print_obj_type(lv_obj_t *obj)
 {
     const lv_obj_class_t *obj_class = lv_obj_get_class(obj);
