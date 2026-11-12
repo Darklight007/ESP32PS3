@@ -845,8 +845,10 @@ lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_
                     PowerSupply.recordingMem.sample_rate_ms = 1000 / sps;  // period in ms = 1000 / samples_per_second
                 }
 
-                // Max samples is table size
-                PowerSupply.recordingMem.max_samples = RECORDING_TABLE_SIZE;
+                // Record up to the table length set in "Len:" (all 250 rows only
+                // if recording starts at or past that length)
+                const int len = PowerSupply.funGenMem.table_length;
+                PowerSupply.recordingMem.max_samples = (len > selected_row && len <= RECORDING_TABLE_SIZE) ? len : RECORDING_TABLE_SIZE;
 
                 // Update status
                 if (Utility_objs.record_status_label) {

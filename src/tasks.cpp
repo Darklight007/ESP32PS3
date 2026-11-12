@@ -164,7 +164,8 @@ void Task_ADC(void *pvParameters)
             {
                 lastRecordTime = millis();
 
-                if (PowerSupply.recordingMem.sample_count < RECORDING_TABLE_SIZE)
+                if (PowerSupply.recordingMem.sample_count < PowerSupply.recordingMem.max_samples &&
+                    PowerSupply.recordingMem.sample_count < RECORDING_TABLE_SIZE)
                 {
                     double voltage = PowerSupply.Voltage.measured.Mean();
 

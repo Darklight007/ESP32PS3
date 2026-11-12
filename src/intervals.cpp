@@ -303,6 +303,8 @@ void UpdateRecordingUI()
     bool isRecording = PowerSupply.recordingMem.is_recording;
 
     static uint16_t lastUpdatedIndex = 0;
+    if (lastUpdatedIndex > PowerSupply.recordingMem.sample_count)
+        lastUpdatedIndex = 0; // a new recording started (e.g. stopped with STOP last time)
 
     if (isRecording && slowSampling)
     {
@@ -329,7 +331,7 @@ void UpdateRecordingUI()
         if (Utility_objs.record_status_label)
         {
             lv_label_set_text_fmt(Utility_objs.record_status_label, "Recording: %d/%d",
-                                 PowerSupply.recordingMem.sample_count, RECORDING_TABLE_SIZE);
+                                 PowerSupply.recordingMem.sample_count, PowerSupply.recordingMem.max_samples);
             lv_obj_set_style_text_color(Utility_objs.record_status_label, lv_palette_main(LV_PALETTE_RED), 0);
         }
     }
