@@ -442,6 +442,14 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Description:** For each child of the current page: size, position and the ms it adds to a full repaint (hides it, times 3 frames, shows it again). Takes several seconds.
 **Syntax:** `:DISP:PROF?`
 
+### DIAG:ADC:FAST - ADC Cycle Speed-Ups
+**Description:** Bit mask, default 7; set 0 to compare noise or speed against the old cycle. Not saved. Ignored parts in low-noise mode (rate 0).
+- 1 - start the next conversion before reading the finished result
+- 2 - channel select and START in one I2C transfer
+- 4 - result read as one I2C transfer
+**Syntax:** `DIAG:ADC:FAST <0-7>`, `DIAG:ADC:FAST?`
+**Returns:** `mode,late_reads_redone,ready_glitches_ignored,stalls_recovered` (counts since boot)
+
 ### :DISPlay:AREA - Redraw Time of One Rectangle
 **Description:** Redraws one screen rectangle 100 times; returns ms per redraw (render + flush)
 **Syntax:** `:DISP:AREA <x1>,<y1>,<x2>,<y2>`

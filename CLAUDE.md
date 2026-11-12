@@ -62,6 +62,12 @@ ADS1219 ADC → GPIO9 DRDY interrupt → Task_ADC
   → DAC output adjustment (CC/CV feedback loop)
 ```
 
+### ADC Conversion Cycle
+
+On DRDY the next conversion is started first (channel select + START in one I2C transfer) and the finished result is read while it runs: 800 conversions/s at rate 4 (was 666), 302 at rate 3. Low-noise mode (rate 0) keeps read-then-start so no I2C runs during a conversion. `DIAG:ADC:FAST 0` restores the old cycle for A/B.
+
+Channel-swap guard: reading after the new conversion has finished returns the other channel's value (voltage drawn as current). `readOldResult()` rejects a read that ends >700 us after the start and converts that channel again (~1 per second); a ready flag is only trusted while the DRDY pin is low (`readyIsReal()`); 300 ms without a result restarts the conversion. `DIAG:ADC:FAST?` returns mode, late reads redone, glitches ignored, stalls recovered.
+
 ### DAC Update Timing
 
 - **Normal mode:** 100ms interval (10 Hz)

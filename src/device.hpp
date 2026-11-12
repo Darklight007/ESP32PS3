@@ -439,6 +439,14 @@ public:
         //     ads1219->readDifferential_2_3();
         //     // ads1219->readSingleEnded(3);
 
+        startUs = micros();
+        if (!quietMode && (fast & 2))
+        {
+            ads1219->selectSingleEndedAndStart(channel);
+            busyChannel = channel;
+            nextIsPairStart = false;
+            return;
+        }
         ads1219->selectSingleEnded(channel);  // Configure channel (no start)
         busyChannel = channel;
         if (quietMode)
@@ -452,6 +460,58 @@ public:
             ads1219->start();  // Actually START the conversion!
         nextIsPairStart = false;
     }
+
+    // Speed-ups for the conversion cycle, A/B switchable (SCPI DIAG:ADC:FAST n):
+    // 1 = start the next conversion before reading the finished one
+    // 2 = channel select + START in one I2C transfer
+    // 4 = result read as one I2C transfer (repeated start)
+    static inline volatile uint8_t fast = 7;
+    bool startFirst() const { return (fast & 1) && !quietMode; }
+
+    // Start-first reads the old result while the new conversion runs. If the
+    // read is held up (task preempted, flash write) until that conversion has
+    // finished, the chip returns the NEW channel's value - voltage would show
+    // up as current and vice versa. Such a read is rejected: the caller keeps
+    // its previous value and the new result is read normally next pass.
+    uint32_t startUs{0};
+    uint32_t lateReads{0};
+    uint32_t earlyReady{0};
+    uint32_t stalls{0};
+    bool readOldResult(int &raw)
+    {
+        const long r = readConversion();
+        if (adcDataReady || micros() - startUs > 700) // 1000 SPS converts in ~1.07 ms
+        {
+            // Unknown which result that was, and reading it may have consumed
+            // the new one: convert the current channel again from scratch.
+            lateReads++;
+            adcDataReady = false;
+            restart();
+            return false;
+        }
+        raw = r;
+        return true;
+    }
+
+    // Convert the selected channel again (mux and gain unchanged).
+    void restart()
+    {
+        startUs = micros();
+        ads1219->start();
+    }
+
+    // DRDY is low from the end of a conversion until its result is read or a
+    // new conversion starts. A ready flag while the pin is high is a glitch on
+    // the line: acting on it would abort the running conversion and take the
+    // other channel's last result as this one's.
+    bool readyIsReal()
+    {
+        if (drdyPin < 0 || digitalRead(drdyPin) == LOW)
+            return true;
+        earlyReady++;
+        return false;
+    }
+    int drdyPin{-1};
 
     // Low-noise mode (adcRate 0), see spi_quiet.h. adcConverting is held for a
     // whole V+I pair (set at the pair's first start, cleared by endPair()), so
@@ -508,7 +568,7 @@ public:
     {
         _wire->beginTransmission(addr);
         _wire->write(0x10);
-        _wire->endTransmission();
+        _wire->endTransmission(!(fast & 4));
         _wire->requestFrom((uint8_t)addr, (uint8_t)3);
         data32 = _wire->read();
         data32 <<= 8;

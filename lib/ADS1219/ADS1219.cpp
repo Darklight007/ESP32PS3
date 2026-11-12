@@ -96,6 +96,21 @@ void ADS1219::readSingleEnded(int channel)
   start();
 }
 
+// Select the input channel and start the conversion in a single I2C transfer
+// (WREG, config, START/SYNC) instead of two.
+void ADS1219::selectSingleEndedAndStart(int channel)
+{
+  static const uint8_t mux[4] = {MUX_SINGLE_0, MUX_SINGLE_1, MUX_SINGLE_2, MUX_SINGLE_3};
+  config &= MUX_MASK;
+  if (channel >= 0 && channel < 4)
+    config |= mux[channel];
+  _wire->beginTransmission(address);
+  i2cWrite(CONFIG_REGISTER_ADDRESS);
+  i2cWrite(config);
+  i2cWrite(0x08);
+  _wire->endTransmission();
+}
+
 // Select the input channel without starting a conversion (caller calls start()).
 void ADS1219::selectSingleEnded(int channel)
 {

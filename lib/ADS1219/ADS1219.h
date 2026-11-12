@@ -85,6 +85,7 @@ public:
 
 	void start();  // Made public for direct conversion control
 	void selectSingleEnded(int channel);  // configure channel only, no start
+	void selectSingleEndedAndStart(int channel); // channel + START in one I2C transfer
 
 private:
 	uint8_t readRegister(uint8_t reg);

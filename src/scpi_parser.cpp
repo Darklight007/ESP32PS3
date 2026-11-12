@@ -328,6 +328,14 @@ void SCPIParser::executeCommand(const String& command)
         return;
     }
 
+    // DIAG:ADC:FAST n - conversion-cycle speed-ups, bit mask (see ADC::fast)
+    if (cmdPart.startsWith("DIAG:ADC:FAST"))
+    {
+        if (cmdPart.endsWith("?")) sendResponse(String(ADC::fast) + "," + String(PowerSupply.adc.lateReads) + "," + String(PowerSupply.adc.earlyReady) + "," + String(PowerSupply.adc.stalls)); // mode, late reads redone, ready glitches ignored, stalls recovered
+        else { ADC::fast = paramPart.toInt(); sendResponse("OK"); }
+        return;
+    }
+
     // SCPI DISPlay subsystem: frame-rate meter
     if (cmdPart.startsWith("DISP"))
     {

@@ -51,6 +51,7 @@ void Device::setupADC(uint8_t pin, void func(void), TwoWire *_awire)
     ESP_LOGI("ADC", "=== Starting ADC setup ===");
     ESP_LOGI("ADC", "Setting up DRDY interrupt on pin %d", pin);
     pinMode(pin, INPUT_PULLUP);
+    adc.drdyPin = pin;
     attachInterrupt(pin, func, FALLING);
     LoadCalibrationData();
 
@@ -594,7 +595,10 @@ void Device::readVoltage()
       32.0000f / 31.9882f  // Index 4: 1000 SPS
   };
 
-        const long raw = adc.readConversion();
+        // startFirst: the ADS1219 keeps the finished result until the next
+        // conversion completes, so start that one now and read while it runs.
+        const bool startFirst = adc.startFirst();
+        const long raw = startFirst ? 0 : adc.readConversion();
         adcDataReady = false;
         // Discard 1st Conversion: throw this one away and convert the same
         // channel again (gain/mux unchanged), keeping the second result.
@@ -606,7 +610,8 @@ void Device::readVoltage()
             return;
         }
         adcKeepNext = false;
-        Voltage.rawValue = raw;
+        if (!startFirst)
+            Voltage.rawValue = raw;
         // TEMPORARY experiment: apply the PGA to CURRENT conversions only. This
         // gain is programmed right before the CURRENT conversion is kicked off,
         // so it is the gain that sample will be digitised with. Voltage keeps
@@ -617,6 +622,8 @@ void Device::readVoltage()
         iPgaPendingCurrentX4 = useX4;
         adc.ads1219->setGain(useX4 ? FOUR : ONE);
         adc.startConversion(CURRENT, REF_EXTERNAL);
+        if (startFirst)
+            adc.readOldResult(Voltage.rawValue); // rejected if late: keeps the last value
 
         // OPTIMIZED: Single line calculation for speed
         double v_corrected = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m * adcRateCompensation[activeAdcRate()];
@@ -671,7 +678,8 @@ void Device::readCurrent()
         // } // throw away first 2 readings after changing rate
         // throw_away = 0;
 
-        const long raw = adc.readConversion();
+        const bool startFirst = adc.startFirst(); // see readVoltage()
+        const long raw = startFirst ? 0 : adc.readConversion();
         adcDataReady = false;
         // Discard 1st Conversion - same as readVoltage(); the PGA gain set for
         // this CURRENT conversion stays in place for the repeat.
@@ -683,11 +691,14 @@ void Device::readCurrent()
             return;
         }
         adcKeepNext = false;
-        Current.rawValue = raw;
+        if (!startFirst)
+            Current.rawValue = raw;
         // Voltage always runs at x1 - the PGA experiment is current-only.
         adc.ads1219->setGain(ONE);
         adc.endPair(); // V+I pair done - low-noise mode lets the display draw now
         adc.startConversion(VOLTAGE, REF_EXTERNAL);
+        if (startFirst)
+            adc.readOldResult(Current.rawValue);
 
         // Undo the PGA before applying the x1 calibration. Divide the RAW code
         // rather than the final current: calib_b is a zero-CODE offset, and at

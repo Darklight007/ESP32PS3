@@ -129,6 +129,19 @@ void Task_ADC(void *pvParameters)
         // Always re-check after wait - might have been woken by timeout instead of notification
         if (!adcDataReady)
         {
+            // Safety net: no result for far longer than any conversion takes
+            // (a missed edge) - convert the current channel again.
+            if (!PowerSupply.adc.quietMode && micros() - PowerSupply.adc.startUs > 300000)
+            {
+                PowerSupply.adc.stalls++;
+                PowerSupply.adc.restart();
+            }
+            continue;
+        }
+
+        if (!PowerSupply.adc.readyIsReal())
+        {
+            adcDataReady = false; // glitch: the real edge will set it again
             continue;
         }
 
