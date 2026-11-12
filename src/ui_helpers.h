@@ -63,6 +63,7 @@ extern int g_graphPushCount;
 void LoadGraphData();
 void SaveGraphDataIfDirty();
 extern volatile bool g_graphDataDirty;
+extern volatile uint32_t g_graphSeq;
 
 // UI styling helper functions
 void legend(lv_obj_t *parent, lv_color16_t c1, const char *ser1, lv_color16_t c2, const char *ser2, int x, int y);
@@ -98,6 +99,7 @@ extern ChartViewMode g_histViewMode;
 
 void applyGraphStatsVisibility(bool visible);
 void applyGraphViewMode(ChartViewMode mode);
+void syncGraphLegend(bool fullscreen);
 void applyHistViewMode(ChartViewMode mode);
 
 // =====================================================================

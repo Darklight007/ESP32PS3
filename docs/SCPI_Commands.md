@@ -457,6 +457,10 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Description:** Same as the Y key on the Graph page: zooms and scrolls the Y axis so the visible part of the V and/or I trace fills the view (both shown together when both are on).
 **Syntax:** `:DISP:GRAPH:FIT`
 
+### :DISPlay:BUF - Draw Buffer Mode
+**Description:** 1 = two internal strips with overlapped DMA (default); 0 = previous path (small frames in one strip, large ones in PSRAM). For A/B timing; not saved.
+**Syntax:** `:DISP:BUF <0|1>`, `:DISP:BUF?`
+
 ### :DISPlay:SHOT? - Screenshot
 **Description:** Repaints the screen and sends it: 240 lines, each 320 pixels as RGB565 hex (4 digits per pixel), then `END`. About 310 KB of text.
 **Syntax:** `:DISP:SHOT?`

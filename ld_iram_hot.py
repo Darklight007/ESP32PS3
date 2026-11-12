@@ -17,6 +17,8 @@ HOT = {
         "lv_draw_sw_rect", "lv_obj_scroll", "lv_anim", "lv_font", "lv_obj_draw", "lv_hal_disp",
         "lv_timer", "lv_draw_label", "lv_draw_rect", "lv_bar", "lv_ll", "lv_obj_class", "lv_disp",
         "lv_utils", "lv_draw_sw_blend", "lv_hal_tick", "lv_obj_style_gen", "lv_draw_mask",
+        # Graph page: plot lines (draw_series_line was ~19% of a graph frame)
+        "lv_chart", "lv_draw_sw_line", "lv_draw_line",
     ],
 }
 
@@ -43,6 +45,8 @@ def patch():
         open(out, "w").write(new)
     flags = [out if str(f) == "sections.ld" else f for f in env["LINKFLAGS"]]
     env.Replace(LINKFLAGS=flags)
+    # SCons doesn't track linker scripts: relink when this one changes
+    env.Depends("$BUILD_DIR/${PROGNAME}.elf", out)
     print("ld_iram_hot: %d object files placed in internal RAM" % sum(len(v) for v in HOT.values()))
 
 patch()

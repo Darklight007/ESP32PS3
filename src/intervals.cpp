@@ -458,13 +458,30 @@ void GraphChartRefreshInterval(unsigned long interval)
                      else lv_obj_add_flag(PowerSupply.graph.label_pause, LV_OBJ_FLAG_HIDDEN);
                  }
 
-                 // Only refresh when on graph page (page 1)
-                 if (Tabs::getCurrentPage() == 1 && !lvglChartIsBusy && !blockAll)
+                 // Redraw when the trace changed (or the page was just entered);
+                 // nothing to do while paused or unchanged. The frame itself
+                 // sets the pace - no fixed refresh period.
+                 static uint32_t shownSeq = 0;
+                 static int lastPage = -1;
+                 const int page = Tabs::getCurrentPage();
+                 if (page == 1 && (g_graphSeq != shownSeq || lastPage != 1) && !lvglChartIsBusy && !blockAll)
                  {
+                     // New data only changes the plot area. lv_chart_refresh()
+                     // also redraws the axis tick labels outside it (about half
+                     // the pixels, plus formatting every label for each strip).
+                     // Page entry redraws everything anyway.
                      lvglChartIsBusy = true;
-                     lv_chart_refresh(PowerSupply.graph.chart);
+                     if (lastPage == 1 && shownSeq != g_graphSeq)
+                     {
+                         lv_area_t a = PowerSupply.graph.chart->coords;
+                         lv_obj_invalidate_area(PowerSupply.graph.chart, &a);
+                     }
+                     else
+                         lv_chart_refresh(PowerSupply.graph.chart);
+                     shownSeq = g_graphSeq;
                      lvglChartIsBusy = false;
-                 } },
+                 }
+                 lastPage = page; },
              interval, timer_);
 }
 

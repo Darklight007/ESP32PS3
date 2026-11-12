@@ -136,6 +136,17 @@ static void setPageScrollable(int pageIdx, bool scrollable)
     }
 }
 
+// Legend "V"/"A" labels: shown only when not fullscreen AND that series is
+// shown. The labels are shared by the Stats and Graph pages, whose V and I
+// series are hidden together (V/A keys), so the graph series decide.
+void syncGraphLegend(bool fullscreen)
+{
+    const bool vShown = PowerSupply.graph.serV && !PowerSupply.graph.serV->hidden;
+    const bool iShown = PowerSupply.graph.serI && !PowerSupply.graph.serI->hidden;
+    setHidden(label_legend1, fullscreen || !vShown);
+    setHidden(label_legend2, fullscreen || !iShown);
+}
+
 void applyGraphViewMode(ChartViewMode mode)
 {
     g_graphViewMode = mode;
@@ -143,8 +154,7 @@ void applyGraphViewMode(ChartViewMode mode)
     const bool stats_visible = (mode == ChartViewMode::NORMAL);
 
     applyGraphStatsVisibility(stats_visible);
-    setHidden(label_legend1, fullscreen);
-    setHidden(label_legend2, fullscreen);
+    syncGraphLegend(fullscreen);
     setHidden(slider_x,      fullscreen);
     setHidden(slider_y,      fullscreen);
 
@@ -191,8 +201,7 @@ void applyHistViewMode(ChartViewMode mode)
     const bool stats_visible = (mode == ChartViewMode::NORMAL);
 
     applyGraphStatsVisibility(stats_visible);
-    setHidden(label_legend1, fullscreen);
-    setHidden(label_legend2, fullscreen);
+    syncGraphLegend(fullscreen);
 
     if (!PowerSupply.stats.chart) return;
 
@@ -489,6 +498,8 @@ int g_graphPushCount = 0;
 // debounced (SaveGraphDataIfDirty, called from Core 1) since GraphPush() runs
 // on Core 0 at ADC rate — writing flash that often would wear it out fast.
 volatile bool g_graphDataDirty = false;
+// Bumped by every change to the trace; Core 1 redraws the chart when it moves.
+volatile uint32_t g_graphSeq = 0;
 
 void graphReset()
 {
@@ -497,6 +508,7 @@ void graphReset()
     memset(graph_data_V, 0, CHART_SIZE * sizeof(graph_data_V[0]));
     memset(graph_data_I, 0, CHART_SIZE * sizeof(graph_data_I[0]));
     g_graphDataDirty = true; // persist the cleared trace too
+    g_graphSeq++;
 }
 
 void LoadGraphData()
@@ -602,6 +614,7 @@ void GraphPush()
         }
         lastPushTime += (unsigned long)count * msPerPoint;
         g_graphDataDirty = true;
+        g_graphSeq++;
 
         // Auto-stop after one full chart fill
         if (PowerSupply.settingParameters.graphAutoStop) {
@@ -615,11 +628,13 @@ void GraphPush()
     }
 
     // Points mode: one point per ADC call
-    memcpy(&graph_data_V[0], &graph_data_V[1], (CHART_SIZE - 1) * sizeof(graph_data_V[0]));
-    memcpy(&graph_data_I[0], &graph_data_I[1], (CHART_SIZE - 1) * sizeof(graph_data_I[0]));
+    // memmove: source and destination overlap (memcpy is undefined there)
+    memmove(&graph_data_V[0], &graph_data_V[1], (CHART_SIZE - 1) * sizeof(graph_data_V[0]));
+    memmove(&graph_data_I[0], &graph_data_I[1], (CHART_SIZE - 1) * sizeof(graph_data_I[0]));
     graph_data_V[CHART_SIZE - 1] = PowerSupply.Voltage.measured.value * 1000.0;
     graph_data_I[CHART_SIZE - 1] = PowerSupply.Current.measured.value * 1000.0;
     g_graphDataDirty = true;
+    g_graphSeq++;
 
     // Auto-stop after one full chart fill
     if (PowerSupply.settingParameters.graphAutoStop) {

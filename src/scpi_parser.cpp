@@ -401,13 +401,24 @@ void SCPIParser::executeCommand(const String& command)
             if (pg < 0 || pg > 4) addError(ERR_DATA_OUT_OF_RANGE);
             else { Tabs::setCurrentPage(pg); sendResponse("OK"); }
         }
+        else if (cmdPart.indexOf("BUF") > 0)
+        {
+            // draw buffers: 1 two internal strips (default), 0 strip + PSRAM
+            extern int g_drawMode;
+            if (cmdPart.endsWith("?")) sendResponse(String(g_drawMode));
+            else { g_drawMode = paramPart.toInt() ? 1 : 0; sendResponse("OK"); }
+        }
         else if (cmdPart.indexOf("SHOT?") > 0)
         {
             // Screenshot: full repaint into the full-screen buffer, then 240
             // lines of 320 RGB565 pixels as hex (high byte first), then END.
             extern lv_color_t *buf[2];
+            extern int g_drawMode;
+            const int mode = g_drawMode;
+            g_drawMode = 0; // full frame into the PSRAM buffer, so it can be read back
             lv_obj_invalidate(lv_scr_act());
             lv_refr_now(NULL);
+            g_drawMode = mode;
             const uint8_t *px = (const uint8_t *)buf[0];
             static const char hex[] = "0123456789abcdef";
             char line[IWIDTH * 4 + 2];

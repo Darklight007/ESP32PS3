@@ -189,7 +189,8 @@ Frame cost is dominated by how many pixels are invalidated, so frequently-changi
 - `patch_lvgl.py` (pre-build, like `patch_tft_espi.py`): LVGL 8.4 padded every invalidated area by 5 px per side even without transforms; the patch skips that.
 - Hot LVGL code runs from internal RAM (`ld_iram_hot.py`, post-build script, ~67 KB): the S3's 16 KB instruction cache made every small redraw stall on flash fetches (1.6 ms per pixel-sized area, now 0.4 ms). Add an object file there only after profiling.
 - LVGL's heap is in PSRAM (`lv_mem_psram.cpp`): same speed, and internal RAM free went 12 KB -> ~105 KB. Task_ADC's stack and the RAM-resident code depend on that.
-- `pickDrawBuffer()` (SetupHandlers.cpp): frames whose areas fit the 320x48 internal buffer are drawn and sent from it; larger ones use the PSRAM buffer.
+- Draw buffers (`pickDrawBuffer()`, SetupHandlers.cpp): every frame is drawn in two internal 320x48 strips; LVGL draws one while DMA sends the other (full repaint 49 -> 22 ms). The PSRAM full-screen buffer is only used by `DISP:SHOT?`, and by `DISP:BUF 0` (old path, for A/B).
+- Graph page redraws when new points arrive (`g_graphSeq`), not on a timer, and only the plot area; tick labels redraw on page entry/zoom. ~42 fps.
 - Measure with `DISP:FPS?` / `DISP:FPS 1` (`disp_perf.cpp`): fps, px/frame, render ms, flush ms, load %, ADC SPS, worst frame gap ms, areas/frame. `DISP:AREA x1,y1,x2,y2` times one rectangle; `DISP:MEM?` gives internal free, largest block, PSRAM free.
 - Profile with `DISP:SAMPRUN` then `DISP:SAMP?` (Core 1 program-counter samples; resolve with addr2line on firmware.elf).
 

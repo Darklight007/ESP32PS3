@@ -262,7 +262,7 @@ void loop()
 
   // Chart refresh (Core 1 only - LVGL thread-safe)
   TIME_SECTION("histChart", HistogramChartRefreshInterval(125));
-  TIME_SECTION("graphChart", GraphChartRefreshInterval(125));
+  TIME_SECTION("graphChart", GraphChartRefreshInterval(0)); // redraws on new data, see intervals.cpp
 
   // Flush measures - gated by displayReady (NofAvgs-driven, DispObject.cpp) so
   // avg=N updates every Nth sample. BUT: the big V/A label flush physically

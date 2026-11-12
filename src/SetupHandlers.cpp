@@ -16,6 +16,10 @@
 static constexpr size_t DMA_BAND_ROWS = 48;
 static constexpr size_t DMA_BAND_PIXELS = (size_t)IWIDTH * DMA_BAND_ROWS;
 static uint16_t *dmaBandBuf = nullptr;
+static uint16_t *dmaBandBuf2 = nullptr; // second strip: LVGL draws one while DMA sends the other
+// 1 = every frame drawn in the two internal strips (default); 0 = small frames
+// in one strip, large ones in the PSRAM full-screen buffer. DISP:BUF n.
+int g_drawMode = 1;
 
 // **Pin Definitions**
 #define SDA_1_ADC 17 // SDA pin for I2C bus 1 (ADC)
@@ -232,6 +236,8 @@ void setupDMA()
                   (void *)dmaBandBuf);
     if (!dmaBandBuf)
         Serial.println("WARNING: DMA band buffer alloc failed - flushing direct from PSRAM (may drop frames)");
+    dmaBandBuf2 = (uint16_t *)heap_caps_malloc(DMA_BAND_PIXELS * sizeof(uint16_t),
+                                               MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
 
 #else
     // Initialize display buffer without DMA
@@ -581,6 +587,7 @@ bool scanI2CBus(TwoWire &i2cBus, uint8_t address)
 // LVGL display flush function
 void touchSample();
 
+static bool lastFlushDirect = false;
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p)
 {
     // Low-noise mode: wait here for the ADC to finish its V+I pair (the frame
@@ -614,6 +621,9 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
         const int32_t w = area->x2 - area->x1 + 1;
         const int32_t h = area->y2 - area->y1 + 1;
         uint16_t *src = (uint16_t *)&color_p->full;
+        // Drawn straight into an internal strip: DMA from it as is
+        const bool direct = src == dmaBandBuf || (dmaBandBuf2 && src == dmaBandBuf2);
+        lastFlushDirect = direct;
 
         // Rows per band. Bounded by the internal staging buffer when we have
         // one (that is what makes the source DMA-capable), otherwise by the
@@ -635,10 +645,12 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
             // source, i.e. the old behaviour, if the alloc ever failed.
             // Drawn straight into the internal buffer (see pickDrawBuffer): send
             // it as is, no staging copy.
-            tft.pushImageDMA(x, yy, w, rows, src, src == dmaBandBuf ? nullptr : dmaBandBuf);
-            tft.dmaWait(); // must complete before the next band overwrites the
-                           // staging buffer / reuses the library's static
-                           // spi_transaction_t
+            tft.pushImageDMA(x, yy, w, rows, src, direct ? nullptr : dmaBandBuf);
+            if (!direct)
+                tft.dmaWait(); // the next band overwrites the staging buffer
+            // direct: no wait. The transfer runs while LVGL draws the next
+            // strip into the OTHER buffer; pushImageDMA() waits for it before
+            // queueing the next one, and the frame's last flush waits below.
             src += (size_t)rows * (size_t)w;
             yy += rows;
             rowsLeft -= rows;
@@ -653,7 +665,14 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
     tft.pushColors((uint16_t *)&color_p->full, w * h, true);
 #endif
 
-    tft.endWrite();
+    // Chip-select is driven by the library, not the DMA: keep the write open
+    // while a direct transfer is still running, close it once the frame's
+    // last one is done.
+    if (!lastFlushDirect || lv_disp_flush_is_last(disp))
+    {
+        tft.dmaWait();
+        tft.endWrite();
+    }
     dispPerfFlushEnd();
 
     if (lv_disp_flush_is_last(disp) && SpiQuiet::frameClaimed)
@@ -672,14 +691,28 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
 static void (*prevRenderStart)(lv_disp_drv_t *) = nullptr;
 static void pickDrawBuffer(lv_disp_drv_t *drv)
 {
-    lv_disp_t *d = lv_disp_get_default();
-    bool small = dmaBandBuf && d;
-    for (uint16_t i = 0; small && i < d->inv_p; i++)
-        if (!d->inv_area_joined[i] && lv_area_get_size(&d->inv_areas[i]) > DMA_BAND_PIXELS)
-            small = false;
     lv_disp_draw_buf_t *b = drv->draw_buf;
-    b->buf1 = b->buf_act = small ? (void *)dmaBandBuf : (void *)buf[0];
-    b->size = small ? DMA_BAND_PIXELS : (uint32_t)IWIDTH * IHEIGHT;
+    if (g_drawMode == 1 && dmaBandBuf && dmaBandBuf2)
+    {
+        // Two internal strips, LVGL alternates between them (it swaps after
+        // each flush). Large areas are drawn strip by strip.
+        b->buf1 = dmaBandBuf;
+        b->buf2 = dmaBandBuf2;
+        if (b->buf_act != b->buf1 && b->buf_act != b->buf2)
+            b->buf_act = b->buf1;
+        b->size = DMA_BAND_PIXELS;
+    }
+    else
+    {
+        lv_disp_t *d = lv_disp_get_default();
+        bool small = dmaBandBuf && d;
+        for (uint16_t i = 0; small && i < d->inv_p; i++)
+            if (!d->inv_area_joined[i] && lv_area_get_size(&d->inv_areas[i]) > DMA_BAND_PIXELS)
+                small = false;
+        b->buf2 = nullptr;
+        b->buf1 = b->buf_act = small ? (void *)dmaBandBuf : (void *)buf[0];
+        b->size = small ? DMA_BAND_PIXELS : (uint32_t)IWIDTH * IHEIGHT;
+    }
     if (prevRenderStart)
         prevRenderStart(drv);
 }

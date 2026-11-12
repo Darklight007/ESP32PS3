@@ -1613,27 +1613,25 @@ void drainPendingKeyEvents()
     if (g_keyToggleVPending)
     {
         g_keyToggleVPending = false;
-        static bool hide = false;
-        hide = !hide;
+        // Toggle from the series' real state (a separate static copy could
+        // drift from it), then let the legend follow.
+        const bool hide = !PowerSupply.graph.serV->hidden;
         lv_chart_hide_series(PowerSupply.stats.chart, PowerSupply.stats.serV, hide);
         lv_chart_hide_series(PowerSupply.graph.chart, PowerSupply.graph.serV, hide);
-        if (!hide)
-            lv_obj_clear_flag(label_legend1, LV_OBJ_FLAG_HIDDEN);
-        else
-            lv_obj_add_flag(label_legend1, LV_OBJ_FLAG_HIDDEN);
+        syncGraphLegend(Tabs::getCurrentPage() == 0 ? g_histViewMode == ChartViewMode::FULLSCREEN
+                                                    : g_graphViewMode == ChartViewMode::FULLSCREEN);
     }
 
     if (g_keyToggleIPending)
     {
         g_keyToggleIPending = false;
-        static bool hide = false;
-        hide = !hide;
+        // Toggle from the series' real state (a separate static copy could
+        // drift from it), then let the legend follow.
+        const bool hide = !PowerSupply.graph.serI->hidden;
         lv_chart_hide_series(PowerSupply.stats.chart, PowerSupply.stats.serI, hide);
         lv_chart_hide_series(PowerSupply.graph.chart, PowerSupply.graph.serI, hide);
-        if (!hide)
-            lv_obj_clear_flag(label_legend2, LV_OBJ_FLAG_HIDDEN);
-        else
-            lv_obj_add_flag(label_legend2, LV_OBJ_FLAG_HIDDEN);
+        syncGraphLegend(Tabs::getCurrentPage() == 0 ? g_histViewMode == ChartViewMode::FULLSCREEN
+                                                    : g_graphViewMode == ChartViewMode::FULLSCREEN);
     }
 
     if (g_keyCurrEntryMilliPending)
