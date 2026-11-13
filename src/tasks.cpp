@@ -5,6 +5,7 @@
 #include "globals.h"
 #include "buzzer.h"
 #include "freeze_trace.h"
+#include "load_analyzer.h"
 
 // Task timing constants
 namespace TaskTiming
@@ -210,6 +211,8 @@ void Task_ADC(void *pvParameters)
         // (not a thrown-away first conversion)
         if (adcRead && !PowerSupply.adcLastDiscarded)
         {
+            loadAnalyzerAdcHook(PowerSupply.Voltage.oldValue,
+                                PowerSupply.Current.oldValue * (PowerSupply.mA_Active ? 0.001 : 1.0));
             HistPush();
             GraphPush();
         }

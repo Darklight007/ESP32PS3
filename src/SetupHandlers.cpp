@@ -383,10 +383,12 @@ void setupPowerSupply()
             lv_obj_set_pos(l, x, y);
             return l;
         };
-        PowerSupply.gui.label_energy_counter = mk("0.000", &dseg_b_11, 30, 185, 90);
+        PowerSupply.gui.label_energy_counter = mk("0.000", &dseg_b_11, -3, 185, 0);
         PowerSupply.gui.label_energy_unit = mk("Wh", &Tauri_R_16, 123, 180, 0);
-        PowerSupply.gui.label_charge_counter = mk("0.000", &dseg_b_11, 135, 185, 58);
+        PowerSupply.gui.label_charge_counter = mk("0.000", &dseg_b_11, 118, 185, 0);
         PowerSupply.gui.label_charge_unit = mk("Ah", &Tauri_R_16, 196, 180, 0);
+        lv_obj_align_to(PowerSupply.gui.label_energy_unit, PowerSupply.gui.label_energy_counter, LV_ALIGN_OUT_RIGHT_BOTTOM, 3, 2);
+        lv_obj_align_to(PowerSupply.gui.label_charge_unit, PowerSupply.gui.label_charge_counter, LV_ALIGN_OUT_RIGHT_BOTTOM, 3, 2);
     }
 
     // Create charts on pages

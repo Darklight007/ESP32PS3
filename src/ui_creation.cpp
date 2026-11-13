@@ -1,3 +1,4 @@
+#include "load_analyzer.h"
 #include "disp_perf.h"
 #include "ui_creation.h"
 #include "config.hpp"
@@ -399,6 +400,7 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_t *tab4 = lv_tabview_add_tab(tabview_utility, "Table");
     lv_obj_t *tab5 = lv_tabview_add_tab(tabview_utility, "Batt");
     createBatteryTab(tab5);
+    createLoadTab(lv_tabview_add_tab(tabview_utility, "Load"));
 
     // Utility page Tab 1 ****************************************************************************************************************************
     /*Add content to the tabs*/

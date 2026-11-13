@@ -750,3 +750,17 @@ This implementation complies with:
 - **SCPI-1999** - Standard Commands for Programmable Instruments
 
 All mandatory IEEE 488.2 common commands are implemented. SCPI subsystems follow the hierarchical command tree structure defined in the SCPI standard.
+
+### :LOAD - Load Analyser (Utility page, Load tab)
+**Description:** `LOAD:SWE` ramps the output 0 -> V-Set -> 0 (~9 s, I-Set still limits) and fits I = I0 + V/R + C*dV/dt plus a diode/LED knee; `LOAD:ZERO` is the same sweep with nothing connected, stored and subtracted later (PSU's own C and leakage); `LOAD:FFT` captures 1024 current samples at the present setpoint at the full ADC rate and finds the strongest frequency. Output must be ON (not FUN). Use ADC speed Turbo for most samples.
+**Syntax:** `:LOAD:SWE`, `:LOAD:ZERO`, `:LOAD:FFT`, `:LOAD:BUSY?`, `:LOAD:RES?`
+**Response:** `OK`; `LOAD:RES?` returns the result lines joined by `;`
+**Example:**
+```
+:LOAD:SWE
+OK
+:LOAD:BUSY?     (repeat until 0)
+0
+:LOAD:RES?
+Open;R open;C < 8.01 uF;I0 -0.05 mA;Noise 0.41 mA;L: too fast
+```
