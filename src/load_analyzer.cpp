@@ -1557,6 +1557,9 @@ static void probe_analyse_and_sweep()
         if (std::isfinite(s_rCC))
             d += "\nR (steps) " + fmtR(s_rCC);
     }
+    // keep what earlier steps already wrote (watch, source) after the header
+    if (s_details.startsWith("Probe details"))
+        d += s_details.substring(13);
     s_details = d;
     if (s_diodeSummary.length())
     {
@@ -1758,7 +1761,8 @@ static void probe_cb(lv_timer_t *)
                     heap_caps_free(im);
                 }
             }
-            const bool ripple = std::isfinite(fpk) && apk > 6 * floor_ && apk > 0.0005f && iEnd > 0.005;
+            // commutation ripple is a real share of the current (fan: 3%), noise is not
+            const bool ripple = std::isfinite(fpk) && apk > 6 * floor_ && apk > 0.0005f && apk > 0.005 * iEnd && iEnd > 0.005;
             const bool spinUp = ipk > 1.3 * iEnd && iEnd > 0.005 && iEnd > 0.1 * ipk;
             char b[160];
             snprintf(b, sizeof b, "\nWatch: peak %s end %s", fmtA(ipk).c_str(), fmtA(iEnd).c_str());

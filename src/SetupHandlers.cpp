@@ -59,6 +59,9 @@ extern int32_t barGraph_V[1];
 // Initialize serial communication
 void initializeSerial()
 {
+    // Long SCPI replies (LOAD:DET? ~300 chars) were cut at the default TX
+    // buffer when the 20 ms timeout below hit; must be set before begin()
+    Serial.setTxBufferSize(1024);
     Serial.begin(115200);
     // Native USB CDC: once plugged in, the core's TX timeout becomes 100 ms. With
     // the cable in but no program reading the port, the TX buffer fills and every
