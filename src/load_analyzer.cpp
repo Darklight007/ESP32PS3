@@ -65,7 +65,7 @@ static lv_obj_t *s_axis = nullptr;
 static lv_obj_t *s_bar = nullptr;    // progress
 static lv_obj_t *s_symbol = nullptr; // drawn component of the result
 
-enum Sym { SYM_NONE, SYM_OPEN, SYM_R, SYM_C, SYM_RC, SYM_DIODE, SYM_LAMP, SYM_BATT };
+enum Sym { SYM_NONE, SYM_OPEN, SYM_R, SYM_C, SYM_RC, SYM_DIODE, SYM_LAMP, SYM_BATT, SYM_DIODE_R };
 
 static void line(const lv_point_t *pts, int n)
 {
@@ -100,6 +100,14 @@ static void draw_symbol(Sym sym)
         break;
     case SYM_DIODE: line(dA, 2); line(dT, 4); line(dK, 2); line(dB, 2); break;
     case SYM_OPEN: line(oA, 2); line(oB, 2); break;
+    case SYM_DIODE_R:
+    {
+        // diode (x 8-36) then a resistor (x 52-96)
+        static const lv_point_t a1[] = {{0, 20}, {8, 20}}, t1[] = {{8, 9}, {8, 31}, {28, 20}, {8, 9}}, k1[] = {{28, 9}, {28, 31}};
+        static const lv_point_t m1[] = {{28, 20}, {48, 20}, {51, 13}, {57, 27}, {63, 13}, {69, 27}, {75, 13}, {81, 27}, {84, 20}, {104, 20}};
+        line(a1, 2); line(t1, 4); line(k1, 2); line(m1, 10);
+        break;
+    }
     case SYM_BATT:
     {
         static const lv_point_t bA[] = {{0, 20}, {46, 20}}, bL[] = {{46, 4}, {46, 36}}, bS[] = {{56, 12}, {56, 28}}, bB[] = {{56, 20}, {104, 20}};
@@ -595,6 +603,40 @@ static void analyse_sweep()
             s_det.sym = SYM_LAMP;
             draw_symbol(SYM_LAMP);
         }
+        // Resistance falling with voltage and a straight upper part that
+        // starts well above 0 V: a diode/LED in series with a resistor,
+        // I = (V - Vf) / R
+        if (s_det.nonlin < -0.10)
+        {
+            double sx = 0, sy = 0, sxx = 0, sxy = 0;
+            int m = 0;
+            for (int q = 0; q < n; q++)
+                if ((s_ph[q] == PH_UP || s_ph[q] == PH_DOWN) && s_v[q] >= 0.6 * s_vtop)
+                {
+                    sx += s_v[q];
+                    sy += s_i[q];
+                    sxx += (double)s_v[q] * s_v[q];
+                    sxy += (double)s_v[q] * s_i[q];
+                    m++;
+                }
+            const double den = m * sxx - sx * sx;
+            if (m > 30 && den > 0)
+            {
+                const double b = (m * sxy - sx * sy) / den, a = (sy - b * sx) / m;
+                const double vf = b > 0 ? -a / b : NAN;
+                if (vf > 0.3 && vf < 0.85 * s_vtop)
+                {
+                    const char *kind = vf < 0.4 ? "Schottky" : vf < 0.85 ? "Si diode" : vf < 1.4 ? "IR LED / 2 diodes" :
+                                       vf < 2.15 ? "red/yel LED" : vf < 3.5 ? "grn/blu/wht LED" : "LED string";
+                    char t[160];
+                    snprintf(t, sizeof t, "Diode + R\nVf %.2f V\nR %s\n%s\nI %s\nat %.2f V", vf, fmtR(1.0 / b).c_str(),
+                             kind, fmtA(a + b * s_vtop).c_str(), s_vtop);
+                    draw_symbol(SYM_DIODE_R);
+                    show_result(t);
+                    return;
+                }
+            }
+        }
     }
     if (s_det.sym == SYM_DIODE)
     {
@@ -625,6 +667,20 @@ static void analyse_sweep()
             }
             return NAN;
         };
+        // Big slope resistance above the knee = a resistor in series:
+        // split it out, I = (V - Vf)/R, Vf where the fitted line meets 0 A
+        if (g > 0 && 1.0 / g > 50.0)
+        {
+            const double vf = -p[0] / g;
+            const char *kind = vf < 0.4 ? "Schottky" : vf < 0.85 ? "Si diode" : vf < 1.4 ? "IR LED / 2 diodes" :
+                               vf < 2.15 ? "red/yel LED" : vf < 3.5 ? "grn/blu/wht LED" : "LED string";
+            char t[160];
+            snprintf(t, sizeof t, "Diode + R\nVf %.2f V\nR %s\n%s\nI %s\nat %.2f V", vf, fmtR(1.0 / g).c_str(), kind,
+                     fmtA(p[0] + g * s_vtop).c_str(), s_vtop);
+            draw_symbol(SYM_DIODE_R);
+            show_result(t);
+            return;
+        }
         String r = "Diode / LED";
         char b[40];
         const double v1 = vAt(0.001), v10 = vAt(0.010);
@@ -856,8 +912,7 @@ static void stage2_cb(lv_timer_t *)
 
 static void stage2_start()
 {
-    s_stage = 2;
-    s_maSwitched = false;
+    s_stage = 2; // (s_maSwitched kept: the probe may have chosen the mA range)
     s_vcmd = 0;
     s_phase = PH_UP;
     s_cap = kMaxSamples;
@@ -929,6 +984,40 @@ static void analyse_stage2()
             r += b;
             snprintf(b, sizeof b, "\nWarming %+.1f%%", 100 * (r2 / r1 - 1));
             r += b;
+            {
+                // Filament heating time: the current's fall during the hold,
+                // time for (I - I_end) to drop to 37% of its first value
+                double vs0, is0, sd0;
+                int m0;
+                window(kS2RampS + 0.05f, kS2RampS + 0.15f, vs0, is0, sd0, m0);
+                const double d0 = is0 - i2;
+                float tth = NAN;
+                if (m0 > 5 && d0 > 0.002 * i2)
+                {
+                    const int n2 = s_n.load();
+                    for (int q = 0; q < n2; q++)
+                        if (s_t[q] > kS2RampS + 0.1f && s_i[q] - i2 < 0.368 * d0)
+                        {
+                            // 25-sample mean guards against single noisy points
+                            double sm = 0;
+                            int c2 = 0;
+                            for (int k = q; k < std::min(n2, q + 25); k++, c2++)
+                                sm += s_i[k];
+                            if (sm / c2 - i2 < 0.368 * d0)
+                            {
+                                tth = s_t[q] - kS2RampS - 0.1f;
+                                break;
+                            }
+                        }
+                }
+                if (std::isfinite(tth))
+                {
+                    snprintf(b, sizeof b, "\nHeat tau %.2f s", tth);
+                    s_details += b;
+                }
+                snprintf(b, sizeof b, "\nWarming %+.1f%%\nat %.2f V", 100 * (r2 / r1 - 1), v2);
+                s_details += b;
+            }
             show_result(r);
             return;
         }
@@ -1068,7 +1157,7 @@ static int s_savedRate = -1;
 static float s_imax = 0;        // analysis current limit, A (0 = keep I-Set)
 static int s_savedIAdj = -1;
 static lv_obj_t *s_imaxDd = nullptr;
-static constexpr float kImaxOpt[] = {0, 0.01f, 0.05f, 0.1f, 0.25f, 0.5f, 1, 2, 3, 5};
+static constexpr float kImaxOpt[] = {0, 0.01f, 0.02f, 0.05f, 0.1f, 0.25f, 0.5f, 1, 2, 3, 5};
 void loadAnalyzerSetImax(float a)
 {
     s_imax = a;
@@ -1104,6 +1193,7 @@ static void end_run_impl()
         PowerSupply.applyAdcRate();
     }
     s_savedRate = -1;
+    restore_range();
     if (s_savedIAdj >= 0)
         PowerSupply.Current.SetUpdate(s_savedIAdj); // back to the user's I-Set
     s_savedIAdj = -1;
@@ -1304,6 +1394,22 @@ static void probe_analyse_and_sweep()
         }
     }
     s_details = d;
+    // Small currents only (hold under 6 mA, the mA range reads to ~8): run
+    // the sweep on the mA range, ~100x less noise
+    {
+        bool allTop = nst > 0;
+        for (int k = 0; k < nst; k++)
+            allTop = allTop && top[k];
+        double vE2, iE2;
+        seg_stats(seg_index(PR_HOLD), 0.6f, 1.0f, vE2, iE2);
+        if (iE2 < 0.006 && !PowerSupply.mA_Active)
+        {
+            s_maPrev = false;
+            s_maSwitched = true;
+            setCurrentRange(true);
+            s_details += "\n(mA range)";
+        }
+    }
     sweep_begin();
 }
 
@@ -1598,7 +1704,7 @@ void createLoadTab(lv_obj_t *parent)
 
     // Current limit for the analysis (restored after)
     s_imaxDd = lv_dropdown_create(parent);
-    lv_dropdown_set_options(s_imaxDd, "Imax: I-Set\nImax: 10 mA\nImax: 50 mA\nImax: 100 mA\nImax: 250 mA\nImax: 500 mA\nImax: 1 A\nImax: 2 A\nImax: 3 A\nImax: 5 A");
+    lv_dropdown_set_options(s_imaxDd, "Imax: I-Set\nImax: 10 mA\nImax: 20 mA\nImax: 50 mA\nImax: 100 mA\nImax: 250 mA\nImax: 500 mA\nImax: 1 A\nImax: 2 A\nImax: 3 A\nImax: 5 A");
     lv_dropdown_set_dir(s_imaxDd, LV_DIR_TOP);
     lv_dropdown_set_symbol(s_imaxDd, LV_SYMBOL_UP);
     lv_obj_set_size(s_imaxDd, 115, 22);
