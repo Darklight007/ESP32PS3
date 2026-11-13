@@ -565,7 +565,11 @@ static void analyse_sweep()
     // Significant = 4 standard errors, and R must carry > 0.2 mA at the top
     const bool hasC = c > 4 * se[2];
     const bool hasR = g > 4 * se[1] && g * s_vtop > 0.0002;
-    s_det = {knee ? SYM_DIODE : hasR && hasC ? SYM_RC : hasR ? SYM_R : hasC ? SYM_C : SYM_OPEN,
+    // The probe saw the voltage decay on its own (let-go / discharge tau):
+    // charge stored AND a path to drain it = R || C, whatever the sweep's
+    // shape suggests (a capacitor's charging current bends it like a knee)
+    const bool storage = std::isfinite(s_tau) && s_tau > 0.02f;
+    s_det = {storage ? SYM_RC : knee ? SYM_DIODE : hasR && hasC ? SYM_RC : hasR ? SYM_R : hasC ? SYM_C : SYM_OPEN,
              g, c, i0, vknee, 4 * se[2], 4 * se[1]};
     draw_symbol(s_det.sym);
     plot_iv(n);
@@ -574,7 +578,7 @@ static void analyse_sweep()
     // Also for R || C: a filament's thermal lag makes up and down differ
     // like a capacitor would, but its resistance rising with voltage gives
     // it away - checked first.
-    if (s_det.sym == SYM_R || s_det.sym == SYM_RC)
+    if ((s_det.sym == SYM_R || s_det.sym == SYM_RC) && !storage)
     {
         double a[2] = {0, 0}, b2[2] = {0, 0};
         for (int q = 0; q < n; q++)
@@ -669,7 +673,7 @@ static void analyse_sweep()
         };
         // Big slope resistance above the knee = a resistor in series:
         // split it out, I = (V - Vf)/R, Vf where the fitted line meets 0 A
-        if (g > 0 && 1.0 / g > 50.0)
+        if (g > 0 && 1.0 / g > 50.0 && -p[0] / g > 0.3)
         {
             const double vf = -p[0] / g;
             const char *kind = vf < 0.4 ? "Schottky" : vf < 0.85 ? "Si diode" : vf < 1.4 ? "IR LED / 2 diodes" :
@@ -953,7 +957,7 @@ static void analyse_stage2()
     String r;
     // Filament check: at a constant voltage its current keeps falling as it
     // heats (resistance rises). A real R || C or a resistor stays flat.
-    if (s_det.sym == SYM_RC || s_det.sym == SYM_R)
+    if ((s_det.sym == SYM_RC || s_det.sym == SYM_R) && !(std::isfinite(s_tau) && s_tau > 0.02f))
     {
         double ve, ie, sde, vl, il2, sdl;
         int me, ml;
@@ -1052,7 +1056,9 @@ static void analyse_stage2()
             vEnd = s_v[k2];
         }
         const bool cq = s_det.sym == SYM_C && std::isfinite(vEnd) && vEnd - vStart > 0.3 * s_vtop;
-        const double c = cq ? q / (vEnd - vStart) : s_det.c;
+        // R || C: C from the probe's decay, tau = R*C, with R = V/I of the hold
+        const double c = (s_det.sym == SYM_RC && std::isfinite(s_tau) && il > 0) ? s_tau * il / v
+                         : cq ? q / (vEnd - vStart) : s_det.c;
         // Step 2's leakage is far more exact than step 1's slope: it decides
         // whether there really is a resistor across the capacitor
         const bool realR = il > lim && v / il < 1e6;
@@ -1061,7 +1067,7 @@ static void analyse_stage2()
         else if (s_det.sym == SYM_C && realR && il > 0.001)
             s_det.sym = SYM_RC;
         draw_symbol(s_det.sym);
-        if (std::isfinite(s_tau) && c > 0)
+        if (s_det.sym == SYM_C && std::isfinite(s_tau) && c > 0)
             s_details += "\nR = tau/C " + fmtR(s_tau / c);
         r = s_det.sym == SYM_RC ? "R || C" : "Capacitor";
         r += "\nC " + fmtC(c);
@@ -1317,8 +1323,7 @@ static void probe_analyse_and_sweep()
         const double slope = (vb - va) / (0.6 * s_segs[si].dur);
         if (slope > 0.05 && vb < 0.95 * s_vtop && ia > 0.0003)
         {
-            s_ccC = 0.5 * (ia + ib) / slope;
-            d += "\nC (I/dVdt) " + fmtC(s_ccC);
+            s_ccC = 0.5 * (ia + ib) / slope; // shown at the end if no R drains it
         }
     }
     // Diode law over the steps that settled below the top
@@ -1344,8 +1349,7 @@ static void probe_analyse_and_sweep()
     {
         // Difference between steps: the meter's offset and tiny voltages
         // at the lowest current cancel out
-        s_rCC = (vs[hi] - vs[lo]) / (is[hi] - is[lo]);
-        d += "\nR (steps) " + fmtR(s_rCC);
+        s_rCC = (vs[hi] - vs[lo]) / (is[hi] - is[lo]); // shown at the end unless charging
     }
     // Inrush: first 60 ms of the hold against its settled end
     {
@@ -1379,7 +1383,8 @@ static void probe_analyse_and_sweep()
                 d += "\nLet go: instant";
             else if (std::isfinite(t37))
             {
-                s_tau = t37;
+                if (!std::isfinite(s_tau))
+                    s_tau = t37;
                 snprintf(b, sizeof b, "\nLet-go tau %.3g s", t37);
                 d += b;
             }
@@ -1392,6 +1397,18 @@ static void probe_analyse_and_sweep()
                 d += b;
             }
         }
+    }
+    if (std::isfinite(s_tau))
+    {
+        snprintf(b, sizeof b, "\nDecay tau %.3g s", s_tau);
+        d += b;
+    }
+    else
+    {
+        if (std::isfinite(s_ccC))
+            d += "\nC (I/dVdt) " + fmtC(s_ccC);
+        if (std::isfinite(s_rCC))
+            d += "\nR (steps) " + fmtR(s_rCC);
     }
     s_details = d;
     // Small currents only (hold under 6 mA, the mA range reads to ~8): run
@@ -1427,8 +1444,25 @@ static void probe_cb(lv_timer_t *)
         // Decisions at the end of a step
         if (s_seg >= 0 && s_segs[s_seg].ph == PR_PRE)
         {
+            // Still falling (a capacitor left charged, discharging through
+            // the load): wait for it - and its decay is a free R*C reading
+            double va, ia, vb, ib;
+            const float d = s_segs[s_seg].dur;
+            seg_stats(s_seg, 1.0f - 0.4f / d, 1.0f - 0.2f / d, va, ia);
+            seg_stats(s_seg, 1.0f - 0.15f / d, 1.0f, vb, ib);
+            if (vb > 0.2 && va > vb * 1.01 && d < 20.0f)
+            {
+                if (!std::isfinite(s_tau))
+                    s_tau = 0.275f / log(va / vb); // centres 0.275 s apart
+                s_segs[s_seg].dur += 0.5f;
+                s_segs[s_seg].name = "Discharging";
+                goto ui;
+            }
+        }
+        if (s_seg >= 0 && s_segs[s_seg].ph == PR_PRE)
+        {
             double v, i;
-            seg_stats(s_seg, 0.5f, 1.0f, v, i);
+            seg_stats(s_seg, 1.0f - 0.2f / s_segs[s_seg].dur, 1.0f, v, i); // last 0.2 s
             if (v > 0.2)
             {
                 // Something already holds a voltage: battery or charged cap.
@@ -1455,7 +1489,7 @@ static void probe_cb(lv_timer_t *)
         {
             const int si = s_seg;
             double v0, i0, va, ia, vb, ib;
-            seg_stats(seg_index(PR_PRE), 0.5f, 1.0f, v0, i0);
+            seg_stats(seg_index(PR_PRE), 1.0f - 0.2f / s_segs[seg_index(PR_PRE)].dur, 1.0f, v0, i0);
             seg_stats(si, 0.15f, 0.35f, va, ia);
             seg_stats(si, 0.75f, 0.95f, vb, ib);
             const double slope = (vb - va) / (0.6 * s_segs[si].dur);
@@ -1496,6 +1530,7 @@ static void probe_cb(lv_timer_t *)
         s_vcmd = sg.v;
         s_phase = sg.ph;
     }
+ui:
     static uint32_t lastUi = 0;
     if (now - lastUi > 150)
     {
