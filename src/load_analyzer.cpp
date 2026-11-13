@@ -177,6 +177,8 @@ static void set_axes(const char *title, const String &xmax, const String &ymax, 
 static String s_summary, s_details;
 static float s_tau = NAN; // probe: let-go time constant, s
 static float s_ccC = NAN; // probe: C from the 1 mA current step
+static String s_diodeSummary; // probe found a diode: finish without the sweep
+static float s_cLG = NAN; // probe: C from the let-go charge balance
 static float s_rCC = NAN; // probe: R between the current steps (cold, ~no power)
 static bool s_showDetails = false;
 static lv_obj_t *s_hint = nullptr;
@@ -355,6 +357,7 @@ static String fmtA(double a)
 // I-V: mean current per voltage bin (noise averages out), up and down apart
 static void plot_iv(int n)
 {
+    lv_obj_set_style_size(s_chart, 0, LV_PART_INDICATOR);
     static float sum[2][kPlotPts];
     static uint16_t cnt[2][kPlotPts];
     memset(sum, 0, sizeof sum);
@@ -397,6 +400,7 @@ static void plot_iv(int n)
 // I against time, mean per time bin (step 2 of a capacitor: charge, then leak)
 static void plot_it(int n, float t0)
 {
+    lv_obj_set_style_size(s_chart, 0, LV_PART_INDICATOR);
     static float sum[kPlotPts];
     static uint16_t cnt[kPlotPts];
     memset(sum, 0, sizeof sum);
@@ -1057,7 +1061,8 @@ static void analyse_stage2()
         }
         const bool cq = s_det.sym == SYM_C && std::isfinite(vEnd) && vEnd - vStart > 0.3 * s_vtop;
         // R || C: C from the probe's decay, tau = R*C, with R = V/I of the hold
-        const double c = (s_det.sym == SYM_RC && std::isfinite(s_tau) && il > 0) ? s_tau * il / v
+        const double c = (s_det.sym == SYM_RC && std::isfinite(s_cLG) && s_cLG > 0) ? s_cLG
+                         : (s_det.sym == SYM_RC && std::isfinite(s_tau) && il > 0) ? s_tau * il / v
                          : cq ? q / (vEnd - vStart) : s_det.c;
         // Step 2's leakage is far more exact than step 1's slope: it decides
         // whether there really is a resistor across the capacitor
@@ -1338,12 +1343,47 @@ static void probe_analyse_and_sweep()
     if (lo >= 0 && hi > lo && vs[lo] > 0.2 && vs[hi] / vs[lo] < 1.6 && is[hi] / is[lo] > 3)
     {
         const double n = (vs[hi] - vs[lo]) / (0.02585 * log(is[hi] / is[lo]));
-        snprintf(b, sizeof b, "\nDiode n %.2f", n);
+        snprintf(b, sizeof b, "\nn (2-point) %.2f", n);
         d += b;
         const double vf = vs[lo];
         const char *kind = vf < 0.4 ? "Schottky/Ge" : vf < 0.85 ? "silicon" : vf < 1.4 ? "2 diodes / IR" :
                            vf < 2.15 ? "red/yel LED" : vf < 3.5 ? "grn/blue/wht LED" : "LED string";
         d += String("\nType ") + kind;
+        // Shockley fit over every settled step: V = n*Vt*ln(I) - n*Vt*ln(Is) + I*Rs,
+        // linear in (n*Vt, -n*Vt*ln Is, Rs)
+        int cnt = 0;
+        double A[3][3] = {}, bb[3] = {};
+        for (int k = lo; k <= hi; k++)
+            if (!top[k] && is[k] > 0.0005)
+            {
+                const double x[3] = {log(is[k]), 1.0, is[k]};
+                for (int r = 0; r < 3; r++)
+                {
+                    for (int c = 0; c < 3; c++)
+                        A[r][c] += x[r] * x[c];
+                    bb[r] += x[r] * vs[k];
+                }
+                cnt++;
+            }
+        double pp[3];
+        double nf = n, rs = NAN, isat = NAN;
+        if (cnt >= 3 && solve3(A, bb, pp) && pp[0] > 0)
+        {
+            nf = pp[0] / 0.02585;
+            rs = pp[2];
+            isat = exp(-pp[1] / pp[0]);
+        }
+        char t[200];
+        snprintf(t, sizeof t, "Diode\nVf %.3f V\n  at %s\nVf %.3f V\n  at %s\nn %.2f  %s", vs[lo], fmtA(is[lo]).c_str(),
+                 vs[hi], fmtA(is[hi]).c_str(), nf, kind);
+        s_diodeSummary = t;
+        if (std::isfinite(rs))
+        {
+            snprintf(b, sizeof b, "\nRs %s", fmtR(std::max(0.0, rs)).c_str());
+            d += b;
+            snprintf(b, sizeof b, "\nIs %.3g A", isat);
+            d += b;
+        }
     }
     else if (lo >= 0 && hi > lo && vs[hi] - vs[lo] > 0.002)
     {
@@ -1398,6 +1438,39 @@ static void probe_analyse_and_sweep()
             }
         }
     }
+    // C from the let-go: the load's R (hold V/I) drains it and the PSU
+    // sinks a few mA as well (measured: negative I), so
+    //   C * dV/dt = -V/R + I_psu  ->  C = sum(x*y)/sum(x*x),
+    //   x = -dV/dt, y = V/R - I_psu
+    {
+        const int sh = seg_index(PR_HOLD), sl = seg_index(PR_LETGO);
+        double vH, iH;
+        seg_stats(sh, 0.6f, 1.0f, vH, iH);
+        const int n = s_n.load();
+        if (sl >= 0 && iH > 0.0002 && vH > 0.2)
+        {
+            const double R = vH / iH;
+            static constexpr int k = 8;
+            double sxy = 0, sxx = 0;
+            for (int q = k; q < n - k; q++)
+            {
+                if (s_ph[q] != PR_LETGO || s_ph[q - k] != PR_LETGO || s_ph[q + k] != PR_LETGO || s_v[q] < 0.1 * vH)
+                    continue;
+                const double dt = s_t[q + k] - s_t[q - k];
+                if (dt <= 0)
+                    continue;
+                const double x = -(s_v[q + k] - s_v[q - k]) / dt;
+                const double y = s_v[q] / R - s_i[q];
+                sxy += x * y;
+                sxx += x * x;
+            }
+            if (sxx > 0 && std::isfinite(s_tau))
+            {
+                s_cLG = sxy / sxx;
+                d += "\nC (let-go) " + fmtC(s_cLG);
+            }
+        }
+    }
     if (std::isfinite(s_tau))
     {
         snprintf(b, sizeof b, "\nDecay tau %.3g s", s_tau);
@@ -1411,6 +1484,33 @@ static void probe_analyse_and_sweep()
             d += "\nR (steps) " + fmtR(s_rCC);
     }
     s_details = d;
+    if (s_diodeSummary.length())
+    {
+        // Diodes conduct hard below V-Set: a sweep would only hit the limit
+        // and the steps already carry the whole diode law
+        // Plot the current steps: I against V
+        double vmx = 0, imx = 0;
+        for (int k = 0; k < nst; k++)
+        {
+            vmx = std::max(vmx, vs[k]);
+            imx = std::max(imx, is[k]);
+        }
+        lv_chart_set_type(s_chart, LV_CHART_TYPE_SCATTER);
+        lv_chart_set_point_count(s_chart, kPlotPts);
+        lv_chart_set_range(s_chart, LV_CHART_AXIS_PRIMARY_X, 0, 1000);
+        lv_chart_set_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 1000);
+        lv_chart_set_all_value(s_chart, s_ser1, LV_CHART_POINT_NONE);
+        lv_chart_set_all_value(s_chart, s_ser2, LV_CHART_POINT_NONE);
+        lv_obj_set_style_size(s_chart, 6, LV_PART_INDICATOR); // dots for 4 points
+        for (int k = 0; k < nst; k++)
+            lv_chart_set_value_by_id2(s_chart, s_ser1, k, (lv_coord_t)(1000 * vs[k] / (1.1 * vmx)), (lv_coord_t)(1000 * is[k] / (1.1 * imx)));
+        lv_chart_refresh(s_chart);
+        char ax[16];
+        snprintf(ax, sizeof ax, "%.2f V", 1.1 * vmx);
+        set_axes("Current steps", ax, fmtA(1.1 * imx), false);
+        probe_end_with(s_diodeSummary, SYM_DIODE);
+        return;
+    }
     // Small currents only (hold under 6 mA, the mA range reads to ~8): run
     // the sweep on the mA range, ~100x less noise
     {
@@ -1557,6 +1657,8 @@ static void probe_begin()
     s_tau = NAN;
     s_ccC = NAN;
     s_rCC = NAN;
+    s_cLG = NAN;
+    s_diodeSummary = "";
     s_details = "";
     s_seg = -1;
     s_vcmd = 0;
