@@ -570,6 +570,20 @@ OK
 0.1000,0.10080;1.0000,1.00609;...;5.0000,5.02712
 ```
 
+### :CALibration:RATE - Speed Match (ADC speeds vs Quiet)
+**Description:** No load, output ON. Measures the voltage at every ADC speed (Quiet/Slow/Normal/Fast/Turbo) at 2 V and 29 V and fits a gain and offset per speed so each reads the same as Quiet. Runs ~2 min, restores the V setpoint and speed, saves itself. Fails without changing anything if a load (>5 mA) is connected. `:CAL:RATE:DEFault` goes back to the built-in trim.
+**Syntax:** `:CAL:RATE`, `:CAL:RATE?`, `:CAL:RATE:DEFault`
+**Response:** `OK`; the query returns `gain,offset_mV;...` for speeds 0-4
+**Example:**
+```
+:CAL:RATE
+OK
+:CAL:BUSY?      (repeat until 0)
+0
+:CAL:RATE?
+1.0000000,0.0000;0.9999998,0.0380;1.0000482,0.0029;1.0001857,-0.3176;1.0004289,-0.8397
+```
+
 ---
 
 ## Error Codes

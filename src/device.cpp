@@ -1,6 +1,7 @@
 #include "esp_task_wdt.h"
 #include "device.hpp"
 #include "calib_cc_limit.h"
+#include "calib_rate_match.h"
 #include "MonotoneCubicCalibrator.h"
 #include "setting_menu.h"
 #include "error_handler.h"
@@ -612,14 +613,7 @@ void Device::readVoltage()
   // error vs Quiet (mV) = a + b*V, a/b below; gain *= 1 - b/1000, offset = -a.
   //   rate1 a=-0.047 b=-0.0063   rate2 a=0.006 b=-0.0130
   //   rate3 a=+0.233 b=-0.0167   rate4 a=0.810 b=-0.0626 (2nd pass)
-  constexpr float adcRateCompensation[5] = {
-      1.00000f,                             // Index 0: Quiet
-      1.00000f * (1.0f + 0.0063e-3f),       // Index 1: Slow
-      32.0000f / 31.9985f * (1.0f + 0.0130e-3f), // Index 2: Normal
-      32.0000f / 31.9945f * (1.0f + 0.0167e-3f), // Index 3: Fast
-      32.0000f / 31.9882f * (1.0f + 0.0626e-3f)  // Index 4: Turbo
-  };
-  constexpr double adcRateOffsetV[5] = {0.0, 0.047e-3, -0.006e-3, -0.233e-3, -0.810e-3};
+  // Trim tables: g_rateGain/g_rateOff (calib_rate_match.cpp), defaults above.
 
         // startFirst: the ADS1219 keeps the finished result until the next
         // conversion completes, so start that one now and read while it runs.
@@ -652,7 +646,7 @@ void Device::readVoltage()
             adc.readOldResult(Voltage.rawValue); // rejected if late: keeps the last value
 
         // OPTIMIZED: Single line calculation for speed
-        double v_corrected = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m * adcRateCompensation[activeAdcRate()] + adcRateOffsetV[activeAdcRate()];
+        double v_corrected = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m * g_rateGain[activeAdcRate()] + g_rateOff[activeAdcRate()];
 
         // Apply INL correction if calibration data is available
         if (g_voltINL_ready)

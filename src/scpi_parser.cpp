@@ -14,6 +14,7 @@
 #include "calib_adc.h"
 #include "calib_internal_leakage.h"
 #include "calib_cc_limit.h"
+#include "calib_rate_match.h"
 #include "calib_log_window.h"
 #include "setting_menu.h"
 #include "event_log.h"
@@ -236,6 +237,20 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("SAVE") > 0) cmd_CAL_SAVE();
         else if (cmdPart.indexOf("LOAD") > 0) cmd_CAL_LOAD();
         else if (cmdPart.indexOf("BUSY?") > 0) sendResponse(g_calibration_in_progress ? "1" : "0");
+        else if (cmdPart.indexOf("RATE:DEF") > 0) { rateMatchClear(); sendResponse("OK"); }
+        else if (cmdPart.indexOf("RATE?") > 0) sendResponse(rateMatchString());
+        else if (cmdPart.indexOf(":RATE") > 0)
+        {
+            // Speed Match (button of the same name): no load, output ON,
+            // ~2 min; poll CAL:BUSY?. Saves itself.
+            if (g_calibration_in_progress || PowerSupply.getStatus() == DEVICE::OFF) { addError(ERR_EXECUTION_ERROR); return; }
+            g_calibration_in_progress = true;
+            create_log_window("Speed Match");
+            log_reset();
+            log_clear();
+            if (!start_rate_match_calibration()) { g_calibration_in_progress = false; addError(ERR_EXECUTION_ERROR); return; }
+            sendResponse("OK");
+        }
         else if (cmdPart.indexOf("CCLIM:CLE") > 0) { ccLimitClear(); sendResponse("OK"); }
         else if (cmdPart.indexOf("CCLIM?") > 0) sendResponse(ccLimitTableString());
         else if (cmdPart.indexOf("CCLIM") > 0)

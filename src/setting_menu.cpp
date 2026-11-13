@@ -4,6 +4,7 @@
 #include "calib_internal_leakage.h"
 #include "calib_dac.h"
 #include "calib_cc_limit.h"
+#include "calib_rate_match.h"
 #include "calib_adc.h"
 #include "calib_inl.h"
 // #include "calib_inl_zc.h"
@@ -917,6 +918,7 @@ void SettingMenu(lv_obj_t *parent)
     create_button_item(section, open_dac_calibration_cb, "DAC Zero/Max");
     create_button_item(section, internal_leakage_calibration_cb, "Leakage");
     create_button_item(section, cc_limit_calibration_cb, "CC Limit (short)");
+    create_button_item(section, rate_match_calibration_cb, "Speed Match");
     create_button_item(section, ADC_INL_Voltage_calibration_cb, "Voltage INL");
     // create_button_item(section, ADC_INL_ZC_calibration_cb, "ADC INL ZC_CAL");
     create_button_item(section, full_auto_calibration_cb, "Full Auto Cal");
