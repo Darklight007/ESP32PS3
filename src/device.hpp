@@ -214,6 +214,9 @@ struct GUI
     Calibration_gui calibration;
 
     // Display labels for new features
+    lv_obj_t *label_energy_unit = nullptr;
+    lv_obj_t *label_charge_counter = nullptr; // Ah counter, right of Wh
+    lv_obj_t *label_charge_unit = nullptr;
     lv_obj_t *label_energy_counter = nullptr;  // Energy Counter display
     lv_obj_t *label_timer_remaining = nullptr; // Timer countdown display
     lv_obj_t *label_current_rel = nullptr;     // REL indicator for current
@@ -677,6 +680,7 @@ public:
 
     // Runtime tracking variables (features #5 and #6)
     unsigned long powerOnStartTime = 0;      // millis() when output turned ON
+    double chargeAccumulatedAh = 0.0;        // Total charge delivered in Ah
     double energyAccumulatedWh = 0.0;        // Total energy delivered in Wh
     unsigned long lastEnergyUpdateTime = 0;  // For energy integration
     unsigned long timerStartTime = 0;        // For timer function

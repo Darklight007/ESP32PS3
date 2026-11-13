@@ -32,33 +32,25 @@ void updateEnergyAndTimeDisplays()
     if (!PowerSupply.gui.label_energy_counter)
         return;
 
-    // Energy line: centred on the power digits alone, moved up when the timer
-    // countdown is shown under it.
+    // Energy and charge: milli-units below 1, unit text set only on change
+    auto show = [](lv_obj_t *num, lv_obj_t *unit, double v, const char *big, const char *small, const char *&last)
     {
-        const bool timerShown = PowerSupply.gui.label_timer_remaining &&
-                                !lv_obj_has_flag(PowerSupply.gui.label_timer_remaining, LV_OBJ_FLAG_HIDDEN);
-        static int last = -1;
-        if ((int)timerShown != last)
+        if (!num)
+            return;
+        const bool milli = v < 1.0;
+        const char *u = milli ? small : big;
+        if (unit && u != last)
         {
-            lv_obj_set_y(PowerSupply.gui.label_energy_counter, timerShown ? 162 : 168);
-            last = timerShown;
+            lv_label_set_text_static(unit, u);
+            last = u;
         }
-    }
-
-    // Update energy counter
-    if (PowerSupply.energyAccumulatedWh < 1.0)
-    {
-        // Display in mWh for values < 1Wh
-        lv_label_set_text_fmt(PowerSupply.gui.label_energy_counter, "%.1fmWh",
-                             PowerSupply.energyAccumulatedWh * 1000.0);
-    }
-    else
-    {
-        // Display in Wh
-        lv_label_set_text_fmt(PowerSupply.gui.label_energy_counter, "%.3fWh",
-                             PowerSupply.energyAccumulatedWh);
-    }
-
+        lv_label_set_text_fmt(num, milli ? "%.1f" : "%.3f", milli ? v * 1000.0 : v);
+    };
+    static const char *lastWh = nullptr, *lastAh = nullptr;
+    show(PowerSupply.gui.label_energy_counter, PowerSupply.gui.label_energy_unit,
+         PowerSupply.energyAccumulatedWh, "Wh", "mWh", lastWh);
+    show(PowerSupply.gui.label_charge_counter, PowerSupply.gui.label_charge_unit,
+         fabs(PowerSupply.chargeAccumulatedAh), "Ah", "mAh", lastAh);
 }
 
 // Update timer countdown display
@@ -137,6 +129,7 @@ void integrateEnergy()
 
     // Integrate: Energy += Power * Time
     PowerSupply.energyAccumulatedWh += power * deltaHours;
+    PowerSupply.chargeAccumulatedAh += current * deltaHours;
 
     PowerSupply.lastEnergyUpdateTime = currentTime;
 }
@@ -393,12 +386,16 @@ void loadEnergyFromStorage()
 {
     energyPrefs.begin("energy", true);  // Read-only
     PowerSupply.energyAccumulatedWh = energyPrefs.getDouble("wh", 0.0);
+    PowerSupply.chargeAccumulatedAh = energyPrefs.getDouble("ah", 0.0);
+    if (!std::isfinite(PowerSupply.chargeAccumulatedAh))
+        PowerSupply.chargeAccumulatedAh = 0.0;
     energyPrefs.end();
 
     // Validate loaded value
     if (!std::isfinite(PowerSupply.energyAccumulatedWh) || PowerSupply.energyAccumulatedWh < 0) {
         Serial.println("Energy data invalid, resetting to 0");
         PowerSupply.energyAccumulatedWh = 0.0;
+    PowerSupply.chargeAccumulatedAh = 0.0;
     } else {
         Serial.printf("Loaded energy: %.6f Wh\n", PowerSupply.energyAccumulatedWh);
     }
@@ -413,6 +410,7 @@ void saveEnergyToStorage()
     {
         energyPrefs.begin("energy", false);  // Read-write
         energyPrefs.putDouble("wh", PowerSupply.energyAccumulatedWh);
+        energyPrefs.putDouble("ah", PowerSupply.chargeAccumulatedAh);
         energyPrefs.end();
         lastSavedEnergy = PowerSupply.energyAccumulatedWh;
     }
@@ -422,8 +420,10 @@ void saveEnergyToStorage()
 void resetEnergyCounter()
 {
     PowerSupply.energyAccumulatedWh = 0.0;
+    PowerSupply.chargeAccumulatedAh = 0.0;
     energyPrefs.begin("energy", false);
     energyPrefs.putDouble("wh", 0.0);
+    energyPrefs.putDouble("ah", 0.0);
     energyPrefs.end();
     Serial.println("Energy counter reset");
 }

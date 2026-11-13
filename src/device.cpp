@@ -1158,6 +1158,9 @@ void Device::setStatus(DEVICE status_)
 
         if (gui.label_current_rel)
             lv_obj_set_style_text_color(gui.label_current_rel, c.measured, 0);
+        for (lv_obj_t *l : {gui.label_energy_counter, gui.label_energy_unit, gui.label_charge_counter, gui.label_charge_unit})
+            if (l)
+                lv_obj_set_style_text_color(l, c.measured, 0);
 
         Voltage.setStatsColor(c.plotColor1);
         Current.setStatsColor(c.plotColor2);

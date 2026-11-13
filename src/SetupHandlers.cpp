@@ -345,8 +345,8 @@ void setupPowerSupply()
     PowerSupply.Power.enableSetting(false);
     PowerSupply.Power.restrict = "%+08.3f";
 
-    lv_obj_align(PowerSupply.Power.label_measureValue, LV_ALIGN_DEFAULT, -10, 161);
-    lv_obj_align(PowerSupply.Power.label_unit, LV_ALIGN_DEFAULT, 130, 159);
+    lv_obj_align(PowerSupply.Power.label_measureValue, LV_ALIGN_DEFAULT, -10, 152);
+    lv_obj_align(PowerSupply.Power.label_unit, LV_ALIGN_DEFAULT, 130, 150);
 
     // Energy counter and timer countdown, between the "W" and the ON/OFF button
     // (button: x=240, y=160, 54x30). Both right-aligned to the button's left
@@ -363,9 +363,31 @@ void setupPowerSupply()
         lv_obj_set_pos(l, 157, y);
         return l;
     };
-    PowerSupply.gui.label_timer_remaining = sideLabel("", 175);
+    PowerSupply.gui.label_timer_remaining = sideLabel("", 162);
     lv_obj_add_flag(PowerSupply.gui.label_timer_remaining, LV_OBJ_FLAG_HIDDEN); // Hidden by default
-    PowerSupply.gui.label_energy_counter = sideLabel("0.000Wh", 168);
+    // Energy (Wh) and charge (Ah) under the power reading: digits in bold
+    // DSEG, units in Tauri, power colour (recoloured with CC/CV in device.cpp).
+    {
+        const lv_color_t c = lv_obj_get_style_text_color(PowerSupply.Power.label_measureValue, 0);
+        auto mk = [&](const char *txt, const lv_font_t *f, lv_coord_t x, lv_coord_t y, lv_coord_t w)
+        {
+            lv_obj_t *l = lv_label_create(PowerSupply.page[2]);
+            lv_label_set_text(l, txt);
+            lv_obj_set_style_text_font(l, f, 0);
+            lv_obj_set_style_text_color(l, c, 0);
+            if (w)
+            {
+                lv_obj_set_width(l, w);
+                lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_RIGHT, 0);
+            }
+            lv_obj_set_pos(l, x, y);
+            return l;
+        };
+        PowerSupply.gui.label_energy_counter = mk("0.000", &dseg_b_11, 30, 185, 90);
+        PowerSupply.gui.label_energy_unit = mk("Wh", &Tauri_R_16, 123, 180, 0);
+        PowerSupply.gui.label_charge_counter = mk("0.000", &dseg_b_11, 135, 185, 58);
+        PowerSupply.gui.label_charge_unit = mk("Ah", &Tauri_R_16, 196, 180, 0);
+    }
 
     // Create charts on pages
     GraphChart(PowerSupply.page[1], 22, -6); // Page 2: Graph chart
