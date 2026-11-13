@@ -65,7 +65,7 @@ static lv_obj_t *s_axis = nullptr;
 static lv_obj_t *s_bar = nullptr;    // progress
 static lv_obj_t *s_symbol = nullptr; // drawn component of the result
 
-enum Sym { SYM_NONE, SYM_OPEN, SYM_R, SYM_C, SYM_RC, SYM_DIODE, SYM_LAMP };
+enum Sym { SYM_NONE, SYM_OPEN, SYM_R, SYM_C, SYM_RC, SYM_DIODE, SYM_LAMP, SYM_BATT };
 
 static void line(const lv_point_t *pts, int n)
 {
@@ -100,6 +100,12 @@ static void draw_symbol(Sym sym)
         break;
     case SYM_DIODE: line(dA, 2); line(dT, 4); line(dK, 2); line(dB, 2); break;
     case SYM_OPEN: line(oA, 2); line(oB, 2); break;
+    case SYM_BATT:
+    {
+        static const lv_point_t bA[] = {{0, 20}, {46, 20}}, bL[] = {{46, 4}, {46, 36}}, bS[] = {{56, 12}, {56, 28}}, bB[] = {{56, 20}, {104, 20}};
+        line(bA, 2); line(bL, 2); line(bS, 2); line(bB, 2);
+        break;
+    }
     case SYM_LAMP:
     {
         // Circle (r 14 around 52,20) with an X: the lamp symbol
@@ -160,36 +166,65 @@ static void set_axes(const char *title, const String &xmax, const String &ymax, 
     lv_label_set_text(s_ytop, ymax.c_str());
 }
 
+static String s_summary, s_details;
+static float s_tau = NAN; // probe: let-go time constant, s
+static float s_ccC = NAN; // probe: C from the 1 mA current step
+static float s_rCC = NAN; // probe: R between the current steps (cold, ~no power)
+static bool s_showDetails = false;
+static lv_obj_t *s_hint = nullptr;
+
+static void render_result()
+{
+    if (!s_result)
+        return;
+    const String &multi = (s_showDetails && s_details.length()) ? s_details : s_summary;
+    String out;
+    int start = 0, line = 0;
+    while (start <= (int)multi.length())
+    {
+        int nl = multi.indexOf('\n', start);
+        if (nl < 0)
+            nl = multi.length();
+        String ln = multi.substring(start, nl);
+        if (line)
+            out += "\n";
+        if (line == 0)
+            out += "#FFC107 " + ln + "#";
+        else
+        {
+            const int sp = ln.indexOf(' ');
+            const char nx = sp > 0 && sp + 1 < (int)ln.length() ? ln[sp + 1] : 0;
+            if (sp > 0 && sp < 7 && (isdigit((unsigned char)nx) || strchr("<>+-~", nx)) && nx)
+                out += "#8A94A6 " + ln.substring(0, sp) + "#" + ln.substring(sp);
+            else
+                out += ln;
+        }
+        start = nl + 1;
+        line++;
+    }
+    lv_label_set_text(s_result, out.c_str());
+    if (s_hint)
+    {
+        if (s_details.length())
+            lv_obj_clear_flag(s_hint, LV_OBJ_FLAG_HIDDEN);
+        else
+            lv_obj_add_flag(s_hint, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(s_hint, s_showDetails ? LV_SYMBOL_LEFT : LV_SYMBOL_LIST);
+    }
+    // the symbol would sit under a long details list
+    if (s_symbol)
+    {
+        if (s_showDetails)
+            lv_obj_add_flag(s_symbol, LV_OBJ_FLAG_HIDDEN);
+        else
+            lv_obj_clear_flag(s_symbol, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 static void show_result(const String &multi)
 {
-    if (s_result)
-    {
-        String out;
-        int start = 0, line = 0;
-        while (start <= (int)multi.length())
-        {
-            int nl = multi.indexOf('\n', start);
-            if (nl < 0)
-                nl = multi.length();
-            String ln = multi.substring(start, nl);
-            if (line)
-                out += "\n";
-            if (line == 0)
-                out += "#FFC107 " + ln + "#";
-            else
-            {
-                const int sp = ln.indexOf(' ');
-                const char nx = sp > 0 && sp + 1 < (int)ln.length() ? ln[sp + 1] : 0;
-                if (sp > 0 && sp < 7 && (isdigit((unsigned char)nx) || strchr("<>+-~", nx)) && nx)
-                    out += "#8A94A6 " + ln.substring(0, sp) + "#" + ln.substring(sp);
-                else
-                    out += ln;
-            }
-            start = nl + 1;
-            line++;
-        }
-        lv_label_set_text(s_result, out.c_str());
-    }
+    s_summary = multi;
+    render_result();
     String one = multi;
     one.replace("\n", ";");
     s_resultText = one;
@@ -886,14 +921,13 @@ static void analyse_stage2()
         char b[48];
         if (s_det.sym == SYM_LAMP)
         {
-            r = "Lamp / bulb\nRhot " + fmtR(r2) + "\nRcold " + fmtR(s_det.rCold);
-            snprintf(b, sizeof b, "\nRatio %.1fx", r2 / s_det.rCold);
+            const double rc = std::isfinite(s_rCC) ? s_rCC : s_det.rCold; // probe = truly cold
+            r = "Lamp / bulb\nRhot " + fmtR(r2) + "\nRcold " + fmtR(rc);
+            snprintf(b, sizeof b, "\nRatio %.2fx", r2 / rc);
             r += b;
             snprintf(b, sizeof b, "\nP %.3f W", v2 * i2);
             r += b;
             snprintf(b, sizeof b, "\nWarming %+.1f%%", 100 * (r2 / r1 - 1));
-            r += b;
-            snprintf(b, sizeof b, "\nat %.2f V", v2);
             r += b;
             show_result(r);
             return;
@@ -938,6 +972,8 @@ static void analyse_stage2()
         else if (s_det.sym == SYM_C && realR && il > 0.001)
             s_det.sym = SYM_RC;
         draw_symbol(s_det.sym);
+        if (std::isfinite(s_tau) && c > 0)
+            s_details += "\nR = tau/C " + fmtR(s_tau / c);
         r = s_det.sym == SYM_RC ? "R || C" : "Capacitor";
         r += "\nC " + fmtC(c);
         if (s_det.sym == SYM_RC)
@@ -1043,10 +1079,9 @@ void loadAnalyzerSetImax(float a)
 }
 static void begin_run()
 {
-    s_savedIAdj = -1;
+    s_savedIAdj = PowerSupply.Current.adjValue; // probe steps change the limit too
     if (s_imax > 0)
     {
-        s_savedIAdj = PowerSupply.Current.adjValue;
         PowerSupply.Current.SetUpdate(s_imax * PowerSupply.Current.adjFactor + PowerSupply.Current.adjOffset);
     }
     auto &sp = PowerSupply.settingParameters;
@@ -1079,6 +1114,319 @@ static void end_run_impl()
 
 bool loadAnalyzerBusy() { return s_timer != nullptr; }
 String loadAnalyzerResult() { return s_resultText; }
+String loadAnalyzerDetails() { String d = s_details; d.replace("\n", ";"); return d; }
+
+// ─── Probe: experiments before the sweep ────────────────────────────────────
+// Gentle first, each step deciding whether the next is safe:
+//   PRE    output at 0 V: any voltage = battery / charged cap / other source
+//   TINY   10 mA limit, 0.2 V: short or not
+//   CC1-4  1/5/10/20 mA current steps (V-Set as ceiling): diode law, R(I),
+//          a capacitor's linear voltage rise (C = I / dV/dt)
+//   HOLD   V-Set, user's limit: inrush of a cold filament / motor
+//   LETGO  setpoint to 0: the PSU can't sink, so the load discharges itself:
+//          instant = no storage, exponential tau = R*C, flat = holds charge
+//   BATT   (source found) 20 mA charge pulse: internal R, or C if it ramps
+enum : uint8_t { PR_PRE = 10, PR_TINY, PR_CC1, PR_CC2, PR_CC3, PR_CC4, PR_HOLD, PR_LETGO, PR_BATT };
+struct Seg { uint8_t ph; float dur, v, ilim; const char *name; };
+static Seg s_segs[12];
+static float s_segT0[12];
+static int s_nseg = 0, s_seg = -1;
+static uint32_t s_segStartMs = 0;
+static float s_userImax = 0;
+static void sweep_begin();
+
+static float user_iset() { return (PowerSupply.Current.adjValue - PowerSupply.Current.adjOffset) / PowerSupply.Current.adjFactor; }
+static void set_amps(double a) { PowerSupply.Current.SetUpdate(a * PowerSupply.Current.adjFactor + PowerSupply.Current.adjOffset); }
+
+// Mean V, I of segment k between fractions [fa, fb] of its duration
+static int seg_stats(int k, float fa, float fb, double &v, double &i)
+{
+    const int n = s_n.load(std::memory_order_acquire);
+    const float t0 = s_segT0[k] + fa * s_segs[k].dur, t1 = s_segT0[k] + fb * s_segs[k].dur;
+    double sv = 0, si = 0;
+    int m = 0;
+    for (int q = 0; q < n; q++)
+        if (s_ph[q] == s_segs[k].ph && s_t[q] >= t0 && s_t[q] <= t1)
+        {
+            sv += s_v[q];
+            si += s_i[q];
+            m++;
+        }
+    v = m ? sv / m : NAN;
+    i = m ? si / m : NAN;
+    return m;
+}
+static int seg_index(uint8_t ph)
+{
+    for (int k = 0; k < s_nseg; k++)
+        if (s_segs[k].ph == ph)
+            return k;
+    return -1;
+}
+
+static void probe_build()
+{
+    const float vt = s_vtop, im = s_userImax;
+    s_nseg = 0;
+    auto add = [&](uint8_t ph, float dur, float v, float il, const char *nm) { s_segs[s_nseg++] = {ph, dur, v, il, nm}; };
+    add(PR_PRE, 0.6f, 0, std::min(0.02f, im), "Source check");
+    add(PR_TINY, 0.5f, std::min(0.2f, vt), std::min(0.01f, im), "Short check");
+    static const float steps[4] = {0.001f, 0.005f, 0.010f, 0.020f};
+    for (int k = 0; k < 4; k++)
+        if (steps[k] <= im)
+            add(PR_CC1 + k, 0.8f, vt, steps[k], "Current steps");
+    add(PR_HOLD, 1.2f, vt, im, "Hold (inrush)");
+    add(PR_LETGO, 2.0f, 0, im, "Let go");
+}
+
+static void probe_end_with(const String &summary, Sym sym)
+{
+    // Stops here (short / source): no sweep
+    if (s_timer)
+    {
+        lv_timer_del(s_timer);
+        s_timer = nullptr;
+    }
+    s_capturing.store(false);
+    PowerSupply.Voltage.SetUpdate(s_savedAdj);
+    progress(-1);
+    end_run();
+    draw_symbol(sym);
+    show_result(summary);
+}
+
+static void probe_analyse_and_sweep()
+{
+    char b[64];
+    String d = "Probe details";
+    // Current steps: settled V, I of each
+    double vs[4], is[4];
+    int nst = 0;
+    bool top[4];
+    for (int k = 0; k < 4; k++)
+    {
+        const int si = seg_index(PR_CC1 + k);
+        if (si < 0)
+            break;
+        seg_stats(si, 0.6f, 1.0f, vs[nst], is[nst]);
+        top[nst] = vs[nst] > 0.95 * s_vtop;
+        nst++;
+    }
+    for (int k = 0; k < nst; k++)
+    {
+        snprintf(b, sizeof b, "\n%s %.3f V%s", fmtA(is[k]).c_str(), vs[k], top[k] ? " (top)" : "");
+        d += b;
+    }
+    // Capacitor: V rising in a straight line during the first step
+    if (nst && seg_index(PR_CC1) >= 0)
+    {
+        const int si = seg_index(PR_CC1);
+        double va, ia, vb, ib;
+        seg_stats(si, 0.1f, 0.3f, va, ia);
+        seg_stats(si, 0.7f, 0.9f, vb, ib);
+        const double slope = (vb - va) / (0.6 * s_segs[si].dur);
+        if (slope > 0.05 && vb < 0.95 * s_vtop && ia > 0.0003)
+        {
+            s_ccC = 0.5 * (ia + ib) / slope;
+            d += "\nC (I/dVdt) " + fmtC(s_ccC);
+        }
+    }
+    // Diode law over the steps that settled below the top
+    int lo = -1, hi = -1;
+    for (int k = 0; k < nst; k++)
+        if (!top[k] && is[k] > 0.0005)
+        {
+            if (lo < 0)
+                lo = k;
+            hi = k;
+        }
+    if (lo >= 0 && hi > lo && vs[lo] > 0.2 && vs[hi] / vs[lo] < 1.6 && is[hi] / is[lo] > 3)
+    {
+        const double n = (vs[hi] - vs[lo]) / (0.02585 * log(is[hi] / is[lo]));
+        snprintf(b, sizeof b, "\nDiode n %.2f", n);
+        d += b;
+        const double vf = vs[lo];
+        const char *kind = vf < 0.4 ? "Schottky/Ge" : vf < 0.85 ? "silicon" : vf < 1.4 ? "2 diodes / IR" :
+                           vf < 2.15 ? "red/yel LED" : vf < 3.5 ? "grn/blue/wht LED" : "LED string";
+        d += String("\nType ") + kind;
+    }
+    else if (lo >= 0 && hi > lo && vs[hi] - vs[lo] > 0.002)
+    {
+        // Difference between steps: the meter's offset and tiny voltages
+        // at the lowest current cancel out
+        s_rCC = (vs[hi] - vs[lo]) / (is[hi] - is[lo]);
+        d += "\nR (steps) " + fmtR(s_rCC);
+    }
+    // Inrush: first 60 ms of the hold against its settled end
+    {
+        const int si = seg_index(PR_HOLD);
+        double vE, iE;
+        seg_stats(si, 0.6f, 1.0f, vE, iE);
+        const int n = s_n.load();
+        float ipk = 0;
+        for (int q = 0; q < n; q++)
+            if (s_ph[q] == PR_HOLD && s_t[q] < s_segT0[si] + 0.06f && s_i[q] > ipk)
+                ipk = s_i[q];
+        if (iE > 0.002 && ipk / iE > 1.05)
+        {
+            snprintf(b, sizeof b, "\nInrush x%.2f", ipk / iE);
+            d += b;
+        }
+        // Let go: how the voltage falls once the PSU stops driving
+        const int sl = seg_index(PR_LETGO);
+        double vh = vE;
+        if (vh > 0.2)
+        {
+            float t37 = NAN, vEnd = NAN;
+            for (int q = 0; q < n; q++)
+                if (s_ph[q] == PR_LETGO)
+                {
+                    if (!std::isfinite(t37) && s_v[q] < 0.368 * vh)
+                        t37 = s_t[q] - s_segT0[sl];
+                    vEnd = s_v[q];
+                }
+            if (std::isfinite(t37) && t37 < 0.02f)
+                d += "\nLet go: instant";
+            else if (std::isfinite(t37))
+            {
+                s_tau = t37;
+                snprintf(b, sizeof b, "\nLet-go tau %.3g s", t37);
+                d += b;
+            }
+            else if (std::isfinite(vEnd) && vEnd > 0.9 * vh)
+                d += "\nLet go: holds V";
+            else if (std::isfinite(vEnd) && vEnd > 0)
+            {
+                s_tau = s_segs[sl].dur / log(vh / vEnd);
+                snprintf(b, sizeof b, "\nLet-go tau ~%.3g s", s_tau);
+                d += b;
+            }
+        }
+    }
+    s_details = d;
+    sweep_begin();
+}
+
+static void probe_cb(lv_timer_t *)
+{
+    if (!output_usable())
+    {
+        probe_end_with("Stopped:\noutput off", SYM_NONE);
+        return;
+    }
+    const uint32_t now = millis();
+    const bool advance = s_seg < 0 || (now - s_segStartMs) * 1e-3f >= s_segs[s_seg].dur;
+    if (advance)
+    {
+        // Decisions at the end of a step
+        if (s_seg >= 0 && s_segs[s_seg].ph == PR_PRE)
+        {
+            double v, i;
+            seg_stats(s_seg, 0.5f, 1.0f, v, i);
+            if (v > 0.2)
+            {
+                // Something already holds a voltage: battery or charged cap.
+                // Short charge pulse (20 mA) a little above it tells which.
+                const float vb = std::min((float)v + 0.5f, std::max(s_vtop, (float)v + 0.1f));
+                s_nseg = s_seg + 1;
+                s_segs[s_nseg++] = {PR_BATT, 1.5f, vb, std::min(0.02f, s_userImax), "Charge pulse"};
+                s_details = "Probe details\nV0 " + String(v, 3) + " V";
+            }
+        }
+        if (s_seg >= 0 && s_segs[s_seg].ph == PR_TINY)
+        {
+            double v, i;
+            seg_stats(s_seg, 0.5f, 1.0f, v, i);
+            if (i > 0.004 && v / i < 0.05)
+            {
+                char b[64];
+                snprintf(b, sizeof b, "Short\nR %s\nat %s\nNothing else run", fmtR(v / i).c_str(), fmtA(i).c_str());
+                probe_end_with(b, SYM_NONE);
+                return;
+            }
+        }
+        if (s_seg >= 0 && s_segs[s_seg].ph == PR_BATT)
+        {
+            const int si = s_seg;
+            double v0, i0, va, ia, vb, ib;
+            seg_stats(seg_index(PR_PRE), 0.5f, 1.0f, v0, i0);
+            seg_stats(si, 0.15f, 0.35f, va, ia);
+            seg_stats(si, 0.75f, 0.95f, vb, ib);
+            const double slope = (vb - va) / (0.6 * s_segs[si].dur);
+            char b[120];
+            String sum;
+            Sym sym;
+            if (slope > 0.02 && ib > 0.001)
+            {
+                const double c = 0.5 * (ia + ib) / slope;
+                snprintf(b, sizeof b, "Charged cap\nV0 %.3f V\nC %s\n(from charge rate)", v0, fmtC(c).c_str());
+                sym = SYM_C;
+            }
+            else
+            {
+                const double ri = (vb - v0) / std::max(ib, 1e-6);
+                snprintf(b, sizeof b, "Battery / source\nV0 %.3f V\nRint %s\nat %s", v0, fmtR(ri).c_str(), fmtA(ib).c_str());
+                sym = SYM_BATT;
+            }
+            probe_end_with(b, sym);
+            return;
+        }
+        if (s_seg + 1 >= s_nseg)
+        {
+            if (s_timer)
+            {
+                lv_timer_del(s_timer);
+                s_timer = nullptr;
+            }
+            probe_analyse_and_sweep();
+            return;
+        }
+        s_seg++;
+        s_segStartMs = now;
+        s_segT0[s_seg] = (now - s_startMs) * 1e-3f;
+        const Seg &sg = s_segs[s_seg];
+        set_amps(sg.ilim);
+        set_volts(sg.v);
+        s_vcmd = sg.v;
+        s_phase = sg.ph;
+    }
+    static uint32_t lastUi = 0;
+    if (now - lastUi > 150)
+    {
+        lastUi = now;
+        float total = 0, done = 0;
+        for (int k = 0; k < s_nseg; k++)
+        {
+            total += s_segs[k].dur;
+            if (k < s_seg)
+                done += s_segs[k].dur;
+        }
+        done += (now - s_segStartMs) * 1e-3f;
+        char b[120];
+        snprintf(b, sizeof b, "Probe %d/%d\n%s\nlimit %s\n%.3f V\n%s", s_seg + 1, s_nseg, s_segs[s_seg].name,
+                 fmtA(s_segs[s_seg].ilim).c_str(), PowerSupply.Voltage.oldValue,
+                 fmtA(PowerSupply.Current.oldValue * (PowerSupply.mA_Active ? 0.001 : 1.0)).c_str());
+        show_result(b);
+        progress((int)(40 * done / std::max(total, 0.1f))); // probe = first 40%
+    }
+}
+
+static void probe_begin()
+{
+    s_tau = NAN;
+    s_ccC = NAN;
+    s_rCC = NAN;
+    s_details = "";
+    s_seg = -1;
+    s_vcmd = 0;
+    s_phase = PR_PRE;
+    s_cap = kMaxSamples;
+    s_n.store(0);
+    s_startMs = millis();
+    s_capturing.store(true);
+    probe_build();
+    s_timer = lv_timer_create(probe_cb, 10, nullptr);
+}
 
 bool loadSweepStart(bool zero)
 {
@@ -1092,21 +1440,36 @@ bool loadSweepStart(bool zero)
     }
     s_isZero = zero;
     s_isFft = false;
-    s_stage = 1;
     s_savedAdj = PowerSupply.Voltage.adjValue;
+    s_userImax = s_imax > 0 ? s_imax : user_iset();
+    s_showDetails = false;
+    s_details = "";
+    begin_run();
+    draw_symbol(SYM_NONE);
+    progress(0);
+    if (zero)
+        sweep_begin();
+    else
+    {
+        show_result("Probe\nstarting");
+        probe_begin();
+    }
+    return true;
+}
+
+static void sweep_begin()
+{
+    s_stage = 1;
     s_vcmd = 0;
     s_phase = PH_SETTLE;
     s_cap = kMaxSamples;
     s_n.store(0);
     s_startMs = millis();
     s_capturing.store(true);
+    set_amps(s_userImax);
     set_volts(0);
-    begin_run();
     s_timer = lv_timer_create(sweep_cb, 10, nullptr);
-    draw_symbol(SYM_NONE);
-    progress(0);
-    show_result(zero ? "Zero sweep...\n(nothing\nconnected)" : "Sweeping\n0 -> V-Set -> 0\n(~11 s)");
-    return true;
+    show_result(s_isZero ? "Zero sweep...\n(nothing\nconnected)" : "Sweeping\n0 -> V-Set -> 0");
 }
 
 bool loadFftStart()
@@ -1198,7 +1561,14 @@ void createLoadTab(lv_obj_t *parent)
     lv_obj_set_style_radius(card, 6, 0);
     lv_obj_set_style_border_width(card, 1, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(0x30363d), 0);
-    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(card, [](lv_event_t *) {
+        if (!s_details.length())
+            return;
+        s_showDetails = !s_showDetails;
+        render_result();
+    }, LV_EVENT_CLICKED, nullptr);
 
     s_result = lv_label_create(card);
     lv_obj_set_style_text_font(s_result, &lv_font_montserrat_12, 0);
@@ -1209,6 +1579,10 @@ void createLoadTab(lv_obj_t *parent)
     lv_label_set_long_mode(s_result, LV_LABEL_LONG_CLIP);
     lv_obj_set_pos(s_result, 5, 4);
     show_result("Ready\nSweep finds\nR, C, diode,\nthen details.\nTop = V-Set\nZero: once,\nno load");
+
+    s_hint = small(card, lv_color_hex(0x8A94A6));
+    lv_obj_align(s_hint, LV_ALIGN_TOP_RIGHT, -4, 4);
+    lv_obj_add_flag(s_hint, LV_OBJ_FLAG_HIDDEN);
 
     s_symbol = lv_obj_create(card);
     lv_obj_remove_style_all(s_symbol);
@@ -1246,7 +1620,7 @@ void createLoadTab(lv_obj_t *parent)
     lv_obj_set_style_bg_color(s_bar, lv_color_hex(0xFFC107), LV_PART_INDICATOR);
     lv_obj_add_flag(s_bar, LV_OBJ_FLAG_HIDDEN);
 
-    static const char *names[3] = {LV_SYMBOL_PLAY " Sweep", LV_SYMBOL_AUDIO " FFT", LV_SYMBOL_REFRESH " Zero"};
+    static const char *names[3] = {LV_SYMBOL_PLAY " Probe", LV_SYMBOL_AUDIO " FFT", LV_SYMBOL_REFRESH " Zero"};
     for (int b = 0; b < 3; b++)
     {
         lv_obj_t *btn = lv_btn_create(parent);

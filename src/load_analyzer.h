@@ -21,4 +21,5 @@ bool loadSweepStart(bool zero = false);
 bool loadFftStart();
 bool loadAnalyzerBusy();
 String loadAnalyzerResult(); // last result text, one line, ';' separated
+String loadAnalyzerDetails(); // probe details, ';' separated
 void loadAnalyzerSetImax(float amps); // analysis current limit; 0 = keep I-Set
