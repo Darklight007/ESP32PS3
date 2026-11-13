@@ -607,13 +607,19 @@ void Device::readVoltage()
         //     return;
         // } // throw away first 2 readings after changing rate
         // throw_away = 0;
+  // Gain and offset per ADC speed, trimmed so each speed's mean matches
+  // Quiet (rate 0). Measured 2026-11-12 at 2 V and 29 V, no load: residual
+  // error vs Quiet (mV) = a + b*V, a/b below; gain *= 1 - b/1000, offset = -a.
+  //   rate1 a=-0.047 b=-0.0063   rate2 a=0.006 b=-0.0130
+  //   rate3 a=+0.233 b=-0.0167   rate4 a=0.810 b=-0.0626 (2nd pass)
   constexpr float adcRateCompensation[5] = {
-      1.00000f,            // Index 0: 10 SPS
-      1.00000f,            // Index 1: 20 SPS
-      32.0000f / 31.9985f, // Index 2: 90 SPS
-      32.0000f / 31.9945f, // Index 3: 330 SPS
-      32.0000f / 31.9882f  // Index 4: 1000 SPS
+      1.00000f,                             // Index 0: Quiet
+      1.00000f * (1.0f + 0.0063e-3f),       // Index 1: Slow
+      32.0000f / 31.9985f * (1.0f + 0.0130e-3f), // Index 2: Normal
+      32.0000f / 31.9945f * (1.0f + 0.0167e-3f), // Index 3: Fast
+      32.0000f / 31.9882f * (1.0f + 0.0626e-3f)  // Index 4: Turbo
   };
+  constexpr double adcRateOffsetV[5] = {0.0, 0.047e-3, -0.006e-3, -0.233e-3, -0.810e-3};
 
         // startFirst: the ADS1219 keeps the finished result until the next
         // conversion completes, so start that one now and read while it runs.
@@ -646,7 +652,7 @@ void Device::readVoltage()
             adc.readOldResult(Voltage.rawValue); // rejected if late: keeps the last value
 
         // OPTIMIZED: Single line calculation for speed
-        double v_corrected = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m * adcRateCompensation[activeAdcRate()];
+        double v_corrected = (Voltage.rawValue - Voltage.calib_b) * Voltage.calib_1m * adcRateCompensation[activeAdcRate()] + adcRateOffsetV[activeAdcRate()];
 
         // Apply INL correction if calibration data is available
         if (g_voltINL_ready)
@@ -854,7 +860,7 @@ void Device::applyAdcRate()
     const uint8_t v = activeAdcRate();
     adc.ads1219->setDataRate(rates[v]);
     adjustAdcTaskPriority();
-    ResetStats();
+    // No ResetStats(): the Stats page keeps its data across speed changes
     // slider_adcRate is the container: child 1 = value label, child 2 = slider
     if (lv_obj_t *c = gui.slider_adcRate)
     {
