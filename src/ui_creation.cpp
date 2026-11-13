@@ -104,6 +104,33 @@ static void draw_event_util_Arbit_chart_cb(lv_event_t *e)
     }
 }
 
+// Table tab: vertical line on the small table plot at the end of the used
+// length ("Len:"), drawn over the plot. Rows past it are not played back.
+// Core 1 only.
+void tableLenMarkerUpdate()
+{
+    lv_obj_t *chart = Utility_objs.record_chart;
+    if (!chart)
+        return;
+    static lv_obj_t *marker = nullptr;
+    if (!marker)
+    {
+        marker = lv_obj_create(chart);
+        lv_obj_remove_style_all(marker);
+        lv_obj_add_flag(marker, LV_OBJ_FLAG_IGNORE_LAYOUT | LV_OBJ_FLAG_FLOATING);
+        lv_obj_clear_flag(marker, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_bg_color(marker, lv_palette_main(LV_PALETTE_YELLOW), 0);
+        lv_obj_set_style_bg_opa(marker, LV_OPA_COVER, 0);
+    }
+    lv_obj_update_layout(chart);
+    const lv_coord_t cw = lv_obj_get_content_width(chart), ch = lv_obj_get_content_height(chart);
+    const int n = RECORDING_TABLE_SIZE, len = LV_CLAMP(1, PowerSupply.funGenMem.table_length, n);
+    // x of the last used row, as the chart places point len-1
+    const lv_coord_t x = (lv_coord_t)((int32_t)(len - 1) * (cw - 1) / (n - 1));
+    lv_obj_set_size(marker, 2, ch);
+    lv_obj_set_pos(marker, x, 0);
+}
+
 static void spinbox_change_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED)
@@ -466,7 +493,7 @@ void Utility_tabview(lv_obj_t *parent)
     int XOffset = -5;
 
     Utility_objs.fun.Amplitude = spinbox_pro(tab2, "#FFFFF7 Amplitude:#", 0, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 0, 98, 0, &graph_R_16);
-    Utility_objs.fun.Frequency = spinbox_pro(tab2, "#FFFFF7 Frequency [Hz]:#", 0, 10000, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1, 98, 1, &graph_R_16);
+    Utility_objs.fun.Frequency = spinbox_pro(tab2, "#FFFFF7 Frequency [Hz]:#", 0, 100000, 6, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 1, 98, 1, &graph_R_16);
     Utility_objs.fun.Offset = spinbox_pro(tab2, "#FFFFF7 Offset [V]:#", -32000, 32750, 5, 2, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 2, 98, 2, &graph_R_16);
     Utility_objs.fun.Duty = spinbox_pro(tab2, "#FFFFF7 Duty [%]:#", 0, 10000, 5, 3, LV_ALIGN_RIGHT_MID, XOffset, verOffset + verPad * 3, 98, 3, &graph_R_16);
 
@@ -714,9 +741,17 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_set_style_size(Utility_objs.record_chart, 0, LV_PART_INDICATOR);  // Hide point indicators
     lv_obj_set_style_line_width(Utility_objs.record_chart, 2, LV_PART_ITEMS);  // Thin line (2px)
     Utility_objs.record_chart_series = lv_chart_add_series(Utility_objs.record_chart, lv_palette_main(LV_PALETTE_RED), LV_CHART_AXIS_PRIMARY_Y);
+    // show the table loaded at boot (was only drawn after Load or a recording)
+    for (int i = 0; i < RECORDING_TABLE_SIZE; i++)
+        lv_chart_set_value_by_id(Utility_objs.record_chart, Utility_objs.record_chart_series, i,
+                                 (lv_coord_t)(PowerSupply.funGenMem.table_points[i][0] * 100));
 
     Utility_objs.table_spinbox_value = spinbox_pro(tab4, "#FFFFF7 Value:#", 0, 10000, 5, 1, LV_ALIGN_RIGHT_MID, -50, -62, 98, 4, &graph_R_16);
     lv_obj_add_event_cb(Utility_objs.table_spinbox_value, spinbox_change_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    // Start on the selected row's real value (row 0 at boot). It started at 0,
+    // so the first edit overwrote row 0's stored value from 0.
+    lv_spinbox_set_value(Utility_objs.table_spinbox_value,
+                         (int32_t)lroundf(PowerSupply.funGenMem.table_points[(uintptr_t)Utility_objs.table_point_list->user_data][0] * 10000));
 
     // Saving  ************************************************************
     lv_obj_t *saveButton = lv_btn_create(tab4);
@@ -769,6 +804,13 @@ void Utility_tabview(lv_obj_t *parent)
             {
                 lv_chart_refresh(Utility_objs.record_chart);
             }
+            // the loaded length: spinbox and marker
+            if (Utility_objs.table_length_spinbox)
+                lv_spinbox_set_value(Utility_objs.table_length_spinbox, PowerSupply.funGenMem.table_length);
+            // Value box: the selected row's loaded value
+            lv_spinbox_set_value(Utility_objs.table_spinbox_value,
+                                 (int32_t)lroundf(PowerSupply.funGenMem.table_points[(uintptr_t)Utility_objs.table_point_list->user_data][0] * 10000));
+            tableLenMarkerUpdate();
         }
     };
 
@@ -811,9 +853,11 @@ lv_obj_align_to( Utility_objs.record_sample_rate_spinbox , saveButton, LV_ALIGN_
         {
             PowerSupply.funGenMem.table_length = lv_spinbox_get_value(Utility_objs.table_length_spinbox);
             PowerSupply.funGenMemDirty = true;  // Mark settings as changed
+            tableLenMarkerUpdate();
         }
     };
     lv_obj_add_event_cb(Utility_objs.table_length_spinbox, table_length_change_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    tableLenMarkerUpdate();
 
 
     // Bottom row: Record and Stop buttons

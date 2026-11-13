@@ -53,3 +53,4 @@ extern lv_obj_t *btn_function_gen;
 
 // Once, after the UI is built: skip LVGL's per-redraw scrollbar work where it can't show anything
 void dropIdleScrollbars();
+void tableLenMarkerUpdate(); // Table tab: length marker on the small plot

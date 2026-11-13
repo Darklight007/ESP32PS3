@@ -70,8 +70,12 @@ struct FunGen
     double amplitude;
     double offset;
     double dutyCycle;
-    int table_length = 100;  // Table length limit for playback (1-250)
-    double table_points[RECORDING_TABLE_SIZE][2];
+    int table_length = 100;  // Table length limit for recording/playback (1-RECORDING_TABLE_SIZE)
+    // One normalized value (0..1) per row. float: 7 digits, far finer than the
+    // 16-bit DAC, and 999 rows fit in what 250 doubles used to take. The [1]
+    // keeps every table_points[i][0] access unchanged. (Was double[250][2],
+    // second column never used.)
+    float table_points[RECORDING_TABLE_SIZE][1];
     double arbitrary_points[40][2];
 };
 struct DAC_codes

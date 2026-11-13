@@ -431,6 +431,8 @@ MemArray Device::LoadMemory(const String &key)
     return data;
 }
 
+static constexpr uint32_t kTableMagic = 0x324C4254; // "TBL2"
+
 void Device::SaveMemoryFgen(const String &key, const FunGen &data)
 {
     // Save small settings to NVS (fast, no size limit issues)
@@ -445,10 +447,13 @@ void Device::SaveMemoryFgen(const String &key, const FunGen &data)
     // is the expensive part of a SPIFFS op (confirmed live: 638ms for one
     // mount+unmount elsewhere), not the read/write itself.
 
-    // Save table_points (4000 bytes) - completely separate from Arbt
+    // Table: header (magic, length set in "Len:") + one float per row.
+    // Completely separate from Arbt.
     fs::File tableFile = SPIFFS.open("/fgen_table.dat", "w");
     if (tableFile) {
-        tableFile.write((uint8_t*)&data.table_points, sizeof(data.table_points));
+        const uint32_t hdr[2] = {kTableMagic, (uint32_t)data.table_length};
+        tableFile.write((const uint8_t*)hdr, sizeof(hdr));
+        tableFile.write((const uint8_t*)&data.table_points, sizeof(data.table_points));
         tableFile.close();
         Serial.println("Table data saved to SPIFFS");
     }
@@ -495,12 +500,27 @@ FunGen Device::LoadMemoryFgen(const String &key)
 
     // Load large arrays from SPIFFS (mounted once at boot in main.cpp)
 
-    // Load table_points (4000 bytes) - independent from Arbt
+    // Table - independent from Arbt. Current format: header + float per row.
+    // Older file: 250 rows of two doubles (4000 bytes, first column used),
+    // converted here; the next save writes the new format.
     fs::File tableFile = SPIFFS.open("/fgen_table.dat", "r");
     if (tableFile) {
-        size_t bytesRead = tableFile.read((uint8_t*)&data.table_points, sizeof(data.table_points));
+        const size_t size = tableFile.size();
+        uint32_t hdr[2] = {0, 0};
+        if (size == 250 * 2 * sizeof(double)) {
+            double row[2];
+            for (int i = 0; i < 250 && tableFile.read((uint8_t*)row, sizeof(row)) == sizeof(row); i++)
+                data.table_points[i][0] = (float)row[0];
+            Serial.println("Table data loaded from SPIFFS (old 250-row format, converted)");
+        } else if (tableFile.read((uint8_t*)hdr, sizeof(hdr)) == sizeof(hdr) && hdr[0] == kTableMagic) {
+            const size_t got = tableFile.read((uint8_t*)&data.table_points, sizeof(data.table_points));
+            if (hdr[1] >= 1 && hdr[1] <= RECORDING_TABLE_SIZE)
+                data.table_length = (int)hdr[1];
+            Serial.printf("Table data loaded from SPIFFS: %u bytes, length %d\n", (unsigned)got, data.table_length);
+        } else {
+            Serial.println("Table data file unrecognised - using defaults");
+        }
         tableFile.close();
-        Serial.printf("Table data loaded from SPIFFS: %d bytes\n", bytesRead);
     } else {
         Serial.println("Table data file not found - using defaults");
     }

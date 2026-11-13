@@ -1,3 +1,4 @@
+#include "ui_creation.h"
 #include "scpi_parser.h"
 #include "display.h"
 #include "device.hpp"
@@ -419,9 +420,18 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("PAGE") > 0)
         {
             // 0 Stats, 1 Graph, 2 Main, 3 Utility, 4 Setting
+            // optional ",n": Utility sub-tab (page 3)
             const int pg = paramPart.toInt();
+            const int comma = paramPart.indexOf(',');
             if (pg < 0 || pg > 4) addError(ERR_DATA_OUT_OF_RANGE);
-            else { Tabs::setCurrentPage(pg); sendResponse("OK"); }
+            else
+            {
+                Tabs::setCurrentPage(pg);
+                extern lv_obj_t *tabview_utility;
+                if (pg == 3 && comma > 0 && tabview_utility)
+                    lv_tabview_set_act(tabview_utility, paramPart.substring(comma + 1).toInt(), LV_ANIM_OFF);
+                sendResponse("OK");
+            }
         }
         else if (cmdPart.indexOf("BUF") > 0)
         {
@@ -1317,6 +1327,10 @@ void SCPIParser::cmd_DATA_TABL(const String& param)
         int len = param.substring(4).toInt();
         if (len >= 1 && len <= RECORDING_TABLE_SIZE) {
             PowerSupply.funGenMem.table_length = len;
+            PowerSupply.funGenMemDirty = true; // saved like a "Len:" change (background, ~15 s)
+            if (Utility_objs.table_length_spinbox)
+                lv_spinbox_set_value(Utility_objs.table_length_spinbox, len);
+            tableLenMarkerUpdate();
             sendResponse("OK");
         } else addError(ERR_DATA_OUT_OF_RANGE);
         return;
@@ -1546,7 +1560,7 @@ void SCPIParser::cmd_SETT_STARTUP(const String& param)
 void SCPIParser::cmd_FGEN_FREQ(const String& param)
 {
     double val;
-    if (parseNumeric(param, val) && val >= 0 && val <= 10.0) {
+    if (parseNumeric(param, val) && val >= 0 && val <= 100.0) { // same as the Frequency box
         PowerSupply.funGenMem.frequency = val;
         if (Utility_objs.fun.Frequency)
             lv_spinbox_set_value(Utility_objs.fun.Frequency, (int32_t)(val * 1000));
