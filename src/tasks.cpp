@@ -80,8 +80,8 @@ void Task_ADC(void *pvParameters)
         // FUN active: 5ms interval = 200 Hz
         // Normal: 100ms interval = 10 Hz
         unsigned long dacInterval;
-        if (funOnlyMode)
-            dacInterval = 2; // 500 Hz update rate for cleanest waveforms
+        if (funOnlyMode || loadAnalyzerBusy())
+            dacInterval = 2; // (load analyser: 500/s for its sines and ramps) // 500 Hz update rate for cleanest waveforms
         else if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED) || loadAnalyzerBusy())
             dacInterval = TaskTiming::DAC_UPDATE_INTERVAL_FUNGEN_MS;
         // (load analyser: smooth ramp, not 10 Hz steps that spike a capacitor)
