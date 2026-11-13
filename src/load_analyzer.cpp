@@ -9,7 +9,7 @@
 extern Device PowerSupply;
 
 // ─── Capture (Core 0 writes, Core 1 reads once s_capturing is false) ────────
-static constexpr int kMaxSamples = 12000; // ~10 s sweep at ~800 pairs/s
+static constexpr int kMaxSamples = 20000; // ~10 s sweep at ~800 pairs/s
 static float *s_t = nullptr;   // s since capture start
 static float *s_v = nullptr;   // V measured
 static float *s_i = nullptr;   // A measured
@@ -1238,6 +1238,8 @@ static void end_run_impl()
 }
 
 bool loadAnalyzerBusy() { return s_timer != nullptr; }
+static bool s_impRunning = false;
+bool loadImpBusy() { return s_impRunning && s_timer != nullptr; }
 String loadAnalyzerResult() { return s_resultText; }
 String loadAnalyzerDetails() { String d = s_details; d.replace("\n", ";"); return d; }
 
@@ -1915,6 +1917,7 @@ static void probe_begin()
 
 bool loadSweepStart(bool zero)
 {
+    s_impRunning = false;
     if (s_timer || !output_usable() || !alloc_buffers())
         return false;
     s_vtop = user_vset();
@@ -1959,6 +1962,7 @@ static void sweep_begin()
 
 bool loadFftStart()
 {
+    s_impRunning = false;
     if (s_timer || !output_usable() || !alloc_buffers())
         return false;
     s_isFft = true;
@@ -1990,10 +1994,29 @@ static constexpr uint8_t PH_IMP0 = 40; // + segment index
 static float s_impF[kImpMax], s_impA[kImpMax], s_impT0[kImpMax], s_impDur[kImpMax];
 static int s_impNseg = 0, s_impPass = 1;
 static float s_impBias = 0, s_impTotal = 0;
-static float s_impTd = 0;            // V/I timing skew, s (calibrated)
+static float s_impTd = 0;            // V/I timing skew, s (fallback model)
+// Measured phase of the whole chain on a resistive load, per frequency
+// (NVS "imp_pc"); subtracted when present - the skew is not one fixed delay
+static constexpr float kCalF[7] = {0.5f, 1, 2, 5, 10, 20, 50};
+struct PhCal { uint32_t magic; float ph[7]; };
+static PhCal s_phCal{0, {}};
+static constexpr uint32_t kPhMagic = 0x9AC40001;
+static bool phase_cal_for(float f, double &ph)
+{
+    if (s_phCal.magic != kPhMagic)
+        return false;
+    for (int k = 0; k < 7; k++)
+        if (kCalF[k] == f)
+        {
+            ph = s_phCal.ph[k];
+            return true;
+        }
+    return false;
+}
 static bool s_impTdLoaded = false;
 static std::complex<double> s_z1[kImpMax]; // pass-1 results
 static float s_z1f[kImpMax];
+static std::complex<double> s_rawZ[kImpMax]; // uncorrected, for calibration
 static int s_z1n = 0;
 static constexpr float kImpSettleS = 2.0f;
 static constexpr float kItarget = 0.001f; // A, AC amplitude in pass 2 (the sink limits the negative half: ~3 mA minus DC)
@@ -2005,6 +2028,8 @@ static void imp_load_td()
     s_impTdLoaded = true;
     PowerSupply.StoreMem.begin("my-app", true);
     s_impTd = PowerSupply.StoreMem.isKey("imp_td") ? PowerSupply.StoreMem.getFloat("imp_td", 0.0f) : 0.0f;
+    if (PowerSupply.StoreMem.isKey("imp_pc"))
+        PowerSupply.StoreMem.getBytes("imp_pc", &s_phCal, sizeof s_phCal);
     PowerSupply.StoreMem.end();
     if (!std::isfinite(s_impTd) || fabsf(s_impTd) > 0.02f)
         s_impTd = 0;
@@ -2042,8 +2067,14 @@ static bool imp_phasor(int k, std::complex<double> &Z, double &vdc, double &idc,
     const std::complex<double> V(vs, vc), I(is, ic);
     if (std::abs(I) < 1e-12)
         return false;
-    // remove the V/I skew: rotate by omega*tau_d
-    Z = V / I * std::polar(1.0, w * s_impTd);
+    // remove the chain's phase: per-frequency table, else the delay model
+    double pc;
+    Z = V / I;
+    s_rawZ[k] = Z;
+    if (phase_cal_for(s_impF[k], pc))
+        Z *= std::polar(1.0, -pc);
+    else
+        Z *= std::polar(1.0, w * s_impTd);
     vdc = vm;
     idc = im;
     iac = 2 * std::abs(I) / m;
@@ -2066,8 +2097,8 @@ static void imp_plan(int pass)
     const float a0 = std::min(0.2f, s_impBias * 0.4f);
     if (pass == 1)
     {
-        static const float f1[] = {0.5f, 1, 2, 5, 10}, c1[] = {2, 3, 4, 6, 10};
-        for (int k = 0; k < 5; k++)
+        static const float f1[] = {0.5f, 1, 2, 5, 10, 20, 50}, c1[] = {2, 3, 4, 6, 10, 20, 50};
+        for (int k = 0; k < 7; k++)
             add(f1[k], c1[k], a0 * std::min(1.0f, 1.0f / f1[k]));
     }
     else
@@ -2080,8 +2111,9 @@ static void imp_plan(int pass)
             return 0.0;
         };
         const float amax = std::min(0.4f, s_impBias * 0.4f);
-        add(10, 30, std::max(0.005f, std::min(amax, (float)(kItarget * zAt(10)))));
+        add(10, 100, std::max(0.005f, std::min(amax, (float)(kItarget * zAt(10)))));
         add(1, 6, std::max(0.005f, std::min(amax, (float)(kItarget * zAt(1)))));
+        add(50, 150, std::max(0.005f, std::min(amax, (float)(kItarget * zAt(50)))));
     }
     s_impTotal = t;
 }
@@ -2133,9 +2165,11 @@ static String lcrText(const std::complex<double> &Z, float f, bool full)
     return b;
 }
 
+static bool s_calDone = false;
 static void analyse_imp_pass1()
 {
     s_z1n = 0;
+    s_calDone = false;
     for (int k = 0; k < s_impNseg; k++)
     {
         std::complex<double> Z;
@@ -2145,6 +2179,30 @@ static void analyse_imp_pass1()
             s_z1[s_z1n] = Z;
             s_z1f[s_z1n] = s_impF[k];
             s_z1n++;
+        }
+    }
+    // Resistive load (|Z| flat within 3%, raw phase small everywhere):
+    // record the chain's phase per frequency
+    if (s_z1n == 7)
+    {
+        double zmin = 1e30, zmax = 0, pmax = 0;
+        for (int k = 0; k < 7; k++)
+        {
+            zmin = std::min(zmin, std::abs(s_rawZ[k]));
+            zmax = std::max(zmax, std::abs(s_rawZ[k]));
+            pmax = std::max(pmax, fabs(std::arg(s_rawZ[k])));
+        }
+        if (zmax / zmin < 1.03 && pmax < 0.6)
+        {
+            s_phCal.magic = kPhMagic;
+            for (int k = 0; k < 7; k++)
+                s_phCal.ph[k] = std::arg(s_rawZ[k]);
+            PowerSupply.StoreMem.begin("my-app", false);
+            PowerSupply.StoreMem.putBytes("imp_pc", &s_phCal, sizeof s_phCal);
+            PowerSupply.StoreMem.end();
+            s_calDone = true;
+            for (int k = 0; k < 7; k++)
+                s_z1[k] = std::abs(s_z1[k]); // resistive: phase 0 after the table
         }
     }
     // Bode plot of pass 1: |Z| log (amber), phase (cyan, 0 top .. -90 bottom)
@@ -2170,7 +2228,7 @@ static void analyse_imp_pass1()
         lv_chart_set_value_by_id(s_chart, s_ser2, k, (lv_coord_t)(1000 * (1 + std::max(-90.0, std::min(0.0, ph)) / 90)));
     }
     lv_chart_refresh(s_chart);
-    set_axes("#FFC107 |Z| log#  #00BCD4 phase#  0.5-10 Hz", "10 Hz", fmtR(pow(10, lmax)), false);
+    set_axes("#FFC107 |Z| log#  #00BCD4 phase#  0.5-50 Hz", "50 Hz", fmtR(pow(10, lmax)), false);
 }
 
 static void analyse_imp_pass2()
@@ -2193,6 +2251,21 @@ static void analyse_imp_pass2()
     }
     // DC part: bias over mean current = the parallel (leak) R, exact
     const double Rdc = id > 0.0002 ? vd / id : INFINITY;
+    if (s_calDone)
+    {
+        String c = "Phase calibrated\n(resistive load)\nR " + fmtR(std::abs(s_z1[4])) + "\nsaved for 0.5-50 Hz";
+        String dd = "Phase cal (deg):";
+        for (int k = 0; k < 7; k++)
+        {
+            snprintf(b, sizeof b, "\n%gHz %+.2f", kCalF[k], s_phCal.ph[k] * 180 / M_PI);
+            dd += b;
+        }
+        show_result(c);
+        draw_symbol(SYM_R);
+        s_details = dd;
+        render_result();
+        return;
+    }
     // Self-calibration on a plain resistor: |Z| == DC R and phase small
     // at both frequencies -> the remaining phase is the V/I skew
     if (ok10 && ok1 && std::isfinite(Rdc) && fabs(std::abs(Z10) / Rdc - 1) < 0.03 && fabs(std::abs(Z1) / Rdc - 1) < 0.03 &&
@@ -2220,6 +2293,12 @@ static void analyse_imp_pass2()
     draw_symbol(Z10.imag() < 0 ? (std::isfinite(Rdc) ? SYM_RC : SYM_C) : SYM_NONE);
     if (ok1)
         d += lcrText(Z1, 1, false);
+    {
+        std::complex<double> Z50;
+        double v5, i5, a5;
+        if (imp_phasor(2, Z50, v5, i5, a5))
+            d += lcrText(Z50, 50, false);
+    }
     snprintf(b, sizeof b, "\nIac %s @10Hz\nskew corr %.2f ms%s", fmtA(ia10).c_str(), s_impTd * 1e3,
              s_impTd == 0 ? " (uncal: run on a resistor)" : "");
     d += b;
@@ -2313,6 +2392,7 @@ bool loadImpStart()
     imp_start_capture();
     draw_symbol(SYM_NONE);
     progress(0);
+    s_impRunning = true;
     s_timer = lv_timer_create(imp_cb, 2, nullptr); // 500 setpoints/s
     return true;
 }

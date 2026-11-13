@@ -73,7 +73,8 @@ void Task_ADC(void *pvParameters)
         toneOff();
 
         // Check if FUN Only mode is active (minimal processing for clean waveforms)
-        bool funOnlyMode = lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED);
+        // (Z(f)/LCR runs get the same quiet bus: ~35 s without key scans)
+        bool funOnlyMode = lv_obj_has_state(Utility_objs.switch_fun_only, LV_STATE_CHECKED) || loadImpBusy();
 
         // Update DAC outputs
         // FUN Only mode: 2ms interval = 500 Hz (cleanest waveform, no I2C interference)
