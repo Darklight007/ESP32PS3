@@ -8,7 +8,7 @@
 extern Device PowerSupply;
 
 // ─── Capture (Core 0 writes, Core 1 reads once s_capturing is false) ────────
-static constexpr int kMaxSamples = 4096;
+static constexpr int kMaxSamples = 10000; // ~10 s sweep at ~800 pairs/s
 static float *s_t = nullptr;   // s since capture start
 static float *s_v = nullptr;   // V measured
 static float *s_i = nullptr;   // A measured
@@ -62,6 +62,60 @@ static lv_obj_t *s_chart = nullptr;
 static lv_chart_series_t *s_ser1 = nullptr, *s_ser2 = nullptr;
 static lv_obj_t *s_result = nullptr;
 static lv_obj_t *s_axis = nullptr;
+static lv_obj_t *s_bar = nullptr;    // progress
+static lv_obj_t *s_symbol = nullptr; // drawn component of the result
+
+enum Sym { SYM_NONE, SYM_OPEN, SYM_R, SYM_C, SYM_RC, SYM_DIODE };
+
+static void line(const lv_point_t *pts, int n)
+{
+    lv_obj_t *l = lv_line_create(s_symbol);
+    lv_line_set_points(l, pts, n);
+    lv_obj_set_style_line_width(l, 2, 0);
+    lv_obj_set_style_line_color(l, lv_palette_main(LV_PALETTE_AMBER), 0);
+    lv_obj_set_style_line_rounded(l, true, 0);
+}
+
+// Schematic symbol, 104 x 40 box, leads left and right at mid height
+static void draw_symbol(Sym sym)
+{
+    if (!s_symbol)
+        return;
+    lv_obj_clean(s_symbol);
+    static const lv_point_t rL[] = {{0, 20}, {28, 20}, {32, 13}, {40, 27}, {48, 13}, {56, 27}, {64, 13}, {72, 27}, {76, 20}, {104, 20}};
+    static const lv_point_t cA[] = {{0, 20}, {47, 20}}, cP1[] = {{47, 6}, {47, 34}}, cP2[] = {{57, 6}, {57, 34}}, cB[] = {{57, 20}, {104, 20}};
+    // R || C: resistor on top (y 9), capacitor below (y 32), joined at x 14 / 90
+    static const lv_point_t pr[] = {{14, 9}, {34, 9}, {37, 4}, {43, 14}, {49, 4}, {55, 14}, {61, 4}, {67, 14}, {70, 9}, {90, 9}};
+    static const lv_point_t pcA[] = {{14, 32}, {48, 32}}, pc1[] = {{48, 24}, {48, 40}}, pc2[] = {{56, 24}, {56, 40}}, pcB[] = {{56, 32}, {90, 32}};
+    static const lv_point_t pL[] = {{0, 20}, {14, 20}}, pR[] = {{90, 20}, {104, 20}}, pv1[] = {{14, 9}, {14, 32}}, pv2[] = {{90, 9}, {90, 32}};
+    static const lv_point_t dA[] = {{0, 20}, {40, 20}}, dT[] = {{40, 8}, {40, 32}, {62, 20}, {40, 8}}, dK[] = {{62, 8}, {62, 32}}, dB[] = {{62, 20}, {104, 20}};
+    static const lv_point_t oA[] = {{0, 20}, {40, 20}}, oB[] = {{64, 20}, {104, 20}};
+    switch (sym)
+    {
+    case SYM_R: line(rL, 10); break;
+    case SYM_C: line(cA, 2); line(cP1, 2); line(cP2, 2); line(cB, 2); break;
+    case SYM_RC:
+        line(pr, 10); line(pcA, 2); line(pc1, 2); line(pc2, 2); line(pcB, 2);
+        line(pL, 2); line(pR, 2); line(pv1, 2); line(pv2, 2);
+        break;
+    case SYM_DIODE: line(dA, 2); line(dT, 4); line(dK, 2); line(dB, 2); break;
+    case SYM_OPEN: line(oA, 2); line(oB, 2); break;
+    default: break;
+    }
+}
+
+static void progress(int pct)
+{
+    if (!s_bar)
+        return;
+    if (pct < 0)
+        lv_obj_add_flag(s_bar, LV_OBJ_FLAG_HIDDEN);
+    else
+    {
+        lv_obj_clear_flag(s_bar, LV_OBJ_FLAG_HIDDEN);
+        lv_bar_set_value(s_bar, pct, LV_ANIM_OFF);
+    }
+}
 static constexpr int kPlotPts = 160;
 static String s_resultText = "No result yet";
 
@@ -337,6 +391,7 @@ static void analyse_sweep()
     else
         type = "Open";
 
+    draw_symbol(knee ? SYM_DIODE : hasR && hasC ? SYM_RC : hasR ? SYM_R : hasC ? SYM_C : SYM_OPEN);
     String r = type + "\nR " + (hasR ? fmtR(1.0 / g) : String("open")) +
                "\nC " + (hasC ? fmtC(c) : String("< ") + fmtC(4 * se[2])) +
                "\nI0 " + fmtA(i0);
@@ -347,7 +402,6 @@ static void analyse_sweep()
         r += b;
     }
     r += "\nNoise " + fmtA(rms);
-    r += "\nL: too fast";
     if (s_zero.magic != kZeroMagic)
         r += "\n(no Zero)";
     show_result(r);
@@ -474,6 +528,7 @@ static void analyse_fft()
 // ─── Runner (LVGL timer, Core 1) ────────────────────────────────────────────
 static void finish()
 {
+    progress(-1);
     if (s_timer)
     {
         lv_timer_del(s_timer);
@@ -516,8 +571,21 @@ static void sweep_cb(lv_timer_t *)
             s_timer = nullptr;
         }
         PowerSupply.Voltage.SetUpdate(s_savedAdj);
+        progress(-1);
         show_result("Stopped:\noutput off");
         return;
+    }
+    static uint32_t lastUi = 0;
+    if (millis() - lastUi > 150)
+    {
+        lastUi = millis();
+        static const char *names[] = {"Settling at 0 V", "Ramp up", "Hold at top", "Ramp down"};
+        const float total = kSettleS + 2 * kRampS + kHoldS;
+        char b[96];
+        snprintf(b, sizeof b, "%s\n%s\n%.2f V\n%s\n%.0f s left", s_isZero ? "Zero sweep" : "Sweeping",
+                 names[ph], v, fmtA(PowerSupply.Current.oldValue * (PowerSupply.mA_Active ? 0.001 : 1.0)).c_str(), total - t);
+        lv_label_set_text(s_result, b);
+        progress((int)(100 * t / total));
     }
     s_vcmd = v;
     s_phase = ph;
@@ -528,6 +596,12 @@ static void sweep_cb(lv_timer_t *)
 
 static void fft_cb(lv_timer_t *)
 {
+    {
+        char b[48];
+        snprintf(b, sizeof b, "FFT capture\n%d / %d samples", s_n.load(), kFftN);
+        lv_label_set_text(s_result, b);
+        progress(100 * s_n.load() / kFftN);
+    }
     if (!s_capturing.load() || s_n.load() >= kFftN)
         finish();
     else if (millis() - s_startMs > 20000)
@@ -535,6 +609,7 @@ static void fft_cb(lv_timer_t *)
         s_capturing.store(false);
         lv_timer_del(s_timer);
         s_timer = nullptr;
+        progress(-1);
         show_result("FFT: no ADC data");
     }
 }
@@ -563,6 +638,8 @@ bool loadSweepStart(bool zero)
     s_capturing.store(true);
     set_volts(0);
     s_timer = lv_timer_create(sweep_cb, 10, nullptr);
+    draw_symbol(SYM_NONE);
+    progress(0);
     show_result(zero ? "Zero sweep...\n(nothing\nconnected)" : "Sweeping\n0 -> V-Set -> 0\n(~11 s)");
     return true;
 }
@@ -580,6 +657,8 @@ bool loadFftStart()
     s_startMs = millis();
     s_capturing.store(true);
     s_timer = lv_timer_create(fft_cb, 50, nullptr);
+    draw_symbol(SYM_NONE);
+    progress(0);
     show_result("FFT capture...");
     return true;
 }
@@ -634,6 +713,19 @@ void createLoadTab(lv_obj_t *parent)
     lv_label_set_long_mode(s_result, LV_LABEL_LONG_CLIP);
     lv_obj_set_pos(s_result, 210, 4);
     lv_label_set_text(s_result, "Sweep: R, C,\nknee. Uses\nV-Set as top,\nI-Set limits.\n\nZero: run once\nwith nothing\nconnected.");
+
+    s_symbol = lv_obj_create(parent);
+    lv_obj_remove_style_all(s_symbol);
+    lv_obj_set_size(s_symbol, 104, 42);
+    lv_obj_set_pos(s_symbol, 212, 116);
+    lv_obj_clear_flag(s_symbol, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+    s_bar = lv_bar_create(parent);
+    lv_obj_set_size(s_bar, 104, 8);
+    lv_obj_set_pos(s_bar, 212, 168);
+    lv_bar_set_range(s_bar, 0, 100);
+    lv_obj_set_style_bg_color(s_bar, lv_palette_main(LV_PALETTE_AMBER), LV_PART_INDICATOR);
+    lv_obj_add_flag(s_bar, LV_OBJ_FLAG_HIDDEN);
 
     static const char *names[3] = {"Sweep", "FFT", "Zero"};
     for (int b = 0; b < 3; b++)
