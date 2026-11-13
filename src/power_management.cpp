@@ -45,6 +45,9 @@ void updateEnergyAndTimeDisplays()
             last = u;
         }
         lv_label_set_text_fmt(num, milli ? "%.1f" : "%.3f", milli ? v * 1000.0 : v);
+        // Left-aligned pair: the unit follows the digits
+        if (unit)
+            lv_obj_align_to(unit, num, LV_ALIGN_OUT_RIGHT_BOTTOM, 3, 2);
     };
     static const char *lastWh = nullptr, *lastAh = nullptr;
     show(PowerSupply.gui.label_energy_counter, PowerSupply.gui.label_energy_unit,
