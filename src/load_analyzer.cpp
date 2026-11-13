@@ -66,7 +66,7 @@ static lv_obj_t *s_axis = nullptr;
 static lv_obj_t *s_bar = nullptr;    // progress
 static lv_obj_t *s_symbol = nullptr; // drawn component of the result
 
-enum Sym { SYM_NONE, SYM_OPEN, SYM_R, SYM_C, SYM_RC, SYM_DIODE, SYM_LAMP, SYM_BATT, SYM_DIODE_R, SYM_ZENER };
+enum Sym { SYM_NONE, SYM_OPEN, SYM_R, SYM_C, SYM_RC, SYM_DIODE, SYM_LAMP, SYM_BATT, SYM_DIODE_R, SYM_ZENER, SYM_MOTOR };
 
 static void line(const lv_point_t *pts, int n)
 {
@@ -107,6 +107,22 @@ static void draw_symbol(Sym sym)
         static const lv_point_t a1[] = {{0, 20}, {8, 20}}, t1[] = {{8, 9}, {8, 31}, {28, 20}, {8, 9}}, k1[] = {{28, 9}, {28, 31}};
         static const lv_point_t m1[] = {{28, 20}, {48, 20}, {51, 13}, {57, 27}, {63, 13}, {69, 27}, {75, 13}, {81, 27}, {84, 20}, {104, 20}};
         line(a1, 2); line(t1, 4); line(k1, 2); line(m1, 10);
+        break;
+    }
+    case SYM_MOTOR:
+    {
+        // circle with an M
+        static lv_point_t circ[21];
+        static bool init = false;
+        if (!init)
+        {
+            for (int k = 0; k <= 20; k++)
+                circ[k] = {(lv_coord_t)lroundf(52 + 15 * cosf(k * 2 * M_PI / 20)), (lv_coord_t)lroundf(20 + 15 * sinf(k * 2 * M_PI / 20))};
+            init = true;
+        }
+        static const lv_point_t mA[] = {{0, 20}, {37, 20}}, mB[] = {{67, 20}, {104, 20}};
+        static const lv_point_t mm[] = {{44, 28}, {44, 12}, {52, 22}, {60, 12}, {60, 28}};
+        line(mA, 2); line(mB, 2); line(circ, 21); line(mm, 5);
         break;
     }
     case SYM_ZENER:
@@ -1235,10 +1251,11 @@ String loadAnalyzerDetails() { String d = s_details; d.replace("\n", ";"); retur
 //   LETGO  setpoint to 0: the PSU can't sink, so the load discharges itself:
 //          instant = no storage, exponential tau = R*C, flat = holds charge
 //   BATT   (source found) 20 mA charge pulse: internal R, or C if it ramps
-enum : uint8_t { PR_PRE = 10, PR_TINY, PR_CC1, PR_CC2, PR_CC3, PR_CC4, PR_HOLD, PR_LETGO, PR_BATT };
+enum : uint8_t { PR_PRE = 10, PR_TINY, PR_CC1, PR_CC2, PR_CC3, PR_CC4, PR_CC5, PR_CC6, PR_HOLD, PR_LETGO, PR_BATT, PR_WATCH };
+static constexpr int kSteps = 6;
 struct Seg { uint8_t ph; float dur, v, ilim; const char *name; };
-static Seg s_segs[12];
-static float s_segT0[12];
+static Seg s_segs[16];
+static float s_segT0[16];
 static int s_nseg = 0, s_seg = -1;
 static uint32_t s_segStartMs = 0;
 static float s_userImax = 0;
@@ -1280,8 +1297,9 @@ static void probe_build()
     auto add = [&](uint8_t ph, float dur, float v, float il, const char *nm) { s_segs[s_nseg++] = {ph, dur, v, il, nm}; };
     add(PR_PRE, 0.6f, 0, std::min(0.02f, im), "Source check");
     add(PR_TINY, 0.5f, std::min(0.2f, vt), std::min(0.01f, im), "Short check");
-    static const float steps[4] = {0.001f, 0.005f, 0.010f, 0.020f};
-    for (int k = 0; k < 4; k++)
+    add(PR_WATCH, 3.0f, vt, im, "Watch (motor?)");
+    static const float steps[kSteps] = {0.001f, 0.005f, 0.010f, 0.020f, 0.050f, 0.100f};
+    for (int k = 0; k < kSteps; k++)
         if (steps[k] <= im)
             add(PR_CC1 + k, 0.8f, vt, steps[k], "Current steps");
     add(PR_HOLD, 1.2f, vt, im, "Hold (inrush)");
@@ -1309,10 +1327,10 @@ static void probe_analyse_and_sweep()
     char b[64];
     String d = "Probe details";
     // Current steps: settled V, I of each
-    double vs[4], is[4];
+    double vs[kSteps], is[kSteps];
     int nst = 0;
-    bool top[4];
-    for (int k = 0; k < 4; k++)
+    bool top[kSteps];
+    for (int k = 0; k < kSteps; k++)
     {
         const int si = seg_index(PR_CC1 + k);
         if (si < 0)
@@ -1348,7 +1366,28 @@ static void probe_analyse_and_sweep()
                 lo = k;
             hi = k;
         }
-    if (lo >= 0 && hi > lo && vs[lo] > 0.2 && vs[hi] / vs[lo] < 1.6 && is[hi] / is[lo] > 3)
+    // Diode with a resistor in parallel: the lowest step sits well below the
+    // knee (the resistor carries it), the rest follow the diode law. Use
+    // that step for Rp and fit the diode to the others.
+    double rPar = NAN;
+    if (lo >= 0 && hi > lo + 1 && vs[lo] > 0.2 && !(vs[hi] / vs[lo] < 1.6) && vs[hi] / vs[lo + 1] < 1.25 &&
+        is[hi] / is[lo + 1] > 2.5)
+    {
+        rPar = vs[lo] / is[lo];
+        lo++;
+    }
+    // Voltage falling while the current rises: no diode or resistor does
+    // that - the load changed during the steps (motor, electronics)
+    bool unstable = false;
+    for (int k = lo + 1; lo >= 0 && k <= hi; k++)
+        if (vs[k] < vs[k - 1] - 0.05)
+            unstable = true;
+    if (unstable)
+    {
+        s_diodeSummary = "Unstable load\nV fell while I\nrose: it changes\nby itself (motor,\nelectronics)";
+        d += "\n(unstable)";
+    }
+    else if (lo >= 0 && hi > lo && vs[lo] > 0.2 && vs[hi] / vs[lo] < 1.6 && is[hi] / is[lo] > 2.5)
     {
         const double n = (vs[hi] - vs[lo]) / (0.02585 * log(is[hi] / is[lo]));
         snprintf(b, sizeof b, "\nn (2-point) %.2f", n);
@@ -1384,6 +1423,12 @@ static void probe_analyse_and_sweep()
         char t[200];
         snprintf(t, sizeof t, "Diode\nVf %.3f V\n  at %s\nVf %.3f V\n  at %s\nn %.2f  %s", vs[lo], fmtA(is[lo]).c_str(),
                  vs[hi], fmtA(is[hi]).c_str(), nf, kind);
+        if (std::isfinite(rPar))
+        {
+            // The parallel R also takes V/Rp at each step: show the diode's own share
+            snprintf(t, sizeof t, "Diode || R\nVf %.3f V\n  at %s\nRp ~%s\nn %.2f  %s", vs[hi],
+                     fmtA(is[hi] - vs[hi] / rPar).c_str(), fmtR(rPar).c_str(), nf, kind);
+        }
         s_diodeSummary = t;
         // Zener / avalanche: a voltage this high that barely moves with
         // current (n < 1 is impossible for a forward-biased junction)
@@ -1537,7 +1582,7 @@ static void probe_analyse_and_sweep()
         char ax[16];
         snprintf(ax, sizeof ax, "%.2f V", 1.1 * vmx);
         set_axes("Current steps", ax, fmtA(1.1 * imx), false);
-        probe_end_with(s_diodeSummary, s_diodeSummary.startsWith("Zener") ? SYM_ZENER : SYM_DIODE);
+        probe_end_with(s_diodeSummary, s_diodeSummary.startsWith("Zener") ? SYM_ZENER : s_diodeSummary.startsWith("Unstable") ? SYM_NONE : SYM_DIODE);
         return;
     }
     // Small currents only (hold under 6 mA, the mA range reads to ~8): run
@@ -1611,6 +1656,134 @@ static void probe_cb(lv_timer_t *)
                 char b[64];
                 snprintf(b, sizeof b, "Short\nR %s\nat %s\nNothing else run", fmtR(v / i).c_str(), fmtA(i).c_str());
                 probe_end_with(b, SYM_NONE);
+                return;
+            }
+        }
+        if (s_seg >= 0 && s_segs[s_seg].ph == PR_WATCH)
+        {
+            // Current over the watch in 50 ms bins: surge, settling, switching
+            const int n = s_n.load(std::memory_order_acquire);
+            const float t0 = s_segT0[s_seg], dur = s_segs[s_seg].dur;
+            static constexpr int kB = 60;
+            float bs[kB] = {}, bv[kB] = {};
+            int bc[kB] = {};
+            for (int q = 0; q < n; q++)
+                if (s_ph[q] == PR_WATCH)
+                {
+                    const int b = (int)((s_t[q] - t0) / 0.05f);
+                    if (b >= 0 && b < kB)
+                    {
+                        bs[b] += s_i[q];
+                        bv[b] += s_v[q];
+                        bc[b]++;
+                    }
+                }
+            float ipk = 0, imin = 1e9f, imax = 0;
+            int jumps = 0, lastLvl = -1;
+            for (int b = 0; b < kB; b++)
+                if (bc[b])
+                {
+                    const float m = bs[b] / bc[b];
+                    if (b < 4)
+                        ipk = std::max(ipk, m);
+                    imin = std::min(imin, m);
+                    imax = std::max(imax, m);
+                }
+            double vEnd, iEnd;
+            seg_stats(s_seg, 1.0f - 0.5f / dur, 1.0f, vEnd, iEnd);
+            // switching: bins alternating between two levels
+            for (int b = 4; b < kB; b++)
+                if (bc[b])
+                {
+                    const float m = bs[b] / bc[b];
+                    const int lvl = m > 0.5f * (imin + imax) ? 1 : 0;
+                    if (lastLvl >= 0 && lvl != lastLvl)
+                        jumps++;
+                    lastLvl = lvl;
+                }
+            // settling time: first bin within 20% of the end current
+            float tSettle = NAN;
+            for (int b = 0; b < kB; b++)
+                if (bc[b] && fabs(bs[b] / bc[b] - iEnd) < 0.2 * iEnd)
+                {
+                    tSettle = b * 0.05f;
+                    break;
+                }
+            // Ripple: FFT of the last 1024 samples of the watch
+            float fpk = NAN, apk = 0, floor_ = 0;
+            {
+                int last = -1;
+                for (int q = n - 1; q >= 0; q--)
+                    if (s_ph[q] == PR_WATCH)
+                    {
+                        last = q;
+                        break;
+                    }
+                const int N = 1024;
+                if (last >= N)
+                {
+                    float *re = (float *)heap_caps_malloc(N * sizeof(float), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                    float *im = (float *)heap_caps_malloc(N * sizeof(float), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                    if (re && im)
+                    {
+                        const int a = last - N + 1;
+                        double mean = 0;
+                        for (int q = 0; q < N; q++)
+                            mean += s_i[a + q];
+                        mean /= N;
+                        float wsum = 0;
+                        for (int q = 0; q < N; q++)
+                        {
+                            const float w = 0.5f - 0.5f * cosf(2 * M_PI * q / (N - 1));
+                            wsum += w;
+                            re[q] = (s_i[a + q] - mean) * w;
+                            im[q] = 0;
+                        }
+                        const double fs = (N - 1) / std::max(1e-6f, s_t[last] - s_t[a]);
+                        fft(re, im, N);
+                        std::vector<float> mag(N / 2);
+                        for (int q = 1; q < N / 2; q++)
+                            mag[q] = 2 * sqrtf(re[q] * re[q] + im[q] * im[q]) / wsum;
+                        int kp = 0;
+                        const int kmin = (int)(15.0 * N / fs); // above 15 Hz
+                        for (int q = std::max(2, kmin); q < N / 2; q++)
+                            if (mag[q] > apk)
+                                apk = mag[q], kp = q;
+                        std::vector<float> srt(mag.begin() + 2, mag.end());
+                        std::nth_element(srt.begin(), srt.begin() + srt.size() / 2, srt.end());
+                        floor_ = srt[srt.size() / 2];
+                        fpk = kp * fs / N;
+                    }
+                    heap_caps_free(re);
+                    heap_caps_free(im);
+                }
+            }
+            const bool ripple = std::isfinite(fpk) && apk > 6 * floor_ && apk > 0.0005f && iEnd > 0.005;
+            const bool spinUp = ipk > 1.3 * iEnd && iEnd > 0.005 && iEnd > 0.1 * ipk;
+            char b[160];
+            snprintf(b, sizeof b, "\nWatch: peak %s end %s", fmtA(ipk).c_str(), fmtA(iEnd).c_str());
+            if (!s_details.length())
+                s_details = "Probe details";
+            s_details += b;
+            if (std::isfinite(fpk))
+            {
+                snprintf(b, sizeof b, "\nRipple %.1f Hz %s (x%.0f floor)", fpk, fmtA(apk).c_str(), apk / std::max(floor_, 1e-9f));
+                s_details += b;
+            }
+            if (jumps >= 1 && imax > 3 * std::max(imin, 0.0005f) && imax > 0.005)
+            {
+                snprintf(b, sizeof b, "Switching load\n%s / %s\n%d changes in 3 s\nStalled motor\nretrying? Raise V",
+                         fmtA(imax).c_str(), fmtA(imin).c_str(), jumps);
+                probe_end_with(b, SYM_MOTOR);
+                return;
+            }
+            if (ripple && (spinUp || fpk > 20))
+            {
+                snprintf(b, sizeof b, "Motor / fan\nRun %s\nSurge %s\nSpin-up %.1f s\nRipple %.0f Hz\n~%.0f RPM (4/rev)",
+                         fmtA(iEnd).c_str(), fmtA(ipk).c_str(), std::isfinite(tSettle) ? tSettle : 0.0f, fpk, fpk * 60 / 4);
+                snprintf(b + strlen(b), sizeof b - strlen(b), "");
+                s_details += "\nP " + String(vEnd * iEnd, 3) + " W";
+                probe_end_with(b, SYM_MOTOR);
                 return;
             }
         }
