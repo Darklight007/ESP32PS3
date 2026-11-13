@@ -341,11 +341,11 @@ void Device::LoadSetting(void)
 
     static std::map<int, const char *> ADC_SPS;
 
-    ADC_SPS[0] = " ~10";
-    ADC_SPS[1] = " ~20";
-    ADC_SPS[2] = " ~70";
-    ADC_SPS[3] = "~200";
-    ADC_SPS[4] = "~500";
+    ADC_SPS[0] = "Quiet (~10)";
+    ADC_SPS[1] = "Slow (~20)";
+    ADC_SPS[2] = "Normal (~70)";
+    ADC_SPS[3] = "Fast (~200)";
+    ADC_SPS[4] = "Turbo (~500)";
 
     Serial.printf("\nadcRate:           %sSPS", ADC_SPS[settingParameters.adcRate]);
     Serial.printf("\nadcNumberOfAvgs:   %f", pow(2, settingParameters.adcNumberOfAvgs));
@@ -850,7 +850,7 @@ uint8_t Device::activeAdcRate() const
 void Device::applyAdcRate()
 {
     static const int rates[] = {20, 20, 90, 330, 1000};
-    static const char *labels[] = {" ~10", " ~20", " ~70", "~200", "~500"};
+    static const char *labels[] = {"Quiet", "Slow", "Normal", "Fast", "Turbo"};
     const uint8_t v = activeAdcRate();
     adc.ads1219->setDataRate(rates[v]);
     adjustAdcTaskPriority();
