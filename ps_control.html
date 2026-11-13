@@ -379,7 +379,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0;
               <input type="number" id="fg_ampl" step="0.001" min="0" max="32.75" onchange="sendCmd('SOUR:FGEN:AMPL '+this.value)">
               <span class="unit">V</span></div>
             <div class="fgen-param"><label>Frequency</label>
-              <input type="number" id="fg_freq" step="0.001" min="0" max="100" onchange="sendCmd('SOUR:FGEN:FREQ '+this.value)">
+              <input type="number" id="fg_freq" step="0.001" min="0" max="20" onchange="sendCmd('SOUR:FGEN:FREQ '+this.value)">
               <span class="unit">Hz</span></div>
             <div class="fgen-param"><label>Offset</label>
               <input type="number" id="fg_offs" step="0.001" min="-32" max="32.75" onchange="sendCmd('SOUR:FGEN:OFFS '+this.value)">

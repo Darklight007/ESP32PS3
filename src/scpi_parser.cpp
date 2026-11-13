@@ -1560,7 +1560,7 @@ void SCPIParser::cmd_SETT_STARTUP(const String& param)
 void SCPIParser::cmd_FGEN_FREQ(const String& param)
 {
     double val;
-    if (parseNumeric(param, val) && val >= 0 && val <= 100.0) { // same as the Frequency box
+    if (parseNumeric(param, val) && val >= 0 && val <= 20.0) { // same as the Frequency box
         PowerSupply.funGenMem.frequency = val;
         if (Utility_objs.fun.Frequency)
             lv_spinbox_set_value(Utility_objs.fun.Frequency, (int32_t)(val * 1000));
