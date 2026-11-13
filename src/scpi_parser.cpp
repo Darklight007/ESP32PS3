@@ -288,6 +288,7 @@ void SCPIParser::executeCommand(const String& command)
     {
         if (cmdPart.indexOf("BUSY?") > 0) sendResponse(loadAnalyzerBusy() ? "1" : "0");
         else if (cmdPart.indexOf("RES?") > 0) sendResponse(loadAnalyzerResult());
+        else if (cmdPart.indexOf("IMAX") > 0) { double a; if (parseNumeric(paramPart, a) && a >= 0 && a <= 6) { loadAnalyzerSetImax(a); sendResponse("OK"); } else addError(ERR_DATA_OUT_OF_RANGE); }
         else if (cmdPart.indexOf("ZERO") > 0) { if (loadSweepStart(true)) sendResponse("OK"); else addError(ERR_EXECUTION_ERROR); }
         else if (cmdPart.indexOf("SWE") > 0) { if (loadSweepStart(false)) sendResponse("OK"); else addError(ERR_EXECUTION_ERROR); }
         else if (cmdPart.indexOf("FFT") > 0) { if (loadFftStart()) sendResponse("OK"); else addError(ERR_EXECUTION_ERROR); }
