@@ -2,6 +2,7 @@
 #include "device.hpp"
 #include "myFonts.h"
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
 #include <atomic>
 #include <cmath>
 #include <complex>
@@ -23,6 +24,52 @@ static volatile float s_vcmd = 0;
 static volatile uint8_t s_phase = 0;
 
 enum Phase : uint8_t { PH_SETTLE = 0, PH_UP = 1, PH_HOLD = 2, PH_DOWN = 3, PH_END = 4 };
+
+// Core-0 sine generator for Z(f)/LCR: Task_ADC calls loadWaveTick() every
+// pass (~1500-2000/s, one DAC write each) instead of the 2 ms setpoint timer
+// - a capacitor's current is C*dV/dt, so coarse steps make current spikes
+static volatile bool s_wOn = false;
+static volatile float s_wBias = 0, s_wAmp = 0, s_wF = 1;
+static volatile uint32_t s_wT0 = 0;
+static volatile uint32_t s_wTicks = 0; // DAC writes, for the rate readout
+static uint32_t s_wStartMs = 0;
+static void wave_write()
+{
+    const float t = (micros() - s_wT0) * 1e-6f;
+    const float v = s_wBias + s_wAmp * sinf(2 * (float)M_PI * s_wF * t);
+    const int32_t code = (int32_t)lroundf(v * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset);
+    PowerSupply.DAC.writeAndPowerAll(DAC_VOLTAGE, (uint16_t)std::max<int32_t>(0, std::min<int32_t>(0xFFFF, code)));
+    s_vcmd = v;
+    s_wTicks++;
+}
+// 2 kHz from esp_timer (its own task): the DAC is on Wire, the ADC on Wire1,
+// and while the sine runs nothing else uses Wire (key scan paused, regular
+// DAC update skipped) - so these writes never delay a measurement
+static esp_timer_handle_t s_wTimer = nullptr;
+static void wave_timer_cb(void *)
+{
+    if (s_wOn)
+        wave_write();
+}
+static void wave_timer_start()
+{
+    if (!s_wTimer)
+    {
+        esp_timer_create_args_t a = {};
+        a.callback = wave_timer_cb;
+        a.name = "zwave";
+        a.dispatch_method = ESP_TIMER_TASK;
+        esp_timer_create(&a, &s_wTimer);
+    }
+    if (s_wTimer)
+        esp_timer_start_periodic(s_wTimer, 500); // us
+}
+static void wave_timer_stop()
+{
+    if (s_wTimer)
+        esp_timer_stop(s_wTimer);
+}
+bool loadWaveActive() { return s_wOn; }
 
 void loadAnalyzerAdcHook(double volts, double amps)
 {
@@ -2113,7 +2160,9 @@ static void imp_plan(int pass)
         const float amax = std::min(0.4f, s_impBias * 0.4f);
         add(10, 100, std::max(0.005f, std::min(amax, (float)(kItarget * zAt(10)))));
         add(1, 6, std::max(0.005f, std::min(amax, (float)(kItarget * zAt(1)))));
-        add(50, 150, std::max(0.005f, std::min(amax, (float)(kItarget * zAt(50)))));
+        // 20 Hz, not 50: at 50 Hz capacitors still read ~10 deg off (ADC re-used
+        // samples suspected); 20 Hz and below are within +-1.5 deg
+        add(20, 80, std::max(0.005f, std::min(amax, (float)(kItarget * zAt(20)))));
     }
     s_impTotal = t;
 }
@@ -2297,12 +2346,12 @@ static void analyse_imp_pass2()
         std::complex<double> Z50;
         double v5, i5, a5;
         if (imp_phasor(2, Z50, v5, i5, a5))
-            d += lcrText(Z50, 50, false);
+            d += lcrText(Z50, 20, false);
     }
     snprintf(b, sizeof b, "\nIac %s @10Hz\nskew corr %.2f ms%s", fmtA(ia10).c_str(), s_impTd * 1e3,
              s_impTd == 0 ? " (uncal: run on a resistor)" : "");
     d += b;
-    snprintf(b, sizeof b, "\nbias %.2f V", s_impBias);
+    snprintf(b, sizeof b, "\nbias %.2f V\nDAC %.0f/s", s_impBias, s_wTicks * 1000.0 / std::max<uint32_t>(1, millis() - s_wStartMs));
     d += b;
     s_details = d;
     render_result();
@@ -2312,6 +2361,8 @@ static void imp_cb(lv_timer_t *)
 {
     if (!output_usable())
     {
+        s_wOn = false;
+        wave_timer_stop();
         s_capturing.store(false);
         lv_timer_del(s_timer);
         s_timer = nullptr;
@@ -2332,6 +2383,8 @@ static void imp_cb(lv_timer_t *)
             imp_start_capture();
             return;
         }
+        s_wOn = false;
+        wave_timer_stop();
         lv_timer_del(s_timer);
         s_timer = nullptr;
         s_capturing.store(false);
@@ -2341,20 +2394,28 @@ static void imp_cb(lv_timer_t *)
         analyse_imp_pass2();
         return;
     }
-    float v = s_impBias;
-    uint8_t ph = PH_SETTLE;
     int seg = -1;
     for (int k = 0; k < s_impNseg; k++)
         if (t >= s_impT0[k] && t < s_impT0[k] + s_impDur[k])
             seg = k;
-    if (seg >= 0)
+    // Segment change: hand the sine to the Core-0 generator (loadWaveTick)
+    static int lastSeg = -2;
+    static int lastPass = 0;
+    if (seg != lastSeg || s_impPass != lastPass)
     {
-        v = s_impBias + s_impA[seg] * sinf(2 * M_PI * s_impF[seg] * (t - s_impT0[seg]));
-        ph = PH_IMP0 + seg;
+        lastSeg = seg;
+        lastPass = s_impPass;
+        if (seg >= 0)
+        {
+            s_wF = s_impF[seg];
+            s_wT0 = micros() - (uint32_t)((t - s_impT0[seg]) * 1e6f);
+            s_wAmp = s_impA[seg];
+        }
+        else
+            s_wAmp = 0;
+        s_wBias = s_impBias;
+        s_phase = seg >= 0 ? PH_IMP0 + seg : PH_SETTLE;
     }
-    s_vcmd = v;
-    s_phase = ph;
-    set_volts(v);
     static uint32_t lastUi = 0;
     if (millis() - lastUi > 200)
     {
@@ -2393,7 +2454,13 @@ bool loadImpStart()
     draw_symbol(SYM_NONE);
     progress(0);
     s_impRunning = true;
-    s_timer = lv_timer_create(imp_cb, 2, nullptr); // 500 setpoints/s
+    s_wBias = s_impBias;
+    s_wAmp = 0;
+    s_wTicks = 0;
+    s_wStartMs = millis();
+    s_wOn = true; // the 2 kHz generator now drives the voltage DAC
+    wave_timer_start();
+    s_timer = lv_timer_create(imp_cb, 2, nullptr);
     return true;
 }
 

@@ -15,6 +15,8 @@ void createLoadTab(lv_obj_t *parent);
 
 // Task_ADC (Core 0), after each fresh V+I pair. volts, amps.
 void loadAnalyzerAdcHook(double volts, double amps);
+// Z(f)/LCR sine running (2 kHz timer drives the DAC): Task_ADC skips its DAC update
+bool loadWaveActive();
 
 // Start from UI or SCPI (Core 1). false = refused (output off, FUN, busy).
 bool loadSweepStart(bool zero = false);

@@ -89,8 +89,11 @@ void Task_ADC(void *pvParameters)
         else
             dacInterval = TaskTiming::DAC_UPDATE_INTERVAL_NORMAL_MS;
 
-        schedule([&]
-                 {
+        // Z(f)/LCR: the analyser's 2 kHz sine timer owns the DAC; the regular
+        // update would fight it (current limit stays as set)
+        if (!loadWaveActive())
+            schedule([&]
+                     {
             if (lv_obj_has_state(btn_function_gen, LV_STATE_CHECKED))
                 functionGenerator();
             PowerSupply.DACUpdate(); }, dacInterval, dacUpdateTimer);
