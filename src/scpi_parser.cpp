@@ -292,6 +292,7 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("IMAX") > 0) { double a; if (parseNumeric(paramPart, a) && a >= 0 && a <= 6) { loadAnalyzerSetImax(a); sendResponse("OK"); } else addError(ERR_DATA_OUT_OF_RANGE); }
         else if (cmdPart.indexOf("ZERO") > 0) { if (loadSweepStart(true)) sendResponse("OK"); else addError(ERR_EXECUTION_ERROR); }
         else if (cmdPart.indexOf("SWE") > 0) { if (loadSweepStart(false)) sendResponse("OK"); else addError(ERR_EXECUTION_ERROR); }
+        else if (cmdPart.indexOf("IMP") > 0) { if (loadImpStart()) sendResponse("OK"); else addError(ERR_EXECUTION_ERROR); }
         else if (cmdPart.indexOf("FFT") > 0) { if (loadFftStart()) sendResponse("OK"); else addError(ERR_EXECUTION_ERROR); }
         else addError(ERR_UNDEFINED_HEADER);
         return;

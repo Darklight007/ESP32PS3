@@ -764,3 +764,5 @@ OK
 :LOAD:RES?
 Open;R open;C < 8.01 uF;I0 -0.05 mA;Noise 0.41 mA;L: too fast
 ```
+
+**Load analyser additions:** `LOAD:IMP` runs the impedance test (DC bias V-Set/2, sines 0.5-10 Hz, lock-in: |Z|, phase, R from DC, C from the admittance); `LOAD:DET?` returns the details page (probe steps, decay tau, per-frequency |Z|); `LOAD:IMAX <A>` sets the analysis current limit (0 = keep I-Set). `LOAD:SWE` now runs the Probe first (source check, short check, 1/5/10/20 mA current steps, hold, let-go) and identifies batteries (OCV, R0, R, Li-ion charge), diodes (Shockley n, Rs, Is), Zeners (Vz, rz, nearest E24), LED + R, R || C (C from the let-go charge balance) before the sweep.

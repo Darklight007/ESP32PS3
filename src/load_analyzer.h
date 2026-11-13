@@ -19,6 +19,7 @@ void loadAnalyzerAdcHook(double volts, double amps);
 // Start from UI or SCPI (Core 1). false = refused (output off, FUN, busy).
 bool loadSweepStart(bool zero = false);
 bool loadFftStart();
+bool loadImpStart(); // impedance vs frequency (lock-in), bias V-Set/2
 bool loadAnalyzerBusy();
 String loadAnalyzerResult(); // last result text, one line, ';' separated
 String loadAnalyzerDetails(); // probe details, ';' separated

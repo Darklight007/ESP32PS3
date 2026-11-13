@@ -4,11 +4,12 @@
 #include "esp_heap_caps.h"
 #include <atomic>
 #include <cmath>
+#include <complex>
 
 extern Device PowerSupply;
 
 // ─── Capture (Core 0 writes, Core 1 reads once s_capturing is false) ────────
-static constexpr int kMaxSamples = 10000; // ~10 s sweep at ~800 pairs/s
+static constexpr int kMaxSamples = 12000; // ~10 s sweep at ~800 pairs/s
 static float *s_t = nullptr;   // s since capture start
 static float *s_v = nullptr;   // V measured
 static float *s_i = nullptr;   // A measured
@@ -65,7 +66,7 @@ static lv_obj_t *s_axis = nullptr;
 static lv_obj_t *s_bar = nullptr;    // progress
 static lv_obj_t *s_symbol = nullptr; // drawn component of the result
 
-enum Sym { SYM_NONE, SYM_OPEN, SYM_R, SYM_C, SYM_RC, SYM_DIODE, SYM_LAMP, SYM_BATT, SYM_DIODE_R };
+enum Sym { SYM_NONE, SYM_OPEN, SYM_R, SYM_C, SYM_RC, SYM_DIODE, SYM_LAMP, SYM_BATT, SYM_DIODE_R, SYM_ZENER };
 
 static void line(const lv_point_t *pts, int n)
 {
@@ -106,6 +107,13 @@ static void draw_symbol(Sym sym)
         static const lv_point_t a1[] = {{0, 20}, {8, 20}}, t1[] = {{8, 9}, {8, 31}, {28, 20}, {8, 9}}, k1[] = {{28, 9}, {28, 31}};
         static const lv_point_t m1[] = {{28, 20}, {48, 20}, {51, 13}, {57, 27}, {63, 13}, {69, 27}, {75, 13}, {81, 27}, {84, 20}, {104, 20}};
         line(a1, 2); line(t1, 4); line(k1, 2); line(m1, 10);
+        break;
+    }
+    case SYM_ZENER:
+    {
+        static const lv_point_t za[] = {{0, 20}, {40, 20}}, zt[] = {{40, 8}, {40, 32}, {62, 20}, {40, 8}};
+        static const lv_point_t zk[] = {{56, 32}, {62, 32}, {62, 8}, {68, 8}}, zb[] = {{62, 20}, {104, 20}};
+        line(za, 2); line(zt, 4); line(zk, 4); line(zb, 2);
         break;
     }
     case SYM_BATT:
@@ -158,7 +166,7 @@ static constexpr int kPlotPts = 160;
 static String s_resultText = "No result yet";
 
 static lv_obj_t *s_ytop = nullptr, *s_xright = nullptr;
-static lv_obj_t *s_btns[3] = {};
+static lv_obj_t *s_btns[4] = {};
 
 // Result card: first line = title (amber), then "key value" rows with the
 // key dimmed - LVGL recolor markup, built from the plain text
@@ -1377,6 +1385,27 @@ static void probe_analyse_and_sweep()
         snprintf(t, sizeof t, "Diode\nVf %.3f V\n  at %s\nVf %.3f V\n  at %s\nn %.2f  %s", vs[lo], fmtA(is[lo]).c_str(),
                  vs[hi], fmtA(is[hi]).c_str(), nf, kind);
         s_diodeSummary = t;
+        // Zener / avalanche: a voltage this high that barely moves with
+        // current (n < 1 is impossible for a forward-biased junction)
+        if (vs[lo] > 1.8 && n < 1.3)
+        {
+            // Vz at the step nearest 5 mA (datasheets' usual test current)
+            int k5 = lo;
+            for (int k = lo; k <= hi; k++)
+                if (fabs(is[k] - 0.005) < fabs(is[k5] - 0.005))
+                    k5 = k;
+            static const float e24[] = {2.4f, 2.7f, 3.0f, 3.3f, 3.6f, 3.9f, 4.3f, 4.7f, 5.1f, 5.6f, 6.2f, 6.8f, 7.5f, 8.2f, 9.1f,
+                                        10, 11, 12, 13, 15, 16, 18, 20, 22, 24, 27, 30};
+            float best = e24[0];
+            for (float z : e24)
+                if (fabs(z - vs[k5]) < fabs(best - vs[k5]))
+                    best = z;
+            const double rz = (vs[hi] - vs[k5]) / std::max(1e-6, is[hi] - is[k5]);
+            snprintf(t, sizeof t, "Zener (reverse)\nVz %.3f V\n  at %s\nVz %.3f V\n  at %s\nrz %s  ~%gV", vs[k5],
+                     fmtA(is[k5]).c_str(), vs[hi], fmtA(is[hi]).c_str(), fmtR(rz).c_str(), best);
+            s_diodeSummary = t;
+            rs = NAN; // the forward diode law doesn't apply
+        }
         if (std::isfinite(rs))
         {
             snprintf(b, sizeof b, "\nRs %s", fmtR(std::max(0.0, rs)).c_str());
@@ -1508,7 +1537,7 @@ static void probe_analyse_and_sweep()
         char ax[16];
         snprintf(ax, sizeof ax, "%.2f V", 1.1 * vmx);
         set_axes("Current steps", ax, fmtA(1.1 * imx), false);
-        probe_end_with(s_diodeSummary, SYM_DIODE);
+        probe_end_with(s_diodeSummary, s_diodeSummary.startsWith("Zener") ? SYM_ZENER : SYM_DIODE);
         return;
     }
     // Small currents only (hold under 6 mA, the mA range reads to ~8): run
@@ -1604,8 +1633,44 @@ static void probe_cb(lv_timer_t *)
             }
             else
             {
-                const double ri = (vb - v0) / std::max(ib, 1e-6);
-                snprintf(b, sizeof b, "Battery / source\nV0 %.3f V\nRint %s\nat %s", v0, fmtR(ri).c_str(), fmtA(ib).c_str());
+                // HPPC-style: the step from the PRE current (the PSU sinks a
+                // few mA from a source at 0 V) to the charge current.
+                // R0 = instant (ohmic) part, R = after the pulse (+ polarization)
+                const double dI = ib - i0;
+                double v1, i1;
+                seg_stats(si, 0.0f, 0.04f / s_segs[si].dur, v1, i1); // first 40 ms
+                const double r0 = (std::isfinite(v1) && i1 - i0 > 0.002) ? (v1 - v0) / (i1 - i0) : NAN;
+                const double rt = dI > 0.002 ? (vb - v0) / dI : NAN;
+                const double ocv = std::isfinite(rt) ? v0 - i0 * rt : v0;
+                // Rough state of charge from the open-circuit voltage
+                String kind;
+                if (ocv > 3.0 && ocv < 4.3)
+                {
+                    static const float tv[] = {3.0f, 3.3f, 3.5f, 3.6f, 3.7f, 3.8f, 3.9f, 4.0f, 4.1f, 4.2f};
+                    static const float tp[] = {0, 2, 7, 15, 30, 50, 65, 78, 90, 100};
+                    float pc = 100;
+                    for (int k = 1; k < 10; k++)
+                        if (ocv < tv[k])
+                        {
+                            pc = tp[k - 1] + (tp[k] - tp[k - 1]) * (ocv - tv[k - 1]) / (tv[k] - tv[k - 1]);
+                            break;
+                        }
+                    char kb[24];
+                    snprintf(kb, sizeof kb, "Li-ion ~%.0f%%", pc);
+                    kind = kb;
+                }
+                else if (ocv > 1.0 && ocv < 1.7)
+                    kind = ocv > 1.45 ? "alkaline/primary" : "NiMH / NiCd";
+                else if (ocv > 1.8 && ocv < 2.2)
+                    kind = "lead-acid cell";
+                else
+                    kind = "source";
+                snprintf(b, sizeof b, "Battery\nOCV %.3f V\nR0 %s\nR %s\n%s", ocv,
+                         std::isfinite(r0) ? fmtR(r0).c_str() : "-", std::isfinite(rt) ? fmtR(rt).c_str() : "-", kind.c_str());
+                char dd[160];
+                snprintf(dd, sizeof dd, "\nI0 %s (sink)\nV %.3f V\nI %s\nR0 = 40 ms\nR = 1.5 s",
+                         fmtA(i0).c_str(), vb, fmtA(ib).c_str());
+                s_details += dd;
                 sym = SYM_BATT;
             }
             probe_end_with(b, sym);
@@ -1735,10 +1800,264 @@ bool loadFftStart()
     return true;
 }
 
+// ─── Impedance spectroscopy (lock-in) ───────────────────────────────────────
+// DC bias at V-Set/2 plus a sine at each frequency; the amplitude shrinks
+// with frequency so a capacitor's AC current stays inside what the PSU can
+// sink (~3 mA). Each sine's V and I phasors come from a lock-in over whole
+// cycles (after one settling cycle), Z = V/I; then Y = 1/Z = G + jB gives
+// the parallel R = 1/G and C = B/omega.
+static constexpr int kImpN = 5;
+static constexpr float kImpF[kImpN] = {0.5f, 1, 2, 5, 10};
+static constexpr float kImpCyc[kImpN] = {2, 3, 4, 6, 10};
+static constexpr float kImpSettleS = 2.0f;
+static constexpr uint8_t PH_IMP0 = 40; // + frequency index
+static float s_impT0[kImpN], s_impDur[kImpN];
+static float s_impBias = 0, s_impAmp0 = 0;
+static float s_impTotal = 0;
+
+static float imp_amp(int k) { return s_impAmp0 * std::min(1.0f, 1.0f / kImpF[k]); }
+
+static void analyse_imp()
+{
+    const int n = s_n.load(std::memory_order_acquire);
+    // V and I are read ~one ADC conversion apart (V first): the pair's time
+    // stamp is after I, so V is older by about half a pair period
+    const double pairDt = n > 10 ? (s_t[n - 1] - s_t[0]) / (n - 1) : 0.0026;
+    double zr[kImpN], zi[kImpN], zm[kImpN], zp[kImpN];
+    double G = 0, Bw = 0, ww = 0;
+    int ok = 0, gN = 0;
+    for (int k = 0; k < kImpN; k++)
+    {
+        const double w = 2 * M_PI * kImpF[k];
+        const float t0 = s_impT0[k] + 1.0f / kImpF[k], t1 = s_impT0[k] + s_impDur[k]; // skip 1st cycle
+        double vc = 0, vs = 0, ic = 0, is = 0, vm = 0, im = 0;
+        int m = 0;
+        for (int q = 0; q < n; q++)
+            if (s_ph[q] == PH_IMP0 + k && s_t[q] >= t0 && s_t[q] < t1)
+            {
+                vm += s_v[q];
+                im += s_i[q];
+                m++;
+            }
+        if (m < 20)
+        {
+            zm[k] = NAN;
+            continue;
+        }
+        vm /= m;
+        im /= m;
+        for (int q = 0; q < n; q++)
+            if (s_ph[q] == PH_IMP0 + k && s_t[q] >= t0 && s_t[q] < t1)
+            {
+                const double tv = s_t[q] - s_impT0[k] - pairDt * 0.5, ti = s_t[q] - s_impT0[k];
+                vc += (s_v[q] - vm) * cos(w * tv);
+                vs += (s_v[q] - vm) * sin(w * tv);
+                ic += (s_i[q] - im) * cos(w * ti);
+                is += (s_i[q] - im) * sin(w * ti);
+            }
+        // phasors (same scale; it cancels in Z)
+        const std::complex<double> V(vs, vc), I(is, ic);
+        if (std::abs(I) < 1e-12)
+        {
+            zm[k] = NAN;
+            continue;
+        }
+        const std::complex<double> Z = V / I, Y = 1.0 / Z;
+        zr[k] = Z.real();
+        zi[k] = Z.imag();
+        zm[k] = std::abs(Z);
+        zp[k] = std::arg(Z) * 180 / M_PI;
+        // G only from the low frequencies: higher up the capacitor carries
+        // nearly all the current and a few ms of V/I timing skew swamps it
+        if (kImpF[k] <= 1.0f)
+        {
+            G += Y.real();
+            gN++;
+        }
+        Bw += Y.imag() * w; // weighted: C = sum(B*w)/sum(w^2)
+        ww += w * w;
+        ok++;
+    }
+    if (ok < 2)
+    {
+        show_result("Impedance\nno signal\n(output on?)");
+        return;
+    }
+    G /= std::max(gN, 1);
+    // DC: the bias over the mean current is the parallel R exactly
+    double svd = 0, sid = 0;
+    int md = 0;
+    for (int q = 0; q < n; q++)
+        if (s_ph[q] >= PH_IMP0 && s_ph[q] < PH_IMP0 + kImpN)
+        {
+            svd += s_v[q];
+            sid += s_i[q];
+            md++;
+        }
+    const double Rdc = (md && sid > 0) ? svd / sid : INFINITY;
+    const bool hasRdc = std::isfinite(Rdc) && sid / md > 0.0002; // > 0.2 mA DC
+    const double C = Bw / ww;
+    // Bode plot: |Z| (log, amber) and phase (cyan, 0 top .. -90 bottom)
+    double lmin = 1e9, lmax = -1e9;
+    for (int k = 0; k < kImpN; k++)
+        if (std::isfinite(zm[k]))
+        {
+            lmin = std::min(lmin, log10(zm[k]));
+            lmax = std::max(lmax, log10(zm[k]));
+        }
+    if (lmax - lmin < 0.5)
+    {
+        const double c0 = 0.5 * (lmax + lmin);
+        lmin = c0 - 0.25;
+        lmax = c0 + 0.25;
+    }
+    lv_obj_set_style_size(s_chart, 6, LV_PART_INDICATOR);
+    lv_chart_set_type(s_chart, LV_CHART_TYPE_LINE);
+    lv_chart_set_point_count(s_chart, kImpN);
+    lv_chart_set_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 1000);
+    for (int k = 0; k < kImpN; k++)
+    {
+        lv_chart_set_value_by_id(s_chart, s_ser1, k, std::isfinite(zm[k]) ? (lv_coord_t)(1000 * (log10(zm[k]) - lmin) / (lmax - lmin)) : LV_CHART_POINT_NONE);
+        lv_chart_set_value_by_id(s_chart, s_ser2, k, std::isfinite(zm[k]) ? (lv_coord_t)(1000 * (1 + std::max(-90.0, std::min(0.0, zp[k])) / 90)) : LV_CHART_POINT_NONE);
+    }
+    lv_chart_refresh(s_chart);
+    set_axes("#FFC107 |Z| log#  #00BCD4 phase#  0.5-10 Hz", "10 Hz", fmtR(pow(10, lmax)), false);
+
+    // Verdict from the phase: ~0 = resistive, ~-90 = capacitive
+    double pmean = 0;
+    for (int k = 0; k < kImpN; k++)
+        if (std::isfinite(zm[k]))
+            pmean += zp[k] / ok;
+    String r;
+    char b[64];
+    if (pmean > -10)
+        r = "Impedance\nResistive";
+    else if (hasRdc)
+        r = "Impedance\nR || C";
+    else
+        r = "Impedance\nCapacitive";
+    if (C > 0 && pmean < -10)
+        r += "\nC " + fmtC(C);
+    r += "\nR " + (hasRdc ? fmtR(Rdc) : String(">") + fmtR(md ? (svd / md) / 0.0002 : INFINITY));
+    const int k1 = 1; // 1 Hz
+    if (std::isfinite(zm[k1]))
+    {
+        snprintf(b, sizeof b, "\n|Z| %s @1Hz", fmtR(zm[k1]).c_str());
+        r += b;
+        snprintf(b, sizeof b, "\nphase %.0f deg", zp[k1]);
+        r += b;
+    }
+    show_result(r);
+    // Every frequency on the details page
+    String d = "Impedance\nf: |Z| phase";
+    for (int k = 0; k < kImpN; k++)
+        if (std::isfinite(zm[k]))
+        {
+            snprintf(b, sizeof b, "\n%gHz %s %.0f", kImpF[k], fmtR(zm[k]).c_str(), zp[k]);
+            d += b;
+        }
+    snprintf(b, sizeof b, "\nbias %.2f V", s_impBias);
+    d += b;
+    s_details = d;
+    render_result();
+}
+
+static void imp_cb(lv_timer_t *)
+{
+    if (!output_usable())
+    {
+        s_capturing.store(false);
+        lv_timer_del(s_timer);
+        s_timer = nullptr;
+        PowerSupply.Voltage.SetUpdate(s_savedAdj);
+        progress(-1);
+        end_run();
+        show_result("Stopped:\noutput off");
+        return;
+    }
+    const float t = (millis() - s_startMs) * 1e-3f;
+    float v = s_impBias;
+    uint8_t ph = PH_SETTLE;
+    int seg = -1;
+    for (int k = 0; k < kImpN; k++)
+        if (t >= s_impT0[k] && t < s_impT0[k] + s_impDur[k])
+            seg = k;
+    if (t >= s_impTotal)
+    {
+        lv_timer_del(s_timer);
+        s_timer = nullptr;
+        s_capturing.store(false);
+        PowerSupply.Voltage.SetUpdate(s_savedAdj);
+        progress(-1);
+        end_run();
+        analyse_imp();
+        return;
+    }
+    if (seg >= 0)
+    {
+        v = s_impBias + imp_amp(seg) * sinf(2 * M_PI * kImpF[seg] * (t - s_impT0[seg]));
+        ph = PH_IMP0 + seg;
+    }
+    s_vcmd = v;
+    s_phase = ph;
+    set_volts(v);
+    static uint32_t lastUi = 0;
+    if (millis() - lastUi > 200)
+    {
+        lastUi = millis();
+        char b[96];
+        if (seg >= 0)
+            snprintf(b, sizeof b, "Impedance\n%g Hz sine\n+-%.0f mV on %.2f V\n%.0f s left", kImpF[seg], 1000 * imp_amp(seg), s_impBias, s_impTotal - t);
+        else
+            snprintf(b, sizeof b, "Impedance\nsettling at\n%.2f V bias", s_impBias);
+        show_result(b);
+        progress((int)(100 * t / s_impTotal));
+    }
+}
+
+bool loadImpStart()
+{
+    if (s_timer || !output_usable() || !alloc_buffers())
+        return false;
+    s_vtop = user_vset();
+    if (s_vtop < 0.5f)
+    {
+        show_result("Set V-Set >= 0.5 V\n(bias = V-Set/2)");
+        return false;
+    }
+    s_isFft = false;
+    s_isZero = false;
+    s_savedAdj = PowerSupply.Voltage.adjValue;
+    s_showDetails = false;
+    s_details = "";
+    s_impBias = s_vtop / 2;
+    s_impAmp0 = std::min(0.2f, s_impBias * 0.4f);
+    float t = kImpSettleS;
+    for (int k = 0; k < kImpN; k++)
+    {
+        s_impT0[k] = t;
+        s_impDur[k] = kImpCyc[k] / kImpF[k];
+        t += s_impDur[k];
+    }
+    s_impTotal = t;
+    begin_run();
+    s_vcmd = s_impBias;
+    s_phase = PH_SETTLE;
+    s_cap = kMaxSamples;
+    s_n.store(0);
+    s_startMs = millis();
+    s_capturing.store(true);
+    set_volts(s_impBias);
+    draw_symbol(SYM_NONE);
+    progress(0);
+    s_timer = lv_timer_create(imp_cb, 5, nullptr);
+    return true;
+}
+
 static void btn_cb(lv_event_t *e)
 {
     const int which = (int)(intptr_t)lv_event_get_user_data(e);
-    bool ok = which == 1 ? loadFftStart() : loadSweepStart(which == 2);
+    bool ok = which == 1 ? loadImpStart() : which == 2 ? loadFftStart() : loadSweepStart(which == 3);
     if (!ok && !s_timer && !output_usable())
         show_result("Turn the\noutput ON");
 }
@@ -1863,13 +2182,13 @@ void createLoadTab(lv_obj_t *parent)
     lv_obj_set_style_bg_color(s_bar, lv_color_hex(0xFFC107), LV_PART_INDICATOR);
     lv_obj_add_flag(s_bar, LV_OBJ_FLAG_HIDDEN);
 
-    static const char *names[3] = {LV_SYMBOL_PLAY " Probe", LV_SYMBOL_AUDIO " FFT", LV_SYMBOL_REFRESH " Zero"};
-    for (int b = 0; b < 3; b++)
+    static const char *names[4] = {LV_SYMBOL_PLAY " Probe", "Z(f)", "FFT", "Zero"};
+    for (int b = 0; b < 4; b++)
     {
         lv_obj_t *btn = lv_btn_create(parent);
         s_btns[b] = btn;
-        lv_obj_set_size(btn, 63, 22);
-        lv_obj_set_pos(btn, 3 + b * 68, 160);
+        lv_obj_set_size(btn, b == 0 ? 58 : 44, 22);
+        lv_obj_set_pos(btn, b == 0 ? 3 : 64 + (b - 1) * 46, 160);
         lv_obj_set_style_radius(btn, 6, 0);
         lv_obj_set_style_shadow_width(btn, 0, 0);
         lv_obj_set_style_bg_color(btn, b == 0 ? lv_color_hex(0x1f6feb) : lv_color_hex(0x21262d), 0);
