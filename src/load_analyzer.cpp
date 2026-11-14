@@ -3,6 +3,7 @@
 #include "myFonts.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
+#include "esp_task_wdt.h"
 #include <atomic>
 #include <cmath>
 #include <complex>
@@ -16,6 +17,7 @@ static float *s_v = nullptr;   // V measured
 static float *s_i = nullptr;   // A measured
 static float *s_cmd = nullptr; // V commanded at that moment
 static uint8_t *s_ph = nullptr; // sweep phase
+static uint8_t *s_fl = nullptr; // bit0 = fresh V, bit1 = fresh I (a pass often converts one channel only)
 static std::atomic<bool> s_capturing{false};
 static std::atomic<int> s_n{0};
 static int s_cap = 0;          // samples wanted
@@ -84,6 +86,10 @@ void loadAnalyzerAdcHook(double volts, double amps)
     const uint32_t now = micros();
     if (n == 0)
         s_t0 = now;
+    static float lastV = NAN, lastI = NAN;
+    s_fl[n] = (n == 0 || (float)volts != lastV ? 1 : 0) | (n == 0 || (float)amps != lastI ? 2 : 0);
+    lastV = volts;
+    lastI = amps;
     s_t[n] = (now - s_t0) * 1e-6f;
     s_v[n] = volts;
     s_i[n] = amps;
@@ -102,7 +108,8 @@ static bool alloc_buffers()
     s_i = (float *)ps(kMaxSamples * sizeof(float));
     s_cmd = (float *)ps(kMaxSamples * sizeof(float));
     s_ph = (uint8_t *)ps(kMaxSamples);
-    return s_t && s_v && s_i && s_cmd && s_ph;
+    s_fl = (uint8_t *)ps(kMaxSamples);
+    return s_t && s_v && s_i && s_cmd && s_ph && s_fl;
 }
 
 // ─── UI ─────────────────────────────────────────────────────────────────────
@@ -339,8 +346,14 @@ static void restore_range()
         setCurrentRange(s_maPrev);
     s_maSwitched = false;
 }
-static ZeroCal s_zero{0, 0, 0, 0};
 static constexpr uint32_t kZeroMagic = 0x10AD0001;
+static ZeroCal s_zero{0, 0, 0, 0};
+// A Zero is the PSU's own output (~0.8 uF, ~200 kOhm): anything far beyond
+// that was run with a load connected and would wreck every later result
+static bool zero_plausible(const ZeroCal &z)
+{
+    return z.magic == kZeroMagic && fabsf(z.g) < 1e-4f && fabsf(z.i0) < 1e-3f && fabsf(z.c) < 1e-4f;
+}
 
 static float user_vset() { return (PowerSupply.Voltage.adjValue - PowerSupply.Voltage.adjOffset) / PowerSupply.Voltage.adjFactor; }
 static void set_volts(double v) { PowerSupply.Voltage.SetUpdate(v * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); }
@@ -622,7 +635,14 @@ static void analyse_sweep()
     double i0 = p[0], g = p[1], c = p[2];
     if (s_isZero)
     {
-        s_zero = {kZeroMagic, (float)i0, (float)g, (float)c};
+        const ZeroCal z{kZeroMagic, (float)i0, (float)g, (float)c};
+        if (!zero_plausible(z))
+        {
+            show_result("Zero refused\nsomething is\nconnected: " + fmtA(g * s_vtop) + "\nat the top.\nDisconnect, retry");
+            plot_iv(n);
+            return;
+        }
+        s_zero = z;
         PowerSupply.StoreMem.begin("my-app", false);
         PowerSupply.StoreMem.putBytes("load_zero", &s_zero, sizeof(s_zero));
         PowerSupply.StoreMem.end();
@@ -631,7 +651,7 @@ static void analyse_sweep()
         plot_iv(n);
         return;
     }
-    if (s_zero.magic == kZeroMagic)
+    if (zero_plausible(s_zero))
     {
         i0 -= s_zero.i0;
         g -= s_zero.g;
@@ -1028,11 +1048,11 @@ static void analyse_stage2()
         sdI = m > 1 ? sqrt(std::max(0.0, sii / m - i * i)) : NAN;
     };
     const float tEnd = s_t[n - 1];
-    auto zeroI = [&](double v) { return s_zero.magic == kZeroMagic ? s_zero.i0 + s_zero.g * v : 0.0; };
+    auto zeroI = [&](double v) { return zero_plausible(s_zero) ? s_zero.i0 + s_zero.g * v : 0.0; };
     String r;
     // Filament check: at a constant voltage its current keeps falling as it
     // heats (resistance rises). A real R || C or a resistor stays flat.
-    if ((s_det.sym == SYM_RC || s_det.sym == SYM_R) && !(std::isfinite(s_tau) && s_tau > 0.02f))
+    if ((s_det.sym == SYM_RC || s_det.sym == SYM_R || s_det.sym == SYM_C) && !(std::isfinite(s_tau) && s_tau > 0.02f))
     {
         double ve, ie, sde, vl, il2, sdl;
         int me, ml;
@@ -1282,6 +1302,20 @@ static void end_run_impl()
     for (lv_obj_t *b : s_btns)
         if (b)
             lv_obj_clear_state(b, LV_STATE_DISABLED);
+}
+
+// Raw capture for offline analysis: "t,V,I,phase" per sample, then END
+void loadAnalyzerDumpRaw()
+{
+    const int n = s_capturing.load() ? 0 : s_n.load();
+    Serial.printf("N,%d\n", n);
+    for (int q = 0; q < n; q++)
+    {
+        Serial.printf("%.6f,%.6f,%.7f,%u\n", s_t[q], s_v[q], s_i[q], s_ph[q]);
+        if ((q & 255) == 0)
+            esp_task_wdt_reset();
+    }
+    Serial.println("END");
 }
 
 bool loadAnalyzerBusy() { return s_timer != nullptr; }
@@ -2041,7 +2075,8 @@ static constexpr uint8_t PH_IMP0 = 40; // + segment index
 static float s_impF[kImpMax], s_impA[kImpMax], s_impT0[kImpMax], s_impDur[kImpMax];
 static int s_impNseg = 0, s_impPass = 1;
 static float s_impBias = 0, s_impTotal = 0;
-static float s_impTd = 0;            // V/I timing skew, s (fallback model)
+static float s_impTd = 0;            // V/I timing skew, s (A range)
+static float s_impTdm = 0;           // same for the mA range (own amplifier/filter)
 // Measured phase of the whole chain on a resistive load, per frequency
 // (NVS "imp_pc"); subtracted when present - the skew is not one fixed delay
 static constexpr float kCalF[7] = {0.5f, 1, 2, 5, 10, 20, 50};
@@ -2075,6 +2110,7 @@ static void imp_load_td()
     s_impTdLoaded = true;
     PowerSupply.StoreMem.begin("my-app", true);
     s_impTd = PowerSupply.StoreMem.isKey("imp_td") ? PowerSupply.StoreMem.getFloat("imp_td", 0.0f) : 0.0f;
+    s_impTdm = PowerSupply.StoreMem.isKey("imp_tdm") ? PowerSupply.StoreMem.getFloat("imp_tdm", 0.0f) : s_impTd;
     if (PowerSupply.StoreMem.isKey("imp_pc"))
         PowerSupply.StoreMem.getBytes("imp_pc", &s_phCal, sizeof s_phCal);
     PowerSupply.StoreMem.end();
@@ -2088,29 +2124,39 @@ static bool imp_phasor(int k, std::complex<double> &Z, double &vdc, double &idc,
     const int n = s_n.load(std::memory_order_acquire);
     const double w = 2 * M_PI * s_impF[k];
     const float t0 = s_impT0[k] + 1.0f / s_impF[k], t1 = s_impT0[k] + s_impDur[k];
+    // Each channel only from its fresh samples, each at its own time;
+    // whole cycles only, so the mean (DC) drops out cleanly
+    const double tw = floor((t1 - t0) * s_impF[k]) / s_impF[k];
     double vm = 0, im = 0;
-    int m = 0;
+    int mv = 0, mi = 0;
     for (int q = 0; q < n; q++)
-        if (s_ph[q] == PH_IMP0 + k && s_t[q] >= t0 && s_t[q] < t1)
+        if (s_ph[q] == PH_IMP0 + k && s_t[q] >= t0 && s_t[q] < t0 + tw)
         {
-            vm += s_v[q];
-            im += s_i[q];
-            m++;
+            if (s_fl[q] & 1) { vm += s_v[q]; mv++; }
+            if (s_fl[q] & 2) { im += s_i[q]; mi++; }
         }
-    if (m < 20)
+    if (mv < 20 || mi < 20)
         return false;
-    vm /= m;
-    im /= m;
+    vm /= mv;
+    im /= mi;
     double vc = 0, vs = 0, ic = 0, is = 0;
     for (int q = 0; q < n; q++)
-        if (s_ph[q] == PH_IMP0 + k && s_t[q] >= t0 && s_t[q] < t1)
+        if (s_ph[q] == PH_IMP0 + k && s_t[q] >= t0 && s_t[q] < t0 + tw)
         {
             const double tt = s_t[q] - s_impT0[k];
-            vc += (s_v[q] - vm) * cos(w * tt);
-            vs += (s_v[q] - vm) * sin(w * tt);
-            ic += (s_i[q] - im) * cos(w * tt);
-            is += (s_i[q] - im) * sin(w * tt);
+            if (s_fl[q] & 1)
+            {
+                vc += (s_v[q] - vm) * cos(w * tt);
+                vs += (s_v[q] - vm) * sin(w * tt);
+            }
+            if (s_fl[q] & 2)
+            {
+                ic += (s_i[q] - im) * cos(w * tt);
+                is += (s_i[q] - im) * sin(w * tt);
+            }
         }
+    vc /= mv; vs /= mv; ic /= mi; is /= mi; // channels have different counts
+    const int m = mi;
     const std::complex<double> V(vs, vc), I(is, ic);
     if (std::abs(I) < 1e-12)
         return false;
@@ -2118,13 +2164,13 @@ static bool imp_phasor(int k, std::complex<double> &Z, double &vdc, double &idc,
     double pc;
     Z = V / I;
     s_rawZ[k] = Z;
-    if (phase_cal_for(s_impF[k], pc))
+    if (!PowerSupply.mA_Active && phase_cal_for(s_impF[k], pc))
         Z *= std::polar(1.0, -pc);
     else
-        Z *= std::polar(1.0, w * s_impTd);
+        Z *= std::polar(1.0, w * (PowerSupply.mA_Active ? s_impTdm : s_impTd));
     vdc = vm;
     idc = im;
-    iac = 2 * std::abs(I) / m;
+    iac = 2 * std::abs(I); (void)m;
     return true;
 }
 
@@ -2215,6 +2261,7 @@ static String lcrText(const std::complex<double> &Z, float f, bool full)
 }
 
 static bool s_calDone = false;
+static bool s_calRangeMA = false; // pass 2 ran on the mA range
 static void analyse_imp_pass1()
 {
     s_z1n = 0;
@@ -2322,15 +2369,42 @@ static void analyse_imp_pass2()
     {
         // residual phase at 10 Hz (corrected with the old tau) -> new tau
         const double extra = std::arg(Z10) / (2 * M_PI * 10); // s; Z rotated by +w*td
-        s_impTd -= extra;
+        float &td = s_calRangeMA ? s_impTdm : s_impTd;
+        td -= extra;
         PowerSupply.StoreMem.begin("my-app", false);
-        PowerSupply.StoreMem.putFloat("imp_td", s_impTd);
+        PowerSupply.StoreMem.putFloat(s_calRangeMA ? "imp_tdm" : "imp_td", td);
         PowerSupply.StoreMem.end();
-        snprintf(b, sizeof b, "\nPhase cal: skew %.2f ms (saved)", s_impTd * 1e3);
+        snprintf(b, sizeof b, "\nPhase cal %s: skew %.2f ms (saved)", s_calRangeMA ? "mA" : "A", (s_calRangeMA ? s_impTdm : s_impTd) * 1e3);
         d += b;
-        snprintf(b, sizeof b, "Resistor\nR %s\n(phase calib.\nsaved: %.2f ms)", fmtR(Rdc).c_str(), s_impTd * 1e3);
+        snprintf(b, sizeof b, "Resistor\nR %s\n(phase calib.\n%s: %.2f ms)", fmtR(Rdc).c_str(), s_calRangeMA ? "mA" : "A", (s_calRangeMA ? s_impTdm : s_impTd) * 1e3);
         show_result(b);
         draw_symbol(SYM_R);
+        s_details = d;
+        render_result();
+        return;
+    }
+    // Phase within +-30 deg at 10 Hz: resistive - an LCR readout would be
+    // nonsense (D >> 1). A filament (or PTC/NTC) heats and cools with slow
+    // sines but not fast ones: |Z| higher at 0.5 Hz than at 10 Hz.
+    if (ok10 && fabs(std::arg(Z10)) < 30 * M_PI / 180)
+    {
+        double z05 = NAN;
+        for (int k = 0; k < s_z1n; k++)
+            if (s_z1f[k] == 0.5f)
+                z05 = std::abs(s_z1[k]);
+        const double ratio = std::isfinite(z05) ? z05 / std::abs(Z10) : 1.0;
+        String rr = ratio > 1.03 ? "Thermal R\n(lamp / PTC)" : ratio < 0.97 ? "Thermal R\n(NTC)" : "Resistive";
+        rr += "\nRac " + fmtR(std::abs(Z10)) + " @10Hz";
+        if (std::isfinite(z05))
+            rr += "\nR " + fmtR(z05) + " @0.5Hz";
+        if (std::isfinite(Rdc))
+            rr += "\nRdc " + fmtR(Rdc);
+        snprintf(b, sizeof b, "\nphase %.1f deg", std::arg(Z10) * 180 / M_PI);
+        rr += b;
+        show_result(rr);
+        draw_symbol(ratio > 1.03 ? SYM_LAMP : SYM_R);
+        snprintf(b, sizeof b, "\nbias %.2f V", s_impBias);
+        d += b;
         s_details = d;
         render_result();
         return;
@@ -2348,8 +2422,8 @@ static void analyse_imp_pass2()
         if (imp_phasor(2, Z50, v5, i5, a5))
             d += lcrText(Z50, 20, false);
     }
-    snprintf(b, sizeof b, "\nIac %s @10Hz\nskew corr %.2f ms%s", fmtA(ia10).c_str(), s_impTd * 1e3,
-             s_impTd == 0 ? " (uncal: run on a resistor)" : "");
+    snprintf(b, sizeof b, "\nIac %s @10Hz\n%s range, skew %.2f ms", fmtA(ia10).c_str(), s_calRangeMA ? "mA" : "A",
+             (s_calRangeMA ? s_impTdm : s_impTd) * 1e3);
     d += b;
     snprintf(b, sizeof b, "\nbias %.2f V\nDAC %.0f/s", s_impBias, s_wTicks * 1000.0 / std::max<uint32_t>(1, millis() - s_wStartMs));
     d += b;
@@ -2380,6 +2454,29 @@ static void imp_cb(lv_timer_t *)
             s_capturing.store(false);
             analyse_imp_pass1();
             imp_plan(2);
+            // Pass 2 on the mA range when DC + AC fit (~100x less current
+            // noise: the phase noise on the A range was a few degrees)
+            {
+                double vd, id, ia;
+                std::complex<double> Zx;
+                double idc = 0;
+                int nn = 0;
+                for (int k = 0; k < s_z1n; k++)
+                    if (imp_phasor(k, Zx, vd, id, ia))
+                        idc += id, nn++;
+                idc = nn ? idc / nn : 1;
+                s_calRangeMA = false;
+                // ...and only if the current never reverses: the mA range's
+                // amplifier reads one direction only (a capacitor alone
+                // swings negative and read half its AC current there)
+                if (idc > 1.5 * kItarget && idc + 1.5 * kItarget < 0.007 && !PowerSupply.mA_Active)
+                {
+                    s_maPrev = false;
+                    s_maSwitched = true;
+                    setCurrentRange(true);
+                    s_calRangeMA = true;
+                }
+            }
             imp_start_capture();
             return;
         }
@@ -2479,7 +2576,7 @@ void createLoadTab(lv_obj_t *parent)
 
     PowerSupply.StoreMem.begin("my-app", true);
     ZeroCal z{};
-    if (PowerSupply.StoreMem.getBytes("load_zero", &z, sizeof(z)) == sizeof(z) && z.magic == kZeroMagic)
+    if (PowerSupply.StoreMem.getBytes("load_zero", &z, sizeof(z)) == sizeof(z) && zero_plausible(z))
         s_zero = z;
     PowerSupply.StoreMem.end();
 

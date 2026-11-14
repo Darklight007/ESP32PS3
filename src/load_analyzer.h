@@ -23,6 +23,7 @@ bool loadSweepStart(bool zero = false);
 bool loadFftStart();
 bool loadImpStart(); // impedance vs frequency (lock-in), bias V-Set/2
 bool loadAnalyzerBusy();
+void loadAnalyzerDumpRaw(); // LOAD:RAW? - every captured sample, CSV
 bool loadImpBusy(); // Z(f)/LCR running: Task_ADC uses Clean Wave timing
 String loadAnalyzerResult(); // last result text, one line, ';' separated
 String loadAnalyzerDetails(); // probe details, ';' separated
