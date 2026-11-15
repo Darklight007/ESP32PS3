@@ -10,6 +10,7 @@
 #include "boot_splash.h"
 #include "Keypad_MC17.h"
 #include "buzzer.h"
+#include "esp_task_wdt.h"
 extern Keypad_MC17 kpd;
 
 extern TFT_eSPI tft;
@@ -272,7 +273,8 @@ void splashBegin()
     tft.fillRect(kBarX + 2, kBarY + 2, kBarW - 4, 4, tft.color565(2, 22, 32));
     tft.drawRoundRect(kBarX, kBarY, kBarW, 8, 4, tft.color565(0, 140, 170));
     splashProgress(2, "Starting");
-    s_lock = xSemaphoreCreateMutex();
+    if (!s_lock)
+        s_lock = xSemaphoreCreateMutex();
     s_run = true;
     if (s_lock && xTaskCreatePinnedToCore(twinkleTask, "twinkle", 3072, nullptr, 1, &s_task, 0) != pdPASS)
         s_task = nullptr;
@@ -298,4 +300,37 @@ void splashProgress(int pct, const char *what)
     tft.setTextDatum(TL_DATUM);
     if (locked)
         xSemaphoreGive(s_lock);
+}
+
+// Settings > About > Software information: the splash again, until a tap.
+// Caller holds the display (spiQuietAcquire) and repaints LVGL afterwards.
+void splashShow()
+{
+    splashBegin();
+    splashProgress(100, "Tap to close");
+    auto touched = []() {
+        bool t = false;
+        if (s_lock && xSemaphoreTake(s_lock, pdMS_TO_TICKS(100)) == pdTRUE)
+        {
+            t = tft.getTouchRawZ() > 600 && tft.getTouchRawZ() > 600;
+            xSemaphoreGive(s_lock);
+        }
+        return t;
+    };
+    // the tap that opened it: wait for its release first
+    const uint32_t t0 = millis();
+    while (touched() && millis() - t0 < 3000)
+        delay(20);
+    delay(150);
+    // then a tap closes it (or 60 s)
+    while (!touched() && millis() - t0 < 60000)
+    {
+        esp_task_wdt_reset();
+        delay(20);
+    }
+    while (touched() && millis() - t0 < 63000)
+        delay(20);
+    s_run = false;
+    for (int k = 0; k < 40 && s_task; k++)
+        delay(5);
 }

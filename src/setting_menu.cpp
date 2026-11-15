@@ -23,6 +23,7 @@
 #include "lv_gui_helper.h" // LVLabel, LVButton helpers
 #include "disp_perf.h"     // frame-rate overlay switch
 #include "touch_affine.h"
+#include "boot_splash.h"
 #include "spi_quiet.h"     // spiQuietAcquire() for the touch calibration
 #include <float.h>
 
@@ -990,6 +991,13 @@ void SettingMenu(lv_obj_t *parent)
     section = lv_menu_section_create(sub_about_page);
     auto *itm = create_text(section, nullptr, "Software information", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_software_info_page);
+    // ...and the ARASH splash, until a tap
+    lv_obj_add_event_cb(itm, [](lv_event_t *) {
+        spiQuietAcquire();
+        splashShow();
+        spiQuietEnd();
+        lv_obj_invalidate(lv_scr_act());
+    }, LV_EVENT_CLICKED, nullptr);
 
     // Root page + items
     lv_obj_t *root_page = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
