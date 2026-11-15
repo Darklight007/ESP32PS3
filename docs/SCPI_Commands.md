@@ -470,6 +470,22 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Syntax:** `DIAG:ADC:FAST <0-7>`, `DIAG:ADC:FAST?`
 **Returns:** `mode,late_reads_redone,ready_glitches_ignored,stalls_recovered` (counts since boot)
 
+### :DISPlay:CHECK? - Display Glitch Finder
+**Description:** Sends pending updates, renders the whole screen in LVGL without sending it, reads the panel's memory back and compares. Returns `mismatched_pixels,x1,y1,x2,y2` (`0,999,999,-1,-1` = panel matches exactly), then repaints. `DISP:CHECK? 1` also lists mismatching runs as `R y x1 x2` lines. 1-9 px on the Stats chart are LVGL's anti-aliasing differing between strip and full renders, not glitches.
+**Syntax:** `:DISP:CHECK? [1]`
+
+### :DISPlay:LCD? - Panel Readback
+**Description:** What the panel actually shows (its memory, read over MISO), in the `DISP:SHOT?` format. `DISP:SHOT?` shows LVGL's copy instead.
+**Syntax:** `:DISP:LCD?`
+
+### :DISPlay:SYNC - Wait for Each Display Transfer
+**Description:** `1` (default) waits for every display DMA transfer before LVGL draws on. `0` = old overlapped mode, which corrupted pixels (black bars, broken digit segments); for A/B tests only. Not saved.
+**Syntax:** `:DISP:SYNC <0|1>`
+
+### :DIAGnostic:NOTOUCH - Skip Touch Reads
+**Description:** `1` skips touch-panel reads (glitch hunting). Not saved.
+**Syntax:** `:DIAG:NOTOUCH <0|1>`
+
 ### :DISPlay:PAGE - Show a Page
 **Syntax:** `:DISP:PAGE <0-4>[,<sub-tab>]` (0 Stats, 1 Graph, 2 Main, 3 Utility, 4 Setting; the sub-tab applies to Utility), `:DISP:PAGE?`
 

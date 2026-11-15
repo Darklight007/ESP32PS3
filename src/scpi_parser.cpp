@@ -222,6 +222,21 @@ void SCPIParser::executeCommand(const String& command)
         return;
     }
 
+    if (cmdPart.startsWith("DISP:SYNC"))
+    {
+        extern volatile bool g_dmaSync;
+        g_dmaSync = paramPart.toInt() != 0;
+        sendResponse("OK");
+        return;
+    }
+    if (cmdPart.startsWith("DIAG:NOTOUCH"))
+    {
+        extern volatile bool g_noTouch;
+        g_noTouch = paramPart.toInt() != 0;
+        sendResponse("OK");
+        return;
+    }
+
     // SYST:WEAT? | SYST:WEAT:FETC | SYST:WEAT:FORC n (-1 live, 0 clear..5 thunder)
     if (cmdPart.startsWith("SYST:WEAT"))
     {
@@ -517,6 +532,67 @@ void SCPIParser::executeCommand(const String& command)
             if (cmdPart.endsWith("?")) sendResponse(String(g_drawMode));
             else { g_drawMode = paramPart.toInt() ? 1 : 0; sendResponse("OK"); }
         }
+        else if (cmdPart.indexOf("CHECK?") > 0)
+        {
+            // Glitch finder: render the whole LVGL screen into the PSRAM
+            // buffer WITHOUT sending it, read the panel's memory, compare.
+            // -> mismatched pixels,x1,y1,x2,y2 (then a normal full repaint).
+            // "DISP:CHECK? 1" also dumps the mismatch rows as x ranges.
+            extern lv_color_t *buf[2];
+            extern int g_drawMode;
+            extern volatile bool g_flushSkip;
+            lv_refr_now(NULL); // send pending changes first: only real glitches remain
+            const int mode = g_drawMode;
+            g_drawMode = 0;
+            g_flushSkip = true;
+            lv_obj_invalidate(lv_scr_act());
+            lv_refr_now(NULL);
+            g_flushSkip = false;
+            g_drawMode = mode;
+            uint16_t *lcd = (uint16_t *)heap_caps_malloc(320 * 240 * 2, MALLOC_CAP_SPIRAM);
+            if (!lcd || !buf[0]) { free(lcd); sendResponse("ERR no memory"); return; }
+            spiQuietAcquire();
+            { extern void dispDrain(); dispDrain(); }
+            tft.dmaWait();
+            for (int y = 0; y < 240; y++)
+                tft.readRect(0, y, 320, 1, lcd + y * 320);
+            spiQuietEnd();
+            const uint16_t *lv = (const uint16_t *)buf[0];
+            long n = 0; int x1 = 999, y1 = 999, x2 = -1, y2 = -1;
+            const bool dump = paramPart.toInt() == 1;
+            for (int y = 0; y < 240; y++)
+            {
+                int runStart = -1;
+                for (int x = 0; x <= 320; x++)
+                {
+                    bool bad = false;
+                    if (x < 320)
+                    {
+                        const uint16_t a = lcd[y * 320 + x], b = lv[y * 320 + x];
+                        // compare at 5/6/5 bits with 1 LSB slack per channel
+                        const uint16_t bs = b; // both already in the same byte order
+                        const uint16_t as_ = a;
+                        const int ar = as_ >> 11, ag = (as_ >> 5) & 63, ab = as_ & 31;
+                        const int br = bs >> 11, bg = (bs >> 5) & 63, bb = bs & 31;
+                        bad = abs(ar - br) > 2 || abs(ag - bg) > 4 || abs(ab - bb) > 2;
+                    }
+                    if (bad)
+                    {
+                        n++;
+                        x1 = std::min(x1, x), x2 = std::max(x2, x), y1 = std::min(y1, y), y2 = std::max(y2, y);
+                        if (runStart < 0) runStart = x;
+                    }
+                    else if (runStart >= 0)
+                    {
+                        if (dump) Serial.printf("R %d %d %d\n", y, runStart, x - 1);
+                        runStart = -1;
+                    }
+                }
+            }
+            free(lcd);
+            Serial.printf("%ld,%d,%d,%d,%d\n", n, x1, y1, x2, y2);
+            lv_obj_invalidate(lv_scr_act()); // panel back in step
+        }
         else if (cmdPart.indexOf("LCD?") > 0)
         {
             // what the panel really shows (GRAM over MISO), not LVGL's buffer
@@ -631,10 +707,12 @@ void SCPIParser::executeCommand(const String& command)
         }
         else if (cmdPart.indexOf("MEM?") > 0)
         {
-            // internal RAM free, its largest block, PSRAM free, UI task stack never used (bytes)
-            Serial.printf("%u,%u,%u,%u\n", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+            // internal RAM free, its largest block, PSRAM free, UI task stack never used (bytes),
+            // display transfers dispDrain() had to finish
+            extern volatile uint32_t g_drainCount;
+            Serial.printf("%u,%u,%u,%u,%u\n", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
                           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
-                          (unsigned)uxTaskGetStackHighWaterMark(NULL));
+                          (unsigned)uxTaskGetStackHighWaterMark(NULL), (unsigned)g_drainCount);
         }
         else if (cmdPart.indexOf("FPS?") > 0)
         {

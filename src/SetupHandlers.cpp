@@ -619,8 +619,36 @@ bool scanI2CBus(TwoWire &i2cBus, uint8_t address)
 void touchSample();
 
 static bool lastFlushDirect = false;
+volatile bool g_flushSkip = false;
+// Wait for every display transfer before LVGL draws on. Overlapping them
+// (draw the next strip while DMA sends the last) let some write land in a
+// buffer still being sent: wrong pixels reached the panel (black bars under
+// the status text, broken digit segments) while LVGL's own copy was right.
+// Found with DISP:CHECK? (7/15 checks bad overlapped, 0/15 waited). Costs
+// nothing measurable (DISP:AREA full screen 44.7 vs 44.8 ms): rendering, not
+// SPI, is the bottleneck. DISP:SYNC 0 = old overlapped mode, for A/B only.
+volatile bool g_dmaSync = true;
+static bool s_writeOpen = false;   // a frame left a DMA transfer running with CS held
+volatile uint32_t g_drainCount = 0; // times dispDrain() had to finish one (DISP:MEM? 5th)
+// Finish a display transfer a frame left open. Anything else on the SPI bus
+// (touch, LCD readback) would otherwise cut off its tail: the last pixels
+// of the area stay stale on the panel.
+void dispDrain()
+{
+    if (!s_writeOpen)
+        return;
+    tft.dmaWait();
+    tft.endWrite();
+    s_writeOpen = false;
+    g_drainCount++;
+} // DISP:CHECK?: render for comparison, don't send
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p)
 {
+    if (g_flushSkip)
+    {
+        lv_disp_flush_ready(disp);
+        return;
+    }
     // Low-noise mode: wait here for the ADC to finish its V+I pair (the frame
     // was already rendered into the buffer while it converted). No-op otherwise.
     spiFrameClaim();
@@ -664,6 +692,14 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
         if (maxRows < 1)
             maxRows = 1;
 
+        // A staged flush copies into dmaBandBuf, which is also a direct draw
+        // strip: a direct transfer from it may still be running (no wait
+        // after direct flushes). pushImageDMA() copies into the staging
+        // buffer BEFORE it waits, so that copy overwrote pixels still being
+        // sent - the tail of the area reached the panel wrong (black bars
+        // under the status text, broken digit segments). Wait first.
+        if (!direct)
+            tft.dmaWait();
         int32_t yy = area->y1;
         int32_t rowsLeft = h;
         while (rowsLeft > 0)
@@ -677,7 +713,7 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
             // Drawn straight into the internal buffer (see pickDrawBuffer): send
             // it as is, no staging copy.
             tft.pushImageDMA(x, yy, w, rows, src, direct ? nullptr : dmaBandBuf);
-            if (!direct)
+            if (!direct || g_dmaSync)
                 tft.dmaWait(); // the next band overwrites the staging buffer
             // direct: no wait. The transfer runs while LVGL draws the next
             // strip into the OTHER buffer; pushImageDMA() waits for it before
@@ -703,7 +739,10 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
     {
         tft.dmaWait();
         tft.endWrite();
+        s_writeOpen = false;
     }
+    else
+        s_writeOpen = true; // a direct transfer still running, CS held
     dispPerfFlushEnd();
 
     if (lv_disp_flush_is_last(disp) && SpiQuiet::frameClaimed)

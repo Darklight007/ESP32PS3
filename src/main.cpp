@@ -210,6 +210,7 @@ void loop()
     lvglIsBusy = true;
     TRACE("loop_pre_lvgl");
     lv_timer_handler();
+    { extern void dispDrain(); dispDrain(); } // a frame that never flagged its last flush
     spiFrameRelease(); // low-noise mode: normally already released by the last flush
     TRACE("loop_post_lvgl");
     lvglIsBusy = false;

@@ -168,8 +168,13 @@ static struct
 // threshold twice, two position samples within _RAWERR (20) of each other,
 // inside the calibrated range. ~0.3 ms per poll. Noise fails the position
 // checks; a press passes them at once.
+void dispDrain();
+volatile bool g_noTouch = false; // DIAG:NOTOUCH 1: skip touch reads (glitch hunting)
 static bool fastTouch(uint16_t *x, uint16_t *y, bool held)
 {
+    if (g_noTouch)
+        return false;
+    dispDrain(); // never cut a display DMA short
 #ifdef USE_LGFX
     // LovyanGFX shim: idle reads <= ~215, presses ~500 (bottom-left corner)
     // to ~3100 (measured), so 600 missed corner presses.

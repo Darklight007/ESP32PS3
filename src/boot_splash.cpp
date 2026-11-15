@@ -474,205 +474,551 @@ template <typename R> static void weatherFrame(R &rnd)
     }
 }
 
-// Sea life: now and then something surfaces - dolphins, a whale's spout,
-// an octopus, a sea serpent, a glowing jellyfish. Drawn pixels are listed
-// and put back from the scene, so nothing else is touched.
-static int16_t s_lifeX[700], s_lifeY[700];
-static int s_lifeN = 0;
+// Sea life and traffic. Now and then something surfaces (dolphins, whale,
+// octopus, sea serpent, jellyfish, shark, fish, turtle, manta, seal, gulls,
+// flying fish, a kraken's eye), sized by distance (smaller near the
+// horizon); ships, tankers, planes and satellites pass. Drawn pixels are
+// listed and put back from the scene, so nothing else is touched.
+struct PixList { int16_t *x = nullptr, *y = nullptr; int n = 0; }; // lists in PSRAM (internal RAM is short)
+static PixList s_life, s_traffic;
+static PixList *s_pl = &s_life;
+static bool s_waterOnly = true;
+static float s_sc = 1; // size by distance
 static void lifePix(int x, int y, uint32_t c, float a)
 {
-    if (skipPix(x, y) || y < kHorizon + 1 || s_lifeN >= 700)
+    if (s_waterOnly && (y <= kHorizon || (y > 150 && (x < 42 || x > 278))))
+        return; // sky or the wooded shores
+    if (skipPix(x, y) || s_pl->n >= 900)
         return;
+    if (!s_pl->x)
+    {
+        s_pl->x = (int16_t *)heap_caps_malloc(900 * 2 * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+        if (!s_pl->x)
+            return;
+        s_pl->y = s_pl->x + 900;
+    }
     putPix(x, y, c, a);
-    s_lifeX[s_lifeN] = x, s_lifeY[s_lifeN++] = y;
+    s_pl->x[s_pl->n] = x, s_pl->y[s_pl->n++] = y;
 }
-static void lifeErase()
+static void lp(float x, float y, uint32_t c, float a) { lifePix(lroundf(x), lroundf(y), c, a); }
+static void listErase(PixList &l)
 {
-    for (int i = 0; i < s_lifeN; i++)
-        if (!skipPix(s_lifeX[i], s_lifeY[i]))
-            restorePix(s_lifeX[i], s_lifeY[i]);
-    s_lifeN = 0;
+    for (int i = 0; i < l.n; i++)
+        if (!skipPix(l.x[i], l.y[i]))
+            restorePix(l.x[i], l.y[i]);
+    l.n = 0;
 }
 static void dolphin(float x, float y, float ux, float uy, int dir)
 {
     const uint32_t body = 0x26364C, rim = 0x7090B8;
-    const float nx = uy * dir, ny = -ux * dir; // "up" side of the body
-    for (int i = -5; i <= 5; i++)
+    const float s = s_sc, nx = uy * dir, ny = -ux * dir; // "up" side of the body
+    const int n = std::max(2, (int)(5 * s));
+    for (int i = -n; i <= n; i++)
     {
         const float px = x + i * ux * dir, py = y + i * uy * dir;
-        lifePix(lroundf(px), lroundf(py), body, 0.95f);
-        if (abs(i) < 4)
-            lifePix(lroundf(px + nx), lroundf(py + ny), rim, 0.55f), lifePix(lroundf(px - nx), lroundf(py - ny), body, 0.8f);
+        lp(px, py, body, 0.95f);
+        if (abs(i) < n - 1 && s > 0.7f)
+            lp(px + nx, py + ny, rim, 0.55f), lp(px - nx, py - ny, body, 0.8f);
     }
-    lifePix(lroundf(x + 2 * nx), lroundf(y + 2 * ny), body, 0.9f);          // dorsal fin
-    lifePix(lroundf(x + 3 * nx - ux * dir), lroundf(y + 3 * ny - uy * dir), body, 0.8f);
-    const float tx = x - 6 * ux * dir, ty = y - 6 * uy * dir;               // tail flukes
-    lifePix(lroundf(tx + nx), lroundf(ty + ny), body, 0.9f), lifePix(lroundf(tx - nx), lroundf(ty - ny), body, 0.9f);
-    lifePix(lroundf(x + 6 * ux * dir), lroundf(y + 6 * uy * dir), body, 0.7f); // beak
+    lp(x + 2 * s * nx, y + 2 * s * ny, body, 0.9f); // dorsal fin
+    const float tx = x - (n + 1) * ux * dir, ty = y - (n + 1) * uy * dir; // flukes
+    lp(tx + nx, ty + ny, body, 0.9f), lp(tx - nx, ty - ny, body, 0.9f);
 }
-static void splash(int x, int y, float k, uint32_t seed)
+static void splash(float x, float y, float k, uint32_t seed)
 {
     for (int i = 0; i < 6; i++)
     {
         seed = seed * 1664525u + 1013904223u;
         const int dx = (int)(seed >> 28) - 8, dy = (int)((seed >> 24) & 7);
-        lifePix(x + dx / 2, y - (int)(dy * k), 0xA8C4E0, 0.7f * k);
+        lp(x + dx / 2 * s_sc, y - dy * k * s_sc, 0xA8C4E0, 0.7f * k);
+    }
+}
+static void ring(float x, float y, float r, uint32_t c, float a) // a ripple on the water
+{
+    for (int i = 0; i < 16; i++)
+    {
+        const float t = i / 16.0f * 6.28318f;
+        lp(x + cosf(t) * r, y + sinf(t) * r * 0.3f, c, a);
     }
 }
 template <typename R> static void seaLifeFrame(R &rnd)
 {
-    enum { DOLPHINS, WHALE, OCTOPUS, SERPENT, JELLY, KINDS };
+    enum { DOLPHINS, WHALE, OCTOPUS, SERPENT, JELLY, SHARK, FISHES, TURTLE, MANTA, SEAL, GULLS, FLYFISH, KRAKEN, KINDS };
+    static const uint32_t durs[KINDS] = {1900, 5200, 4200, 9000, 4500, 7000, 2600, 5000, 1700, 4500, 22000, 2200, 4800};
     static int kind = -1, dir = 1, x0 = 0, y0 = 0;
-    static uint32_t t0 = 0, next = 0, dur = 0, showSeen = 0;
+    static uint32_t t0 = 0, next = 0, dur = 0, showSeen = 0, seed = 1;
     const uint32_t now = millis();
+    s_pl = &s_life, s_waterOnly = true;
     if (showSeen != s_showMs)
-        showSeen = s_showMs, kind = -1, s_lifeN = 0, next = now + 2500 + rnd() % 3000;
-    lifeErase();
+        showSeen = s_showMs, kind = -1, s_life.n = 0, next = now + 2000 + rnd() % 3000;
+    listErase(s_life);
     if (kind < 0)
     {
         if ((int32_t)(now - next) < 0)
             return;
         kind = rnd() % KINDS;
-        static const uint32_t durs[KINDS] = {1900, 5200, 4200, 8000, 4500};
         dur = durs[kind];
-        for (int tries = 0; tries < 8; tries++) // keep clear of the boat
+        y0 = kind == SERPENT || kind == KRAKEN ? kHorizon + 8 + rnd() % 26 : kHorizon + 10 + rnd() % 66;
+        s_sc = 0.45f + (y0 - kHorizon) / 85.0f; // far = small
+        const int span = kind == SERPENT || kind == SHARK || kind == GULLS || kind == FLYFISH ? (int)(45 * s_sc) : (int)(25 * s_sc);
+        for (int tries = 0; tries < 10; tries++) // clear of the boat and the shores
         {
-            x0 = 70 + rnd() % 190;
-            if (abs(x0 - s_bx) > 55)
+            x0 = 50 + span + rnd() % std::max(1, 220 - 2 * span);
+            if (abs(x0 - s_bx) > 30 + span)
                 break;
         }
-        y0 = kHorizon + 22 + rnd() % 55;
         dir = rnd() & 1 ? 1 : -1;
+        seed = rnd();
         t0 = now;
     }
     const float p = (now - t0) / (float)dur;
     if (p >= 1)
     {
-        kind = -1, next = now + 6000 + rnd() % 10000;
+        kind = -1, next = now + 4000 + rnd() % 8000;
         return;
     }
-    const float fade = sinf(3.14159f * p);
+    s_sc = 0.45f + (y0 - kHorizon) / 85.0f;
+    const float s = s_sc, fade = sinf(3.14159f * p), PI_ = 3.14159f;
     switch (kind)
     {
-    case DOLPHINS: // two leaps, a quarter second apart
-        for (int d = 0; d < 2; d++)
+    case DOLPHINS: // two or three leaps
+        for (int d = 0; d < 3; d++)
         {
-            const float q = (p * dur - d * 300) / 1300.0f;
-            const int bx0 = x0 + d * 12 * -dir, by0 = y0 + d * 3;
+            const float q = (p * dur - d * 280) / 1300.0f;
+            const float bx0 = x0 - d * 11 * s * dir, by0 = y0 + d * 2;
             if (q < 0 || q > 1)
                 continue;
-            const float x = bx0 + dir * (q * 44 - 22), y = by0 - 15 * sinf(3.14159f * q);
-            float ux = 44, uy = -15 * 3.14159f * cosf(3.14159f * q);
+            const float w = 44 * s, hh = 15 * s;
+            const float x = bx0 + dir * (q * w - w / 2), y = by0 - hh * sinf(PI_ * q);
+            float ux = w, uy = -hh * PI_ * cosf(PI_ * q);
             const float l = sqrtf(ux * ux + uy * uy);
-            ux /= l, uy /= l;
-            dolphin(x, y, ux, uy * dir, dir);
+            dolphin(x, y, ux / l, uy / l * dir, dir);
             if (q < 0.18f)
-                splash(bx0 - dir * 22, by0, 1 - q / 0.18f, 77 + d);
+                splash(bx0 - dir * w / 2, by0, 1 - q / 0.18f, 77 + d);
             if (q > 0.82f)
-                splash(bx0 + dir * 22, by0, (q - 0.82f) / 0.18f, 99 + d);
+                splash(bx0 + dir * w / 2, by0, (q - 0.82f) / 0.18f, 99 + d);
         }
         break;
     case WHALE: // a long back rolls up, blows, then the flukes
     {
-        const float h = 4 * fade;
-        const int bxw = x0 + (int)(dir * (p * 16 - 8));
+        const float h = 4 * s * fade, bxw = x0 + dir * (p * 16 - 8) * s;
         for (int dy = 0; dy <= (int)h; dy++)
         {
-            const int w = (int)(16 * sqrtf(std::max(0.0f, 1 - (dy / (h + 0.5f)) * (dy / (h + 0.5f)))));
+            const int w = (int)(16 * s * sqrtf(std::max(0.0f, 1 - (dy / (h + 0.5f)) * (dy / (h + 0.5f)))));
             for (int dx = -w; dx <= w; dx++)
-                lifePix(bxw + dx, y0 - dy, dy == (int)h ? 0x405876 : 0x182434, 0.95f);
+                lp(bxw + dx, y0 - dy, dy == (int)h ? 0x405876 : 0x182434, 0.95f);
         }
-        if (p > 0.3f && p < 0.7f) // spout: a column that fans out and falls
+        if (p > 0.3f && p < 0.7f)
         {
-            const float sp = sinf(3.14159f * (p - 0.3f) / 0.4f);
-            const int H = (int)(20 * sp), sx = bxw + dir * 9;
+            const float sp = sinf(PI_ * (p - 0.3f) / 0.4f);
+            const int H = (int)(20 * s * sp);
+            const float sx = bxw + dir * 9 * s;
             for (int y = 0; y < H; y++)
-                lifePix(sx + ((y * 7 + (int)(now / 60)) % 3) - 1, y0 - (int)h - y, 0xB8D0EA, 0.55f * sp);
+                lp(sx + ((y * 7 + (int)(now / 60)) % 3) - 1, y0 - h - y, 0xB8D0EA, 0.55f * sp);
             for (int i = 0; i < 10; i++)
             {
-                const float a = i / 9.0f * 3.14159f;
-                lifePix(sx + (int)(cosf(a) * 7 * sp), y0 - (int)h - H + (int)(fabsf(cosf(a)) * 6 * sp), 0xC8DCF0, 0.6f * sp);
+                const float a = i / 9.0f * PI_;
+                lp(sx + cosf(a) * 7 * s * sp, y0 - h - H + fabsf(cosf(a)) * 6 * s * sp, 0xC8DCF0, 0.6f * sp);
             }
         }
-        if (p > 0.72f) // flukes as it dives
+        if (p > 0.72f)
         {
-            const float f = sinf(3.14159f * (p - 0.72f) / 0.28f);
-            const int fx = bxw - dir * 18, fh = (int)(9 * f);
+            const float f = sinf(PI_ * (p - 0.72f) / 0.28f), fx = bxw - dir * 18 * s;
+            const int fh = (int)(9 * s * f);
             for (int y = 0; y < fh; y++)
-                lifePix(fx, y0 - y, 0x182434, 0.95f);
-            for (int i = 0; i <= 5; i++)
-                lifePix(fx - i, y0 - fh - i / 2 + 2, 0x2A3C54, 0.95f * f), lifePix(fx + i, y0 - fh - i / 2 + 2, 0x2A3C54, 0.95f * f);
+                lp(fx, y0 - y, 0x182434, 0.95f);
+            for (int i = 0; i <= (int)(5 * s); i++)
+                lp(fx - i, y0 - fh - i / 2 + 2, 0x2A3C54, 0.95f * f), lp(fx + i, y0 - fh - i / 2 + 2, 0x2A3C54, 0.95f * f);
         }
         break;
     }
     case OCTOPUS: // tentacles curl out of the water, two lamp eyes between
     {
-        const float L = 18 * fade;
+        const float L = 18 * s * fade;
         for (int i = 0; i < 6; i++)
         {
-            const int base = x0 + (i - 3) * 6 + 3;
-            for (int sIdx = 0; sIdx < (int)L; sIdx++)
+            const float base = x0 + (i - 2.5f) * 6 * s;
+            for (int k = 0; k < (int)L; k++)
             {
-                const float u = sIdx / std::max(1.0f, L);
-                const float cx = base + (4 + 3 * u) * sinf(sIdx * 0.32f + now * 0.004f + i * 1.3f) * u;
-                lifePix(lroundf(cx), y0 - sIdx, 0x4A2C5C, 0.95f);
-                if (u < 0.6f)
-                    lifePix(lroundf(cx) + 1, y0 - sIdx, 0x2E1A3A, 0.95f);
-                if (sIdx % 4 == 2)
-                    lifePix(lroundf(cx) - 1, y0 - sIdx, 0xC08AD0, 0.5f); // suckers
+                const float u = k / std::max(1.0f, L);
+                const float cx = base + (4 + 3 * u) * s * sinf(k * 0.32f / s + now * 0.004f + i * 1.3f) * u;
+                lp(cx, y0 - k, 0x4A2C5C, 0.95f);
+                if (u < 0.6f && s > 0.7f)
+                    lp(cx + 1, y0 - k, 0x2E1A3A, 0.95f);
+                if (k % 4 == 2)
+                    lp(cx - 1, y0 - k, 0xC08AD0, 0.5f);
             }
         }
         const float e = fade * (0.6f + 0.4f * sinf(now * 0.01f));
-        lifePix(x0 - 4, y0 - 2, 0xFFE070, e), lifePix(x0 + 4, y0 - 2, 0xFFE070, e);
-        lifePix(x0 - 3, y0 - 2, 0x806010, e * 0.6f), lifePix(x0 + 5, y0 - 2, 0x806010, e * 0.6f);
+        lp(x0 - 4 * s, y0 - 2, 0xFFE070, e), lp(x0 + 4 * s, y0 - 2, 0xFFE070, e);
         break;
     }
-    case SERPENT: // humps and a long neck gliding along, one red eye
+    case SERPENT: // far out: humps and a neck gliding along, one red eye
     {
-        const float hx = x0 + dir * (p * 80 - 40);
+        const float hx = x0 + dir * (p * 90 - 45) * s;
         for (int k = 0; k < 4; k++)
         {
-            const float cx = hx - dir * (10 + k * 11), r = (3.5f - k * 0.5f) * fade * (0.8f + 0.2f * sinf(now * 0.005f + k));
+            const float cx = hx - dir * (10 + k * 11) * s, r = (3.5f - k * 0.5f) * s * fade * (0.8f + 0.2f * sinf(now * 0.005f + k));
             for (int a = 0; a <= 12; a++)
             {
-                const float t = a / 12.0f * 3.14159f;
-                lifePix(lroundf(cx + cosf(t) * (r + 1)), lroundf(y0 - sinf(t) * r), 0x1C3A2C, 0.95f);
-                lifePix(lroundf(cx + cosf(t) * r), lroundf(y0 - sinf(t) * (r - 1)), 0x0E2018, 0.95f);
+                const float t = a / 12.0f * PI_;
+                lp(cx + cosf(t) * (r + 1), y0 - sinf(t) * r, 0x1C3A2C, 0.95f);
             }
         }
-        const int nh = (int)(12 * fade);
-        for (int y = 0; y < nh; y++) // neck, leaning forward near the top
+        const int nh = (int)(12 * s * fade);
+        for (int y = 0; y < nh; y++)
+            lp(hx + dir * (y > nh - 4 ? (y - nh + 4) : 0) * 0.8f, y0 - y, 0x1C3A2C, 0.95f);
+        if (nh > 3)
         {
-            const int nx = lroundf(hx + dir * (y > nh - 4 ? (y - nh + 4) : 0) * 0.8f);
-            lifePix(nx, y0 - y, 0x1C3A2C, 0.95f), lifePix(nx - dir, y0 - y, 0x0E2018, 0.95f);
-        }
-        if (nh > 4)
-        {
-            const int hx2 = lroundf(hx + dir * 3), hy = y0 - nh;
-            for (int i = 0; i < 4; i++)
-                lifePix(hx2 + dir * i, hy, 0x2A5440, 0.95f), lifePix(hx2 + dir * i, hy + 1, 0x1C3A2C, 0.95f);
-            lifePix(hx2 + dir, hy, 0xFF3020, fade);
+            const float hx2 = hx + dir * 3 * s;
+            for (int i = 0; i < (int)(4 * s) + 1; i++)
+                lp(hx2 + dir * i, y0 - nh, 0x2A5440, 0.95f);
+            lp(hx2 + dir, y0 - nh, 0xFF3020, fade);
         }
         break;
     }
-    case JELLY: // a glowing ring pulsing under the surface, trailing threads
+    case JELLY: // a glowing bell pulsing under the surface, trailing threads
     {
-        const float pulse = 0.75f + 0.25f * sinf(now * 0.008f);
-        const int jy = y0 + 4 - (int)(4 * p);
+        const float pulse = 0.75f + 0.25f * sinf(now * 0.008f), jy = y0 + 4 - 4 * p;
         for (int a = 0; a < 24; a++)
         {
             const float t = a / 24.0f * 6.28318f;
-            if (sinf(t) > 0.2f)
-                continue; // bell: upper half only
-            lifePix(lroundf(x0 + cosf(t) * 6 * pulse), lroundf(jy + sinf(t) * 4 * pulse), 0x40FFD0, 0.6f * fade);
+            if (sinf(t) <= 0.2f)
+                lp(x0 + cosf(t) * 6 * s * pulse, jy + sinf(t) * 4 * s * pulse, 0x40FFD0, 0.6f * fade);
         }
-        lifePix(x0, jy - 2, 0xA0FFF0, 0.7f * fade);
         for (int k = -2; k <= 2; k++)
-            for (int y = 1; y < 8; y++)
-                lifePix(x0 + k * 2 + lroundf(sinf(y * 0.6f + now * 0.006f + k)), jy + y, 0x20C0A0, 0.4f * fade * (1 - y / 8.0f));
+            for (int y = 1; y < (int)(8 * s); y++)
+                lp(x0 + k * 2 * s + sinf(y * 0.6f + now * 0.006f + k), jy + y, 0x20C0A0, 0.4f * fade);
+        break;
+    }
+    case SHARK: // a fin cutting along, a thin wake behind it
+    {
+        const float fx = x0 + dir * (p * 90 - 45) * s, h = 6 * s * std::min(1.0f, fade * 3);
+        for (int y = 0; y < (int)h; y++)
+            for (int x = 0; x <= (int)((h - y) * 0.7f); x++)
+                lp(fx - dir * x + dir * y * 0.3f, y0 - y, 0x1A2230, 0.95f);
+        for (int i = 2; i < (int)(16 * s); i += 2)
+            lp(fx - dir * i, y0 + (i / 2 % 2), 0x8CA8C8, 0.45f * fade * (1 - i / (16 * s)));
+        break;
+    }
+    case FISHES: // a little school skipping out of the water
+    {
+        uint32_t sd = seed;
+        for (int f = 0; f < 9; f++)
+        {
+            sd = sd * 1664525u + 1013904223u;
+            const float off = (sd >> 24) / 255.0f * 0.5f, q = (p - off) / 0.45f;
+            sd = sd * 1664525u + 1013904223u;
+            const float fx0 = x0 + ((int)(sd >> 27) - 16) * s, fy0 = y0 + ((sd >> 24) & 7) - 3;
+            if (q < 0 || q > 1)
+                continue;
+            const float x = fx0 + dir * (q * 10 - 5) * s, y = fy0 - 5 * s * sinf(PI_ * q);
+            lp(x, y, 0xD0E0F0, 0.8f), lp(x - dir, y + (q < 0.5f ? 1 : -1) * 0.5f, 0x8098B0, 0.7f);
+        }
+        break;
+    }
+    case TURTLE: // a shell and a small head, drifting, then down again
+    {
+        const float tx = x0 + dir * (p * 12 - 6) * s, h = 2.5f * s * fade;
+        for (int dy = 0; dy <= (int)h; dy++)
+        {
+            const int w = (int)(5 * s * sqrtf(std::max(0.0f, 1 - (dy / (h + 0.5f)) * (dy / (h + 0.5f)))));
+            for (int dx = -w; dx <= w; dx++)
+                lp(tx + dx, y0 - dy, (dx + dy) % 3 ? 0x2C4A30 : 0x46684A, 0.95f);
+        }
+        if (fade > 0.4f)
+            lp(tx + dir * 6 * s, y0 - 1, 0x3E5E42, 0.95f), lp(tx + dir * 7 * s, y0 - 2, 0x3E5E42, 0.95f);
+        ring(tx, y0 + 1, 7 * s * (0.5f + p), 0x6A88AA, 0.3f * fade);
+        break;
+    }
+    case MANTA: // a flat ray leaps and slaps back down
+    {
+        const float x = x0 + dir * (p * 30 - 15) * s, y = y0 - 14 * s * sinf(PI_ * p), w = 8 * s;
+        for (int i = -(int)w; i <= (int)w; i++)
+        {
+            const float t = 1 - fabsf(i / w);
+            lp(x + i, y - t * 1.5f * s * sinf(now * 0.02f), 0x202838, 0.95f);
+            if (t > 0.5f)
+                lp(x + i, y + 1, 0x101620, 0.95f);
+        }
+        lp(x - dir * (w + 2), y + 1, 0x202838, 0.8f), lp(x - dir * (w + 3), y + 2, 0x202838, 0.6f); // tail
+        if (p < 0.12f)
+            splash(x0 - dir * 15 * s, y0, 1 - p / 0.12f, seed);
+        if (p > 0.88f)
+            splash(x0 + dir * 15 * s, y0, (p - 0.88f) / 0.12f, seed + 1);
+        break;
+    }
+    case SEAL: // a round head bobs up, looks around
+    {
+        const float hy = y0 - 3 * s * fade + sinf(now * 0.006f), r = 2.5f * s;
+        for (int dy = -(int)r; dy <= 0; dy++)
+            for (int dx = -(int)r; dx <= (int)r; dx++)
+                if (dx * dx + dy * dy <= r * r)
+                    lp(x0 + dx, hy + dy, 0x24282E, 0.95f * std::min(1.0f, fade * 2));
+        const float look = sinf(now * 0.002f) > 0 ? 1 : -1;
+        lp(x0 + look * r * 0.6f, hy - r * 0.5f, 0xE0E8F0, 0.8f * fade);
+        lp(x0 + look * (r + 1), hy - 0.5f, 0x50565E, 0.7f * fade); // nose
+        ring(x0, y0 + 1, 5 * s, 0x6A88AA, 0.3f * fade);
+        break;
+    }
+    case GULLS: // fly in from off screen, maybe land and float a while,
+                // then take off and fly out past the other edge
+    {
+        s_waterOnly = false;
+        const bool lands = seed & 1;
+        const float sx = dir > 0 ? -15 : 335, ex = dir > 0 ? 335 : -15;
+        for (int b = 0; b < 3; b++)
+        {
+            const float lx = x0 - dir * b * 8 * s, ly = y0 + b * 2; // landing spot on the water
+            float gx, gy;
+            bool flying = true;
+            if (!lands)
+                gx = sx + (ex - sx) * p, gy = y0 - 20 * s - b * 4;
+            else if (p < 0.3f) // glide in, descending
+            {
+                const float q = p / 0.3f;
+                gx = sx + (lx - sx) * q, gy = ly - (1 - q) * (24 * s + b * 4) - 1;
+            }
+            else if (p < 0.68f) // floating, bobbing
+                gx = lx + dir * (p - 0.3f) * 6, gy = ly + 0.5f * sinf(now * 0.004f + b), flying = false;
+            else // take off, climbing out
+            {
+                const float q = (p - 0.68f) / 0.32f;
+                gx = lx + dir * 2.3f + (ex - lx) * q, gy = ly - q * (30 * s + b * 4);
+            }
+            gx -= dir * b * 9 * s * (flying ? 1 : 0);
+            if (gy < 2 || gx < -12 || gx > 332)
+                continue;
+            if (!flying)
+            {
+                lp(gx, gy - 1, 0xD8DEE6, 0.85f), lp(gx + dir, gy - 1, 0xC0C8D0, 0.8f), lp(gx - dir, gy, 0xA0A8B0, 0.7f);
+                lp(gx + 2 * dir, gy - 2, 0xE0E4E8, 0.85f); // head
+                continue;
+            }
+            const float fl = sinf(now * 0.02f + b * 2); // wing beat
+            const int w = std::max(2, (int)(4 * s));
+            for (int i = 1; i <= w; i++)
+            {
+                const float dy = -fl * i * 0.6f;
+                lp(gx - i, gy + dy, 0xC0C8D0, 0.75f), lp(gx + i, gy + dy, 0xC0C8D0, 0.75f);
+            }
+            lp(gx, gy, 0xE0E4E8, 0.85f);
+        }
+        s_waterOnly = true;
+        break;
+    }
+    case FLYFISH: // glides low over the surface, fins shimmering
+    {
+        const float x = x0 + dir * (p * 70 - 35) * s, y = y0 - 4 * s * sinf(PI_ * p);
+        for (int i = -2; i <= 2; i++)
+            lp(x + dir * i * s, y, 0x90A8C8, 0.85f);
+        const float sh = 0.5f + 0.5f * sinf(now * 0.05f);
+        lp(x, y - 1, 0xC0F0FF, 0.6f * sh), lp(x - dir, y - 2, 0xC0F0FF, 0.5f * sh);
+        if (p < 0.1f || p > 0.9f)
+            splash(x, y0, 0.6f, seed);
+        break;
+    }
+    case KRAKEN: // far out, a vast eye opens on the water, looks, blinks
+    {
+        const float open = std::min(1.0f, fade * 2.5f) * (fabsf(p - 0.6f) < 0.03f ? 0.1f : 1); // a blink
+        const float w = 7 * s, h = 2.5f * s * open;
+        for (int dx = -(int)w; dx <= (int)w; dx++)
+        {
+            const float hh = h * sqrtf(std::max(0.0f, 1 - (dx / w) * (dx / w)));
+            for (int dy = -(int)hh; dy <= (int)hh; dy++)
+                lp(x0 + dx, y0 + dy, abs(dx - (int)(2 * s * sinf(now * 0.001f))) < std::max(1.0f, s) ? 0x100800 : 0xE0B020, 0.9f);
+        }
+        for (int a = 0; a < 6; a++) // dark coils around it
+        {
+            const float t = now * 0.0015f + a * 1.05f;
+            lp(x0 + cosf(t) * (w + 6 * s), y0 + sinf(t) * 2 * s, 0x301828, 0.8f * fade);
+        }
         break;
     }
     }
+}
+
+// Ships, tankers, planes and satellites crossing now and then
+template <typename R> static void trafficFrame(R &rnd)
+{
+    enum { TRAWLER, TANKER, LINER, PLANE, PLANE2, SATELLITE, KINDS };
+    static int kind = -1, dir = 1, y0 = 0;
+    static float speed = 0;
+    static uint32_t t0 = 0, next = 0, showSeen = 0;
+    const uint32_t now = millis();
+    s_pl = &s_traffic, s_waterOnly = false;
+    if (showSeen != s_showMs)
+        showSeen = s_showMs, kind = -1, s_traffic.n = 0, next = now + 4000 + rnd() % 6000;
+    listErase(s_traffic);
+    if (kind < 0)
+    {
+        if ((int32_t)(now - next) < 0)
+            return;
+        kind = rnd() % KINDS;
+        dir = rnd() & 1 ? 1 : -1;
+        const bool ship = kind <= LINER;
+        y0 = ship ? kHorizon + 2 + rnd() % 3 : kind == SATELLITE ? 6 + rnd() % 30 : 10 + rnd() % 70;
+        speed = ship ? 0.8f + (rnd() % 100) / 70.0f : kind == SATELLITE ? 9 + rnd() % 6 : 22 + rnd() % 20; // ships far out: ~1-2 px/s
+        t0 = now;
+    }
+    const float x = (dir > 0 ? -20 : 340) + dir * speed * (now - t0) / 1000.0f;
+    if (x < -50 || x > 370)
+    {
+        kind = -1, next = now + 8000 + rnd() % 14000;
+        return;
+    }
+    const int X = (int)x, Y = y0;
+    const bool blink = (now / 500) % 2, strobe = (now % 1200) < 90;
+    switch (kind)
+    {
+    case TRAWLER: // small hull, wheelhouse, a mast with a work light
+        for (int i = -5; i <= 5; i++)
+            lifePix(X + i, Y, 0x05080C, 1);
+        for (int i = -3; i <= 4; i++)
+            lifePix(X + i, Y + 1, 0x05080C, 1);
+        lifePix(X - 2, Y - 1, 0x05080C, 1), lifePix(X - 1, Y - 1, 0x05080C, 1), lifePix(X - 1, Y - 2, 0x05080C, 1);
+        lifePix(X - 2, Y - 1, 0xFFC060, 0.6f);
+        for (int y = 1; y <= 5; y++)
+            lifePix(X + 2, Y - y, 0x0A1018, 1);
+        lifePix(X + 2, Y - 6, 0xFFFFFF, blink ? 0.9f : 0.5f);
+        break;
+    case TANKER: // long low hull, bridge aft, red and white lights
+        for (int i = -16; i <= 16; i++)
+            lifePix(X + i, Y, 0x05080C, 1), lifePix(X + i, Y + 1, 0x05080C, 1);
+        for (int y = 1; y <= 4; y++)
+            for (int i = 0; i < 4; i++)
+                lifePix(X - dir * (12 + i), Y - y, 0x080C12, 1);
+        lifePix(X - dir * 13, Y - 2, 0xFFD080, 0.5f), lifePix(X - dir * 14, Y - 3, 0xFFD080, 0.4f);
+        lifePix(X - dir * 13, Y - 6, 0xFF2010, blink ? 0.9f : 0.3f);
+        lifePix(X + dir * 15, Y - 2, 0xFFFFFF, 0.6f);
+        for (int i = -10; i < 10; i += 5)
+            lifePix(X + i, Y - 1, 0x0A1018, 1); // deck pipework
+        break;
+    case LINER: // a cruise ship: rows of lit windows
+        for (int i = -13; i <= 13; i++)
+            lifePix(X + i, Y, 0x06090E, 1), lifePix(X + i, Y + 1, 0x06090E, 1);
+        for (int i = -11; i <= 10; i++)
+            lifePix(X + i, Y - 1, 0x0A0E14, 1), lifePix(X + i, Y - 2, 0x0A0E14, 1);
+        for (int i = -10; i <= 9; i += 2)
+            lifePix(X + i, Y - 1, 0xFFE0A0, ((i * 7 + now / 900) % 5) ? 0.6f : 0.2f);
+        for (int i = -6; i <= 5; i += 2)
+            lifePix(X + i, Y - 2, 0xFFE8B0, 0.5f);
+        lifePix(X - dir * 3, Y - 3, 0x0A0E14, 1), lifePix(X - dir * 3, Y - 4, 0x0A0E14, 1); // funnel
+        break;
+    case PLANE:
+    case PLANE2: // tiny dark body, red/green wing lights, white strobe
+    {
+        const int Yp = Y + (int)((x - 160) * (kind == PLANE2 ? 0.06f : -0.03f)); // gently climbing/descending
+        for (int i = -2; i <= 2; i++)
+            lifePix(X + i, Yp, 0x101418, 0.9f);
+        lifePix(X, Yp - 1, 0xFF2020, blink ? 0.9f : 0.4f);
+        lifePix(X, Yp + 1, 0x20FF40, blink ? 0.4f : 0.9f);
+        if (strobe)
+            lifePix(X - dir * 2, Yp, 0xFFFFFF, 1);
+        break;
+    }
+    case SATELLITE: // a faint steady point drifting across
+        lifePix(X, Y + (int)(x * 0.15f), 0xD0D8E8, 0.55f + 0.3f * ((now / 2500) % 2));
+        break;
+    }
+}
+
+// Pines on the shores, swaying in the wind. Each shore strip (40 x 90)
+// is composed from a tree-free copy plus the pines at the current sway and
+// pushed to the LCD; the rows below kTreeY1 never move (trunks, caption).
+static constexpr int kTreeY0 = 150, kTreeY1 = 222, kTreeH = kTreeY1 - kTreeY0, kTreeW = 40;
+static constexpr int kTreeX[2] = {0, 280};
+static uint16_t *s_treeBase = nullptr, *s_treeBuf = nullptr; // PSRAM: [2][kTreeH*kTreeW], one strip
+struct Pine { int16_t x, base, h; };
+static const Pine kPines[] = {{6, 200, 40}, {17, 210, 28}, {27, 222, 18}, {314, 196, 44}, {302, 206, 32}, {291, 220, 20}};
+static float s_sway[6] = {0};
+template <typename Plot> static void pineDraw(const Pine &t, int ti, float sway, Plot plot)
+{
+    const uint16_t land = 0x0000, snow = mix(0x3A4860, 0, 0);
+    const bool snowy = s_wx == WX_SNOW;
+    const int h = t.h, trunk = std::max(2, h / 8), crown = h - trunk;
+    for (int y = t.base - trunk; y <= t.base; y++)
+        for (int x = t.x - (h > 30 ? 1 : 0); x <= t.x + 1; x++)
+            plot(x, y, land);
+    auto hash = [&](int x, int y) { uint32_t v = x * 73856093u ^ y * 19349663u ^ ti * 83492791u; v ^= v >> 13; v *= 0x5bd1e995; return (v >> 8) & 255; };
+    const float A = h / 13.0f; // tip sway in px at full wind
+    for (int y = 0; y < crown; y++)
+    {
+        const float f = (float)y / crown;                 // 0 top .. 1 bottom
+        const float tf = fmodf(f * 5, 1.0f);              // place in its tier
+        const float maxW = (0.07f + 0.31f * f) * h;
+        const float w = maxW * (0.3f + 0.7f * tf);
+        const int yy = t.base - trunk - crown + y;
+        const float bend = sway * A * powf(1 - f, 1.6f);  // top bends most
+        const int cx = t.x + (int)lroundf(bend);
+        const int core = (int)(w * 0.5f);
+        for (int dx = -(int)w - 1; dx <= (int)w + 1; dx++)
+        {
+            const int ad = abs(dx);
+            bool on = ad <= core;
+            if (!on && ad <= w + 1) // needles thin out toward the edge
+                on = hash(cx + dx, yy) < 255 * (1.15f - (ad - core) / (w - core + 1.5f));
+            if (on)
+            {
+                const int tip = ad > core ? (int)lroundf(sway * 0.6f * tf) : 0; // outer needles flutter
+                const bool top = snowy && tf < 0.35f && ad > core / 2;
+                plot(cx + dx + tip, yy, top ? snow : land);
+            }
+        }
+        if (tf > 0.82f && w > 3) // a drooping branch at the bottom of each tier
+            for (int side = -1; side <= 1; side += 2)
+                for (int k = (int)w; k <= (int)w + 3; k++)
+                    plot(cx + side * k + (int)lroundf(sway * 0.8f), yy + (k - (int)w) / 2, land);
+    }
+}
+static void treesCompose(int side)
+{
+    uint16_t *buf = s_treeBuf;
+    memcpy(buf, s_treeBase + side * kTreeH * kTreeW, kTreeH * kTreeW * 2);
+    const int x0 = kTreeX[side];
+    for (int i = 0; i < 6; i++)
+        if ((kPines[i].x < 160) == (side == 0))
+            pineDraw(kPines[i], i, s_sway[i], [&](int x, int y, uint16_t c) {
+                if (x >= x0 && x < x0 + kTreeW && y >= kTreeY0 && y < kTreeY1)
+                    buf[(y - kTreeY0) * kTreeW + x - x0] = c;
+            });
+}
+static void treesInit()
+{
+    if (!s_treeBase)
+        s_treeBase = (uint16_t *)heap_caps_malloc(3 * kTreeH * kTreeW * 2, MALLOC_CAP_SPIRAM);
+    if (s_treeBase && s_bgSpr)
+    {
+        s_treeBuf = s_treeBase + 2 * kTreeH * kTreeW;
+        for (int side = 0; side < 2; side++)
+            for (int y = 0; y < kTreeH; y++)
+                for (int x = 0; x < kTreeW; x++)
+                    s_treeBase[side * kTreeH * kTreeW + y * kTreeW + x] = s_bgSpr->readPixel(kTreeX[side] + x, kTreeY0 + y);
+    }
+    for (int i = 0; i < 6; i++) // the still picture: trees at rest, full height
+        s_sway[i] = 0, pineDraw(kPines[i], i, 0, [&](int x, int y, uint16_t c) { if (x >= 0 && x < 320) g->drawPixel(x, y, c); });
+}
+// Wind: a slow swell plus gusts; each tree has its own phase and stiffness
+static void treesFrame()
+{
+    static uint32_t last = 0;
+    const uint32_t now = millis();
+    if (!s_treeBase || !s_bgSpr || now - last < 110)
+        return;
+    last = now;
+    const float t = now / 1000.0f;
+    const float gust = 0.5f + 0.5f * sinf(t * 0.23f) * sinf(t * 0.61f + 1);
+    for (int i = 0; i < 6; i++)
+        s_sway[i] = (0.35f + 0.65f * gust) * (0.6f * sinf(t * (1.1f + 0.13f * i) + i * 1.7f) + 0.4f * sinf(t * 2.3f + i)) + 0.5f * gust;
+    const bool sw = tft.getSwapBytes();
+    tft.setSwapBytes(true);
+    for (int side = 0; side < 2; side++)
+    {
+        treesCompose(side);
+        const int rows = s_barShown ? std::min(kTreeH, kBarY - 15 - kTreeY0) : kTreeH;
+        tft.pushImage(kTreeX[side], kTreeY0, kTreeW, rows, s_treeBuf);
+    }
+    tft.setSwapBytes(sw);
 }
 
 static void twinkleTask(void *)
@@ -701,16 +1047,16 @@ static void twinkleTask(void *)
                 static uint32_t lastMs = 0, nextRoll = 0, showSeen = 0;
                 const uint32_t now = millis();
                 if (showSeen != s_showMs)
-                    showSeen = s_showMs, pos = rnd() % 200, v = vt = 0.7f, lastMs = now, nextRoll = now + 2000;
+                    showSeen = s_showMs, pos = 20 + rnd() % 300, v = vt = 0.7f, lastMs = now, nextRoll = now + 2000;
                 const float dt = (now - lastMs) / 1000.0f;
                 lastMs = now;
                 if ((int32_t)(now - nextRoll) >= 0)
                     vt = (rnd() % 1000) / 1000.0f * 1.4f, nextRoll = now + 3000 + rnd() % 6000;
                 v += (vt - v) * std::min(1.0f, dt * 0.4f);
                 pos += v * dt;
-                if (pos >= 260)
-                    pos -= 260;
-                const int bx = 30 + (int)pos;
+                if (pos >= 360)
+                    pos -= 360; // sails off the right edge, comes back in from the left
+                const int bx = -20 + (int)pos;
                 const int by = kBoatY;
                 const int fl = (el / 260) % 3;
                 if (bx != lastBx || by != lastBy || fl != lastFl)
@@ -815,6 +1161,8 @@ static void twinkleTask(void *)
             const Star &o = s_orion[rnd() % 9]; // and one Orion star
             if (o.halo)
                 star(o.x, o.y, o.halo, o.b * (0.55f + (rnd() % 100) / 160.0f), o.tint);
+            treesFrame();
+            trafficFrame(rnd);
             seaLifeFrame(rnd);
             weatherFrame(rnd);
             xSemaphoreGive(s_lock);
@@ -874,19 +1222,36 @@ void splashEnd()
 
 // Mountain ridge (top y at column x; kHorizon = none): Damavand on the left,
 // where Arash shot from, lower peaks fading out before Orion
+static float ridgeBase(int x);
+static int ridgeSmooth(int x) { return std::min(kHorizon, (int)lroundf(ridgeBase(x))); }
 static int ridgeY(int x)
 {
+    const float best = ridgeBase(x);
+    // a little roughness on the slopes
+    const int j = ((x * 37) ^ (x * 11 >> 2)) % 3;
+    return std::min(kHorizon, (int)best + (best < kHorizon - 1 ? j - 1 : 0));
+}
+static float ridgeBase(int x)
+{
     struct P { int x, y, w; };
-    static const P pk[] = {{38, 100, 44}, {84, 117, 24}, {110, 111, 30}, {146, 123, 20}, {174, 116, 28}, {206, 125, 18}}; // uneven, not sorted by height
-    float best = kHorizon;
+    static const P pk[] = {{84, 117, 24}, {110, 111, 30}, {146, 123, 20}, {174, 116, 28}, {206, 125, 18}}; // uneven, not sorted by height
+    // Damavand: a broad volcanic cone - small flat summit, concave flanks
+    // (steep near the top, easing out), the right flank longer, a shoulder
+    // part way down the left
+    const float dx = x - 40.0f;
+    const float u = std::max(0.0f, fabsf(dx) - 2.5f) / (dx < 0 ? 42.0f : 58.0f);
+    float dam = 99 + (kHorizon - 99) * std::min(1.0f, powf(u, 0.68f));
+    if (dx < 0)
+        dam -= 3.0f * expf(-powf((u - 0.52f) / 0.09f, 2));
+    else
+        dam -= 1.5f * expf(-powf((u - 0.66f) / 0.07f, 2));
+    float best = std::min((float)kHorizon, dam);
     for (const P &p : pk)
     {
         const float d = fabsf((float)(x - p.x)) / p.w;
         best = std::min(best, p.y + (kHorizon - p.y) * std::min(1.0f, d * (0.85f + 0.15f * d)));
     }
-    // a little roughness on the slopes
-    const int j = ((x * 37) ^ (x * 11 >> 2)) % 3;
-    return std::min(kHorizon, (int)best + (best < kHorizon - 1 ? j - 1 : 0));
+    return best;
 }
 static bool behindMountain(int x, int y) { return x >= 0 && x < 320 && y >= ridgeY(x) - 2; }
 static uint16_t oceanPix(int x, int y)
@@ -986,19 +1351,40 @@ void splashBegin()
             continue;
         g->drawFastVLine(x, r, kHorizon - r, mix(0x010306, 0, 0)); // near black
         g->drawPixel(x, r, mix(0x0A1220, 0, 0)); // faint rim
-        // snow cap: down to a ragged line (gullies run lower), brighter at
-        // the top, the slope facing left (moonlit) lighter than the right
-        const int base = s_wx == WX_SNOW ? 122 : 110;
-        const int line = base + (int)lroundf(1.5f * sinf(x * 0.33f) + 0.8f * sinf(x * 0.71f + 1)); // gently ragged
-        if (r < line - 1)
+        // snow cap: on the smooth ridge (no rock roughness), down to a gently
+        // ragged line, fading with height; left (moonlit) slope lighter
+        const int base = s_wx == WX_SNOW ? 123 : 114; // snow over the upper third of the cone
+        const int rs = ridgeSmooth(x);
+        // Texture from the summit down: irregular ribs of snow and rock
+        // gullies (smooth value noise over the direction from the summit,
+        // so they vary in width and spacing), snow running further down the
+        // ribs, scattered rock showing through, a soft skyline edge
+        const float sdx = x - 40.0f;
+        auto vnoise = [](float t, uint32_t seed) { // smooth 1-D value noise, -1..1
+            const int i = (int)floorf(t);
+            const float f = t - i, u = f * f * (3 - 2 * f);
+            auto h = [&](int k) { uint32_t v = (uint32_t)k * 2654435761u ^ seed; v ^= v >> 15; v *= 2246822519u; v ^= v >> 13; return (v & 1023) / 511.5f - 1; };
+            return h(i) + (h(i + 1) - h(i)) * u;
+        };
+        for (int y = rs; x < 96 && y < base + 10; y++)
         {
-            const int slope = ridgeY(x + 4) - ridgeY(x - 4); // > 0: right-facing (shade)
-            const float lit = std::max(0.5f, std::min(1.0f, 0.8f - 0.06f * slope));
-            for (int y = r + 1; y < line; y++)
-            {
-                const float k = 1.0f - (float)(y - r) / (line - r + 2); // fades toward the line
-                g->drawPixel(x, y, mix(0x010306, 0x4A5668, lit * (0.35f + 0.45f * k)));
-            }
+            const float a = sdx / (y - 99 + 4.0f);                       // direction from the summit
+            const float rib = 0.65f * vnoise(a * 4.2f, 11) + 0.35f * vnoise(a * 9.5f + 0.02f * (y - 99), 23);
+            const int line = base + (int)lroundf(1.0f * sinf(x * 0.19f) + 6.0f * std::max(0.0f, rib) - 1.5f * std::max(0.0f, -rib));
+            if (y >= line)
+                continue;
+            const float k = std::min(1.0f, (line - y) / 12.0f);          // brighter higher up
+            const int slope = ridgeSmooth(x + 5) - ridgeSmooth(x - 5);
+            const float lit = std::max(0.5f, std::min(1.0f, 0.8f - 0.05f * slope)) * (0.88f + 0.18f * rib);
+            float v = lit * (0.35f + 0.45f * k);
+            if (rib < -0.3f && y > rs + 2 && y > 103)
+                v *= 0.55f + 0.3f * (rib + 1);                            // rock showing in the gullies
+            const uint32_t hh = (uint32_t)(x * 73856093u ^ y * 19349663u);
+            if (y > rs + 3 && ((hh >> 7) & 63) == 0)
+                v *= 0.6f;                                                // a scattered dark rock
+            if (y == rs)
+                v = std::min(1.0f, v * 1.2f + 0.06f);                      // soft skyline edge
+            g->drawPixel(x, y, mix(0x010306, 0x6E7C96, v));
         }
     }
     // Ocean: deep navy at the horizon to near black, with the mountains
@@ -1026,39 +1412,15 @@ void splashBegin()
             g->drawFastHLine(297 - 1 + (int)(1.5f * sinf(y)), y, 3, mix(0x02101E, 0x5070A0, 0.5f * (1.0f - (y - kHorizon) / 40.0f)));
     }
     fogDraw();
-    // Shores with pine trees, left and right of the progress bar
+    // Shores: dark land, then pines (drawn by treesCompose, which the
+    // wind animation redraws; the tree-free shore is kept for it)
     {
         const uint16_t land = 0x0000;
-        auto pine = [&](int x, int base, int h) {
-            g->drawFastVLine(x, base - h, h, land);
-            for (int k = 0; k < 4; k++) // four stacked tiers
-            {
-                const int top = base - h + k * h / 5, w = 2 + k * h / 9;
-                g->fillTriangle(x, top, x - w, top + h / 3, x + w, top + h / 3, land);
-            }
-        };
         g->fillTriangle(0, 186, 0, 240, 32, 240, land);
         g->fillTriangle(0, 186, 30, 205, 32, 240, land);
         g->fillTriangle(320, 180, 320, 240, 288, 240, land);
         g->fillTriangle(320, 180, 292, 200, 288, 240, land);
-        pine(6, 200, 40);
-        pine(17, 210, 28);
-        pine(27, 222, 18);
-        pine(314, 196, 44);
-        pine(302, 206, 32);
-        pine(291, 220, 20);
-        if (s_wx == WX_SNOW) // snow on the branches
-        {
-            static const int16_t tr[6][3] = {{6, 200, 40}, {17, 210, 28}, {27, 222, 18}, {314, 196, 44}, {302, 206, 32}, {291, 220, 20}};
-            const uint16_t sn = mix(0x2A3850, 0, 0);
-            for (auto &p : tr)
-                for (int k = 0; k < 4; k++)
-                {
-                    const int top = p[1] - p[2] + k * p[2] / 5, w = 2 + k * p[2] / 9;
-                    g->drawLine(p[0] - w, top + p[2] / 3, p[0] - w / 2, top + p[2] / 3 - 2, sn);
-                    g->drawLine(p[0] + w / 2, top + p[2] / 3 - 2, p[0] + w, top + p[2] / 3, sn);
-                }
-        }
+        treesInit();
     }
     // Name with a glow (dim offset copies, then the bright core)
     g->setTextFont(4);
