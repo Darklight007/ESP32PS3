@@ -1,5 +1,7 @@
 // Boot splash: drawn straight with TFT_eSPI right after the display starts
-// (LVGL isn't running yet); LVGL's first frame paints over it. Night sky with
+// (LVGL isn't running yet); LVGL's first frame paints over it. ARASH 3206:
+// named for Arash the Archer, who gave his life to the arrow that set the
+// border of Iran. Night sky with
 // Orion (the three belt stars in a line), a teal horizon, a perspective grid,
 // a glowing title and a progress bar that setup() advances.
 #include <Arduino.h>
@@ -7,6 +9,7 @@
 #include "version.h"
 #include "boot_splash.h"
 #include "Keypad_MC17.h"
+#include "buzzer.h"
 extern Keypad_MC17 kpd;
 
 extern TFT_eSPI tft;
@@ -94,6 +97,7 @@ static void twinkleTask(void *)
 static bool anyHeld()
 {
     kpd.getKeys();
+    toneOff(); // a key press starts its beep; Task_ADC (which ends beeps) isn't running yet
     for (int i = 0; i < LIST_MAX; i++)
         if (kpd.key[i].kchar && (kpd.key[i].kstate == PRESSED || kpd.key[i].kstate == HOLD))
             return true;
@@ -134,6 +138,25 @@ void splashEnd()
         delay(5);
 }
 
+// Arash's arrow: a quadratic curve from the lower left toward Orion
+static void arrowAt(float t, float &x, float &y)
+{
+    const float u = 1 - t;
+    x = u * u * 6 + 2 * u * t * 112 + t * t * 212;
+    y = u * u * 128 + 2 * u * t * 72 + t * t * 96;
+}
+static bool nearArrow(int x, int y)
+{
+    for (int k = 0; k <= 40; k++)
+    {
+        float ax, ay;
+        arrowAt(k / 40.0f, ax, ay);
+        if (fabsf(ax - x) < 6 && fabsf(ay - y) < 6)
+            return true;
+    }
+    return false;
+}
+
 void splashBegin()
 {
     // Sky: black, then deep navy, a dark teal glow only near the horizon
@@ -148,7 +171,7 @@ void splashBegin()
         const int x = rnd() % 320, y = rnd() % (kHorizon - 10);
         const float b = 0.25f + (rnd() % 100) / 150.0f;
         const uint32_t tint = rnd() % 5 ? 0xC8DCFF : 0xFFE6C0;
-        if (x > 6 && x < 222 && y > 12 && y < 82)
+        if ((x > 6 && x < 222 && y > 8 && y < 80) || nearArrow(x, y))
             continue;
         s_bg[k++] = {(int16_t)x, (int16_t)y, 0, b, tint};
         tft.drawPixel(x, y, mix(skyRgb(y), tint, b));
@@ -191,26 +214,57 @@ void splashBegin()
         const float f = k / 8.0f;
         tft.drawFastHLine(0, kHorizon + (int)((240 - kHorizon) * f * f), 320, mix(0x06303C, 0x00C8A0, f));
     }
-    // Title with a glow (dim offset copies, then the bright core)
+    // Arash's arrow streaking across the sky: a fading trail, bright head
+    {
+        float px, py;
+        arrowAt(0, px, py);
+        for (int k = 1; k <= 120; k++)
+        {
+            const float t = k / 120.0f;
+            float x, y;
+            arrowAt(t, x, y);
+            const uint16_t c = mix(skyRgb((int)y), 0x9FFFE0, t * t);
+            tft.drawLine((int)px, (int)py, (int)x, (int)y, c);
+            if (t > 0.5f) // a soft glow around the newer part
+                tft.drawLine((int)px, (int)py + 1, (int)x, (int)y + 1, mix(skyRgb((int)y), 0x2AA090, (t - 0.5f)));
+            px = x, py = y;
+        }
+        // head along the tangent at the end
+        float x0, y0;
+        arrowAt(0.97f, x0, y0);
+        const float dx = px - x0, dy = py - y0, l = sqrtf(dx * dx + dy * dy);
+        const float ux = dx / l, uy = dy / l, nx = -uy, ny = ux;
+        const int hx = (int)(px + 5 * ux), hy = (int)(py + 5 * uy);
+        tft.fillTriangle(hx, hy, (int)(px - 3 * ux + 3 * nx), (int)(py - 3 * uy + 3 * ny),
+                         (int)(px - 3 * ux - 3 * nx), (int)(py - 3 * uy - 3 * ny), tft.color565(230, 255, 245));
+        // fletching at the tail end of the bright part
+        float fx, fy;
+        arrowAt(0.86f, fx, fy);
+        tft.drawLine((int)fx, (int)fy, (int)(fx - 4 * ux + 3 * nx), (int)(fy - 4 * uy + 3 * ny), tft.color565(120, 220, 200));
+        tft.drawLine((int)fx, (int)fy, (int)(fx - 4 * ux - 3 * nx), (int)(fy - 4 * uy - 3 * ny), tft.color565(120, 220, 200));
+    }
+    // Name with a glow (dim offset copies, then the bright core)
     tft.setTextFont(4);
     tft.setTextDatum(MC_DATUM);
-    const char *title = "PRECISION  PSU";
+    const char *title = "A R A S H";
     const uint16_t glow = tft.color565(0, 70, 90);
     for (int dx = -2; dx <= 2; dx += 2)
         for (int dy = -2; dy <= 2; dy += 2)
             if (dx || dy)
             {
                 tft.setTextColor(glow);
-                tft.drawString(title, 112 + dx, 30 + dy);
+                tft.drawString(title, 112 + dx, 22 + dy);
             }
     tft.setTextColor(tft.color565(210, 255, 250));
-    tft.drawString(title, 112, 30);
+    tft.drawString(title, 112, 22);
     tft.setTextFont(2);
     tft.setTextColor(tft.color565(70, 230, 170));
-    tft.drawString("0-32 V   0-6 A   24-bit", 112, 56);
+    tft.drawString("PRECISION POWER SUPPLY", 112, 46);
     tft.setTextFont(1);
-    tft.setTextColor(tft.color565(110, 140, 170));
-    tft.drawString(SOFTWARE_VERSION, 112, 72);
+    tft.setTextColor(tft.color565(150, 200, 190));
+    tft.drawString("MODEL 3206  -  0-32 V  0-6 A  24-bit", 112, 62);
+    tft.setTextColor(tft.color565(90, 115, 140));
+    tft.drawString(SOFTWARE_VERSION, 112, 74);
     tft.setTextDatum(TL_DATUM);
     // Progress bar on a clear strip (grid lines showing through its empty
     // part looked like stripes)
