@@ -31,7 +31,7 @@ static uint16_t mix(uint32_t a, uint32_t b, float t)
 
 static constexpr int kHorizon = 132;
 static constexpr int kBarX = 40, kBarY = 226, kBarW = 240;
-static constexpr uint32_t kFloor = 0x010B1A; // ocean colour near the bottom (bar strip)
+static constexpr uint32_t kFloor = 0x01070F; // ocean colour near the bottom (bar strip)
 
 // Sky colour at row y: black, then deep navy, a dark teal only near the horizon
 static uint32_t skyRgb(int y)
@@ -44,7 +44,7 @@ static uint32_t skyRgb(int y)
             r |= (uint32_t)(((a >> sh) & 255) + t * ((int)((b >> sh) & 255) - (int)((a >> sh) & 255))) << sh;
         return r;
     };
-    return t < 0.7f ? lerp(0x000000, 0x00040E, t / 0.7f) : lerp(0x00040E, 0x000A16, (t - 0.7f) / 0.3f);
+    return t < 0.75f ? lerp(0x000000, 0x000106, t / 0.75f) : lerp(0x000106, 0x01040B, (t - 0.75f) / 0.25f); // near black, faint at the horizon
 }
 
 // Ordered (Bayer 4x4) dither to RGB565: dark gradients have only a few
@@ -205,7 +205,7 @@ static void boatDraw(int bx, int by, int flick)
     for (int k = 0; k < 3; k++)
     {
         const int y = by + 2 + k * 2, w = 1 + ((k + flick) % 2);
-        tft.drawFastHLine(bx - 3 + ((k * 5 + flick) % 3) - 1, y, w, mix(0x02132C, 0xC07020, 0.5f - 0.13f * k));
+        tft.drawFastHLine(bx - 3 + ((k * 5 + flick) % 3) - 1, y, w, mix(0x020C1C, 0xC07020, 0.5f - 0.13f * k));
     }
     // hull, bow raised to the right
     tft.drawFastHLine(bx - 7, by - 2, 15, rim);
@@ -474,6 +474,207 @@ template <typename R> static void weatherFrame(R &rnd)
     }
 }
 
+// Sea life: now and then something surfaces - dolphins, a whale's spout,
+// an octopus, a sea serpent, a glowing jellyfish. Drawn pixels are listed
+// and put back from the scene, so nothing else is touched.
+static int16_t s_lifeX[700], s_lifeY[700];
+static int s_lifeN = 0;
+static void lifePix(int x, int y, uint32_t c, float a)
+{
+    if (skipPix(x, y) || y < kHorizon + 1 || s_lifeN >= 700)
+        return;
+    putPix(x, y, c, a);
+    s_lifeX[s_lifeN] = x, s_lifeY[s_lifeN++] = y;
+}
+static void lifeErase()
+{
+    for (int i = 0; i < s_lifeN; i++)
+        if (!skipPix(s_lifeX[i], s_lifeY[i]))
+            restorePix(s_lifeX[i], s_lifeY[i]);
+    s_lifeN = 0;
+}
+static void dolphin(float x, float y, float ux, float uy, int dir)
+{
+    const uint32_t body = 0x26364C, rim = 0x7090B8;
+    const float nx = uy * dir, ny = -ux * dir; // "up" side of the body
+    for (int i = -5; i <= 5; i++)
+    {
+        const float px = x + i * ux * dir, py = y + i * uy * dir;
+        lifePix(lroundf(px), lroundf(py), body, 0.95f);
+        if (abs(i) < 4)
+            lifePix(lroundf(px + nx), lroundf(py + ny), rim, 0.55f), lifePix(lroundf(px - nx), lroundf(py - ny), body, 0.8f);
+    }
+    lifePix(lroundf(x + 2 * nx), lroundf(y + 2 * ny), body, 0.9f);          // dorsal fin
+    lifePix(lroundf(x + 3 * nx - ux * dir), lroundf(y + 3 * ny - uy * dir), body, 0.8f);
+    const float tx = x - 6 * ux * dir, ty = y - 6 * uy * dir;               // tail flukes
+    lifePix(lroundf(tx + nx), lroundf(ty + ny), body, 0.9f), lifePix(lroundf(tx - nx), lroundf(ty - ny), body, 0.9f);
+    lifePix(lroundf(x + 6 * ux * dir), lroundf(y + 6 * uy * dir), body, 0.7f); // beak
+}
+static void splash(int x, int y, float k, uint32_t seed)
+{
+    for (int i = 0; i < 6; i++)
+    {
+        seed = seed * 1664525u + 1013904223u;
+        const int dx = (int)(seed >> 28) - 8, dy = (int)((seed >> 24) & 7);
+        lifePix(x + dx / 2, y - (int)(dy * k), 0xA8C4E0, 0.7f * k);
+    }
+}
+template <typename R> static void seaLifeFrame(R &rnd)
+{
+    enum { DOLPHINS, WHALE, OCTOPUS, SERPENT, JELLY, KINDS };
+    static int kind = -1, dir = 1, x0 = 0, y0 = 0;
+    static uint32_t t0 = 0, next = 0, dur = 0, showSeen = 0;
+    const uint32_t now = millis();
+    if (showSeen != s_showMs)
+        showSeen = s_showMs, kind = -1, s_lifeN = 0, next = now + 2500 + rnd() % 3000;
+    lifeErase();
+    if (kind < 0)
+    {
+        if ((int32_t)(now - next) < 0)
+            return;
+        kind = rnd() % KINDS;
+        static const uint32_t durs[KINDS] = {1900, 5200, 4200, 8000, 4500};
+        dur = durs[kind];
+        for (int tries = 0; tries < 8; tries++) // keep clear of the boat
+        {
+            x0 = 70 + rnd() % 190;
+            if (abs(x0 - s_bx) > 55)
+                break;
+        }
+        y0 = kHorizon + 22 + rnd() % 55;
+        dir = rnd() & 1 ? 1 : -1;
+        t0 = now;
+    }
+    const float p = (now - t0) / (float)dur;
+    if (p >= 1)
+    {
+        kind = -1, next = now + 6000 + rnd() % 10000;
+        return;
+    }
+    const float fade = sinf(3.14159f * p);
+    switch (kind)
+    {
+    case DOLPHINS: // two leaps, a quarter second apart
+        for (int d = 0; d < 2; d++)
+        {
+            const float q = (p * dur - d * 300) / 1300.0f;
+            const int bx0 = x0 + d * 12 * -dir, by0 = y0 + d * 3;
+            if (q < 0 || q > 1)
+                continue;
+            const float x = bx0 + dir * (q * 44 - 22), y = by0 - 15 * sinf(3.14159f * q);
+            float ux = 44, uy = -15 * 3.14159f * cosf(3.14159f * q);
+            const float l = sqrtf(ux * ux + uy * uy);
+            ux /= l, uy /= l;
+            dolphin(x, y, ux, uy * dir, dir);
+            if (q < 0.18f)
+                splash(bx0 - dir * 22, by0, 1 - q / 0.18f, 77 + d);
+            if (q > 0.82f)
+                splash(bx0 + dir * 22, by0, (q - 0.82f) / 0.18f, 99 + d);
+        }
+        break;
+    case WHALE: // a long back rolls up, blows, then the flukes
+    {
+        const float h = 4 * fade;
+        const int bxw = x0 + (int)(dir * (p * 16 - 8));
+        for (int dy = 0; dy <= (int)h; dy++)
+        {
+            const int w = (int)(16 * sqrtf(std::max(0.0f, 1 - (dy / (h + 0.5f)) * (dy / (h + 0.5f)))));
+            for (int dx = -w; dx <= w; dx++)
+                lifePix(bxw + dx, y0 - dy, dy == (int)h ? 0x405876 : 0x182434, 0.95f);
+        }
+        if (p > 0.3f && p < 0.7f) // spout: a column that fans out and falls
+        {
+            const float sp = sinf(3.14159f * (p - 0.3f) / 0.4f);
+            const int H = (int)(20 * sp), sx = bxw + dir * 9;
+            for (int y = 0; y < H; y++)
+                lifePix(sx + ((y * 7 + (int)(now / 60)) % 3) - 1, y0 - (int)h - y, 0xB8D0EA, 0.55f * sp);
+            for (int i = 0; i < 10; i++)
+            {
+                const float a = i / 9.0f * 3.14159f;
+                lifePix(sx + (int)(cosf(a) * 7 * sp), y0 - (int)h - H + (int)(fabsf(cosf(a)) * 6 * sp), 0xC8DCF0, 0.6f * sp);
+            }
+        }
+        if (p > 0.72f) // flukes as it dives
+        {
+            const float f = sinf(3.14159f * (p - 0.72f) / 0.28f);
+            const int fx = bxw - dir * 18, fh = (int)(9 * f);
+            for (int y = 0; y < fh; y++)
+                lifePix(fx, y0 - y, 0x182434, 0.95f);
+            for (int i = 0; i <= 5; i++)
+                lifePix(fx - i, y0 - fh - i / 2 + 2, 0x2A3C54, 0.95f * f), lifePix(fx + i, y0 - fh - i / 2 + 2, 0x2A3C54, 0.95f * f);
+        }
+        break;
+    }
+    case OCTOPUS: // tentacles curl out of the water, two lamp eyes between
+    {
+        const float L = 18 * fade;
+        for (int i = 0; i < 6; i++)
+        {
+            const int base = x0 + (i - 3) * 6 + 3;
+            for (int sIdx = 0; sIdx < (int)L; sIdx++)
+            {
+                const float u = sIdx / std::max(1.0f, L);
+                const float cx = base + (4 + 3 * u) * sinf(sIdx * 0.32f + now * 0.004f + i * 1.3f) * u;
+                lifePix(lroundf(cx), y0 - sIdx, 0x4A2C5C, 0.95f);
+                if (u < 0.6f)
+                    lifePix(lroundf(cx) + 1, y0 - sIdx, 0x2E1A3A, 0.95f);
+                if (sIdx % 4 == 2)
+                    lifePix(lroundf(cx) - 1, y0 - sIdx, 0xC08AD0, 0.5f); // suckers
+            }
+        }
+        const float e = fade * (0.6f + 0.4f * sinf(now * 0.01f));
+        lifePix(x0 - 4, y0 - 2, 0xFFE070, e), lifePix(x0 + 4, y0 - 2, 0xFFE070, e);
+        lifePix(x0 - 3, y0 - 2, 0x806010, e * 0.6f), lifePix(x0 + 5, y0 - 2, 0x806010, e * 0.6f);
+        break;
+    }
+    case SERPENT: // humps and a long neck gliding along, one red eye
+    {
+        const float hx = x0 + dir * (p * 80 - 40);
+        for (int k = 0; k < 4; k++)
+        {
+            const float cx = hx - dir * (10 + k * 11), r = (3.5f - k * 0.5f) * fade * (0.8f + 0.2f * sinf(now * 0.005f + k));
+            for (int a = 0; a <= 12; a++)
+            {
+                const float t = a / 12.0f * 3.14159f;
+                lifePix(lroundf(cx + cosf(t) * (r + 1)), lroundf(y0 - sinf(t) * r), 0x1C3A2C, 0.95f);
+                lifePix(lroundf(cx + cosf(t) * r), lroundf(y0 - sinf(t) * (r - 1)), 0x0E2018, 0.95f);
+            }
+        }
+        const int nh = (int)(12 * fade);
+        for (int y = 0; y < nh; y++) // neck, leaning forward near the top
+        {
+            const int nx = lroundf(hx + dir * (y > nh - 4 ? (y - nh + 4) : 0) * 0.8f);
+            lifePix(nx, y0 - y, 0x1C3A2C, 0.95f), lifePix(nx - dir, y0 - y, 0x0E2018, 0.95f);
+        }
+        if (nh > 4)
+        {
+            const int hx2 = lroundf(hx + dir * 3), hy = y0 - nh;
+            for (int i = 0; i < 4; i++)
+                lifePix(hx2 + dir * i, hy, 0x2A5440, 0.95f), lifePix(hx2 + dir * i, hy + 1, 0x1C3A2C, 0.95f);
+            lifePix(hx2 + dir, hy, 0xFF3020, fade);
+        }
+        break;
+    }
+    case JELLY: // a glowing ring pulsing under the surface, trailing threads
+    {
+        const float pulse = 0.75f + 0.25f * sinf(now * 0.008f);
+        const int jy = y0 + 4 - (int)(4 * p);
+        for (int a = 0; a < 24; a++)
+        {
+            const float t = a / 24.0f * 6.28318f;
+            if (sinf(t) > 0.2f)
+                continue; // bell: upper half only
+            lifePix(lroundf(x0 + cosf(t) * 6 * pulse), lroundf(jy + sinf(t) * 4 * pulse), 0x40FFD0, 0.6f * fade);
+        }
+        lifePix(x0, jy - 2, 0xA0FFF0, 0.7f * fade);
+        for (int k = -2; k <= 2; k++)
+            for (int y = 1; y < 8; y++)
+                lifePix(x0 + k * 2 + lroundf(sinf(y * 0.6f + now * 0.006f + k)), jy + y, 0x20C0A0, 0.4f * fade * (1 - y / 8.0f));
+        break;
+    }
+    }
+}
+
 static void twinkleTask(void *)
 {
     uint32_t seed = 0xC0FFEE;
@@ -494,7 +695,22 @@ static void twinkleTask(void *)
             {
                 static int lastBx = -1000, lastBy = 0, lastFl = -1;
                 const uint32_t el = millis() - s_showMs;
-                const int bx = 30 + (int)((el / 700) % 260); // ~1.4 px/s
+                // speed drifts between stop and ~1.4 px/s: a new target every
+                // 3-9 s, eased toward it, so the boat idles and gets under way
+                static float pos = 0, v = 0, vt = 0;
+                static uint32_t lastMs = 0, nextRoll = 0, showSeen = 0;
+                const uint32_t now = millis();
+                if (showSeen != s_showMs)
+                    showSeen = s_showMs, pos = rnd() % 200, v = vt = 0.7f, lastMs = now, nextRoll = now + 2000;
+                const float dt = (now - lastMs) / 1000.0f;
+                lastMs = now;
+                if ((int32_t)(now - nextRoll) >= 0)
+                    vt = (rnd() % 1000) / 1000.0f * 1.4f, nextRoll = now + 3000 + rnd() % 6000;
+                v += (vt - v) * std::min(1.0f, dt * 0.4f);
+                pos += v * dt;
+                if (pos >= 260)
+                    pos -= 260;
+                const int bx = 30 + (int)pos;
                 const int by = kBoatY;
                 const int fl = (el / 260) % 3;
                 if (bx != lastBx || by != lastBy || fl != lastFl)
@@ -599,6 +815,7 @@ static void twinkleTask(void *)
             const Star &o = s_orion[rnd() % 9]; // and one Orion star
             if (o.halo)
                 star(o.x, o.y, o.halo, o.b * (0.55f + (rnd() % 100) / 160.0f), o.tint);
+            seaLifeFrame(rnd);
             weatherFrame(rnd);
             xSemaphoreGive(s_lock);
         }
@@ -660,7 +877,7 @@ void splashEnd()
 static int ridgeY(int x)
 {
     struct P { int x, y, w; };
-    static const P pk[] = {{38, 100, 44}, {92, 114, 34}, {128, 120, 26}, {168, 124, 30}};
+    static const P pk[] = {{38, 100, 44}, {84, 117, 24}, {110, 111, 30}, {146, 123, 20}, {174, 116, 28}, {206, 125, 18}}; // uneven, not sorted by height
     float best = kHorizon;
     for (const P &p : pk)
     {
@@ -677,7 +894,7 @@ static uint16_t oceanPix(int x, int y)
     const int d = y - kHorizon;
     const float f = std::min(1.0f, d / 70.0f);
     float ra, ga, ba, rb, gb, bb;
-    rgbOf(0x02132C, ra, ga, ba);
+    rgbOf(0x020C1C, ra, ga, ba);
     rgbOf(kFloor, rb, gb, bb);
     const int shift = (int)(2.0f * sinf(d * 0.9f));
     const int sx = std::max(0, std::min(319, x + shift));
@@ -768,10 +985,21 @@ void splashBegin()
         if (r >= kHorizon)
             continue;
         g->drawFastVLine(x, r, kHorizon - r, mix(0x010306, 0, 0)); // near black
-        g->drawPixel(x, r, mix(0x081830, 0, 0));
-        const int line = s_wx == WX_SNOW ? 122 : 108; // snow line, lower when it snows
-        if (r < line) // snow cap, dim blue-grey
-            g->drawFastVLine(x, r + 1, std::min(s_wx == WX_SNOW ? 7 : 4, line - r), mix(0x0C1828, 0x22324C, (line - r) / 10.0f));
+        g->drawPixel(x, r, mix(0x0A1220, 0, 0)); // faint rim
+        // snow cap: down to a ragged line (gullies run lower), brighter at
+        // the top, the slope facing left (moonlit) lighter than the right
+        const int base = s_wx == WX_SNOW ? 122 : 110;
+        const int line = base + (int)lroundf(1.5f * sinf(x * 0.33f) + 0.8f * sinf(x * 0.71f + 1)); // gently ragged
+        if (r < line - 1)
+        {
+            const int slope = ridgeY(x + 4) - ridgeY(x - 4); // > 0: right-facing (shade)
+            const float lit = std::max(0.5f, std::min(1.0f, 0.8f - 0.06f * slope));
+            for (int y = r + 1; y < line; y++)
+            {
+                const float k = 1.0f - (float)(y - r) / (line - r + 2); // fades toward the line
+                g->drawPixel(x, y, mix(0x010306, 0x4A5668, lit * (0.35f + 0.45f * k)));
+            }
+        }
     }
     // Ocean: deep navy at the horizon to near black, with the mountains
     // mirrored (rippled) and starlight glints
@@ -782,7 +1010,7 @@ void splashBegin()
         {
             const int d = y - kHorizon;
             const float f = std::min(1.0f, d / 70.0f);
-            const uint16_t sea = mix(0x02132C, kFloor, f);
+            const uint16_t sea = mix(0x020C1C, kFloor, f);
             for (int x = 0; x < 320; x++)
                 s_row[x] = oceanPix(x, y);
             pushRow(y);
