@@ -755,6 +755,7 @@ All mandatory IEEE 488.2 common commands are implemented. SCPI subsystems follow
 **Description:** `LOAD:SWE` ramps the output 0 -> V-Set -> 0 (~9 s, I-Set still limits) and fits I = I0 + V/R + C*dV/dt plus a diode/LED knee; `LOAD:ZERO` is the same sweep with nothing connected, stored and subtracted later (PSU's own C and leakage); `LOAD:FFT` captures 1024 current samples at the present setpoint at the full ADC rate and finds the strongest frequency. Output must be ON (not FUN). Use ADC speed Turbo for most samples.
 **Syntax:** `:LOAD:SWE`, `:LOAD:ZERO`, `:LOAD:FFT`, `:LOAD:BUSY?`, `:LOAD:RES?`
 **Response:** `OK`; `LOAD:RES?` returns the result lines joined by `;`
+**Fingerprint library:** `:LOAD:LEARN <name>` stores the last result (kind + its numbers) as a known load (a long press on the result card does the same with an automatic name); later results of the same kind with most numbers within 20% end with `= <name>`. `:LOAD:LIB?` lists `name=kind,values;...`, `:LOAD:LIB:CLE` empties it (12 entries, NVS `load_lib`).
 **Example:**
 ```
 :LOAD:SWE

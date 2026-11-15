@@ -1,4 +1,5 @@
 // Standard libraries
+#include "boot_splash.h"
 #include "event_log.h"
 #include <map>
 #include <mutex>
@@ -83,12 +84,15 @@ void setup()
   initializeI2C();
   ESP_LOGI("SETUP", ">>> After initializeI2C()");
   initializeDisplay();
+  splashBegin();
   ESP_LOGI("SETUP", ">>> After initializeDisplay()");
   initializeTouch();
+  splashProgress(15, "Touch");
   ESP_LOGI("SETUP", ">>> After initializeTouch()");
   setupLVGL();
   ESP_LOGI("SETUP", ">>> After setupLVGL()");
   setupDMA();
+  splashProgress(25, "Graphics");
   ESP_LOGI("SETUP", ">>> After setupDMA()");
 
   // lv_demo_music();
@@ -107,12 +111,15 @@ void setup()
   if (!SPIFFS.begin(true))
     Serial.println("SPIFFS Mount Failed at boot");
 
+  splashProgress(35, "Building screens");
   setupPowerSupply();
   LoadGraphData(); // restore the graph trace before Task_ADC starts pushing new points
+  splashProgress(80, "ADC");
   setupADC();
   setupDAC();
   // SetupOVP();  // Create OVP/OCP protection
 
+  splashProgress(88, "Calibration");
   setupCalibPage();
   dropIdleScrollbars(); // after the UI exists; render-time saving, no visual change
   eventLogBegin(); // fault history: logs this boot and its reset reason
@@ -120,6 +127,7 @@ void setup()
   PowerSupply.Voltage.opaqueMeasureBackground(); // faster digit redraws, same pixels
   PowerSupply.Current.opaqueMeasureBackground();
   PowerSupply.Power.opaqueMeasureBackground();
+  splashProgress(100, "Ready");
   createTasks();
   initialMemory();
   loadEnergyFromStorage(); // Load persistent energy counter

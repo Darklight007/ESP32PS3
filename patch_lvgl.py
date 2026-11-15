@@ -72,4 +72,44 @@ def main():
     print("patch_lvgl: patched %s (no 5 px padding without a transform)" % TARGET)
 
 
+# ---------------------------------------------------------------------------
+# Core guard: LVGL may only run on Core 1 (main loop). lv_core_guard()
+# (src/lv_core_guard.cpp) records the backtrace of the first call from any
+# other core in RTC memory (survives the crash it causes); DIAG:LVCORE? reads
+# it. Added after a heap-corruption crash in layout_update_core().
+GUARD_MARK = "lv_core_guard(); /* PATCHED core guard */"
+GUARDS = [
+    (os.path.join("lib", "lvgl", "src", "core", "lv_obj_pos.c"),
+     ["void lv_obj_invalidate_area(const lv_obj_t * obj, const lv_area_t * area)\n{\n",
+      "void lv_obj_invalidate(const lv_obj_t * obj)\n{\n"]),
+    (os.path.join("lib", "lvgl", "src", "core", "lv_obj_tree.c"),
+     ["void lv_obj_del(lv_obj_t * obj)\n{\n", "void lv_obj_clean(lv_obj_t * obj)\n{\n"]),
+    (os.path.join("lib", "lvgl", "src", "core", "lv_obj_class.c"),
+     ["lv_obj_t * lv_obj_class_create_obj(const lv_obj_class_t * class_p, lv_obj_t * parent)\n{\n"]),
+]
+
+
+def guard():
+    for path, anchors in GUARDS:
+        if not os.path.isfile(path):
+            print("patch_lvgl: WARNING %s missing" % path)
+            continue
+        with open(path, "r", encoding="utf-8", errors="surrogateescape") as fh:
+            text = fh.read()
+        if GUARD_MARK in text:
+            continue
+        n = 0
+        for a in anchors:
+            if a in text:
+                text = text.replace(a, a + "    " + GUARD_MARK + "\n", 1)
+                n += 1
+            else:
+                print("patch_lvgl: WARNING guard anchor not found in %s" % path)
+        text = "void lv_core_guard(void);\n" + text
+        with open(path, "w", encoding="utf-8", errors="surrogateescape") as fh:
+            fh.write(text)
+        print("patch_lvgl: core guard in %s (%d)" % (path, n))
+
+
 main()
+guard()

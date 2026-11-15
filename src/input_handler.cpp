@@ -18,6 +18,7 @@
 
 // External references
 extern TFT_eSPI tft;
+#include "touch_affine.h"
 extern Device PowerSupply;
 extern lv_obj_t *slider_x;
 extern Waveform waveforms[];
@@ -186,9 +187,18 @@ static bool fastTouch(uint16_t *x, uint16_t *y, bool held)
     if (abs((int)x1 - (int)x2) > 20 || abs((int)y1 - (int)y2) > 20)
         return false;
     uint16_t xr = (x1 + x2) / 2, yr = (y1 + y2) / 2;
-    tft.convertRawXY(&xr, &yr);
-    if (xr >= tft.width() || yr >= tft.height())
-        return false;
+    if (touchAffineActive())
+    {
+        // 9-point fit (corrects rotation/skew too)
+        if (!touchAffineMap(xr, yr, &xr, &yr))
+            return false;
+    }
+    else
+    {
+        tft.convertRawXY(&xr, &yr);
+        if (xr >= tft.width() || yr >= tft.height())
+            return false;
+    }
     *x = xr;
     *y = yr;
     return true;

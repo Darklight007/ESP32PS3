@@ -28,3 +28,9 @@ bool loadImpBusy(); // Z(f)/LCR running: Task_ADC uses Clean Wave timing
 String loadAnalyzerResult(); // last result text, one line, ';' separated
 String loadAnalyzerDetails(); // probe details, ';' separated
 void loadAnalyzerSetImax(float amps); // analysis current limit; 0 = keep I-Set
+bool loadLearn(const String &name); // store the last result as a known load ("" = auto name)
+String loadLibList();               // name=kind,values;... or "empty"
+void loadLibClear();
+void loadSetSkew(float ms, bool maRange); // Z(f) V/I skew, ms
+String loadSkew();                         // "A ms,mA ms"
+void loadAnalyzerSetVmax(float volts); // analysis top voltage; 0 = V-Set

@@ -22,6 +22,7 @@
 #include "device.hpp"      // provides PowerSupply and dac_data_g
 #include "lv_gui_helper.h" // LVLabel, LVButton helpers
 #include "disp_perf.h"     // frame-rate overlay switch
+#include "touch_affine.h"
 #include "spi_quiet.h"     // spiQuietAcquire() for the touch calibration
 #include <float.h>
 
@@ -638,25 +639,13 @@ namespace
     // Saved to NVS and loaded by initializeTouch() at boot (it used to be lost
     // on every restart). Takes the SPI slot for the whole run, so in low-noise
     // mode the ADC simply waits.
+    // 9-point affine calibration (touch_affine.cpp). Takes the SPI slot for
+    // the whole run, so in low-noise mode the ADC simply waits.
     static void LCD_Calibration_cb(lv_event_t *)
     {
-        uint16_t calData[5];
         spiQuietAcquire();
-        tft.fillScreen(TFT_BLACK);
-        tft.setCursor(20, 0);
-        tft.setTextFont(2);
-        tft.setTextSize(1);
-        tft.setTextColor(TFT_WHITE, TFT_BLACK);
-        tft.println("Touch corners as indicated");
-        tft.setTextFont(1);
-        tft.println();
-        delay(2000);
-        tft.calibrateTouch(calData, TFT_MAGENTA, TFT_BLACK, 15);
+        touchCalibrateScreen();
         spiQuietEnd();
-        tft.setTouch(calData);
-        PowerSupply.StoreMem.begin("my-app", false);
-        PowerSupply.StoreMem.putBytes("touch_cal", calData, sizeof(calData));
-        PowerSupply.StoreMem.end();
         lv_obj_invalidate(lv_scr_act());
     }
 

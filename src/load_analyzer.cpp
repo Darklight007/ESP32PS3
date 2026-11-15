@@ -1,4 +1,6 @@
 #include "load_analyzer.h"
+#include "tabs.h"
+static void s_tab_set(lv_obj_t *p);
 #include "device.hpp"
 #include "myFonts.h"
 #include "esp_heap_caps.h"
@@ -309,11 +311,177 @@ static void render_result()
     }
 }
 
+// ─── Fingerprint library ────────────────────────────────────────────────────
+// A result's first line (the kind) plus its first numbers (SI prefixes
+// applied) is its signature. LOAD:LEARN "name" (or a long press on the
+// result card) stores the last result; every finished result is compared
+// with the stored ones: same kind and most numbers within 20%.
+struct LoadFp { char name[16]; char kind[24]; uint8_t nv; float v[6]; };
+static constexpr int kLibN = 12;
+static constexpr uint32_t kLibMagic = 0xF1A90001;
+struct LoadLib { uint32_t magic; LoadFp e[kLibN]; };
+static LoadLib s_lib{};
+static bool s_libLoaded = false;
+static void lib_load()
+{
+    if (s_libLoaded)
+        return;
+    s_libLoaded = true;
+    PowerSupply.StoreMem.begin("my-app", true);
+    const size_t got = PowerSupply.StoreMem.getBytes("load_lib", &s_lib, sizeof s_lib);
+    PowerSupply.StoreMem.end();
+    if (got != sizeof s_lib || s_lib.magic != kLibMagic)
+        memset(&s_lib, 0, sizeof s_lib);
+}
+static void lib_save()
+{
+    s_lib.magic = kLibMagic;
+    PowerSupply.StoreMem.begin("my-app", false);
+    PowerSupply.StoreMem.putBytes("load_lib", &s_lib, sizeof s_lib);
+    PowerSupply.StoreMem.end();
+}
+static bool fp_from(const String &multi, LoadFp &f)
+{
+    memset(&f, 0, sizeof f);
+    int nl = multi.indexOf('\n');
+    String kind = nl < 0 ? multi : multi.substring(0, nl);
+    kind.trim();
+    if (!kind.length())
+        return false;
+    strncpy(f.kind, kind.c_str(), sizeof f.kind - 1);
+    int start = nl < 0 ? multi.length() : nl + 1;
+    while (start < (int)multi.length() && f.nv < 6)
+    {
+        int e = multi.indexOf('\n', start);
+        if (e < 0)
+            e = multi.length();
+        const String ln = multi.substring(start, e);
+        start = e + 1;
+        // first number on the line, then the prefix of the unit after it
+        const char *c = ln.c_str();
+        for (; *c; c++)
+            if (isdigit((unsigned char)*c) && (c == ln.c_str() || strchr(" ~+-x(", c[-1])))
+            {
+                char *end;
+                double x = strtod(c, &end);
+                while (*end == ' ')
+                    end++;
+                if (end[0] && isalpha((unsigned char)end[1]))
+                    switch (end[0])
+                    {
+                    case 'p': x *= 1e-12; break;
+                    case 'n': x *= 1e-9; break;
+                    case 'u': x *= 1e-6; break;
+                    case 'm': x *= 1e-3; break;
+                    case 'k': x *= 1e3; break;
+                    case 'M': x *= 1e6; break;
+                    }
+                f.v[f.nv++] = x;
+                break;
+            }
+    }
+    return true;
+}
+// fraction of the shared numbers that agree (-1 = other kind)
+static float fp_score(const LoadFp &a, const LoadFp &b)
+{
+    if (strcmp(a.kind, b.kind))
+        return -1;
+    const int m = std::min(a.nv, b.nv);
+    if (!m)
+        return 1;
+    int ok = 0;
+    for (int k = 0; k < m; k++)
+    {
+        const float x = a.v[k], y = b.v[k], big = std::max(fabsf(x), fabsf(y));
+        if (big < 1e-12f || fabsf(x - y) <= 0.2f * big)
+            ok++;
+    }
+    return (float)ok / m;
+}
+static String lib_match(const String &multi)
+{
+    lib_load();
+    LoadFp f;
+    if (!fp_from(multi, f))
+        return "";
+    float best = 0.74f;
+    int bi = -1;
+    for (int k = 0; k < kLibN; k++)
+        if (s_lib.e[k].name[0])
+        {
+            const float sc = fp_score(f, s_lib.e[k]);
+            if (sc > best)
+                best = sc, bi = k;
+        }
+    return bi < 0 ? "" : String(s_lib.e[bi].name);
+}
+static String s_lastFinal; // last finished result, multi-line
+bool loadLearn(const String &name)
+{
+    lib_load();
+    LoadFp f;
+    if (!s_lastFinal.length() || !fp_from(s_lastFinal, f))
+        return false;
+    // not a load: nothing worth recognising
+    for (const char *no : {"Open", "Ready", "Stopped", "Too few", "Zero", "Current limit", "Impedance", "LCR"})
+        if (!strcmp(f.kind, no))
+            return false;
+    String nm = name;
+    nm.trim();
+    nm.replace("\"", "");
+    int slot = -1;
+    for (int k = 0; k < kLibN && slot < 0; k++)
+        if (s_lib.e[k].name[0] && nm == s_lib.e[k].name)
+            slot = k; // same name: replace
+    for (int k = 0; k < kLibN && slot < 0; k++)
+        if (!s_lib.e[k].name[0])
+            slot = k;
+    if (slot < 0)
+        slot = kLibN - 1;
+    if (!nm.length())
+        nm = "Load " + String(slot + 1);
+    strncpy(f.name, nm.c_str(), sizeof f.name - 1);
+    s_lib.e[slot] = f;
+    lib_save();
+    return true;
+}
+String loadLibList()
+{
+    lib_load();
+    String r;
+    for (int k = 0; k < kLibN; k++)
+        if (s_lib.e[k].name[0])
+        {
+            if (r.length())
+                r += ";";
+            r += String(s_lib.e[k].name) + "=" + s_lib.e[k].kind;
+            for (int j = 0; j < s_lib.e[k].nv; j++)
+                r += "," + String(s_lib.e[k].v[j], 6);
+        }
+    return r.length() ? r : "empty";
+}
+void loadLibClear()
+{
+    memset(&s_lib, 0, sizeof s_lib);
+    s_libLoaded = true;
+    lib_save();
+}
+
 static void show_result(const String &multi)
 {
-    s_summary = multi;
+    String m = multi;
+    // a finished result (not a progress message): compare with the library
+    if (!loadAnalyzerBusy())
+    {
+        s_lastFinal = multi;
+        const String hit = lib_match(multi);
+        if (hit.length())
+            m += "\n= " + hit;
+    }
+    s_summary = m;
     render_result();
-    String one = multi;
+    String one = m;
     one.replace("\n", ";");
     s_resultText = one;
 }
@@ -355,7 +523,9 @@ static bool zero_plausible(const ZeroCal &z)
     return z.magic == kZeroMagic && fabsf(z.g) < 1e-4f && fabsf(z.i0) < 1e-3f && fabsf(z.c) < 1e-4f;
 }
 
-static float user_vset() { return (PowerSupply.Voltage.adjValue - PowerSupply.Voltage.adjOffset) / PowerSupply.Voltage.adjFactor; }
+static float s_vmax = 0; // analysis top voltage, V (0 = V-Set)
+static float user_vset_raw() { return (PowerSupply.Voltage.adjValue - PowerSupply.Voltage.adjOffset) / PowerSupply.Voltage.adjFactor; }
+static float user_vset() { return s_vmax > 0 ? s_vmax : user_vset_raw(); }
 static void set_volts(double v) { PowerSupply.Voltage.SetUpdate(v * PowerSupply.Voltage.adjFactor + PowerSupply.Voltage.adjOffset); }
 
 static bool output_usable()
@@ -534,9 +704,20 @@ static void analyse_sweep()
     }
     if (s_limited && !s_isZero)
     {
-        char b[96];
-        snprintf(b, sizeof b, "Current limit\nI-Set held the\noutput below\n%.2f V.\nRaise I-Set\nand sweep again", s_vtop);
-        draw_symbol(SYM_NONE);
+        char b[160];
+        // the probe's current steps still measured it: report that
+        if (std::isfinite(s_rCC) && s_rCC > 0)
+        {
+            const float ilim = (PowerSupply.Current.adjValue - PowerSupply.Current.adjOffset) / PowerSupply.Current.adjFactor; // limit in force
+            snprintf(b, sizeof b, "Resistor ~%s\n(current steps)\nSweep stopped at\n%.2f V: %s limit.\nRaise Imax for\nmore detail",
+                     fmtR(s_rCC).c_str(), s_rCC * ilim, fmtA(ilim).c_str());
+            draw_symbol(SYM_R);
+        }
+        else
+        {
+            snprintf(b, sizeof b, "Current limit\nheld the output\nbelow %.2f V.\nRaise Imax\nand probe again", s_vtop);
+            draw_symbol(SYM_NONE);
+        }
         plot_iv(n);
         show_result(b);
         return;
@@ -551,7 +732,16 @@ static void analyse_sweep()
     for (int q = 0; q < n; q++)
         if (s_ph[q] == PH_UP && s_i[q] < thr && s_v[q] > vknee)
             vknee = s_v[q];
-    const bool knee = vknee > 0.3 && vknee < 0.9 * s_vtop && imaxUp > 0.002;
+    // A resistor still carries half its top current at half voltage; a
+    // diode/LED far less. (Without this, a 428 Ohm coil swept to 28 V has
+    // "I < 3%" up to ~0.9 V and looked like a knee.)
+    double imid = 0;
+    int nmid = 0;
+    for (int q = 0; q < n; q++)
+        if (s_ph[q] == PH_UP && s_v[q] > 0.45 * s_vtop && s_v[q] < 0.55 * s_vtop)
+            imid += s_i[q], nmid++;
+    imid = nmid ? imid / nmid : 0;
+    const bool knee = vknee > 0.3 && vknee < 0.9 * s_vtop && imaxUp > 0.002 && imid < 0.3 * imaxUp;
 
     // dV/dt per sample: least-squares slope over +-k samples of the same
     // phase; NAN = not used in the fit. s_cmd is reused for it after the
@@ -658,7 +848,9 @@ static void analyse_sweep()
         c -= s_zero.c;
     }
     // Significant = 4 standard errors, and R must carry > 0.2 mA at the top
-    const bool hasC = c > 4 * se[2];
+    // ...and carry >= 1% of the top current on the ramp: a coil warming
+    // during the sweep (down-ramp current lower) otherwise fits as ~10 uF
+    const bool hasC = c > 4 * se[2] && c * s_vtop / kRampS > 0.01 * std::max(imaxUp, 0.001);
     const bool hasR = g > 4 * se[1] && g * s_vtop > 0.0002;
     // The probe saw the voltage decay on its own (let-go / discharge tau):
     // charge stored AND a path to drain it = R || C, whatever the sweep's
@@ -668,6 +860,71 @@ static void analyse_sweep()
              g, c, i0, vknee, 4 * se[2], 4 * se[1]};
     draw_symbol(s_det.sym);
     plot_iv(n);
+
+    // Threshold load: the current jumps within one bin (V/160) instead of
+    // bending like a diode - relay pull-in, a circuit turning on, a crowbar,
+    // a motor breaking away. The down ramp gives the release voltage
+    // (hysteresis).
+    {
+        static float su[kPlotPts], sd[kPlotPts];
+        static uint16_t cu[kPlotPts], cd[kPlotPts];
+        memset(su, 0, sizeof su); memset(sd, 0, sizeof sd);
+        memset(cu, 0, sizeof cu); memset(cd, 0, sizeof cd);
+        for (int q = 0; q < n; q++)
+        {
+            const int bb = std::min(kPlotPts - 1, std::max(0, (int)(kPlotPts * s_v[q] / s_vtop)));
+            if (s_ph[q] == PH_UP) { su[bb] += s_i[q]; cu[bb]++; }
+            else if (s_ph[q] == PH_DOWN) { sd[bb] += s_i[q]; cd[bb]++; }
+        }
+        // biggest step between neighbouring filled bins vs the typical step
+        auto bigStep = [&](float *s, uint16_t *c, int sign, float &vAt, float &dI, float &typ)
+        {
+            std::vector<float> d;
+            float prev = NAN;
+            int pb = -1;
+            vAt = NAN, dI = 0;
+            for (int bb = 0; bb < kPlotPts; bb++)
+                if (c[bb] >= 2)
+                {
+                    const float m = s[bb] / c[bb];
+                    if (pb >= 0 && bb - pb <= 2)
+                    {
+                        const float st = (m - prev) * sign;
+                        d.push_back(fabsf(m - prev));
+                        if (st > dI) { dI = st; vAt = s_vtop * (bb + 0.5f) / kPlotPts; }
+                    }
+                    prev = m, pb = bb;
+                }
+            typ = 0;
+            if (d.size() > 10)
+            {
+                std::nth_element(d.begin(), d.begin() + d.size() * 3 / 4, d.end());
+                typ = d[d.size() * 3 / 4];
+            }
+        };
+        float vOn, dOn, tOn, vOff, dOff, tOff;
+        bigStep(su, cu, +1, vOn, dOn, tOn);
+        bigStep(sd, cd, +1, vOff, dOff, tOff); // down ramp read low->high V too
+        // a diode's knee can also be steep: without hysteresis only a jump
+        // far sharper than everything else counts, and not into a limit
+        const bool hyst = std::isfinite(vOff) && dOff > 0.5 * dOn && dOff > 8 * tOff && vOn - vOff > 2.5f * s_vtop / kPlotPts;
+        if (std::isfinite(vOn) && dOn > std::max(0.25 * imaxUp, 0.002) && dOn > 8 * tOn && vOn > 0.3 && (!knee || hyst))
+        {
+            char t[200];
+            String extra = "";
+            if (hyst)
+            {
+                char e[64];
+                snprintf(e, sizeof e, "\nRelease %.2f V\nHyst. %.2f V", vOff, vOn - vOff);
+                extra = e;
+            }
+            snprintf(t, sizeof t, "Threshold load\nTurns on %.2f V\nI jump +%s%s\n(relay / circuit\n/ motor start)",
+                     vOn, fmtA(dOn).c_str(), extra.c_str());
+            draw_symbol(SYM_NONE);
+            show_result(t);
+            return;
+        }
+    }
 
     // Resistor linearity: slope through the origin, lower vs upper half.
     // Also for R || C: a filament's thermal lag makes up and down differ
@@ -933,6 +1190,7 @@ static void finish()
     s_capturing.store(false);
     if (s_isFft)
     {
+        PowerSupply.Voltage.SetUpdate(s_savedAdj);
         end_run();
         analyse_fft();
         return;
@@ -1059,7 +1317,11 @@ static void analyse_stage2()
         window(kS2RampS + 0.3f, kS2RampS + 1.0f, ve, ie, sde, me);
         window(tEnd - 0.7f, tEnd + 1, vl, il2, sdl, ml);
         const double fall = (ie / ve) / (il2 / vl) - 1.0; // R_late/R_early - 1
-        if (me > 20 && ml > 20 && fall > 0.01 && ie > 0.005)
+        // and hot vs cold well apart: a filament is >1.15x even barely lit,
+        // a copper coil warming a few degrees only ~1.03x
+        const double rc = std::isfinite(s_rCC) ? s_rCC : s_det.rCold;
+        const bool hotCold = !std::isfinite(rc) || (vl / il2) / rc > 1.15;
+        if (me > 20 && ml > 20 && fall > 0.01 && ie > 0.005 && hotCold)
         {
             s_det.sym = SYM_LAMP;
             draw_symbol(SYM_LAMP);
@@ -1259,6 +1521,8 @@ static int s_savedRate = -1;
 static float s_imax = 0;        // analysis current limit, A (0 = keep I-Set)
 static int s_savedIAdj = -1;
 static lv_obj_t *s_imaxDd = nullptr;
+static lv_obj_t *s_vmaxDd = nullptr;
+static constexpr float kVmaxOpt[] = {0, 1, 2, 3, 5, 9, 12, 15, 18, 24, 28, 32};
 static constexpr float kImaxOpt[] = {0, 0.01f, 0.02f, 0.05f, 0.1f, 0.25f, 0.5f, 1, 2, 3, 5};
 void loadAnalyzerSetImax(float a)
 {
@@ -1286,8 +1550,15 @@ static void begin_run()
         if (b)
             lv_obj_add_state(b, LV_STATE_DISABLED);
 }
+static bool s_autoOn = false; // the analyser switched the output on: off again at the end
 static void end_run_impl()
 {
+    if (s_autoOn)
+    {
+        s_autoOn = false;
+        if (PowerSupply.getStatus() != DEVICE::OFF)
+            PowerSupply.toggle();
+    }
     auto &sp = PowerSupply.settingParameters;
     if (s_savedRate >= 0 && sp.adcRate != s_savedRate)
     {
@@ -1318,7 +1589,8 @@ void loadAnalyzerDumpRaw()
     Serial.println("END");
 }
 
-bool loadAnalyzerBusy() { return s_timer != nullptr; }
+bool loadAnalyzerPending();
+bool loadAnalyzerBusy() { return s_timer != nullptr || loadAnalyzerPending(); }
 static bool s_impRunning = false;
 bool loadImpBusy() { return s_impRunning && s_timer != nullptr; }
 String loadAnalyzerResult() { return s_resultText; }
@@ -1873,6 +2145,39 @@ static void probe_cb(lv_timer_t *)
                 probe_end_with(b, SYM_MOTOR);
                 return;
             }
+            // Inductor: V steps up at once, I follows with tau = L/R and
+            // never overshoots (a capacitor spikes, a filament surges).
+            // tau from the first fresh samples: time each reaches 63%.
+            if (!spinUp && iEnd > 0.002 && ipk < 1.1 * iEnd)
+            {
+                float tV = NAN, tI = NAN;
+                for (int q = 0; q < n; q++)
+                    if (s_ph[q] == PR_WATCH)
+                    {
+                        const float tt = s_t[q] - t0;
+                        if (tt > 0.5f)
+                            break;
+                        if (!std::isfinite(tV) && (s_fl[q] & 1) && s_v[q] >= 0.63 * vEnd)
+                            tV = tt;
+                        if (!std::isfinite(tI) && (s_fl[q] & 2) && s_i[q] >= 0.63 * iEnd)
+                            tI = tt;
+                    }
+                const float tau = tI - tV;
+                if (std::isfinite(tau))
+                {
+                    snprintf(b, sizeof b, "\nI lag %.1f ms", tau * 1e3);
+                    s_details += b;
+                }
+                if (std::isfinite(tau) && tau > 0.008f)
+                {
+                    const double R = vEnd / iEnd;
+                    snprintf(b, sizeof b, "Inductor\nL ~%s\nR %s\ntau %.0f ms\n(L = tau x R)",
+                             (tau * R >= 1 ? String(tau * R, 2) + " H" : String(tau * R * 1e3, 1) + " mH").c_str(),
+                             fmtR(R).c_str(), tau * 1e3);
+                    probe_end_with(b, SYM_NONE);
+                    return;
+                }
+            }
         }
         if (s_seg >= 0 && s_segs[s_seg].ph == PR_BATT)
         {
@@ -1996,7 +2301,7 @@ static void probe_begin()
     s_timer = lv_timer_create(probe_cb, 10, nullptr);
 }
 
-bool loadSweepStart(bool zero)
+static bool loadSweepStart_now(bool zero)
 {
     s_impRunning = false;
     if (s_timer || !output_usable() || !alloc_buffers())
@@ -2041,14 +2346,17 @@ static void sweep_begin()
     show_result(s_isZero ? "Zero sweep...\n(nothing\nconnected)" : "Sweeping\n0 -> V-Set -> 0");
 }
 
-bool loadFftStart()
+static bool loadFftStart_now()
 {
     s_impRunning = false;
     if (s_timer || !output_usable() || !alloc_buffers())
         return false;
     s_isFft = true;
     s_isZero = false;
+    s_savedAdj = PowerSupply.Voltage.adjValue;
     s_vcmd = user_vset();
+    if (s_vmax > 0)
+        set_volts(s_vmax); // spectrum at the chosen voltage (V-Set restored after)
     s_phase = PH_HOLD;
     s_cap = kFftN;
     s_n.store(0);
@@ -2101,6 +2409,7 @@ static float s_z1f[kImpMax];
 static std::complex<double> s_rawZ[kImpMax]; // uncorrected, for calibration
 static int s_z1n = 0;
 static constexpr float kImpSettleS = 2.0f;
+static float s_impIac = 0.001f; // pass-2 AC amplitude, A
 static constexpr float kItarget = 0.001f; // A, AC amplitude in pass 2 (the sink limits the negative half: ~3 mA minus DC)
 
 static void imp_load_td()
@@ -2139,6 +2448,26 @@ static bool imp_phasor(int k, std::complex<double> &Z, double &vdc, double &idc,
         return false;
     vm /= mv;
     im /= mi;
+    // Straight-line drift out of each channel (a lamp still warming makes
+    // its current sink during the slow sines; over 1-2 cycles that drift
+    // leaked into the phasor: 0.5 Hz read 4.4 Ohm on a 6.1 Ohm lamp + R)
+    double tmv = 0, tmi = 0;
+    for (int q = 0; q < n; q++)
+        if (s_ph[q] == PH_IMP0 + k && s_t[q] >= t0 && s_t[q] < t0 + tw)
+        {
+            if (s_fl[q] & 1) tmv += s_t[q];
+            if (s_fl[q] & 2) tmi += s_t[q];
+        }
+    tmv /= mv;
+    tmi /= mi;
+    double svt = 0, stt_v = 0, sit = 0, stt_i = 0;
+    for (int q = 0; q < n; q++)
+        if (s_ph[q] == PH_IMP0 + k && s_t[q] >= t0 && s_t[q] < t0 + tw)
+        {
+            if (s_fl[q] & 1) { const double d = s_t[q] - tmv; svt += d * (s_v[q] - vm); stt_v += d * d; }
+            if (s_fl[q] & 2) { const double d = s_t[q] - tmi; sit += d * (s_i[q] - im); stt_i += d * d; }
+        }
+    const double slV = stt_v > 0 ? svt / stt_v : 0, slI = stt_i > 0 ? sit / stt_i : 0;
     double vc = 0, vs = 0, ic = 0, is = 0;
     for (int q = 0; q < n; q++)
         if (s_ph[q] == PH_IMP0 + k && s_t[q] >= t0 && s_t[q] < t0 + tw)
@@ -2146,13 +2475,15 @@ static bool imp_phasor(int k, std::complex<double> &Z, double &vdc, double &idc,
             const double tt = s_t[q] - s_impT0[k];
             if (s_fl[q] & 1)
             {
-                vc += (s_v[q] - vm) * cos(w * tt);
-                vs += (s_v[q] - vm) * sin(w * tt);
+                const double x = s_v[q] - vm - slV * (s_t[q] - tmv);
+                vc += x * cos(w * tt);
+                vs += x * sin(w * tt);
             }
             if (s_fl[q] & 2)
             {
-                ic += (s_i[q] - im) * cos(w * tt);
-                is += (s_i[q] - im) * sin(w * tt);
+                const double x = s_i[q] - im - slI * (s_t[q] - tmi);
+                ic += x * cos(w * tt);
+                is += x * sin(w * tt);
             }
         }
     vc /= mv; vs /= mv; ic /= mi; is /= mi; // channels have different counts
@@ -2171,6 +2502,56 @@ static bool imp_phasor(int k, std::complex<double> &Z, double &vdc, double &idc,
     vdc = vm;
     idc = im;
     iac = 2 * std::abs(I); (void)m;
+    return true;
+}
+
+// Harmonic distortion of segment k: sqrt(sum h=2..5 |X_h|^2) / |X_1| for
+// V (ch 0) and I (ch 1). The DAC's own distortion shows in V; a non-linear
+// load (diode, lamp heating each half-cycle, rectifier) adds to I only.
+static bool imp_thd(int k, double &thdV, double &thdI, double &h2I, double &h3I)
+{
+    const int n = s_n.load(std::memory_order_acquire);
+    const double w = 2 * M_PI * s_impF[k];
+    const float t0 = s_impT0[k] + 1.0f / s_impF[k], t1 = s_impT0[k] + s_impDur[k];
+    const double tw = floor((t1 - t0) * s_impF[k]) / s_impF[k];
+    double mean[2] = {0, 0};
+    int cnt[2] = {0, 0};
+    for (int q = 0; q < n; q++)
+        if (s_ph[q] == PH_IMP0 + k && s_t[q] >= t0 && s_t[q] < t0 + tw)
+            for (int c = 0; c < 2; c++)
+                if (s_fl[q] & (1 << c)) { mean[c] += c ? s_i[q] : s_v[q]; cnt[c]++; }
+    if (cnt[0] < 40 || cnt[1] < 40)
+        return false;
+    mean[0] /= cnt[0]; mean[1] /= cnt[1];
+    double re[2][6] = {}, im[2][6] = {};
+    for (int q = 0; q < n; q++)
+        if (s_ph[q] == PH_IMP0 + k && s_t[q] >= t0 && s_t[q] < t0 + tw)
+        {
+            const double tt = s_t[q] - s_impT0[k];
+            for (int c = 0; c < 2; c++)
+                if (s_fl[q] & (1 << c))
+                {
+                    const double x = (c ? s_i[q] : s_v[q]) - mean[c];
+                    for (int h = 1; h <= 5; h++)
+                    {
+                        re[c][h] += x * cos(h * w * tt);
+                        im[c][h] += x * sin(h * w * tt);
+                    }
+                }
+        }
+    double th[2], a1[2];
+    for (int c = 0; c < 2; c++)
+    {
+        a1[c] = hypot(re[c][1], im[c][1]);
+        double s2 = 0;
+        for (int h = 2; h <= 5; h++)
+            s2 += re[c][h] * re[c][h] + im[c][h] * im[c][h];
+        th[c] = a1[c] > 0 ? sqrt(s2) / a1[c] : NAN;
+    }
+    thdV = th[0];
+    thdI = th[1];
+    h2I = a1[1] > 0 ? hypot(re[1][2], im[1][2]) / a1[1] : NAN;
+    h3I = a1[1] > 0 ? hypot(re[1][3], im[1][3]) / a1[1] : NAN;
     return true;
 }
 
@@ -2203,12 +2584,12 @@ static void imp_plan(int pass)
                     return std::abs(s_z1[k]);
             return 0.0;
         };
-        const float amax = std::min(0.4f, s_impBias * 0.4f);
-        add(10, 100, std::max(0.005f, std::min(amax, (float)(kItarget * zAt(10)))));
-        add(1, 6, std::max(0.005f, std::min(amax, (float)(kItarget * zAt(1)))));
+        const float amax = s_impIac > kItarget ? s_impBias * 0.4f : std::min(0.4f, s_impBias * 0.4f);
+        add(10, 100, std::max(0.005f, std::min(amax, (float)(s_impIac * zAt(10)))));
+        add(1, 6, std::max(0.005f, std::min(amax, (float)(s_impIac * zAt(1)))));
         // 20 Hz, not 50: at 50 Hz capacitors still read ~10 deg off (ADC re-used
         // samples suspected); 20 Hz and below are within +-1.5 deg
-        add(20, 80, std::max(0.005f, std::min(amax, (float)(kItarget * zAt(20)))));
+        add(20, 80, std::max(0.005f, std::min(amax, (float)(s_impIac * zAt(20)))));
     }
     s_impTotal = t;
 }
@@ -2345,6 +2726,28 @@ static void analyse_imp_pass2()
         show_result("LCR\nno signal");
         return;
     }
+    // Bias not reached: the current limit (CC) held the output, so the sine
+    // never reached the load - every number after this would be noise
+    if (ok10 && vd < 0.8 * s_impBias)
+    {
+        char t[128];
+        snprintf(t, sizeof t, "Impedance\nCurrent limit\nbias %.2f V wanted\n%.2f V reached\n(~%s).\nRaise Imax or\nlower Vmax", s_impBias, vd,
+                 fmtR(id > 0 ? vd / id : INFINITY).c_str());
+        show_result(t);
+        draw_symbol(SYM_NONE);
+        s_details = d;
+        render_result();
+        return;
+    }
+    // AC current down in the noise (A range ~0.1 mA): nothing to measure
+    if (ok10 && !s_calRangeMA && ia10 < 0.00015 && fabs(id) < 0.0005)
+    {
+        show_result("Impedance\nOpen\nIac below noise\n|Z| > " + fmtR(std::abs(Z10) * ia10 / 0.00015));
+        draw_symbol(SYM_NONE);
+        s_details = d;
+        render_result();
+        return;
+    }
     // DC part: bias over mean current = the parallel (leak) R, exact
     const double Rdc = id > 0.0002 ? vd / id : INFINITY;
     if (s_calDone)
@@ -2364,7 +2767,11 @@ static void analyse_imp_pass2()
     }
     // Self-calibration on a plain resistor: |Z| == DC R and phase small
     // at both frequencies -> the remaining phase is the V/I skew
-    if (ok10 && ok1 && std::isfinite(Rdc) && fabs(std::abs(Z10) / Rdc - 1) < 0.03 && fabs(std::abs(Z1) / Rdc - 1) < 0.03 &&
+    bool flat = s_z1n >= 4;
+    for (int k = 0; k < s_z1n; k++)
+        if (s_z1f[k] <= 20 && fabs(std::abs(s_z1[k]) / Rdc - 1) > 0.05)
+            flat = false;
+    if (flat && ok10 && ok1 && std::isfinite(Rdc) && fabs(std::abs(Z10) / Rdc - 1) < 0.03 && fabs(std::abs(Z1) / Rdc - 1) < 0.03 &&
         fabs(std::arg(Z10)) < 0.35)
     {
         // residual phase at 10 Hz (corrected with the old tau) -> new tau
@@ -2388,21 +2795,39 @@ static void analyse_imp_pass2()
     // sines but not fast ones: |Z| higher at 0.5 Hz than at 10 Hz.
     if (ok10 && fabs(std::arg(Z10)) < 30 * M_PI / 180)
     {
-        double z05 = NAN;
+        // slow side = mean of 0.5 and 1 Hz (one bad 1-cycle reading alone
+        // used to decide "NTC")
+        double z05 = 0, rlo = INFINITY, rhi = -INFINITY;
+        int nz = 0;
         for (int k = 0; k < s_z1n; k++)
-            if (s_z1f[k] == 0.5f)
-                z05 = std::abs(s_z1[k]);
-        const double ratio = std::isfinite(z05) ? z05 / std::abs(Z10) : 1.0;
-        String rr = ratio > 1.03 ? "Thermal R\n(lamp / PTC)" : ratio < 0.97 ? "Thermal R\n(NTC)" : "Resistive";
+            if (s_z1f[k] == 0.5f || s_z1f[k] == 1.0f)
+            {
+                const double rk = std::abs(s_z1[k]) / std::abs(Z10);
+                z05 += std::abs(s_z1[k]), nz++;
+                rlo = std::min(rlo, rk), rhi = std::max(rhi, rk);
+            }
+        z05 = nz ? z05 / nz : NAN;
+        // thermal only when both slow points agree on the side
+        const double ratio = nz == 2 && rlo > 1.03 ? rlo : nz == 2 && rhi < 0.97 ? rhi : 1.0;
+        // positive phase (current lags) on a steady R: a coil, L = X / w
+        const bool coil = Z10.imag() > 0 && std::arg(Z10) > 2 * M_PI / 180;
+        String rr = coil ? "Coil (R + L)\nLs " + (Z10.imag() / (2 * M_PI * 10) >= 1 ? String(Z10.imag() / (2 * M_PI * 10), 2) + " H" : String(Z10.imag() / (2 * M_PI * 10) * 1e3, 1) + " mH") + "\nRs " + fmtR(Z10.real())
+                  : ratio > 1.03 ? "Thermal R\n(lamp / PTC)" : ratio < 0.97 ? "Thermal R\n(NTC)" : "Resistive";
         rr += "\nRac " + fmtR(std::abs(Z10)) + " @10Hz";
         if (std::isfinite(z05))
-            rr += "\nR " + fmtR(z05) + " @0.5Hz";
+            rr += "\nR " + fmtR(z05) + " @0.5-1Hz";
         if (std::isfinite(Rdc))
             rr += "\nRdc " + fmtR(Rdc);
         snprintf(b, sizeof b, "\nphase %.1f deg", std::arg(Z10) * 180 / M_PI);
         rr += b;
         show_result(rr);
         draw_symbol(ratio > 1.03 ? SYM_LAMP : SYM_R);
+        double tv, ti, h2, h3;
+        if (imp_thd(0, tv, ti, h2, h3))
+        {
+            snprintf(b, sizeof b, "\nTHD I %.1f%% V %.1f%%\nH2 %.1f%% H3 %.1f%%", 100 * ti, 100 * tv, 100 * h2, 100 * h3);
+            d += b;
+        }
         snprintf(b, sizeof b, "\nbias %.2f V", s_impBias);
         d += b;
         s_details = d;
@@ -2421,6 +2846,19 @@ static void analyse_imp_pass2()
         double v5, i5, a5;
         if (imp_phasor(2, Z50, v5, i5, a5))
             d += lcrText(Z50, 20, false);
+    }
+    {
+        double tv, ti, h2, h3;
+        if (imp_thd(0, tv, ti, h2, h3))
+        {
+            snprintf(b, sizeof b, "\nTHD I %.1f%% V %.1f%%\nH2 %.1f%% H3 %.1f%%", 100 * ti, 100 * tv, 100 * h2, 100 * h3);
+            d += b;
+            if (ti > tv + 0.05)
+            {
+                r += "\nNon-linear I";
+                show_result(r);
+            }
+        }
     }
     snprintf(b, sizeof b, "\nIac %s @10Hz\n%s range, skew %.2f ms", fmtA(ia10).c_str(), s_calRangeMA ? "mA" : "A",
              (s_calRangeMA ? s_impTdm : s_impTd) * 1e3);
@@ -2446,6 +2884,11 @@ static void imp_cb(lv_timer_t *)
         show_result("Stopped:\noutput off");
         return;
     }
+    if (!s_wOn && s_impPass == 1 && millis() - s_wStartMs >= 300)
+    {
+        s_wOn = true; // the 2 kHz generator now drives the voltage DAC
+        wave_timer_start();
+    }
     const float t = (millis() - s_startMs) * 1e-3f;
     if (t >= s_impTotal)
     {
@@ -2453,6 +2896,19 @@ static void imp_cb(lv_timer_t *)
         {
             s_capturing.store(false);
             analyse_imp_pass1();
+            // AC current for pass 2: 1 mA, or 30% of a large DC current
+            // (a 440 Ohm coil at 14 V: 1 mA was 0.44 V, in the A-range noise;
+            // with 32 mA DC flowing the sink can't clip it)
+            {
+                double vd, id, ia, idc = 0;
+                std::complex<double> Zx;
+                int nn = 0;
+                for (int k = 0; k < s_z1n; k++)
+                    if (imp_phasor(k, Zx, vd, id, ia))
+                        idc += id, nn++;
+                idc = nn ? idc / nn : 0;
+                s_impIac = std::max((double)kItarget, 0.3 * idc);
+            }
             imp_plan(2);
             // Pass 2 on the mA range when DC + AC fit (~100x less current
             // noise: the phase noise on the A range was a few degrees)
@@ -2528,7 +2984,7 @@ static void imp_cb(lv_timer_t *)
     }
 }
 
-bool loadImpStart()
+static bool loadImpStart_now()
 {
     if (s_timer || !output_usable() || !alloc_buffers())
         return false;
@@ -2545,6 +3001,7 @@ bool loadImpStart()
     s_showDetails = false;
     s_details = "";
     s_impBias = s_vtop / 2;
+    s_impIac = kItarget;
     imp_plan(1);
     begin_run();
     imp_start_capture();
@@ -2555,8 +3012,10 @@ bool loadImpStart()
     s_wAmp = 0;
     s_wTicks = 0;
     s_wStartMs = millis();
-    s_wOn = true; // the 2 kHz generator now drives the voltage DAC
-    wave_timer_start();
+    // The 2 kHz generator takes the voltage DAC over only after 300 ms: until
+    // then Task_ADC's DACUpdate writes the analysis current limit (Imax). It
+    // used to start at once, so the old limit stayed (Imax 3 A ran at 1 A:
+    // the output sat in CC below the bias and every sine read as noise).
     s_timer = lv_timer_create(imp_cb, 2, nullptr);
     return true;
 }
@@ -2571,6 +3030,7 @@ static void btn_cb(lv_event_t *e)
 
 void createLoadTab(lv_obj_t *parent)
 {
+    s_tab_set(parent);
     lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_pad_all(parent, 0, LV_PART_MAIN);
 
@@ -2638,6 +3098,14 @@ void createLoadTab(lv_obj_t *parent)
         s_showDetails = !s_showDetails;
         render_result();
     }, LV_EVENT_CLICKED, nullptr);
+    // long press: learn this result into the fingerprint library
+    lv_obj_add_event_cb(card, [](lv_event_t *) {
+        if (loadAnalyzerBusy() || !loadLearn(""))
+            return;
+        s_showDetails = false;
+        s_summary += "\n(learned)";
+        render_result();
+    }, LV_EVENT_LONG_PRESSED, nullptr);
 
     s_result = lv_label_create(card);
     lv_obj_set_style_text_font(s_result, &lv_font_montserrat_12, 0);
@@ -2665,25 +3133,34 @@ void createLoadTab(lv_obj_t *parent)
     s_pct = small(parent, lv_color_hex(0xC9D1D9));
     lv_obj_set_pos(s_pct, 290, 146);
 
-    // Current limit for the analysis (restored after)
-    s_imaxDd = lv_dropdown_create(parent);
-    lv_dropdown_set_options(s_imaxDd, "Imax: I-Set\nImax: 10 mA\nImax: 20 mA\nImax: 50 mA\nImax: 100 mA\nImax: 250 mA\nImax: 500 mA\nImax: 1 A\nImax: 2 A\nImax: 3 A\nImax: 5 A");
-    lv_dropdown_set_dir(s_imaxDd, LV_DIR_TOP);
-    lv_dropdown_set_symbol(s_imaxDd, LV_SYMBOL_UP);
-    lv_obj_set_size(s_imaxDd, 115, 22);
-    lv_obj_set_pos(s_imaxDd, 203, 160);
-    lv_obj_set_style_text_font(s_imaxDd, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_pad_ver(s_imaxDd, 3, 0);
-    lv_obj_set_style_pad_hor(s_imaxDd, 6, 0);
-    lv_obj_set_style_radius(s_imaxDd, 6, 0);
-    lv_obj_set_style_bg_color(s_imaxDd, lv_color_hex(0x21262d), 0);
-    lv_obj_set_style_border_color(s_imaxDd, lv_color_hex(0x30363d), 0);
-    lv_obj_set_style_text_color(s_imaxDd, lv_color_hex(0xE6EDF3), 0);
+    // Top voltage and current limit for the analysis (the user's V-Set /
+    // I-Set are untouched and restored after)
+    auto mkDd = [&](const char *opts, int x, int w) {
+        lv_obj_t *dd = lv_dropdown_create(parent);
+        lv_dropdown_set_options(dd, opts);
+        lv_dropdown_set_dir(dd, LV_DIR_TOP);
+        lv_dropdown_set_symbol(dd, nullptr);
+        lv_obj_set_size(dd, w, 22);
+        lv_obj_set_pos(dd, x, 160);
+        lv_obj_set_style_text_font(dd, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_pad_ver(dd, 3, 0);
+        lv_obj_set_style_pad_hor(dd, 5, 0);
+        lv_obj_set_style_radius(dd, 6, 0);
+        lv_obj_set_style_bg_color(dd, lv_color_hex(0x21262d), 0);
+        lv_obj_set_style_border_color(dd, lv_color_hex(0x30363d), 0);
+        lv_obj_set_style_text_color(dd, lv_color_hex(0xE6EDF3), 0);
+        if (lv_obj_t *list = lv_dropdown_get_list(dd))
+            lv_obj_set_style_text_font(list, &lv_font_montserrat_12, 0);
+        return dd;
+    };
+    s_vmaxDd = mkDd("V-Set\n1 V\n2 V\n3 V\n5 V\n9 V\n12 V\n15 V\n18 V\n24 V\n28 V\n32 V", 203, 54);
+    lv_obj_add_event_cb(s_vmaxDd, [](lv_event_t *e) {
+        s_vmax = kVmaxOpt[lv_dropdown_get_selected(lv_event_get_target(e))];
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
+    s_imaxDd = mkDd("I-Set\n10 mA\n20 mA\n50 mA\n100 mA\n250 mA\n500 mA\n1 A\n2 A\n3 A\n5 A", 260, 58);
     lv_obj_add_event_cb(s_imaxDd, [](lv_event_t *e) {
         s_imax = kImaxOpt[lv_dropdown_get_selected(lv_event_get_target(e))];
     }, LV_EVENT_VALUE_CHANGED, nullptr);
-    if (lv_obj_t *list = lv_dropdown_get_list(s_imaxDd))
-        lv_obj_set_style_text_font(list, &lv_font_montserrat_12, 0);
     lv_bar_set_range(s_bar, 0, 100);
     lv_obj_set_style_bg_color(s_bar, lv_color_hex(0x30363d), LV_PART_MAIN);
     lv_obj_set_style_bg_color(s_bar, lv_color_hex(0xFFC107), LV_PART_INDICATOR);
@@ -2711,3 +3188,94 @@ void createLoadTab(lv_obj_t *parent)
         lv_obj_center(l);
     }
 }
+
+// LOAD:SKEW <ms>[,mA] / LOAD:SKEW? - V/I timing skew used by Z(f)/LCR
+void loadSetSkew(float ms, bool maRange)
+{
+    imp_load_td();
+    (maRange ? s_impTdm : s_impTd) = ms * 1e-3f;
+    PowerSupply.StoreMem.begin("my-app", false);
+    PowerSupply.StoreMem.putFloat(maRange ? "imp_tdm" : "imp_td", ms * 1e-3f);
+    PowerSupply.StoreMem.end();
+}
+String loadSkew()
+{
+    imp_load_td();
+    return String(s_impTd * 1e3f, 3) + "," + String(s_impTdm * 1e3f, 3);
+}
+
+// ─── Start wrappers: switch the output on if it is off ──────────────────────
+// The analyser drives the output itself; one it switched on is switched off
+// again when the run ends (end_run). The output may take a moment (Output
+// Delay), so the start waits for it, up to 5 s.
+static lv_timer_t *s_pendTimer = nullptr;
+static int s_pendKind = 0; // 1 sweep, 2 zero, 3 fft, 4 imp
+static uint32_t s_pendMs = 0;
+static bool start_kind(int kind)
+{
+    switch (kind)
+    {
+    case 1: return loadSweepStart_now(false);
+    case 2: return loadSweepStart_now(true);
+    case 3: return loadFftStart_now();
+    default: return loadImpStart_now();
+    }
+}
+// Show the Load tab while a run goes (also when started over SCPI)
+static lv_obj_t *s_tab = nullptr;
+static void show_load_tab()
+{
+    extern lv_obj_t *tabview_utility;
+    if (!s_tab || !tabview_utility)
+        return;
+    if (Tabs::getCurrentPage() != 3)
+        Tabs::setCurrentPage(3);
+    lv_tabview_set_act(tabview_utility, lv_obj_get_index(s_tab), LV_ANIM_OFF);
+}
+static bool request_start(int kind)
+{
+    show_load_tab();
+    if (s_timer || s_pendTimer)
+        return false;
+    if (PowerSupply.getStatus() == DEVICE::FUN)
+    {
+        show_result("Stop the function\ngenerator first");
+        return false;
+    }
+    if (output_usable())
+        return start_kind(kind);
+    if (PowerSupply.getStatus() != DEVICE::OFF)
+        return false; // fault states (OVP, ...): leave alone
+    PowerSupply.toggle();
+    s_pendKind = kind;
+    s_pendMs = millis();
+    show_result("Output on...");
+    s_pendTimer = lv_timer_create([](lv_timer_t *) {
+        if (!output_usable() && millis() - s_pendMs < 5000)
+            return;
+        lv_timer_del(s_pendTimer);
+        s_pendTimer = nullptr;
+        if (!output_usable())
+        {
+            show_result("Output did not\nturn on");
+            return;
+        }
+        s_autoOn = true; // set before start so a refused start still turns it off
+        if (!start_kind(s_pendKind))
+            end_run_impl();
+    }, 50, nullptr);
+    return true;
+}
+bool loadSweepStart(bool zero) { return request_start(zero ? 2 : 1); }
+bool loadFftStart() { return request_start(3); }
+bool loadImpStart() { return request_start(4); }
+bool loadAnalyzerPending() { return s_pendTimer != nullptr; }
+void loadAnalyzerSetVmax(float v)
+{
+    s_vmax = v;
+    if (s_vmaxDd)
+        for (int k = 0; k < (int)(sizeof kVmaxOpt / sizeof kVmaxOpt[0]); k++)
+            if (fabsf(kVmaxOpt[k] - v) < 1e-3f)
+                lv_dropdown_set_selected(s_vmaxDd, k);
+}
+static void s_tab_set(lv_obj_t *p) { s_tab = p; }

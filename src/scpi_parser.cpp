@@ -288,8 +288,14 @@ void SCPIParser::executeCommand(const String& command)
     {
         if (cmdPart.indexOf("BUSY?") > 0) sendResponse(loadAnalyzerBusy() ? "1" : "0");
         else if (cmdPart.indexOf("RAW?") > 0) loadAnalyzerDumpRaw();
+        else if (cmdPart.indexOf("SKEW?") > 0) sendResponse(loadSkew());
+        else if (cmdPart.indexOf("SKEW") > 0) { double ms; if (parseNumeric(paramPart, ms) && fabs(ms) < 20) { loadSetSkew(ms, paramPart.indexOf(",") > 0); sendResponse("OK"); } else addError(ERR_DATA_OUT_OF_RANGE); }
+        else if (cmdPart.indexOf("LIB:CLE") > 0) { loadLibClear(); sendResponse("OK"); }
+        else if (cmdPart.indexOf("LIB?") > 0) sendResponse(loadLibList());
+        else if (cmdPart.indexOf("LEARN") > 0) { if (loadLearn(paramPart)) sendResponse("OK"); else addError(ERR_EXECUTION_ERROR); }
         else if (cmdPart.indexOf("RES?") > 0) sendResponse(loadAnalyzerResult());
         else if (cmdPart.indexOf("DET?") > 0) sendResponse(loadAnalyzerDetails());
+        else if (cmdPart.indexOf("VMAX") > 0) { double v; if (parseNumeric(paramPart, v) && v >= 0 && v <= 32.768) { loadAnalyzerSetVmax(v); sendResponse("OK"); } else addError(ERR_DATA_OUT_OF_RANGE); }
         else if (cmdPart.indexOf("IMAX") > 0) { double a; if (parseNumeric(paramPart, a) && a >= 0 && a <= 6) { loadAnalyzerSetImax(a); sendResponse("OK"); } else addError(ERR_DATA_OUT_OF_RANGE); }
         else if (cmdPart.indexOf("ZERO") > 0) { if (loadSweepStart(true)) sendResponse("OK"); else addError(ERR_EXECUTION_ERROR); }
         else if (cmdPart.indexOf("SWE") > 0) { if (loadSweepStart(false)) sendResponse("OK"); else addError(ERR_EXECUTION_ERROR); }
@@ -363,6 +369,15 @@ void SCPIParser::executeCommand(const String& command)
     }
 
     // DIAG:ADC:FAST n - conversion-cycle speed-ups, bit mask (see ADC::fast)
+    // LVGL called from the wrong core (first offender's backtrace, survives resets)
+    if (cmdPart.startsWith("DIAG:LVCORE"))
+    {
+        extern String lvCoreGuardReport();
+        extern void lvCoreGuardClear();
+        if (cmdPart.indexOf("CLE") > 0) { lvCoreGuardClear(); sendResponse("OK"); }
+        else sendResponse(lvCoreGuardReport());
+        return;
+    }
     if (cmdPart.startsWith("DIAG:ADC:FAST"))
     {
         if (cmdPart.endsWith("?")) sendResponse(String(ADC::fast) + "," + String(PowerSupply.adc.lateReads) + "," + String(PowerSupply.adc.earlyReady) + "," + String(PowerSupply.adc.stalls)); // mode, late reads redone, ready glitches ignored, stalls recovered

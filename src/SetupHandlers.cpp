@@ -1,3 +1,4 @@
+#include "touch_affine.h"
 #include "SetupHandlers.h" // Include the setup handlers header
 #include "display.h"       // DISPLAY_DRIVER_NAME
 #include "i2c_recovery.h"  // Include I2C bus recovery module
@@ -186,6 +187,7 @@ void initializeTouch()
         memcpy(calData, saved, sizeof(calData));
     tft.setTouch(calData);
     Serial.printf("Touch Screen Calibrated (%s).\n", haveSaved ? "saved" : "factory");
+    touchAffineLoad(); // 9-point fit, when one is saved, replaces the mapping above
 }
 
 // Initialize LVGL graphics library

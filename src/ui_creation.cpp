@@ -720,6 +720,10 @@ void Utility_tabview(lv_obj_t *parent)
 
     Utility_objs.table_point_list = table_pro(tab4, &style_stats, &graph_R_16, LV_ALIGN_DEFAULT, 3, 15, 160, 120, 0, 5);
 
+    // Size the table once: adding cells one row at a time made LVGL re-measure
+    // every row on each new row (O(n^2) text layout): ~14 s of boot for 250 rows
+    lv_table_set_row_cnt(Utility_objs.table_point_list, RECORDING_TABLE_SIZE);
+    lv_table_set_col_cnt(Utility_objs.table_point_list, 2);
     for (int i = 0; i < RECORDING_TABLE_SIZE; i++)
     {
         // Utility_objs.table_points[i] = PowerSupply.funGenMem.table_points[i];
@@ -980,6 +984,9 @@ void StatusBar()
 
         lv_obj_align(status, LV_ALIGN_TOP_MID, 0, 226);
         lv_obj_set_scrollbar_mode(status, LV_SCROLLBAR_MODE_OFF);
+        // Its labels stick out past the 14 px box, so it was scrollable: a
+        // touch with any drag scrolled them out of sight (bar went blank)
+        lv_obj_clear_flag(status, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_style(status, &style, 0);
 
         lv_style_set_text_letter_space(&style_font, -1);
