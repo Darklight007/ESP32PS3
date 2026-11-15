@@ -128,6 +128,7 @@ void setup()
   PowerSupply.Current.opaqueMeasureBackground();
   PowerSupply.Power.opaqueMeasureBackground();
   splashProgress(100, "Ready");
+  splashEnd();
   createTasks();
   initialMemory();
   loadEnergyFromStorage(); // Load persistent energy counter
