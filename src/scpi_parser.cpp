@@ -1,3 +1,6 @@
+#include "weather.h"
+#include "boot_splash.h"
+#include "spi_quiet.h"
 #include "ui_creation.h"
 #include "scpi_parser.h"
 #include "display.h"
@@ -29,11 +32,18 @@
 // the addresses with addr2line against firmware.elf to see where time goes.
 #include "freertos/xtensa_context.h"
 static const int SAMP_MAX = 6000;
-static volatile uint32_t s_samp[SAMP_MAX];
+// allocated on first use (internal RAM, the ISR runs with the cache off too): 24 KB
+static volatile uint32_t *s_samp = nullptr;
+static bool sampAlloc()
+{
+    if (!s_samp)
+        s_samp = (volatile uint32_t *)heap_caps_malloc(SAMP_MAX * 4, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    return s_samp != nullptr;
+}
 static volatile int s_sampN = 0;
 static void IRAM_ATTR sampIsr()
 {
-    if (s_sampN < SAMP_MAX)
+    if (s_samp && s_sampN < SAMP_MAX)
     {
         void **tcb = (void **)xTaskGetCurrentTaskHandle();
         s_samp[s_sampN++] = ((XtExcFrame *)(*tcb))->pc;
@@ -209,6 +219,25 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("PROT:CLE") > 0) cmd_OUTP_PROT_CLE();
         else if (cmdPart.indexOf("PROT:TRIP?") > 0) cmd_OUTP_PROT_TRIP_Q();
         else addError(ERR_UNDEFINED_HEADER);
+        return;
+    }
+
+    // SYST:WEAT? | SYST:WEAT:FETC | SYST:WEAT:FORC n (-1 live, 0 clear..5 thunder)
+    if (cmdPart.startsWith("SYST:WEAT"))
+    {
+        if (cmdPart.indexOf("FETC") > 0) { weatherFetchStart(); sendResponse("OK"); }
+        else if (cmdPart.indexOf("AUTO") > 0)
+        {
+            if (cmdPart.endsWith("?")) sendResponse(weatherAuto() ? "1" : "0");
+            else { weatherSetAuto(paramPart.toInt() != 0); sendResponse("OK"); }
+        }
+        else if (cmdPart.indexOf("CITY") > 0)
+        {
+            if (cmdPart.endsWith("?")) sendResponse(weatherUserCity());
+            else { String c = paramPart; c.trim(); c.replace("\"", ""); weatherSetCity(c); sendResponse("OK, reboot to fetch"); }
+        }
+        else if (cmdPart.indexOf("FORC") > 0) { weatherForce(paramPart.toInt()); sendResponse("OK"); }
+        else sendResponse(weatherInfo());
         return;
     }
 
@@ -488,6 +517,22 @@ void SCPIParser::executeCommand(const String& command)
             if (cmdPart.endsWith("?")) sendResponse(String(g_drawMode));
             else { g_drawMode = paramPart.toInt() ? 1 : 0; sendResponse("OK"); }
         }
+        else if (cmdPart.indexOf("LCD?") > 0)
+        {
+            // what the panel really shows (GRAM over MISO), not LVGL's buffer
+            spiQuietAcquire();
+            splashShot(0, false);
+            spiQuietEnd();
+        }
+        else if (cmdPart.indexOf("SPLASH:SHOT?") > 0)
+        {
+            // Splash screenshot read back from the LCD; optional wait in ms
+            const long ms = paramPart.length() ? paramPart.toInt() : 800;
+            spiQuietAcquire();
+            splashShot(ms < 0 ? 0 : ms > 20000 ? 20000 : ms);
+            spiQuietEnd();
+            lv_obj_invalidate(lv_scr_act());
+        }
         else if (cmdPart.indexOf("SHOT?") > 0)
         {
             // Screenshot: full repaint into the full-screen buffer, then 240
@@ -545,6 +590,7 @@ void SCPIParser::executeCommand(const String& command)
         }
         else if (cmdPart.indexOf("SAMPRUN") > 0)
         {
+            if (!sampAlloc()) { sendResponse("ERR no memory"); return; }
             static hw_timer_t *t = nullptr;
             s_sampN = 0;
             if (!t)
@@ -562,6 +608,7 @@ void SCPIParser::executeCommand(const String& command)
             int v[4] = {0, 0, 0, 0};
             sscanf(paramPart.c_str(), "%d,%d,%d,%d", &v[0], &v[1], &v[2], &v[3]);
             lv_area_t a = {(lv_coord_t)v[0], (lv_coord_t)v[1], (lv_coord_t)v[2], (lv_coord_t)v[3]};
+            if (!sampAlloc()) { sendResponse("ERR no memory"); return; }
             s_sampN = 0;
             hw_timer_t *t = timerBegin(0, 80, true);
             timerAttachInterrupt(t, &sampIsr, true);

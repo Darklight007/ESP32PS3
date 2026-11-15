@@ -24,6 +24,7 @@ void IRAM_ATTR VoltageEnc(void *) { encoder1Flag++; }
 void IRAM_ATTR CurrentEnc(void *) { encoder2Flag++; }
 
 // ===== Keypad processing =====
+volatile uint32_t g_keyPressCount = 0; // any key press (splash: close on a key)
 void getKeys() {
     if (kpd.getKeys()) {
         for (int i = 0; i < LIST_MAX; i++) {
@@ -31,6 +32,7 @@ void getKeys() {
                 lowNoisePause(); // keypad in use: full-speed UI (spi_quiet.h)
                 switch (kpd.key[i].kstate) {
                     case PRESSED:
+                        g_keyPressCount++;
                         myTone(NOTE_A4, 50);
                         msg = " PRESSED.";
                         ismyTextHiddenChange = true;

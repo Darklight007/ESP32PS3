@@ -424,6 +424,26 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 
 ---
 
+### :SYSTem:WEATher? - Local Weather (Splash)
+**Description:** Weather shown on the boot/About splash. At boot (if enabled) a background task joins WiFi, finds the location from the public IP (ip-api.com), reads the current weather (open-meteo.com), caches it in NVS and turns WiFi off before the ADC starts. Returns `kind,WMO code,temp C,city,status,forced|live`.
+**Syntax:** `:SYST:WEAT?`
+
+### :SYSTem:WEATher:FORCe - Force a Weather Look
+**Description:** `-1` live, `0` clear, `1` cloudy, `2` rain, `3` snow, `4` fog, `5` storm. Saved.
+**Syntax:** `:SYST:WEAT:FORC <n>`
+
+### :SYSTem:WEATher:AUTO - Fetch at Boot
+**Description:** `1` (default) fetch at boot (~1.4 s, overlapped with display start; boot ~0.7 s longer), `0` never use WiFi. After 'no wifi' the next 5 boots skip the fetch.
+**Syntax:** `:SYST:WEAT:AUTO <0|1>`, `:SYST:WEAT:AUTO?`
+
+### :SYSTem:WEATher:CITY - Fixed Location
+**Description:** Use this city instead of the IP location (ISP's city is often wrong). Geocoded via open-meteo at the next boot, then cached. `""` = back to IP location.
+**Syntax:** `:SYST:WEAT:CITY "<name>"`, `:SYST:WEAT:CITY?`
+
+### :SYSTem:WEATher:FETCh - Fetch Now
+**Description:** Only works with >50 KB internal RAM free (normally only at boot).
+**Syntax:** `:SYST:WEAT:FETC`
+
 ## DISPlay Subsystem (Display Performance)
 
 ### :SYSTem:LOG? - Event Log
@@ -468,6 +488,10 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 ### :DISPlay:SHOT? - Screenshot
 **Description:** Repaints the screen and sends it: 240 lines, each 320 pixels as RGB565 hex (4 digits per pixel), then `END`. About 310 KB of text.
 **Syntax:** `:DISP:SHOT?`
+
+### :DISPlay:SPLASH:SHOT? - Splash Screenshot
+**Description:** Shows the splash (no progress bar), waits `ms` (default 800), reads the whole frame back from the LCD and sends it like `:DISP:SHOT?`. The splash is drawn outside LVGL, so `:DISP:SHOT?` can't see it.
+**Syntax:** `:DISP:SPLASH:SHOT? [ms]`
 
 ### :DISPlay:AREA - Redraw Time of One Rectangle
 **Description:** Redraws one screen rectangle 100 times; returns ms per redraw (render + flush)

@@ -1,3 +1,4 @@
+#include "weather.h"
 // Standard libraries
 #include "boot_splash.h"
 #include "event_log.h"
@@ -73,27 +74,31 @@ void setup()
   // Disable Task Watchdog Timer
   // esp_task_wdt_deinit(); // Deinitializes the task watchdog timer
 
-  ESP_LOGI("SETUP", ">>> Starting setup()");
+  ESP_LOGI("SETUP", ">>> Starting setup()  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   initializeSerial();
   setupBuzzer(); // first: setup code beeps (myTone/toneOff) before the old spot -> "LEDC is not initialized" errors
-  ESP_LOGI("SETUP", ">>> After initializeSerial()");
+  ESP_LOGI("SETUP", ">>> After initializeSerial()  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   ErrorHandler::init(true, true); // Enable serial and UI error reporting
-  ESP_LOGI("SETUP", ">>> After ErrorHandler::init()");
+  ESP_LOGI("SETUP", ">>> After ErrorHandler::init()  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   initialMemory();
-  ESP_LOGI("SETUP", ">>> After initialMemory()");
+  ESP_LOGI("SETUP", ">>> After initialMemory()  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  weatherFetchStart(); // background: local weather (next splash); WiFi off before setupDMA
   initializeI2C();
-  ESP_LOGI("SETUP", ">>> After initializeI2C()");
+  ESP_LOGI("SETUP", ">>> After initializeI2C()  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   initializeDisplay();
   splashBegin();
-  ESP_LOGI("SETUP", ">>> After initializeDisplay()");
+  ESP_LOGI("SETUP", ">>> After initializeDisplay()  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   initializeTouch();
   splashProgress(15, "Touch");
-  ESP_LOGI("SETUP", ">>> After initializeTouch()");
+  ESP_LOGI("SETUP", ">>> After initializeTouch()  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   setupLVGL();
-  ESP_LOGI("SETUP", ">>> After setupLVGL()");
+  ESP_LOGI("SETUP", ">>> After setupLVGL()  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  weatherWait(4500); // WiFi RAM must be free before the draw buffers
+  splashHold(true); // twinkle task off the SPI bus while DMA is set up
   setupDMA();
+  splashHold(false);
   splashProgress(25, "Graphics");
-  ESP_LOGI("SETUP", ">>> After setupDMA()");
+  ESP_LOGI("SETUP", ">>> After setupDMA()  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
 
   // lv_demo_music();
   // lv_demo_benchmark();
@@ -114,11 +119,13 @@ void setup()
   splashProgress(35, "Building screens");
   setupPowerSupply();
   LoadGraphData(); // restore the graph trace before Task_ADC starts pushing new points
+  ESP_LOGI("SETUP", ">>> After setupPowerSupply+graph  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   splashProgress(80, "ADC");
   setupADC();
   setupDAC();
   // SetupOVP();  // Create OVP/OCP protection
 
+  ESP_LOGI("SETUP", ">>> After ADC/DAC  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   splashProgress(88, "Calibration");
   setupCalibPage();
   dropIdleScrollbars(); // after the UI exists; render-time saving, no visual change
@@ -127,9 +134,12 @@ void setup()
   PowerSupply.Voltage.opaqueMeasureBackground(); // faster digit redraws, same pixels
   PowerSupply.Current.opaqueMeasureBackground();
   PowerSupply.Power.opaqueMeasureBackground();
+  ESP_LOGI("SETUP", ">>> After calib page/UI extras  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   splashProgress(100, "Ready");
   splashEnd();
+  lv_obj_invalidate(lv_scr_act()); // the splash covered the LCD: first frame is a full one
   createTasks();
+  ESP_LOGI("SETUP", ">>> After createTasks  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   initialMemory();
   loadEnergyFromStorage(); // Load persistent energy counter
   MemoryMonitor::init();   // Initialize memory monitoring
@@ -187,6 +197,12 @@ void loop()
 
   //   // Render bars immediately (throttled to ~60 FPS to avoid DMA issues)
   TRACE("loop_top");
+  { // One full repaint 3 s into the loop: frames drawn while boot settles
+    // left the LCD damaged (digit tops, tab bar, Wh) until a full redraw
+    static uint32_t t0 = millis();
+    static bool done = false;
+    if (!done && millis() - t0 > 3000) { done = true; lv_obj_invalidate(lv_scr_act()); }
+  }
   static unsigned long lastBarRender = 0;
   if (millis() - lastBarRender >= 10) // was 100: touch was polled at only 10 Hz
   {

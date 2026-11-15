@@ -44,10 +44,17 @@ void updateEnergyAndTimeDisplays()
             lv_label_set_text_static(unit, u);
             last = u;
         }
-        lv_label_set_text_fmt(num, milli ? "%.1f" : "%.3f", milli ? v * 1000.0 : v);
+        char t[16];
+        snprintf(t, sizeof t, milli ? "%.1f" : "%.3f", milli ? v * 1000.0 : v);
+        if (strcmp(t, lv_label_get_text(num)) == 0)
+            return; // unchanged: no redraw (repeated redraws clipped the unit's glyphs on the LCD)
+        lv_label_set_text(num, t);
         // Left-aligned pair: the unit follows the digits
         if (unit)
-            lv_obj_align_to(unit, num, LV_ALIGN_OUT_RIGHT_BOTTOM, 3, 2);
+        {
+            lv_obj_align_to(unit, num, LV_ALIGN_OUT_RIGHT_BOTTOM, 3, 5);
+            lv_obj_invalidate(unit);
+        }
     };
     static const char *lastWh = nullptr, *lastAh = nullptr;
     show(PowerSupply.gui.label_energy_counter, PowerSupply.gui.label_energy_unit,
