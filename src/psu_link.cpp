@@ -82,7 +82,8 @@ namespace
     uint32_t s_lastRx = 0;
     bool s_wasConnected = false;
     Pkt s_peerState = {};
-    uint32_t s_rxCount = 0, s_txFail = 0;
+    uint32_t s_rxCount = 0, s_txFail = 0, s_txOk = 0, s_rxAll = 0;
+    esp_err_t s_lastSendErr = ESP_OK;
 
     void *s_reserve[6] = {};
 
@@ -107,6 +108,7 @@ namespace
         memcpy(&p, data, sizeof(p));
         if (p.magic != kMagic)
             return;
+        s_rxAll++;
         portENTER_CRITICAL(&s_mux);
         const uint8_t next = (s_qHead + 1) % kQ;
         if (next != s_qTail) // full: drop (STATE repeats every 20 ms)
@@ -122,6 +124,8 @@ namespace
     {
         if (st != ESP_NOW_SEND_SUCCESS)
             s_txFail++;
+        else
+            s_txOk++;
     }
 
     void addPeer(const uint8_t *mac)
@@ -151,7 +155,8 @@ namespace
         cfg.dynamic_rx_buf_num = 8;
         cfg.tx_buf_type = 1; // dynamic
         cfg.dynamic_tx_buf_num = 8;
-        cfg.cache_tx_buf_num = 0;
+        // cache_tx_buf_num stays default (PSRAM): at 0 every esp_now_send()
+        // failed with ESP_ERR_ESPNOW_NO_MEM
         cfg.ampdu_rx_enable = 0;
         cfg.ampdu_tx_enable = 0;
         cfg.amsdu_tx_enable = 0;
@@ -204,7 +209,7 @@ namespace
             return;
         addPeer(mac);
         Pkt p = {kMagic, type, seq++, on, flags, v, i};
-        esp_now_send(mac, (const uint8_t *)&p, sizeof(p));
+        s_lastSendErr = esp_now_send(mac, (const uint8_t *)&p, sizeof(p));
     }
 
     double vSet() { auto &V = PowerSupply.Voltage; return (V.adjValue - V.adjOffset) / V.adjFactor; }
@@ -263,8 +268,15 @@ namespace
             I.SetUpdate(std::clamp((double)p.i, 0.0, iMax) * I.adjFactor + I.adjOffset);
         }
         // output follows the master's switching (edges): a slave that tripped
-        // stays off until the master switches again
-        if (first || (p.on != 0) != lastOn)
+        // stays off until the master switches again. On (re)connect it may
+        // only turn off: a link that comes back must not switch the output on.
+        if (first)
+        {
+            lastOn = p.on != 0;
+            if (!lastOn)
+                outputSet(false);
+        }
+        else if ((p.on != 0) != lastOn)
         {
             lastOn = p.on != 0;
             outputSet(lastOn);
@@ -337,12 +349,13 @@ namespace
         }
     }
 
-    void linkLost()
+    void linkLost(bool log = true)
     {
         if (outputArmed())
         {
             outputSet(false);
-            eventLog(Event::LINK_LOST, (float)vSet(), (uint8_t)s_role);
+            if (log)
+                eventLog(Event::LINK_LOST, (float)vSet(), (uint8_t)s_role);
             Serial.println("[LINK] partner lost: output OFF");
         }
     }
@@ -533,7 +546,8 @@ void linkUnpair()
     if (s_hasPeer)
         send(s_peer, UNPAIR);
     if (linkConnected())
-        linkLost();
+        linkLost(false); // asked for: output off, nothing to log
+    s_wasConnected = false;
     dropPeer();
     s_note[0] = 0;
 }
@@ -549,6 +563,19 @@ float linkRatio() { return s_ratio; }
 bool linkConnected() { return s_radio && s_hasPeer && s_lastRx && millis() - s_lastRx < kLostMs; }
 
 const char *linkSelfName() { return s_selfName; }
+
+String linkDiag()
+{
+    uint8_t ch = 0;
+    wifi_second_chan_t sc;
+    if (s_radio)
+        esp_wifi_get_channel(&ch, &sc);
+    char b[120];
+    snprintf(b, sizeof(b), "radio %d,ch %u,tx ok %lu,tx fail %lu,send err %d,rx all %lu,rx peer %lu",
+             s_radio, ch, (unsigned long)s_txOk, (unsigned long)s_txFail, s_lastSendErr,
+             (unsigned long)s_rxAll, (unsigned long)s_rxCount);
+    return String(b);
+}
 
 String linkStatus()
 {

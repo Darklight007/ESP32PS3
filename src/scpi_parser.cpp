@@ -251,6 +251,7 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.startsWith("LINK:RAT?")) sendResponse(String(linkRatio(), 1));
         else if (cmdPart.startsWith("LINK:RAT")) { linkSetRatio(paramPart.toFloat()); sendResponse(String(linkRatio(), 1)); }
         else if (cmdPart.startsWith("LINK:TEST")) { extern void linkTestIncoming(); linkTestIncoming(); sendResponse("OK"); }
+        else if (cmdPart.startsWith("LINK:DIAG?")) { extern String linkDiag(); sendResponse(linkDiag()); }
         else if (cmdPart.startsWith("LINK:NAME?")) sendResponse(linkSelfName());
         else if (cmdPart.startsWith("LINK:STAT?")) sendResponse(linkStatus());
         else addError(ERR_UNDEFINED_HEADER);

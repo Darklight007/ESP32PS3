@@ -33,7 +33,8 @@ namespace
     float mV = 5, mI = 1;
     bool mOn = false;
     Pkt lastStatus = {};
-    uint32_t lastRx = 0, rxCount = 0;
+    uint32_t lastRx = 0, rxCount = 0, rxAll = 0, txOk = 0, txFail = 0;
+    esp_err_t lastErr = ESP_OK;
     // scan / requests
     uint8_t found[6][6];
     int nFound = 0;
@@ -78,10 +79,11 @@ namespace
         static uint8_t seq;
         addPeer(m);
         Pkt p = {kMagic, type, seq++, on, 0, v, i};
-        esp_now_send(m, (uint8_t *)&p, sizeof(p));
+        lastErr = esp_now_send(m, (uint8_t *)&p, sizeof(p));
     }
     void onRecv(const uint8_t *mac, const uint8_t *d, int len)
     {
+        rxAll++;
         if (len != sizeof(Pkt))
             return;
         Rx r;
@@ -165,6 +167,8 @@ namespace
         float a = 0, b = 0;
         if (c == "status")
         {
+            uint8_t ch; wifi_second_chan_t sc; esp_wifi_get_channel(&ch, &sc);
+            out("ch %u tx ok %lu fail %lu err %d rx all %lu\n", ch, (unsigned long)txOk, (unsigned long)txFail, lastErr, (unsigned long)rxAll);
             out("%s role=%s peer=%s connected=%d rx=%lu auto=%d mute=%d\n", name(selfMac),
                 role == MASTER ? "MASTER" : role == SLAVE ? "SLAVE" : "READY", hasPeer ? name(peer) : "-",
                 hasPeer && millis() - lastRx < 300, (unsigned long)rxCount, autoAccept, mute);
@@ -197,6 +201,7 @@ void setup()
     esp_wifi_set_channel(kChannel, WIFI_SECOND_CHAN_NONE);
     esp_now_init();
     esp_now_register_recv_cb(onRecv);
+    esp_now_register_send_cb([](const uint8_t *, esp_now_send_status_t st) { st == ESP_NOW_SEND_SUCCESS ? txOk++ : txFail++; });
     addPeer(kBcast);
     esp_wifi_get_mac(WIFI_IF_STA, selfMac);
     out("\nLINK SIM %s ready (auto accept on). Type ? for commands.\n", name(selfMac));
