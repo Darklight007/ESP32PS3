@@ -1,3 +1,4 @@
+#include "psu_link.h"
 #include "weather.h"
 #include "boot_splash.h"
 #include "spi_quiet.h"
@@ -227,6 +228,51 @@ void SCPIParser::executeCommand(const String& command)
         extern volatile bool g_dmaSync;
         g_dmaSync = paramPart.toInt() != 0;
         sendResponse("OK");
+        return;
+    }
+    // LINK:ENAB 0|1, LINK:SCAN, LINK:LIST?, LINK:REQ n, LINK:ACC 0|1,
+    // LINK:UNL, LINK:RAT pct, LINK:STAT?, LINK:NAME?
+    if (cmdPart.startsWith("LINK"))
+    {
+        if (cmdPart.startsWith("LINK:ENAB?")) sendResponse(linkEnabled() ? "1" : "0");
+        else if (cmdPart.startsWith("LINK:ENAB")) { linkEnable(paramPart.toInt() != 0); sendResponse(linkStatus()); }
+        else if (cmdPart.startsWith("LINK:SCAN")) { linkScan(); sendResponse(linkEnabled() ? "OK" : "link off"); }
+        else if (cmdPart.startsWith("LINK:LIST?"))
+        {
+            char names[6][12];
+            const int n = linkFound(names, 6);
+            String r;
+            for (int k = 0; k < n; k++) { if (k) r += ","; r += names[k]; }
+            sendResponse(n ? r : String("none"));
+        }
+        else if (cmdPart.startsWith("LINK:REQ")) { linkRequest(paramPart.toInt()); sendResponse(linkStatus()); }
+        else if (cmdPart.startsWith("LINK:ACC")) { linkAnswer(paramPart.toInt() != 0); sendResponse(linkStatus()); }
+        else if (cmdPart.startsWith("LINK:UNL")) { linkUnpair(); sendResponse(linkStatus()); }
+        else if (cmdPart.startsWith("LINK:RAT?")) sendResponse(String(linkRatio(), 1));
+        else if (cmdPart.startsWith("LINK:RAT")) { linkSetRatio(paramPart.toFloat()); sendResponse(String(linkRatio(), 1)); }
+        else if (cmdPart.startsWith("LINK:TEST")) { extern void linkTestIncoming(); linkTestIncoming(); sendResponse("OK"); }
+        else if (cmdPart.startsWith("LINK:NAME?")) sendResponse(linkSelfName());
+        else if (cmdPart.startsWith("LINK:STAT?")) sendResponse(linkStatus());
+        else addError(ERR_UNDEFINED_HEADER);
+        return;
+    }
+    // DISP:MENU n: open Settings and its n-th sidebar item (screenshots/tests)
+    if (cmdPart.startsWith("DISP:MENU"))
+    {
+        lv_tabview_set_act(PowerSupply.tab.tabview, 4, LV_ANIM_OFF);
+        lv_obj_t *root = lv_menu_get_cur_sidebar_page(PowerSupply.gui.setting_menu);
+        lv_obj_t *sec = root ? lv_obj_get_child(root, 0) : nullptr;
+        lv_obj_t *itm = sec ? lv_obj_get_child(sec, paramPart.toInt()) : nullptr;
+        if (itm)
+            lv_event_send(itm, LV_EVENT_CLICKED, nullptr);
+        const int comma = paramPart.indexOf(',');
+        lv_obj_t *page = lv_menu_get_cur_main_page(PowerSupply.gui.setting_menu);
+        if (itm && comma > 0 && page)
+        {
+            lv_obj_scroll_to_y(page, paramPart.substring(comma + 1).toInt(), LV_ANIM_OFF);
+            lv_obj_scroll_to_y(lv_obj_get_parent(page), paramPart.substring(comma + 1).toInt(), LV_ANIM_OFF);
+        }
+        sendResponse(itm ? "OK" : "no item");
         return;
     }
     if (cmdPart.startsWith("DIAG:NOTOUCH"))

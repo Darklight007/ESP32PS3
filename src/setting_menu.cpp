@@ -24,6 +24,8 @@
 #include "disp_perf.h"     // frame-rate overlay switch
 #include "touch_affine.h"
 #include "boot_splash.h"
+#include "event_log.h"
+#include "psu_link.h"
 #include "spi_quiet.h"     // spiQuietAcquire() for the touch calibration
 #include <float.h>
 
@@ -979,6 +981,155 @@ void SettingMenu(lv_obj_t *parent)
     create_button_item(section, btn_siren_demo_cb, "Play / Stop");
     create_siren_spinboxes(section);
 
+    // Event Log: fault/boot history (same as SYST:LOG?), refreshed on open
+    static lv_obj_t *s_logLabel = nullptr;
+    static auto logRefresh = []() {
+        static char buf[40 * 56];
+        eventLogText(buf, sizeof(buf));
+        lv_label_set_text(s_logLabel, buf);
+    };
+    lv_obj_t *sub_event_log = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
+    section = lv_menu_section_create(sub_event_log);
+    create_text(section, nullptr, "Newest first. #boot h:mm:ss", 0, nullptr);
+    create_button_item(section, [](lv_event_t *) { eventLogClear(); logRefresh(); }, "Clear Log");
+    {
+        lv_obj_t *cont = lv_menu_cont_create(section);
+        s_logLabel = lv_label_create(cont);
+        lv_label_set_long_mode(s_logLabel, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(s_logLabel, LV_PCT(100));
+        lv_obj_set_style_text_font(s_logLabel, &lv_font_montserrat_10, 0);
+        logRefresh();
+    }
+
+    // PSU Link: follow another PSU over ESP-NOW (psu_link.cpp)
+    static lv_obj_t *s_linkStat = nullptr, *s_linkList = nullptr, *s_linkScanBtn = nullptr, *s_linkSw = nullptr;
+    lv_obj_t *sub_link = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
+    section = lv_menu_section_create(sub_link);
+    s_linkSw = lv_obj_get_child(create_switch_(section, nullptr, "Link Radio", linkEnabled(), [](lv_event_t *e) {
+        linkEnable(lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED));
+    }, LV_EVENT_VALUE_CHANGED, nullptr), 1);
+    {
+        lv_obj_t *cont = lv_menu_cont_create(section);
+        s_linkStat = lv_label_create(cont);
+        lv_label_set_long_mode(s_linkStat, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(s_linkStat, LV_PCT(100));
+        lv_obj_set_style_text_font(s_linkStat, &lv_font_montserrat_12, 0);
+        lv_label_set_text(s_linkStat, "");
+    }
+    s_linkScanBtn = lv_obj_get_child(create_button_item(section, [](lv_event_t *) { linkScan(); }, "Scan"), 0);
+    {
+        // units found by the scan: tap one to ask it to follow this unit
+        s_linkList = lv_menu_cont_create(section);
+        lv_obj_set_flex_flow(s_linkList, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_row(s_linkList, 4, 0);
+    }
+    create_button_item(section, [](lv_event_t *) { linkUnpair(); }, "Unlink");
+    create_slider(section, nullptr, "Slave Ratio", 1, 100, (int32_t)lroundf(linkRatio()),
+                  [](lv_event_t *e) {
+                      auto *sl = lv_event_get_target(e);
+                      const int32_t v = lv_slider_get_value(sl);
+                      char buf[8];
+                      lv_snprintf(buf, sizeof(buf), "%d%%", v);
+                      lv_label_set_text(lv_obj_get_child(lv_obj_get_parent(sl), 1), buf);
+                      if ((int32_t)lroundf(linkRatio()) != v)
+                          linkSetRatio((float)v);
+                  }, LV_EVENT_VALUE_CHANGED);
+    create_text(section, nullptr, "Slave = master x ratio", 0, nullptr);
+
+    // Page refresh (2 Hz, only when visible) and the link request prompt
+    // (any page: the other unit is waiting for an answer)
+    lv_timer_create([](lv_timer_t *) {
+        static lv_obj_t *s_askBox = nullptr;
+        char who[12];
+        if (!s_askBox && linkIncoming(who))
+        {
+            static char txt[96];
+            snprintf(txt, sizeof(txt), "%s wants this PSU to follow it (this unit = slave).", who);
+            static const char *btns[] = {"Accept", "Refuse", ""};
+            s_askBox = lv_msgbox_create(NULL, "PSU Link", txt, btns, false);
+            lv_obj_center(s_askBox);
+            lv_obj_add_event_cb(s_askBox, [](lv_event_t *e) {
+                lv_obj_t *mb = lv_event_get_current_target(e);
+                linkAnswer(lv_msgbox_get_active_btn(mb) == 0);
+                lv_msgbox_close_async(mb);
+                s_askBox = nullptr;
+            }, LV_EVENT_VALUE_CHANGED, nullptr);
+        }
+        else if (s_askBox && !linkIncoming(who)) // timed out
+        {
+            lv_msgbox_close(s_askBox);
+            s_askBox = nullptr;
+        }
+
+        if (!lv_obj_is_visible(s_linkStat))
+            return;
+        // status: this unit, role/state, partner, slave readings, last result
+        String f[8];
+        int nf = 0;
+        String st = linkStatus();
+        for (int from = 0; nf < 8;)
+        {
+            int c = st.indexOf(',', from);
+            f[nf++] = st.substring(from, c < 0 ? st.length() : c);
+            if (c < 0)
+                break;
+            from = c + 1;
+        }
+        String t = String("This: ") + linkSelfName() + "\n" + f[0] + ", " + f[1];
+        if (nf > 2 && f[2] != "-")
+            t += "\nPartner: " + f[2];
+        for (int k = 4; k < nf; k++)
+            t += "\n" + f[k];
+        if (linkScanning())
+            t += "\nScanning...";
+        if (strcmp(lv_label_get_text(s_linkStat), t.c_str()) != 0)
+            lv_label_set_text(s_linkStat, t.c_str());
+        if (lv_obj_has_state(s_linkSw, LV_STATE_CHECKED) != linkEnabled()) // changed over SCPI
+            linkEnabled() ? lv_obj_add_state(s_linkSw, LV_STATE_CHECKED) : lv_obj_clear_state(s_linkSw, LV_STATE_CHECKED);
+        if (linkEnabled())
+            lv_obj_clear_state(s_linkScanBtn, LV_STATE_DISABLED);
+        else
+            lv_obj_add_state(s_linkScanBtn, LV_STATE_DISABLED);
+
+        static uint32_t shownVer = ~0u;
+        static bool shownScanning = false;
+        if (shownVer != linkFoundVersion() || shownScanning != linkScanning())
+        {
+            shownVer = linkFoundVersion();
+            shownScanning = linkScanning();
+            lv_obj_clean(s_linkList);
+            char names[6][12];
+            const int n = linkFound(names, 6);
+            for (int k = 0; k < n; k++)
+            {
+                lv_obj_t *btn = lv_btn_create(s_linkList);
+                lv_obj_set_width(btn, LV_PCT(100));
+                lv_obj_t *l = lv_label_create(btn);
+                lv_label_set_text_fmt(l, "%s  >", names[k]);
+                lv_obj_center(l);
+                lv_obj_add_event_cb(btn, [](lv_event_t *e) {
+                    static int pick;
+                    pick = (int)(intptr_t)lv_event_get_user_data(e);
+                    char names[6][12];
+                    linkFound(names, 6);
+                    static char txt[96];
+                    snprintf(txt, sizeof(txt), "Link %s? This PSU becomes master, %s follows it.", names[pick], names[pick]);
+                    static const char *btns[] = {"Link", "Cancel", ""};
+                    lv_obj_t *mb = lv_msgbox_create(NULL, "PSU Link", txt, btns, false);
+                    lv_obj_center(mb);
+                    lv_obj_add_event_cb(mb, [](lv_event_t *e2) {
+                        lv_obj_t *m = lv_event_get_current_target(e2);
+                        if (lv_msgbox_get_active_btn(m) == 0)
+                            linkRequest(pick);
+                        lv_msgbox_close_async(m);
+                    }, LV_EVENT_VALUE_CHANGED, nullptr);
+                }, LV_EVENT_CLICKED, (void *)(intptr_t)k);
+            }
+            if (n == 0 && !linkScanning() && shownVer > 0)
+                lv_label_set_text(lv_label_create(s_linkList), "No PSU found");
+        }
+    }, 300, nullptr);
+
     // Version/About/Sidebar
     lv_obj_t *sub_software_info_page = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     section = lv_menu_section_create(sub_software_info_page);
@@ -1027,6 +1178,13 @@ void SettingMenu(lv_obj_t *parent)
 
     itm = create_text(section, nullptr, "Load/Save", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_save_load);
+
+    itm = create_text(section, nullptr, "PSU Link", 1, nullptr);
+    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_link);
+
+    itm = create_text(section, nullptr, "Event Log", 1, nullptr);
+    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_event_log);
+    lv_obj_add_event_cb(itm, [](lv_event_t *) { logRefresh(); }, LV_EVENT_CLICKED, nullptr);
 
     itm = create_text(section, nullptr, "About", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_about_page);

@@ -49,7 +49,7 @@ This project implements a precision programmable power supply using the ESP32-S3
 
 ```
 Voltage Range:    0 - 32.768V
-Current Range:    0 - 5.000A (switchable to mA mode for precision)
+Current Range:    0 - 6.5A+ (switchable to mA mode for precision)
 Measurement:      24-bit resolution
 Control:          16-bit DAC resolution
 Update Rate:      Up to 600 SPS ADC sampling

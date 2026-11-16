@@ -1,3 +1,4 @@
+#include "psu_link.h"
 #include "weather.h"
 // Standard libraries
 #include "boot_splash.h"
@@ -139,6 +140,8 @@ void setup()
   splashEnd();
   lv_obj_invalidate(lv_scr_act()); // the splash covered the LCD: first frame is a full one
   createTasks();
+  { extern void radioReserve(); radioReserve(); } // internal RAM kept for the PSU link radio (after Task_ADC: it needs 14 KB)
+  linkBegin(); // PSU-to-PSU link (ESP-NOW), if a role is set
   ESP_LOGI("SETUP", ">>> After createTasks  int=%u big=%u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   initialMemory();
   loadEnergyFromStorage(); // Load persistent energy counter
@@ -277,6 +280,7 @@ void loop()
   // digits/bars are updated. With a render here AND at the end (AND inside
   // lv_timer_handler), a heavy pass ran up to three back to back - ~150 ms in
   // FUN mode, freezing the digits and bars for the whole pass.
+  linkLoop(); // PSU link: follow/send setpoints
   StatusBarUpdateInterval(300);
 
   TIME_SECTION("scpi", scpiParser.process());

@@ -447,8 +447,17 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 ## DISPlay Subsystem (Display Performance)
 
 ### :SYSTem:LOG? - Event Log
-**Description:** Fault/event history kept across restarts (last 40): boots with reset reason, output lost (power/thermal), OVP, OCP. One line per event: `boot,uptime_s,event,value,arg`. `:SYST:LOG:CLE` clears it.
+**Description:** Fault/event history kept across restarts (last 40): boots with reset reason, output lost (power/thermal), OVP, OCP. One line per event: `boot,uptime_s,event,value,arg`. `:SYST:LOG:CLE` clears it. Also shown in Settings > Event Log (newest first, with a Clear button).
 **Syntax:** `:SYST:LOG?`, `:SYST:LOG:CLE`
+
+### LINK - PSU-to-PSU Link (ESP-NOW)
+**Description:** Two units without a wire (Settings > PSU Link). Turn Link Radio on in both; Scan on one lists the others (`PSU-xxxxxx`, end of the MAC); pick one and confirm; the other unit shows Accept/Refuse. The asking unit becomes master. The master sends V-Set, I-Limit and output on/off 50 times a second; the slave follows x ratio (1-100%; 10% = master 10 V -> slave 1 V), clamped to its maximum and OVP level. Output follows the master's switching. Link lost >300 ms: the output turns off (event log `LINK_LOST`). Slave output off while the master is on: master off too after Output Delay + 1.5 s (`LINK_PEER_OFF`). Radio on/off, partner and ratio are saved; linked units reconnect after a restart.
+**Syntax:** `LINK:ENAB 0|1`, `LINK:ENAB?`, `LINK:SCAN` (3 s), `LINK:LIST?`, `LINK:REQ <n>` (0-based list index), `LINK:ACC 0|1` (answer a request), `LINK:UNL`, `LINK:RAT <1..100>`, `LINK:RAT?`, `LINK:NAME?`, `LINK:STAT?`, `LINK:TEST` (fake request, to check the prompt)
+**Response (STAT?):** `role,state,partner|-,ratio[,slave V A ON|OFF (master)][,last pairing result]`
+
+### :DISPlay:MENU - Open a Settings Page
+**Description:** Opens the Settings tab and its n-th sidebar item (0 = Display), optionally scrolled to y px; for screenshots with `:DISP:SHOT?`.
+**Syntax:** `:DISP:MENU <n>[,<y>]`
 
 ### :SETTing:PROT:FAULt - Power Lost / Thermal Protection
 **Description:** Turn the output-lost protection on or off (Protection page switch)

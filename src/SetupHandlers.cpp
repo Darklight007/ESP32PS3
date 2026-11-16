@@ -242,8 +242,9 @@ void setupDMA()
                   (void *)dmaBandBuf);
     if (!dmaBandBuf)
         Serial.println("WARNING: DMA band buffer alloc failed - flushing direct from PSRAM (may drop frames)");
-    dmaBandBuf2 = (uint16_t *)heap_caps_malloc(DMA_BAND_PIXELS * sizeof(uint16_t),
-                                               MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+    // No second strip: every transfer is waited for (g_dmaSync), so LVGL never
+    // draws while one runs and a second buffer saved nothing. Freed 31 KB of
+    // internal RAM (radio link). DISP:SYNC 0 needs it and is now ignored.
 
 #else
     // Initialize display buffer without DMA
@@ -713,7 +714,7 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
             // Drawn straight into the internal buffer (see pickDrawBuffer): send
             // it as is, no staging copy.
             tft.pushImageDMA(x, yy, w, rows, src, direct ? nullptr : dmaBandBuf);
-            if (!direct || g_dmaSync)
+            if (!direct || g_dmaSync || !dmaBandBuf2)
                 tft.dmaWait(); // the next band overwrites the staging buffer
             // direct: no wait. The transfer runs while LVGL draws the next
             // strip into the OTHER buffer; pushImageDMA() waits for it before
@@ -762,12 +763,11 @@ static void (*prevRenderStart)(lv_disp_drv_t *) = nullptr;
 static void pickDrawBuffer(lv_disp_drv_t *drv)
 {
     lv_disp_draw_buf_t *b = drv->draw_buf;
-    if (g_drawMode == 1 && dmaBandBuf && dmaBandBuf2)
+    if (g_drawMode == 1 && dmaBandBuf)
     {
-        // Two internal strips, LVGL alternates between them (it swaps after
-        // each flush). Large areas are drawn strip by strip.
+        // One internal strip; large areas are drawn strip by strip.
         b->buf1 = dmaBandBuf;
-        b->buf2 = dmaBandBuf2;
+        b->buf2 = dmaBandBuf2; // nullptr
         if (b->buf_act != b->buf1 && b->buf_act != b->buf2)
             b->buf_act = b->buf1;
         b->size = DMA_BAND_PIXELS;

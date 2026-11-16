@@ -39,6 +39,8 @@ namespace
         case Event::OUTPUT_LOST_THERMAL: return "OUTPUT_LOST_THERMAL";
         case Event::OVP: return "OVP";
         case Event::OCP: return "OCP";
+        case Event::LINK_LOST: return "LINK_LOST";
+        case Event::LINK_PEER_OFF: return "LINK_PEER_OFF";
         }
         return "?";
     }
@@ -81,4 +83,78 @@ void eventLogClear()
     s_log = Store{};
     s_log.boots = boots;
     save();
+}
+
+namespace
+{
+    const char *resetName(uint8_t r)
+    {
+        switch ((esp_reset_reason_t)r)
+        {
+        case ESP_RST_POWERON: return "power on";
+        case ESP_RST_SW: return "restart";
+        case ESP_RST_PANIC: return "CRASH";
+        case ESP_RST_INT_WDT:
+        case ESP_RST_TASK_WDT:
+        case ESP_RST_WDT: return "WATCHDOG";
+        case ESP_RST_BROWNOUT: return "BROWNOUT";
+        case ESP_RST_DEEPSLEEP: return "wake";
+        case ESP_RST_EXT: return "reset pin";
+        default: return "reset";
+        }
+    }
+}
+
+void eventLogText(char *buf, size_t len)
+{
+    size_t n = 0;
+    buf[0] = 0;
+    if (s_log.count == 0)
+    {
+        snprintf(buf, len, "No events");
+        return;
+    }
+    auto at = [](int i) -> const Entry & { return s_log.e[(s_log.head + kCap - s_log.count + i) % kCap]; };
+    for (int i = s_log.count - 1; i >= 0 && n + 1 < len; i--)
+    {
+        const Entry &e = at(i);
+        char line[72];
+        if ((Event)e.type == Event::BOOT)
+        {
+            // a run of boots with the same reason -> one line
+            int j = i;
+            while (j > 0 && (Event)at(j - 1).type == Event::BOOT && at(j - 1).arg == e.arg)
+                j--;
+            if (j == i)
+                snprintf(line, sizeof(line), "#%u  Boot (%s)", e.boot, resetName(e.arg));
+            else
+                snprintf(line, sizeof(line), "#%u-%u  %d boots (%s)", at(j).boot, e.boot, i - j + 1, resetName(e.arg));
+            i = j;
+        }
+        else
+        {
+            const uint32_t t = e.uptimeS;
+            char what[48];
+            switch ((Event)e.type)
+            {
+            case Event::OUTPUT_LOST_POWER: snprintf(what, sizeof(what), "Output lost: power? %.2f A", e.value); break;
+            case Event::OUTPUT_LOST_THERMAL: snprintf(what, sizeof(what), "Output lost: thermal? %.2f A", e.value); break;
+            case Event::OVP: snprintf(what, sizeof(what), "OVP %.3f V", e.value); break;
+            case Event::OCP: snprintf(what, sizeof(what), "OCP %.3f A", e.value); break;
+            case Event::LINK_LOST: snprintf(what, sizeof(what), "Link lost, output off"); break;
+            case Event::LINK_PEER_OFF: snprintf(what, sizeof(what), "Slave went off, output off"); break;
+            default: snprintf(what, sizeof(what), "?"); break;
+            }
+            snprintf(line, sizeof(line), "#%u %lu:%02lu:%02lu  %s", e.boot, (unsigned long)(t / 3600),
+                     (unsigned long)(t / 60 % 60), (unsigned long)(t % 60), what);
+        }
+        int w = snprintf(buf + n, len - n, "%s\n", line);
+        if (w < 0)
+            break;
+        n += (size_t)w;
+    }
+    if (n >= len)
+        n = len - 1;
+    if (n > 0 && buf[n - 1] == '\n')
+        buf[n - 1] = 0;
 }

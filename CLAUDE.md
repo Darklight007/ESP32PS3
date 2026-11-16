@@ -17,7 +17,7 @@ pio run -t clean           # Clean build artifacts
 
 Precision laboratory power supply with 24-bit ADC measurement (ADS1219), 16-bit DAC control (LTC2655), touchscreen UI (ILI9341 + LVGL 8.4), rotary encoders, matrix keypad, and SCPI remote control via USB Serial. Includes 18+ waveform function generator.
 
-**Ranges:** 0-32.768V, 0-5.000A (switchable mA mode), ADC: 20/90/330/1000 SPS
+**Ranges:** 0-32.768V, 0-6.5A+ (no 5 A cap) (switchable mA mode), ADC: 20/90/330/1000 SPS
 
 ## Critical Architecture Concepts
 
@@ -109,6 +109,9 @@ Calibration routines call `calib_low_noise_begin()/end()` (calib_adc.cpp): ADC r
 
 "CC Limit (short)"/`CAL:CCLIM` (`calib_cc_limit.cpp`): with the output shorted it records the real current at limits 0.1-5 A; `DACUpdate()` inverts that table via `ccLimitCorrect()` (NVS key `cc_lim`). The current-limit loop senses the 10 mOhm A shunt in both ranges, so below ~10 mA its accuracy is set by op-amp offset (~0.1 mA), not by calibration.
 
+### PSU Link (ESP-NOW)
+`psu_link.cpp`: master/slave tracking between two units (`LINK:*`, Settings > PSU Link: radio switch, Scan, pick a unit, Accept on the other; the asker is master). WiFi can't start at runtime with stock buffers, so the radio starts with 2 static RX buffers, dynamic TX, no AMPDU (~9 KB internal) from 6x4 KB blocks reserved right after `createTasks()` (`radioReserve()`; before it, Task_ADC failed to start). Small mallocs (<=4 KB) prefer internal RAM and eat anything freed, hence the reserve. Radio on: internal free ~8-12 KB. The display uses one 320x48 strip (the second gave nothing once every DMA transfer is waited for).
+
 ### Error Handler
 
 `ErrorHandler` namespace (`error_handler.h/cpp`) provides centralized error reporting with severity levels (DEBUG through CRITICAL) and categories (HARDWARE, CALIBRATION, VALIDATION, MEMORY, SCPI, SYSTEM, USER_INPUT). Initialized in `setup()` with serial and UI reporting enabled.
@@ -189,7 +192,7 @@ Frame cost is dominated by how many pixels are invalidated, so frequently-changi
 - `patch_lvgl.py` (pre-build, like `patch_tft_espi.py`): LVGL 8.4 padded every invalidated area by 5 px per side even without transforms; the patch skips that.
 - Hot LVGL code runs from internal RAM (`ld_iram_hot.py`, post-build script, ~67 KB): the S3's 16 KB instruction cache made every small redraw stall on flash fetches (1.6 ms per pixel-sized area, now 0.4 ms). Add an object file there only after profiling.
 - LVGL's heap is in PSRAM (`lv_mem_psram.cpp`): same speed, and internal RAM free went 12 KB -> ~105 KB. Task_ADC's stack and the RAM-resident code depend on that.
-- Draw buffers (`pickDrawBuffer()`, SetupHandlers.cpp): every frame is drawn in two internal 320x48 strips. Each transfer is waited for (`g_dmaSync`, `DISP:SYNC`): overlapping DMA with drawing the next strip corrupted pixels on the panel (found with `DISP:CHECK?`) and saved nothing measurable. The PSRAM full-screen buffer is only used by `DISP:SHOT?`, and by `DISP:BUF 0` (old path, for A/B).
+- Draw buffers (`pickDrawBuffer()`, SetupHandlers.cpp): every frame is drawn in one internal 320x48 strip (second strip removed: no gain with waited DMA, RAM went to the radio). Each transfer is waited for (`g_dmaSync`, `DISP:SYNC`): overlapping DMA with drawing the next strip corrupted pixels on the panel (found with `DISP:CHECK?`) and saved nothing measurable. The PSRAM full-screen buffer is only used by `DISP:SHOT?`, and by `DISP:BUF 0` (old path, for A/B).
 - Graph page redraws when new points arrive (`g_graphSeq`), not on a timer, and only the plot area; tick labels redraw on page entry/zoom. ~42 fps.
 - Measure with `DISP:FPS?` / `DISP:FPS 1` (`disp_perf.cpp`): fps, px/frame, render ms, flush ms, load %, ADC SPS, worst frame gap ms, areas/frame. `DISP:AREA x1,y1,x2,y2` times one rectangle; `DISP:MEM?` gives internal free, largest block, PSRAM free.
 - Profile with `DISP:SAMPRUN` then `DISP:SAMP?` (Core 1 program-counter samples; resolve with addr2line on firmware.elf).
