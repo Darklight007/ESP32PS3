@@ -372,6 +372,13 @@ static void cloudsSetup(WxKind k)
             add(cx, cy, rx, ry, w), i++;
         }
     }
+    // a thin veil over Orion: long, flat wisps it shows through
+    if (k == WX_CLOUD || k == WX_RAIN || k == WX_THUNDER)
+    {
+        const float f = k == WX_CLOUD ? 1.0f : 1.3f;
+        add(252, 82, 38, 4, 0.30f * f), add(288, 104, 30, 3, 0.26f * f);
+        add(238, 116, 28, 3, 0.24f * f), add(274, 64, 24, 3, 0.20f * f);
+    }
 }
 // Clouds on the scene: dark, a faint lit rim on their tops
 static void cloudsDraw()
@@ -1405,7 +1412,7 @@ void splashBegin()
         if (nearUfo(x, y) || behindMountain(x, y))
             continue;
         const bool overcast = s_wx == WX_RAIN || s_wx == WX_SNOW || s_wx == WX_THUNDER;
-        const bool hidden = overcast || cloudA(x, y) > 0.3f;
+        const bool hidden = overcast || cloudA(x, y) > 0.12f;
         s_bg[k++] = {(int16_t)x, (int16_t)y, (uint8_t)(hidden ? 255 : 0), b, tint};
         if (!hidden)
             g->drawPixel(x, y, mix(skyAt(x, y), tint, b));
@@ -1431,8 +1438,8 @@ void splashBegin()
         s_orion[k] = {(int16_t)(222 + (int)(84 * o.x)), (int16_t)(70 + (int)(58 * o.y)),
                       (uint8_t)(o.b > 0.8f ? 4 : o.b > 0.5f ? 3 : 2), o.b, o.tint};
         star(s_orion[k].x, s_orion[k].y, s_orion[k].halo, o.b, o.tint);
-        if (cloudA(s_orion[k].x, s_orion[k].y) > 0.35f)
-            s_orion[k].halo = 0; // behind a cloud: no twinkle
+        if (cloudA(s_orion[k].x, s_orion[k].y) > 0.08f)
+            s_orion[k].halo = 0; // behind a cloud or veil: no twinkle (its redraw would cut a hole)
     }
     cloudsDraw();
 
