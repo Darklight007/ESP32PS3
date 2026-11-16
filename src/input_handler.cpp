@@ -710,20 +710,15 @@ void handleHistogramPage(int32_t &encoder1_last_value, int32_t &encoder2_last_va
 
 void handleUtilityPage(int32_t encoder1_last_value, int32_t encoder2_last_value)
 {
-    // **Handle Vertical Shift/Zoom with Encoder 1**
-    // Only navigate tabs with encoder if user hasn't manually selected a tab
-    if (encoder1_last_value != encoder1_value && !manualTabSelection)
+    // Encoder 1 steps through the sub-tabs (Mem..Load), from the one shown:
+    // also after a tab was tapped, and wrapping at both ends
+    if (encoder1_last_value != encoder1_value)
     {
-        static u8_t _posY = 0;
-
-        // Determine the direction of encoder 1 rotation
-        if (encoder1_last_value < encoder1_value)
-            _posY++; // Rotated clockwise
-        else if (encoder1_last_value > encoder1_value)
-            _posY--; // Rotated counter-clockwise
-
-        static lv_obj_t *table = lv_obj_get_child(PowerSupply.page[3], 0);
-        lv_tabview_set_act(table, _posY % 5, LV_ANIM_ON);
+        lv_obj_t *tv = lv_obj_get_child(PowerSupply.page[3], 0);
+        const int n = (int)lv_obj_get_child_cnt(lv_tabview_get_content(tv));
+        const int step = encoder1_last_value < encoder1_value ? 1 : -1;
+        if (n > 0)
+            lv_tabview_set_act(tv, (uint32_t)(((int)lv_tabview_get_tab_act(tv) + step + n) % n), LV_ANIM_ON);
     }
 
     if (encoder2_last_value != encoder2_value)
