@@ -47,6 +47,95 @@ static uint32_t skyRgb(int y)
     return t < 0.75f ? lerp(0x000000, 0x000106, t / 0.75f) : lerp(0x000106, 0x01040B, (t - 0.75f) / 0.25f); // near black, faint at the horizon
 }
 
+// Orion's nebulae, faint and added to the sky (long-exposure look): Barnard's
+// Loop (red arc around the left side), the Lambda Orionis bubble around the
+// head, M42 (pink, blue-white core), the Flame near Alnitak, Betelgeuse and
+// Rigel glows, the Witch Head (blue wisp right of Rigel). Orion's box: x 222-306, y 66-128.
+static float hnoise(float x, float y, uint32_t seed) // 2-D value noise, 0..1
+{
+    auto h = [seed](int i, int j) {
+        uint32_t v = (uint32_t)i * 374761393u + (uint32_t)j * 668265263u + seed * 2246822519u;
+        v = (v ^ (v >> 13)) * 1274126177u;
+        return ((v ^ (v >> 16)) & 1023) / 1023.0f;
+    };
+    const int i = (int)floorf(x), j = (int)floorf(y);
+    float fx = x - i, fy = y - j;
+    fx = fx * fx * (3 - 2 * fx);
+    fy = fy * fy * (3 - 2 * fy);
+    const float a = h(i, j) + fx * (h(i + 1, j) - h(i, j));
+    const float b = h(i, j + 1) + fx * (h(i + 1, j + 1) - h(i, j + 1));
+    return a + fy * (b - a);
+}
+static float fbm(float x, float y, uint32_t seed)
+{
+    return 0.55f * hnoise(x, y, seed) + 0.3f * hnoise(x * 2.1f, y * 2.1f, seed + 7) + 0.15f * hnoise(x * 4.3f, y * 4.3f, seed + 13);
+}
+static void nebula(int x, int y, float &r, float &g, float &b)
+{
+    r = g = b = 0;
+    if (x < 180 || y > 140)
+        return;
+    auto gauss = [](float d2, float s) { return expf(-d2 / (2 * s * s)); };
+    const float n = fbm(x * 0.09f, y * 0.09f, 3), n2 = fbm(x * 0.21f, y * 0.21f, 9);
+    // Barnard's Loop: an elliptic band, strongest on the left, broken by noise
+    {
+        const float dx = (x - 266) / 44.0f, dy = (y - 104) / 46.0f;
+        const float rr = sqrtf(dx * dx + dy * dy);
+        const float side = std::max(0.0f, std::min(1.0f, (0.35f - dx / (rr + 1e-3f)) * 1.4f));
+        const float band = gauss((rr - 1) * (rr - 1), 0.07f + 0.05f * n);
+        const float a = band * side * (0.35f + 1.1f * n2);
+        r += 70 * a, g += 8 * a, b += 22 * a;
+        const float in = (rr < 1 ? 1.0f : 0.0f) * side * 0.18f * n; // faint red haze inside
+        r += 30 * in, g += 6 * in, b += 8 * in;
+    }
+    // Lambda Orionis: a red bubble round Meissa, rim a little brighter
+    {
+        const float d = sqrtf((float)((x - 259) * (x - 259) + (y - 63) * (y - 63))) / 13.0f;
+        const float a = (d < 1.15f ? 0.35f + 0.5f * gauss((d - 0.95f) * (d - 0.95f), 0.12f) : gauss((d - 1.15f) * (d - 1.15f), 0.08f) * 0.6f) * (0.4f + 0.9f * n);
+        r += 55 * a, g += 7 * a, b += 16 * a;
+    }
+    // M42: pink cloud, blue-white core
+    {
+        const float d2 = (x - 261) * (x - 261) + (y - 111) * (y - 111) * 0.8f;
+        const float a = gauss(d2, 4.5f) * (0.6f + 0.6f * n2);
+        r += 90 * a, g += 25 * a, b += 70 * a;
+        const float c = gauss(d2, 1.4f);
+        r += 40 * c, g += 55 * c, b += 80 * c;
+    }
+    // Flame / Horsehead region below Alnitak
+    {
+        const float a = gauss((x - 249) * (x - 249) + (y - 104) * (y - 104), 3.0f) * (0.5f + n2);
+        r += 45 * a, g += 12 * a, b += 6 * a;
+    }
+    // star glows
+    {
+        const float a = gauss((x - 232) * (x - 232) + (y - 73) * (y - 73), 6.0f);
+        r += 40 * a, g += 18 * a, b += 4 * a; // Betelgeuse
+        const float c = gauss((x - 297) * (x - 297) + (y - 119) * (y - 119), 7.0f);
+        r += 8 * c, g += 18 * c, b += 45 * c; // Rigel
+    }
+    // Witch Head: a thin blue wisp down-right of Rigel
+    {
+        const float t = std::max(0.0f, std::min(1.0f, ((x - 302) * 0.6f + (y - 117) * 0.8f) / 18.0f));
+        const float px = 302 + t * 18 * 0.6f, py = 117 + t * 18 * 0.8f;
+        const float a = gauss((x - px) * (x - px) + (y - py) * (y - py), 1.6f) * (1 - t * 0.6f) * (0.4f + n2);
+        r += 6 * a, g += 16 * a, b += 38 * a;
+    }
+    // dark dust lanes cut through it all
+    const float dust = std::max(0.0f, fbm(x * 0.14f + 5, y * 0.14f, 21) - 0.55f) * 2.2f;
+    const float k = std::max(0.0f, 1 - dust);
+    r *= k, g *= k, b *= k;
+}
+// Sky plus nebula at a pixel, 0xRRGGBB (stars and their redraws use this)
+static uint32_t skyAt(int x, int y)
+{
+    float r, g, b;
+    nebula(x, y, r, g, b);
+    const uint32_t s = skyRgb(y);
+    auto add = [](int c, float v) { return (uint32_t)std::min(255, c + (int)v); };
+    return add((s >> 16) & 255, r) << 16 | add((s >> 8) & 255, g) << 8 | add(s & 255, b);
+}
+
 // Ordered (Bayer 4x4) dither to RGB565: dark gradients have only a few
 // 565 levels, which showed as steps; dithering mixes neighbouring levels.
 static uint16_t dith(float r, float g, float b, int x, int y)
@@ -94,7 +183,7 @@ static uint16_t bgPix(int x, int y)
         return 0;
     if (s_bgSpr)
         return s_bgSpr->readPixel(x, y);
-    return y < kHorizon ? mix(skyRgb(y), 0, 0) : oceanPix(x, y);
+    return y < kHorizon ? mix(skyAt(x, y), 0, 0) : oceanPix(x, y);
 }
 static void restorePix(int x, int y)
 {
@@ -136,7 +225,7 @@ static void blendPix(int x, int y, uint32_t to, float a)
 // covers the brighter one)
 static void star(int x, int y, int halo, float bright, uint32_t tint)
 {
-    const uint32_t bg = skyRgb(y);
+    const uint32_t bg = skyAt(x, y);
     for (int r = halo; r >= 1; r--)
         g->fillCircle(x, y, r, mix(bg, tint, bright * (1.0f - (float)r / (halo + 1)) * 0.8f));
     g->drawPixel(x, y, mix(bg, 0xF0F4FF, std::min(1.0f, bright * 1.1f)));
@@ -1035,7 +1124,7 @@ static void twinkleTask(void *)
                 if (st.halo == 255)
                     continue; // behind a cloud
                 const float f = 0.15f + (rnd() % 100) / 70.0f;
-                tft.drawPixel(st.x, st.y, mix(skyRgb(st.y), st.tint, std::min(1.0f, st.b * f)));
+                tft.drawPixel(st.x, st.y, mix(skyAt(st.x, st.y), st.tint, std::min(1.0f, st.b * f)));
             }
             // Boat: ~6 px/s left to right, steady keel (no bob); waves drift
             {
@@ -1297,7 +1386,11 @@ void splashBegin()
         float r2, g2, b2;
         rgbOf(skyRgb(y + 1), r2, g2, b2);
         for (int x = 0; x < 320; x++)
-            s_row[x] = dith((r + r2) / 2, (g + g2) / 2, (b + b2) / 2, x, y);
+        {
+            float nr, ng, nb;
+            nebula(x, y, nr, ng, nb);
+            s_row[x] = dith((r + r2) / 2 + nr, (g + g2) / 2 + ng, (b + b2) / 2 + nb, x, y);
+        }
         pushRow(y);
     }
     // Faint background stars (fixed seed: the same sky every boot), not
@@ -1315,7 +1408,7 @@ void splashBegin()
         const bool hidden = overcast || cloudA(x, y) > 0.3f;
         s_bg[k++] = {(int16_t)x, (int16_t)y, (uint8_t)(hidden ? 255 : 0), b, tint};
         if (!hidden)
-            g->drawPixel(x, y, mix(skyRgb(y), tint, b));
+            g->drawPixel(x, y, mix(skyAt(x, y), tint, b));
     }
     // Orion, as seen in the sky: Betelgeuse (orange) top-left, Bellatrix
     // top-right, the belt Alnitak-Alnilam-Mintaka in a line, Saiph and Rigel
@@ -1448,7 +1541,7 @@ void splashBegin()
     for (int k = 0; k < kBg; k++)
     {
         Star &st = s_bg[k];
-        if (st.halo != 255 && g->readPixel(st.x, st.y) != mix(skyRgb(st.y), st.tint, st.b))
+        if (st.halo != 255 && g->readPixel(st.x, st.y) != mix(skyAt(st.x, st.y), st.tint, st.b))
             st.halo = 255; // under a letter or its glow: stays put, never twinkles
     }
     // Local weather, small, top left
