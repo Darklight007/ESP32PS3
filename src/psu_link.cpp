@@ -25,6 +25,7 @@
 
 extern Device PowerSupply;
 void radioReserve();
+static volatile bool s_logAllocFail = false; // print failed mallocs only while the radio starts
 
 namespace
 {
@@ -56,6 +57,8 @@ namespace
     float s_ratio = 100;
     bool s_radio = false;
     uint32_t s_saveAt = 0;
+    bool s_ovr = false, s_ovrOn = false; // linkOverride()
+    float s_ovrV = 0, s_ovrI = 0;
     char s_selfName[12] = "PSU-?";
 
     // scan
@@ -85,7 +88,7 @@ namespace
     uint32_t s_rxCount = 0, s_txFail = 0, s_txOk = 0, s_rxAll = 0;
     esp_err_t s_lastSendErr = ESP_OK;
 
-    void *s_reserve[6] = {};
+    void *s_reserve[8] = {}; // ~20 KB: the radio uses ~17 KB of internal RAM
 
     void macName(const uint8_t *m, char *out) { snprintf(out, 12, "PSU-%02X%02X%02X", m[3], m[4], m[5]); }
 
@@ -161,22 +164,32 @@ namespace
         cfg.ampdu_tx_enable = 0;
         cfg.amsdu_tx_enable = 0;
         cfg.nvs_enable = 0;
+        const char *stepName = "init";
+        s_logAllocFail = true;
         esp_err_t e = esp_wifi_init(&cfg);
         if (e == ESP_OK)
         {
             esp_wifi_set_storage(WIFI_STORAGE_RAM);
             esp_wifi_set_mode(WIFI_MODE_STA);
+            stepName = "start";
             e = esp_wifi_start();
         }
         if (e == ESP_OK)
         {
             esp_wifi_set_ps(WIFI_PS_NONE); // low latency
             esp_wifi_set_channel(kChannel, WIFI_SECOND_CHAN_NONE);
+            stepName = "esp_now";
             e = esp_now_init();
         }
+        s_logAllocFail = false;
         if (e != ESP_OK)
         {
-            Serial.printf("[LINK] radio start failed: %d\n", e);
+            Serial.printf("[LINK] radio %s failed: %d (DMA free %u, largest %u)\n", stepName, e,
+                          (unsigned)heap_caps_get_free_size(MALLOC_CAP_DMA),
+                          (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA));
+            Serial.printf("[LINK] internal free %u, largest %u\n",
+                          (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                          (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
             esp_wifi_stop();
             esp_wifi_deinit();
             radioReserve();
@@ -361,11 +374,27 @@ namespace
     }
 }
 
+static void allocFail(size_t size, uint32_t caps, const char *fn)
+{
+    if (s_logAllocFail)
+        esp_rom_printf("[ALLOC FAIL] %u bytes caps 0x%x in %s, largest %u\n", (unsigned)size, (unsigned)caps, fn,
+                   (unsigned)heap_caps_get_largest_free_block(caps));
+}
+
 void radioReserve()
 {
+    static bool hooked = false;
+    if (!hooked)
+        hooked = heap_caps_register_failed_alloc_callback(allocFail) == ESP_OK;
+    // Free internal RAM is in pieces under ~8 KB by now; WiFi needs, among
+    // others, 2216-byte RX buffers (DMA). Blocks of 2.5 KB fit the pieces
+    // (4 KB ones mostly did not, so little was reserved) and each one freed
+    // holds an RX buffer. ~20 KB in all.
+    int n = 0;
     for (auto &r : s_reserve)
-        if (!r)
-            r = heap_caps_malloc(4096, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+        if (!r && (r = heap_caps_malloc(2560, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA)))
+            n++;
+    (void)n;
 }
 
 void linkBegin()
@@ -424,8 +453,13 @@ void linkLoop()
     {
         lastSend = now;
         if (s_role == LinkRole::MASTER && s_hasPeer)
-            send(s_peer, STATE, outputArmed(), 0, (float)(vSet() * s_ratio / 100.0),
-                 (float)(iSet() * s_ratio / 100.0));
+        {
+            if (s_ovr)
+                send(s_peer, STATE, s_ovrOn, 0, s_ovrV, s_ovrI);
+            else
+                send(s_peer, STATE, outputArmed(), 0, (float)(vSet() * s_ratio / 100.0),
+                     (float)(iSet() * s_ratio / 100.0));
+        }
     }
 
     const bool conn = linkConnected();
@@ -435,7 +469,7 @@ void linkLoop()
 
     // master: the slave turned itself off (fault/trip) while tracking
     static uint32_t mismatchSince = 0;
-    if (s_role == LinkRole::MASTER && conn && outputOn() && !s_peerState.on)
+    if (s_role == LinkRole::MASTER && conn && outputOn() && !s_peerState.on && !s_ovr)
     {
         const uint32_t grace = PowerSupply.settingParameters.outputDelayMs + 1500;
         if (!mismatchSince)
@@ -580,6 +614,16 @@ bool linkAsking(char *name)
 }
 
 const char *linkNote() { return s_note; }
+
+void linkOverride(bool active, float v, float i, bool on)
+{
+    s_ovr = active;
+    s_ovrV = v;
+    s_ovrI = i;
+    s_ovrOn = active && on;
+}
+
+bool linkSlaveMilliamp() { return s_peerState.flags & 1; }
 
 bool linkSlaveReading(float &v, float &i, bool &on)
 {

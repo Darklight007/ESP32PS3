@@ -554,15 +554,14 @@ void createTasks()
 
     // Create a task for ADC reading and FUN generation
     // Priority 5 - balanced (was 1 too low, 20 was too high)
-    const BaseType_t adcOk = xTaskCreatePinnedToCore(
-        Task_ADC,                /* Task function */
-        "Voltage & Current ADC", /* Name of task */
-        14000,                   /* Stack size of task */
-        NULL,                    /* Parameter of the task */
-        12,                       /* Priority of the task */
-        &Task_adc,               /* Task handle */
-        0                        /* Pin task to core 0 */
-    );
+    // Static stack (.bss, placed at link time): a 14 KB heap block had to be
+    // found after the UI fragmented internal RAM, which also forced the PSU
+    // link's radio reserve to be taken late, when only small pieces were left.
+    static StackType_t s_adcStack[14000];
+    static StaticTask_t s_adcTcb;
+    Task_adc = xTaskCreateStaticPinnedToCore(Task_ADC, "Voltage & Current ADC", sizeof(s_adcStack), NULL, 12,
+                                             s_adcStack, &s_adcTcb, 0);
+    const BaseType_t adcOk = Task_adc ? pdPASS : pdFAIL;
     // Task_ADC is created after the UI has taken most internal SRAM. If its
     // 14 KB stack doesn't fit, creation fails and the unit boots looking normal
     // but with no measurements and a dead keypad - make that impossible to miss.

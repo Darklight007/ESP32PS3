@@ -109,8 +109,10 @@ Calibration routines call `calib_low_noise_begin()/end()` (calib_adc.cpp): ADC r
 
 "CC Limit (short)"/`CAL:CCLIM` (`calib_cc_limit.cpp`): with the output shorted it records the real current at limits 0.1-5 A; `DACUpdate()` inverts that table via `ccLimitCorrect()` (NVS key `cc_lim`). The current-limit loop senses the 10 mOhm A shunt in both ranges, so below ~10 mA its accuracy is set by op-amp offset (~0.1 mA), not by calibration.
 
-### PSU Link (ESP-NOW)
-`psu_link.cpp`: master/slave tracking between two units (`LINK:*`, Settings > PSU Link: radio switch, Scan, pick a unit, Accept on the other; the asker is master). WiFi can't start at runtime with stock buffers, so the radio starts with 2 static RX buffers, dynamic TX, no AMPDU (~9 KB internal) from 6x4 KB blocks reserved right after `createTasks()` (`radioReserve()`; before it, Task_ADC failed to start). Small mallocs (<=4 KB) prefer internal RAM and eat anything freed, hence the reserve. Radio on: internal free ~8-12 KB. The display uses one 320x48 strip (the second gave nothing once every DMA transfer is waited for).
+### PSU Link (ESP-NOW) and Curve Tracer
+`psu_link.cpp`: master/slave tracking between two units (`LINK:*`, Settings > PSU Link: radio switch, Search, tap a unit, Accept on the other; the asker is master). Main page shows LINK M/S. The radio starts with 2 static RX buffers (2216 B DMA blocks each), dynamic TX, no AMPDU; keep `cache_tx_buf_num` at its default (PSRAM): at 0 every send failed with NO_MEM. Its internal RAM is reserved in 2.5 KB blocks right after `setupDMA()` (`radioReserve()`), while large free blocks exist: reserved later, only small pieces remained and the radio failed at random. Task_ADC's 14 KB stack is static (`xTaskCreateStaticPinnedToCore`) so it no longer needs a late contiguous heap block. Radio on: internal free ~15 KB. `linkOverride()` lets the master drive the slave directly.
+
+`curve_tracer.cpp` (Utility > Trace, `TRAC:*`): BJT Ic-Vce curves; master sweeps Vce, slave voltage is servoed to each Ib step. State machine in the main loop. Test without a second PSU: `tools/link_sim` on a bare ESP32-S3 (needs RESET after flashing: its BOOT strap reads low on a USB reset).
 
 ### Error Handler
 

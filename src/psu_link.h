@@ -28,4 +28,8 @@ bool linkLinked(char *peerName);  // partner saved (name filled), connected or n
 bool linkAsking(char *name);      // waiting for the other unit to accept
 const char *linkNote();           // last pairing result ("" if none)
 bool linkSlaveReading(float &v, float &i, bool &on); // master: slave's measured output
+// Master: drive the slave directly instead of "follow x ratio" (curve
+// tracer). Its output switches on/off with `on` (edges, like follow mode).
+void linkOverride(bool active, float v = 0, float i = 0, bool on = false);
+bool linkSlaveMilliamp(); // master: slave reports its mA range is on
 String linkStatus();              // short, comma separated (SCPI LINK:STAT?, menu)

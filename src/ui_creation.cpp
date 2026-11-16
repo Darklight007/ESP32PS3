@@ -1,3 +1,4 @@
+#include "curve_tracer.h"
 #include "load_analyzer.h"
 #include "disp_perf.h"
 #include "ui_creation.h"
@@ -401,6 +402,7 @@ void Utility_tabview(lv_obj_t *parent)
     lv_obj_t *tab5 = lv_tabview_add_tab(tabview_utility, "Batt");
     createBatteryTab(tab5);
     createLoadTab(lv_tabview_add_tab(tabview_utility, "Load"));
+    createTracerTab(lv_tabview_add_tab(tabview_utility, "Trace"));
 
     // Utility page Tab 1 ****************************************************************************************************************************
     /*Add content to the tabs*/

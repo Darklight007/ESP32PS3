@@ -452,8 +452,12 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 
 ### LINK - PSU-to-PSU Link (ESP-NOW)
 **Description:** Two units without a wire (Settings > PSU Link). Turn Link Radio on in both; Scan on one lists the others (`PSU-xxxxxx`, end of the MAC); pick one and confirm; the other unit shows Accept/Refuse. The asking unit becomes master. The master sends V-Set, I-Limit and output on/off 50 times a second; the slave follows x ratio (1-100%; 10% = master 10 V -> slave 1 V), clamped to its maximum and OVP level. Output follows the master's switching. Link lost >300 ms: the output turns off (event log `LINK_LOST`). Slave output off while the master is on: master off too after Output Delay + 1.5 s (`LINK_PEER_OFF`). Radio on/off, partner and ratio are saved; linked units reconnect after a restart.
-**Syntax:** `LINK:ENAB 0|1`, `LINK:ENAB?`, `LINK:SCAN` (3 s), `LINK:LIST?`, `LINK:REQ <n>` (0-based list index), `LINK:ACC 0|1` (answer a request), `LINK:UNL`, `LINK:RAT <1..100>`, `LINK:RAT?`, `LINK:NAME?`, `LINK:STAT?`, `LINK:TEST` (fake request, to check the prompt)
+**Syntax:** `LINK:ENAB 0|1`, `LINK:ENAB?`, `LINK:SCAN` (3 s), `LINK:LIST?`, `LINK:REQ <n>` (0-based list index), `LINK:ACC 0|1` (answer a request), `LINK:UNL`, `LINK:RAT <1..100>`, `LINK:RAT?`, `LINK:NAME?`, `LINK:STAT?`, `LINK:TEST` (fake request, to check the prompt), `LINK:DIAG?` (radio, channel, tx ok/fail, last send error, rx counts)
 **Response (STAT?):** `role,state,partner|-,ratio[,slave V A ON|OFF (master)][,last pairing result]`
+
+### TRAC - BJT Curve Tracer (two linked PSUs)
+**Description:** Utility > Trace. This PSU (link master): + to collector, - to emitter; sweeps Vce 0..Vce max and measures Ic, current-limited at Ic max. The linked PSU: + through a base resistor (1-100 kOhm) to the base, - to emitter; its voltage is servoed (secant) until its measured current equals each Ib step, then held for the curve. One curve per Ib = step x 1..N; a curve stops at the point where Vce x Ic > P max. Afterwards both outputs are off and this PSU's V/I setpoints are restored. Put the base PSU on the mA range for small Ib.
+**Syntax:** `TRAC:CONF vceMax,icMax,pMax,ibStep,curves[,points,vbMax,settleMs]` (V, A, W, A, n; defaults 40 points, 12 V, 200 ms), `TRAC:CONF?`, `TRAC:STAR`, `TRAC:DEMO` (simulated NPN, no output used; also Start with no PSU linked), `TRAC:STOP`, `TRAC:STAT?`, `TRAC:DATA?` (CSV `curve,ib_A,vce_V,ic_A,ib_pt_A`)
 
 ### :DISPlay:MENU - Open a Settings Page
 **Description:** Opens the Settings tab and its n-th sidebar item (0 = Display), optionally scrolled to y px; for screenshots with `:DISP:SHOT?`.

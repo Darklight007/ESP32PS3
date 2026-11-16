@@ -1595,8 +1595,25 @@ void splashBegin()
         for (int k = 0; k < kDrops; k++)
             dropSpawn(s_drop[k], rn, true);
     }
-    if (s_lock && xTaskCreatePinnedToCore(twinkleTask, "twinkle", 4096, nullptr, 1, &s_task, 0) != pdPASS)
-        s_task = nullptr;
+    // Static stack (.bss): at runtime (About) internal RAM is in small pieces
+    // and a 4 KB heap stack failed, so nothing on the splash moved. (A PSRAM
+    // stack is refused by FreeRTOS here.)
+    static StackType_t s_stackBuf[4096];
+    static StaticTask_t s_tcbBuf;
+    StackType_t *s_stack = s_stackBuf;
+    StaticTask_t *s_tcb = &s_tcbBuf;
+    // the stack/TCB are reused: the last run's task must be fully gone (it
+    // deletes itself; the idle task finishes that)
+    static TaskHandle_t s_prev = nullptr;
+    for (int k = 0; s_prev && k < 50 && eTaskGetState(s_prev) != eDeleted; k++)
+        delay(10);
+    if (s_prev)
+        delay(30);
+    s_task = nullptr;
+    if (s_lock && s_stack && s_tcb)
+        s_task = s_prev = xTaskCreateStaticPinnedToCore(twinkleTask, "twinkle", 4096, nullptr, 1, s_stack, s_tcb, 0);
+    if (s_lock && !s_task)
+        Serial.println("[SPLASH] animation task not started");
 }
 
 void splashProgress(int pct, const char *what)

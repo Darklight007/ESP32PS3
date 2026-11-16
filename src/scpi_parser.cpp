@@ -1,3 +1,4 @@
+#include "curve_tracer.h"
 #include "psu_link.h"
 #include "weather.h"
 #include "boot_splash.h"
@@ -254,6 +255,41 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.startsWith("LINK:DIAG?")) { extern String linkDiag(); sendResponse(linkDiag()); }
         else if (cmdPart.startsWith("LINK:NAME?")) sendResponse(linkSelfName());
         else if (cmdPart.startsWith("LINK:STAT?")) sendResponse(linkStatus());
+        else addError(ERR_UNDEFINED_HEADER);
+        return;
+    }
+    // TRAC: curve tracer. TRAC:STAR, TRAC:STOP, TRAC:STAT?, TRAC:DATA?,
+    // TRAC:CONF vceMax,icMax,pMax,ibStep,curves[,points,vbMax,settleMs], TRAC:CONF?
+    if (cmdPart.startsWith("TRAC"))
+    {
+        TracerCfg &c = tracerCfg();
+        if (cmdPart.startsWith("TRAC:STAR")) sendResponse(tracerStart() ? "OK" : tracerStatus());
+        else if (cmdPart.startsWith("TRAC:DEMO")) sendResponse(tracerDemo() ? "OK" : "busy");
+        else if (cmdPart.startsWith("TRAC:STOP")) { tracerStop(); sendResponse("OK"); }
+        else if (cmdPart.startsWith("TRAC:STAT?")) sendResponse(tracerStatus());
+        else if (cmdPart.startsWith("TRAC:DATA?")) sendResponse(tracerData());
+        else if (cmdPart.startsWith("TRAC:CONF?"))
+        {
+            char b[120];
+            snprintf(b, sizeof(b), "%.3f,%.4f,%.3f,%.3e,%d,%d,%.2f,%d", c.vceMax, c.icMax, c.pMax, c.ibStep, c.curves,
+                     c.points, c.vbMax, c.settleMs);
+            sendResponse(b);
+        }
+        else if (cmdPart.startsWith("TRAC:CONF"))
+        {
+            float v[8];
+            const int n = sscanf(paramPart.c_str(), "%f,%f,%f,%f,%f,%f,%f,%f", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7]);
+            if (n >= 5)
+            {
+                c.vceMax = v[0], c.icMax = v[1], c.pMax = v[2], c.ibStep = v[3], c.curves = (int)v[4];
+                if (n >= 6) c.points = (int)v[5];
+                if (n >= 7) c.vbMax = v[6];
+                if (n >= 8) c.settleMs = (int)v[7];
+                sendResponse("OK");
+            }
+            else
+                addError(ERR_DATA_TYPE_ERROR);
+        }
         else addError(ERR_UNDEFINED_HEADER);
         return;
     }
