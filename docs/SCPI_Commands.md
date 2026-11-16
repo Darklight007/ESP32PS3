@@ -518,6 +518,10 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Description:** Repaints the screen and sends it: 240 lines, each 320 pixels as RGB565 hex (4 digits per pixel), then `END`. About 310 KB of text.
 **Syntax:** `:DISP:SHOT?`
 
+### :DISPlay:SPLASH - Show the Splash
+**Description:** Shows the animated splash until a tap or key press, like About > Software information. Replies `OK` first; the main loop (SCPI too) waits while it is shown.
+**Syntax:** `:DISP:SPLASH`
+
 ### :DISPlay:SPLASH:SHOT? - Splash Screenshot
 **Description:** Shows the splash (no progress bar), waits `ms` (default 800), reads the whole frame back from the LCD and sends it like `:DISP:SHOT?`. The splash is drawn outside LVGL, so `:DISP:SHOT?` can't see it.
 **Syntax:** `:DISP:SPLASH:SHOT? [ms]`

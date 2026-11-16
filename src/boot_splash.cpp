@@ -479,6 +479,7 @@ static void dropErase(const Drop &d)
     for (int i = 0; i < d.len; i++)
         unPix(d.lx + (i * 14) / 65, d.ly - i);
 }
+static void rainHit(float x, int y, bool droplet); // after the water physics
 template <typename R> static void weatherFrame(R &rnd)
 {
     static uint32_t t = 0;
@@ -503,9 +504,10 @@ template <typename R> static void weatherFrame(R &rnd)
             {
                 if (!snow && d.yEnd > kHorizon) // a ring on the water
                 {
-                    d.lx = (int)d.x, d.ly = d.yEnd, d.splash = 1;
-                    for (int i = -2; i <= 2; i++)
-                        putPix(d.lx + i, d.ly, 0x6A8CB8, abs(i) == 2 ? 0.2f : 0.4f);
+                    // a tiny ring spreading where the drop hits (drawn with the
+                    // sea life), now and then a rebound droplet; nearer = bigger
+                    rainHit(d.x, d.yEnd, rnd() % 5 == 0);
+                    dropSpawn(d, rnd, false);
                     continue;
                 }
                 dropSpawn(d, rnd, false);
@@ -575,6 +577,7 @@ template <typename R> static void weatherFrame(R &rnd)
 // flying fish, a kraken's eye), sized by distance (smaller near the
 // horizon); ships, tankers, planes and satellites pass. Drawn pixels are
 // listed and put back from the scene, so nothing else is touched.
+static constexpr int kPixCap = 1600;
 struct PixList { int16_t *x = nullptr, *y = nullptr; int n = 0; }; // lists in PSRAM (internal RAM is short)
 static PixList s_life, s_traffic;
 static PixList *s_pl = &s_life;
@@ -584,14 +587,14 @@ static void lifePix(int x, int y, uint32_t c, float a)
 {
     if (s_waterOnly && (y <= kHorizon || (y > 150 && (x < 42 || x > 278))))
         return; // sky or the wooded shores
-    if (skipPix(x, y) || s_pl->n >= 900)
+    if (skipPix(x, y) || s_pl->n >= kPixCap)
         return;
     if (!s_pl->x)
     {
-        s_pl->x = (int16_t *)heap_caps_malloc(900 * 2 * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+        s_pl->x = (int16_t *)heap_caps_malloc(kPixCap * 2 * sizeof(int16_t), MALLOC_CAP_SPIRAM);
         if (!s_pl->x)
             return;
-        s_pl->y = s_pl->x + 900;
+        s_pl->y = s_pl->x + kPixCap;
     }
     putPix(x, y, c, a);
     s_pl->x[s_pl->n] = x, s_pl->y[s_pl->n++] = y;
@@ -637,6 +640,112 @@ static void ring(float x, float y, float r, uint32_t c, float a) // a ripple on 
         lp(x + cosf(t) * r, y + sinf(t) * r * 0.3f, c, a);
     }
 }
+// ---- water physics: droplets under gravity, spreading ripples ----
+// Units: px and seconds; s_sc scales with distance (far = small and slow).
+struct Particle { float x, y, vx, vy, sy, life, a; uint32_t c; };
+struct Ripple { float x, y, r0, rMax, life, age, a; };
+static constexpr int kParts = 72, kRips = 40;
+static Particle *s_part = nullptr; // PSRAM
+static Ripple *s_rip = nullptr;
+static uint32_t s_physSeed = 0x9E3779B9;
+static float frand() { s_physSeed = s_physSeed * 1664525u + 1013904223u; return (s_physSeed >> 8) / 16777216.0f; }
+static bool physInit()
+{
+    if (!s_part)
+        s_part = (Particle *)heap_caps_calloc(kParts, sizeof(Particle), MALLOC_CAP_SPIRAM);
+    if (!s_rip)
+        s_rip = (Ripple *)heap_caps_calloc(kRips, sizeof(Ripple), MALLOC_CAP_SPIRAM);
+    return s_part && s_rip;
+}
+// a ring that spreads like a capillary wave: fast at first, slowing (r ~ sqrt t), fading
+static void rippleAdd(float x, float y, float a, float rMax, float life)
+{
+    if (!physInit())
+        return;
+    int k = 0;
+    for (int i = 0; i < kRips; i++)
+        if (s_rip[i].age >= s_rip[i].life) { k = i; break; }
+        else if (s_rip[i].age / s_rip[i].life > s_rip[k].age / s_rip[k].life) k = i; // replace the oldest
+    s_rip[k] = {x, y, 0.6f, rMax, life, 0, a};
+}
+// droplets thrown up where something breaks the surface; vxBias carries them along
+static void splashAdd(float x, float y, float strength, float sc, float vxBias = 0, int n = 8, uint32_t c = 0xB8D0EA, float g = 1)
+{
+    if (!physInit())
+        return;
+    for (int i = 0, k = 0; i < n && k < kParts; k++)
+        if (s_part[k].life <= 0)
+        {
+            const float up = (28 + 34 * frand()) * strength * sc;
+            s_part[k] = {x + (frand() - 0.5f) * 3 * sc, y - 0.5f, vxBias + (frand() - 0.5f) * 30 * sc * strength, -up,
+                         y, 1.5f, 0.75f, c};
+            s_part[k].a = g; // gravity factor stored in a for mist (<1 = light)
+            i++;
+        }
+    rippleAdd(x, y + 0.5f, 0.45f * std::min(1.0f, strength), (6 + 8 * strength) * sc, 0.9f + 0.4f * strength);
+}
+static void physStep(float dt)
+{
+    if (!s_part || !s_rip)
+        return;
+    const float G = 160; // px/s^2 at scale 1
+    for (int k = 0; k < kParts; k++)
+    {
+        Particle &q = s_part[k];
+        if (q.life <= 0)
+            continue;
+        const float gk = q.a;
+        q.vy += G * gk * s_sc * dt;
+        q.vx *= 1 - 0.8f * dt;                  // air drag
+        if (gk < 0.5f)
+            q.vx += 6 * dt, q.vy *= 1 - 1.5f * dt; // mist: wind and strong drag
+        q.x += q.vx * dt, q.y += q.vy * dt;
+        q.life -= dt;
+        if (q.y >= q.sy && q.vy > 0) // back in the water: a tiny ring
+        {
+            if (gk >= 0.5f && frand() < 0.35f)
+                rippleAdd(q.x, q.sy + 0.5f, 0.25f, 2.5f, 0.4f);
+            q.life = 0;
+            continue;
+        }
+        lp(q.x, q.y, q.c, (gk < 0.5f ? 0.45f : 0.7f) * std::min(1.0f, q.life * 3));
+    }
+    for (int i = 0; i < kRips; i++)
+    {
+        Ripple &r = s_rip[i];
+        if (r.age >= r.life)
+            continue;
+        r.age += dt;
+        const float u = std::min(1.0f, r.age / r.life);
+        const float rad = r.r0 + (r.rMax - r.r0) * sqrtf(u);
+        const float a = r.a * (1 - u) * (1 - u);
+        const int n = std::clamp((int)(rad * 2.2f), 6, 20);
+        for (int j = 0; j < n; j++)
+        {
+            const float t = j / (float)n * 6.28318f;
+            lp(r.x + cosf(t) * rad, r.y + sinf(t) * rad * 0.28f, 0x7C9CC4, a);
+        }
+    }
+}
+static void rainHit(float x, int y, bool droplet)
+{
+    const float sc = 0.45f + (y - kHorizon) / 85.0f; // nearer = bigger
+    rippleAdd(x, y, 0.35f, 2.5f * sc + 1, 0.35f + 0.15f * sc);
+    if (!droplet || !s_part)
+        return;
+    for (int k = 0; k < kParts; k++)
+        if (s_part[k].life <= 0)
+        {
+            s_part[k] = {x, (float)y, (frand() - 0.5f) * 8, -(14 + 10 * frand()) * sc, (float)y, 0.6f, 1, 0x9CB8DC};
+            break;
+        }
+}
+// damped float: rises past its rest line, settles (buoyancy + water drag)
+static float bobUp(float t, float h, float w = 7.5f, float tau = 0.6f)
+{
+    return h * (1 - expf(-t / tau) * cosf(w * t));
+}
+
 template <typename R> static void seaLifeFrame(R &rnd)
 {
     enum { DOLPHINS, WHALE, OCTOPUS, SERPENT, JELLY, SHARK, FISHES, TURTLE, MANTA, SEAL, GULLS, FLYFISH, KRAKEN, KINDS };
@@ -648,10 +757,20 @@ template <typename R> static void seaLifeFrame(R &rnd)
     if (showSeen != s_showMs)
         showSeen = s_showMs, kind = -1, s_life.n = 0, next = now + 2000 + rnd() % 3000;
     listErase(s_life);
+    static uint32_t lastT = 0;
+    const float dt = lastT ? std::min(0.15f, (now - lastT) / 1000.0f) : 0.05f;
+    lastT = now;
+    {
+        const float sc = s_sc;
+        physStep(dt); // droplets and ripples, also after the creature is gone
+        s_sc = sc;
+    }
+    static float prevP = -1;
     if (kind < 0)
     {
         if ((int32_t)(now - next) < 0)
             return;
+        prevP = -1;
         kind = rnd() % KINDS;
         dur = durs[kind];
         y0 = kind == SERPENT || kind == KRAKEN ? kHorizon + 8 + rnd() % 26 : kHorizon + 10 + rnd() % 66;
@@ -675,24 +794,28 @@ template <typename R> static void seaLifeFrame(R &rnd)
     }
     s_sc = 0.45f + (y0 - kHorizon) / 85.0f;
     const float s = s_sc, fade = sinf(3.14159f * p), PI_ = 3.14159f;
+    const float tS = p * dur / 1000.0f;                       // seconds since it started
+    auto crossed = [&](float e) { return prevP < e && p >= e; }; // an event this frame
+    struct PrevSet { float &r; float v; ~PrevSet() { r = v; } } prevSet{prevP, p};
     switch (kind)
     {
-    case DOLPHINS: // two or three leaps
+    case DOLPHINS: // three leaps, each a true projectile: x = vx t, y = vy t - g t^2 / 2
         for (int d = 0; d < 3; d++)
         {
-            const float q = (p * dur - d * 280) / 1300.0f;
-            const float bx0 = x0 - d * 11 * s * dir, by0 = y0 + d * 2;
-            if (q < 0 || q > 1)
+            const float T = 1.05f, tl = tS - d * 0.28f;          // airtime, this dolphin's clock
+            const float vx = dir * 40 * s, vy = 46 * s, g = 2 * vy / T; // apex vy^2/2g ~ 12 s px
+            const float bx0 = x0 - d * 11 * s * dir - dir * 20 * s, by0 = y0 + d * 2;
+            const float e0 = (d * 0.28f) * 1000 / dur, e1 = (d * 0.28f + T) * 1000 / dur;
+            if (crossed(e0))
+                splashAdd(bx0, by0, 0.9f, s, vx * 0.3f, 9);
+            if (crossed(e1))
+                splashAdd(bx0 + vx * T, by0, 1.2f, s, vx * 0.4f, 12);
+            if (tl < 0 || tl > T)
                 continue;
-            const float w = 44 * s, hh = 15 * s;
-            const float x = bx0 + dir * (q * w - w / 2), y = by0 - hh * sinf(PI_ * q);
-            float ux = w, uy = -hh * PI_ * cosf(PI_ * q);
+            const float x = bx0 + vx * tl, y = by0 - (vy * tl - g * tl * tl / 2);
+            const float ux = vx, uy = -(vy - g * tl); // velocity: the body points along it
             const float l = sqrtf(ux * ux + uy * uy);
-            dolphin(x, y, ux / l, uy / l * dir, dir);
-            if (q < 0.18f)
-                splash(bx0 - dir * w / 2, by0, 1 - q / 0.18f, 77 + d);
-            if (q > 0.82f)
-                splash(bx0 + dir * w / 2, by0, (q - 0.82f) / 0.18f, 99 + d);
+            dolphin(x, y, ux / l * dir, uy / l * dir, dir);
         }
         break;
     case WHALE: // a long back rolls up, blows, then the flukes
@@ -704,18 +827,20 @@ template <typename R> static void seaLifeFrame(R &rnd)
             for (int dx = -w; dx <= w; dx++)
                 lp(bxw + dx, y0 - dy, dy == (int)h ? 0x405876 : 0x182434, 0.95f);
         }
-        if (p > 0.3f && p < 0.7f)
+        if (p > 0.3f && p < 0.42f) // the blow: a column of mist, light, drifting downwind
         {
-            const float sp = sinf(PI_ * (p - 0.3f) / 0.4f);
-            const int H = (int)(20 * s * sp);
             const float sx = bxw + dir * 9 * s;
-            for (int y = 0; y < H; y++)
-                lp(sx + ((y * 7 + (int)(now / 60)) % 3) - 1, y0 - h - y, 0xB8D0EA, 0.55f * sp);
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < 4; i++)
             {
-                const float a = i / 9.0f * PI_;
-                lp(sx + cosf(a) * 7 * s * sp, y0 - h - H + fabsf(cosf(a)) * 6 * s * sp, 0xC8DCF0, 0.6f * sp);
+                for (int k = 0; k < kParts && s_part; k++)
+                    if (s_part[k].life <= 0)
+                    {
+                        s_part[k] = {sx + (frand() - 0.5f) * 2 * s, y0 - h, (frand() - 0.5f) * 14 * s, -(55 + 25 * frand()) * s,
+                                     (float)y0, 1.6f, 0.15f, 0xC8DCF0};
+                        break;
+                    }
             }
+            physInit();
         }
         if (p > 0.72f)
         {
@@ -787,14 +912,28 @@ template <typename R> static void seaLifeFrame(R &rnd)
                 lp(x0 + k * 2 * s + sinf(y * 0.6f + now * 0.006f + k), jy + y, 0x20C0A0, 0.4f * fade);
         break;
     }
-    case SHARK: // a fin cutting along, a thin wake behind it
+    case SHARK: // fin speed pulses with each tail beat; a V (Kelvin) wake trails it
     {
-        const float fx = x0 + dir * (p * 90 - 45) * s, h = 6 * s * std::min(1.0f, fade * 3);
+        const float v = 26 * s, beat = 1.6f;                          // px/s, tail beats/s
+        const float xs = v * (tS + 0.12f / (2 * PI_ * beat) * sinf(2 * PI_ * beat * tS) * 6);
+        const float fx = x0 + dir * (xs - v * dur / 2000.0f), h = 6 * s * std::min(1.0f, fade * 3);
+        const float yaw = 0.6f * sinf(2 * PI_ * beat * tS);           // the fin sways a little
+        // dorsal fin swept back: the leading edge (at fx, the front) slopes up
+        // and backwards, the tip points behind, the trailing edge is steeper
         for (int y = 0; y < (int)h; y++)
-            for (int x = 0; x <= (int)((h - y) * 0.7f); x++)
-                lp(fx - dir * x + dir * y * 0.3f, y0 - y, 0x1A2230, 0.95f);
-        for (int i = 2; i < (int)(16 * s); i += 2)
-            lp(fx - dir * i, y0 + (i / 2 % 2), 0x8CA8C8, 0.45f * fade * (1 - i / (16 * s)));
+        {
+            const float front = 0.75f * y + 0.05f * yaw * y, back = 0.9f * h - 0.15f * y;
+            for (int x = (int)front; x <= (int)back; x++)
+                lp(fx - dir * x, y0 - y, 0x1A2230, 0.95f);
+        }
+        const float L = 22 * s; // wake arms at ~19.5 deg, flattened by the view
+        for (int i = 2; i < (int)L; i++)
+        {
+            const float a = 0.5f * fade * (1 - i / L);
+            const float spread = i * 0.354f * 0.35f;
+            lp(fx - dir * i, y0 + 0.5f - spread, 0x8CA8C8, a * 0.6f);
+            lp(fx - dir * i, y0 + 0.5f + spread, 0x8CA8C8, a);
+        }
         break;
     }
     case FISHES: // a little school skipping out of the water
@@ -808,14 +947,17 @@ template <typename R> static void seaLifeFrame(R &rnd)
             const float fx0 = x0 + ((int)(sd >> 27) - 16) * s, fy0 = y0 + ((sd >> 24) & 7) - 3;
             if (q < 0 || q > 1)
                 continue;
-            const float x = fx0 + dir * (q * 10 - 5) * s, y = fy0 - 5 * s * sinf(PI_ * q);
+            const float x = fx0 + dir * (q * 10 - 5) * s, y = fy0 - 20 * s * q * (1 - q); // parabola (gravity)
+            if (q < 0.08f && ((sd >> 9) & 3) == 0)
+                splashAdd(fx0 - dir * 5 * s, fy0, 0.3f, s, 0, 2);
             lp(x, y, 0xD0E0F0, 0.8f), lp(x - dir, y + (q < 0.5f ? 1 : -1) * 0.5f, 0x8098B0, 0.7f);
         }
         break;
     }
     case TURTLE: // a shell and a small head, drifting, then down again
     {
-        const float tx = x0 + dir * (p * 12 - 6) * s, h = 2.5f * s * fade;
+        const float sink = p > 0.8f ? (p - 0.8f) / 0.2f : 0;
+        const float tx = x0 + dir * (p * 12 - 6) * s, h = std::max(0.0f, bobUp(tS, 2.5f * s) * (1 - sink));
         for (int dy = 0; dy <= (int)h; dy++)
         {
             const int w = (int)(5 * s * sqrtf(std::max(0.0f, 1 - (dy / (h + 0.5f)) * (dy / (h + 0.5f)))));
@@ -829,7 +971,7 @@ template <typename R> static void seaLifeFrame(R &rnd)
     }
     case MANTA: // a flat ray leaps and slaps back down
     {
-        const float x = x0 + dir * (p * 30 - 15) * s, y = y0 - 14 * s * sinf(PI_ * p), w = 8 * s;
+        const float x = x0 + dir * (p * 30 - 15) * s, y = y0 - 56 * s * p * (1 - p), w = 8 * s; // parabola
         for (int i = -(int)w; i <= (int)w; i++)
         {
             const float t = 1 - fabsf(i / w);
@@ -838,15 +980,16 @@ template <typename R> static void seaLifeFrame(R &rnd)
                 lp(x + i, y + 1, 0x101620, 0.95f);
         }
         lp(x - dir * (w + 2), y + 1, 0x202838, 0.8f), lp(x - dir * (w + 3), y + 2, 0x202838, 0.6f); // tail
-        if (p < 0.12f)
-            splash(x0 - dir * 15 * s, y0, 1 - p / 0.12f, seed);
-        if (p > 0.88f)
-            splash(x0 + dir * 15 * s, y0, (p - 0.88f) / 0.12f, seed + 1);
+        if (crossed(0.0f))
+            splashAdd(x0 - dir * 15 * s, y0, 0.8f, s, dir * 6 * s, 8);
+        if (crossed(0.99f)) // the belly slap
+            splashAdd(x0 + dir * 15 * s, y0, 1.5f, s, dir * 10 * s, 16);
         break;
     }
     case SEAL: // a round head bobs up, looks around
     {
-        const float hy = y0 - 3 * s * fade + sinf(now * 0.006f), r = 2.5f * s;
+        const float sink = p > 0.8f ? (p - 0.8f) / 0.2f : 0;
+        const float hy = y0 - bobUp(tS, 3 * s, 6.0f, 0.8f) * (1 - sink) + 0.4f * sinf(now * 0.004f), r = 2.5f * s;
         for (int dy = -(int)r; dy <= 0; dy++)
             for (int dx = -(int)r; dx <= (int)r; dx++)
                 if (dx * dx + dy * dy <= r * r)
@@ -857,32 +1000,50 @@ template <typename R> static void seaLifeFrame(R &rnd)
         ring(x0, y0 + 1, 5 * s, 0x6A88AA, 0.3f * fade);
         break;
     }
-    case GULLS: // fly in from off screen, maybe land and float a while,
-                // then take off and fly out past the other edge
+    case GULLS: // flap-flap-glide flight, eased speed changes; landing flare,
+                // floating, a running take-off; in and out past the edges
     {
         s_waterOnly = false;
         const bool lands = seed & 1;
         const float sx = dir > 0 ? -15 : 335, ex = dir > 0 ? 335 : -15;
+        auto ease = [](float u) { u = std::clamp(u, 0.0f, 1.0f); return u * u * (3 - 2 * u); };
         for (int b = 0; b < 3; b++)
         {
-            const float lx = x0 - dir * b * 8 * s, ly = y0 + b * 2; // landing spot on the water
-            float gx, gy;
-            bool flying = true;
+            const float lx = x0 - dir * b * 8 * s, ly = y0 + b * 2;
+            const float bt = tS + b * 0.37f; // own wingbeat clock
+            float gx, gy, flapHz = 3.2f;
+            bool flying = true, flare = false, run = false;
             if (!lands)
-                gx = sx + (ex - sx) * p, gy = y0 - 20 * s - b * 4;
-            else if (p < 0.3f) // glide in, descending
             {
-                const float q = p / 0.3f;
-                gx = sx + (lx - sx) * q, gy = ly - (1 - q) * (24 * s + b * 4) - 1;
+                gx = sx + (ex - sx) * p - dir * b * 9 * s;
+                gy = y0 - 20 * s - b * 4 + 2.0f * sinf(0.9f * tS + b);
             }
-            else if (p < 0.68f) // floating, bobbing
-                gx = lx + dir * (p - 0.3f) * 6, gy = ly + 0.5f * sinf(now * 0.004f + b), flying = false;
-            else // take off, climbing out
+            else if (p < 0.3f) // glide in: decelerating, descending, a flare at the end
             {
-                const float q = (p - 0.68f) / 0.32f;
-                gx = lx + dir * 2.3f + (ex - lx) * q, gy = ly - q * (30 * s + b * 4);
+                const float q = p / 0.3f, e = 1 - (1 - q) * (1 - q); // fast then slowing
+                gx = sx + (lx - sx) * e - dir * b * 9 * s * (1 - q);
+                gy = ly - (1 - ease(q)) * (24 * s + b * 4) - 1;
+                flare = q > 0.85f;
+                if (crossed(0.3f) && b == 0)
+                    for (int k = 0; k < 3; k++)
+                        splashAdd(lx - dir * k * 8 * s, ly + k * 2, 0.35f, s, dir * 8 * s, 3);
             }
-            gx -= dir * b * 9 * s * (flying ? 1 : 0);
+            else if (p < 0.68f) // floating: drifting, rocked by the swell
+            {
+                gx = lx + dir * (p - 0.3f) * 6;
+                gy = ly + 0.6f * sinf(now * 0.0035f + b * 0.8f);
+                flying = false;
+            }
+            else // take-off: running on the water with fast beats, then climbing
+            {
+                const float q = (p - 0.68f) / 0.32f, e = q * q;    // accelerating
+                gx = lx + dir * 2.3f + (ex - lx) * e;
+                gy = ly - ease((q - 0.12f) / 0.88f) * (30 * s + b * 4);
+                run = q < 0.15f;
+                flapHz = run ? 5.5f : 4.0f;
+                if (run && ((now / 70 + b) & 1))
+                    splashAdd(gx - dir * 2, ly, 0.15f, s, -dir * 10 * s, 1);
+            }
             if (gy < 2 || gx < -12 || gx > 332)
                 continue;
             if (!flying)
@@ -891,27 +1052,50 @@ template <typename R> static void seaLifeFrame(R &rnd)
                 lp(gx + 2 * dir, gy - 2, 0xE0E4E8, 0.85f); // head
                 continue;
             }
-            const float fl = sinf(now * 0.02f + b * 2); // wing beat
+            // 1.4 s of beats then 0.9 s gliding (wings held, slightly raised)
+            const float cyc = fmodf(bt, 2.3f);
+            const bool glide = !lands ? cyc > 1.4f : (!run && p > 0.12f && p < 0.25f);
+            float fl = glide ? -0.25f : sinf(2 * PI_ * flapHz * bt);
+            if (flare)
+                fl = -1; // wings up, braking
+            const float lift = glide ? 0 : 0.5f * cosf(2 * PI_ * flapHz * bt); // body rises on the downstroke
             const int w = std::max(2, (int)(4 * s));
             for (int i = 1; i <= w; i++)
             {
-                const float dy = -fl * i * 0.6f;
+                const float tip = (float)i / w, dy = -fl * i * 0.6f * (0.6f + 0.4f * tip) + lift;
                 lp(gx - i, gy + dy, 0xC0C8D0, 0.75f), lp(gx + i, gy + dy, 0xC0C8D0, 0.75f);
             }
-            lp(gx, gy, 0xE0E4E8, 0.85f);
+            lp(gx, gy + lift, 0xE0E4E8, 0.85f);
         }
         s_waterOnly = true;
         break;
     }
-    case FLYFISH: // glides low over the surface, fins shimmering
+    case FLYFISH: // launch, glide sinking slowly (drag), a tail tap that
+                  // re-boosts it, then it drops in
     {
-        const float x = x0 + dir * (p * 70 - 35) * s, y = y0 - 4 * s * sinf(PI_ * p);
+        const float T1 = 0.48f; // first glide ends here (fraction), the tap
+        float h, x;
+        const float v = 70 * s;
+        x = x0 + dir * (tS * v - dur / 2000.0f * v);
+        if (p < 0.1f)
+            h = 9 * s * (p / 0.1f) * (2 - p / 0.1f);                    // launch arc
+        else if (p < T1)
+            h = 9 * s * expf(-(p - 0.1f) * 4.2f);                         // gliding down
+        else if (p < T1 + 0.08f)
+            h = 9 * s * expf(-(T1 - 0.1f) * 4.2f) * (1 - (p - T1) / 0.08f) + 7 * s * ((p - T1) / 0.08f) * ((p - T1) / 0.08f);
+        else
+            h = 7 * s * expf(-(p - T1 - 0.08f) * 5.5f) * (1 - std::max(0.0f, (p - 0.9f) / 0.1f));
+        if (crossed(0.0f))
+            splashAdd(x, y0, 0.5f, s, dir * 20 * s, 5);
+        if (crossed(T1))
+            splashAdd(x, y0, 0.35f, s, dir * 25 * s, 4);
+        if (crossed(0.97f))
+            splashAdd(x, y0, 0.6f, s, dir * 25 * s, 6);
+        const float y = y0 - h;
         for (int i = -2; i <= 2; i++)
             lp(x + dir * i * s, y, 0x90A8C8, 0.85f);
         const float sh = 0.5f + 0.5f * sinf(now * 0.05f);
         lp(x, y - 1, 0xC0F0FF, 0.6f * sh), lp(x - dir, y - 2, 0xC0F0FF, 0.5f * sh);
-        if (p < 0.1f || p > 0.9f)
-            splash(x, y0, 0.6f, seed);
         break;
     }
     case KRAKEN: // far out, a vast eye opens on the water, looks, blinks

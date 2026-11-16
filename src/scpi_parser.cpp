@@ -690,6 +690,17 @@ void SCPIParser::executeCommand(const String& command)
             splashShot(0, false);
             spiQuietEnd();
         }
+        else if (cmdPart.endsWith("SPLASH"))
+        {
+            // show the splash until a tap or key, like About > Software
+            // information (the main loop, SCPI included, waits meanwhile)
+            sendResponse("OK");
+            Serial.flush();
+            spiQuietAcquire();
+            splashShow();
+            spiQuietEnd();
+            lv_obj_invalidate(lv_scr_act());
+        }
         else if (cmdPart.indexOf("SPLASH:SHOT?") > 0)
         {
             // Splash screenshot read back from the LCD; optional wait in ms
