@@ -24,4 +24,8 @@ void linkSetRatio(float pct);     // master: slave value = master x pct/100 (1..
 float linkRatio();
 bool linkConnected();
 const char *linkSelfName();       // "PSU-A1B2C3" (MAC end)
+bool linkLinked(char *peerName);  // partner saved (name filled), connected or not
+bool linkAsking(char *name);      // waiting for the other unit to accept
+const char *linkNote();           // last pairing result ("" if none)
+bool linkSlaveReading(float &v, float &i, bool &on); // master: slave's measured output
 String linkStatus();              // short, comma separated (SCPI LINK:STAT?, menu)

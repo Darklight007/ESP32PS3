@@ -257,6 +257,13 @@ void SCPIParser::executeCommand(const String& command)
         else addError(ERR_UNDEFINED_HEADER);
         return;
     }
+    // DISP:TAB n: show tab n (0 Stats .. 4 Settings)
+    if (cmdPart.startsWith("DISP:TAB"))
+    {
+        lv_tabview_set_act(PowerSupply.tab.tabview, paramPart.toInt(), LV_ANIM_OFF);
+        sendResponse("OK");
+        return;
+    }
     // DISP:MENU n: open Settings and its n-th sidebar item (screenshots/tests)
     if (cmdPart.startsWith("DISP:MENU"))
     {

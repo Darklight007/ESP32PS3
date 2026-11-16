@@ -314,14 +314,14 @@ namespace
             {
                 s_askUntil = 0;
                 setPeer(mac, LinkRole::MASTER);
-                snprintf(s_note, sizeof(s_note), "%s accepted", nm);
+                s_note[0] = 0;
             }
             return;
         case PAIR_NAK:
             if (s_askUntil && memcmp(mac, s_askMac, 6) == 0)
             {
                 s_askUntil = 0;
-                snprintf(s_note, sizeof(s_note), "%s refused", nm);
+                snprintf(s_note, sizeof(s_note), "%s said no.", nm);
             }
             return;
         }
@@ -331,7 +331,7 @@ namespace
         if (p.type == UNPAIR)
         {
             dropPeer();
-            snprintf(s_note, sizeof(s_note), "%s unlinked", nm);
+            snprintf(s_note, sizeof(s_note), "%s unlinked.", nm);
             return;
         }
         const bool first = !linkConnected();
@@ -409,7 +409,7 @@ void linkLoop()
     if (s_askUntil && now > s_askUntil)
     {
         s_askUntil = 0;
-        snprintf(s_note, sizeof(s_note), "no answer");
+        snprintf(s_note, sizeof(s_note), "No answer from the other PSU.");
     }
     if (s_inUntil && now > s_inUntil)
         s_inUntil = 0;
@@ -484,6 +484,7 @@ void linkScan()
         return;
     s_nFound = 0;
     s_foundVer++;
+    s_note[0] = 0;
     s_scanUntil = millis() + kScanMs;
 }
 
@@ -503,11 +504,12 @@ void linkRequest(int idx)
 {
     if (idx < 0 || idx >= s_nFound)
         return;
+    s_scanUntil = 0;
     memcpy(s_askMac, s_found[idx].mac, 6);
     s_askUntil = millis() + kAskMs;
     char nm[12];
     macName(s_askMac, nm);
-    snprintf(s_note, sizeof(s_note), "asking %s...", nm);
+    s_note[0] = 0;
     send(s_askMac, PAIR_REQ);
 }
 
@@ -535,9 +537,7 @@ void linkAnswer(bool accept)
     if (accept)
     {
         setPeer(s_inMac, LinkRole::SLAVE);
-        char nm[12];
-        macName(s_inMac, nm);
-        snprintf(s_note, sizeof(s_note), "following %s", nm);
+        s_note[0] = 0;
     }
 }
 
@@ -563,6 +563,33 @@ float linkRatio() { return s_ratio; }
 bool linkConnected() { return s_radio && s_hasPeer && s_lastRx && millis() - s_lastRx < kLostMs; }
 
 const char *linkSelfName() { return s_selfName; }
+
+bool linkLinked(char *name)
+{
+    if (s_hasPeer && name)
+        macName(s_peer, name);
+    return s_hasPeer && s_role != LinkRole::OFF;
+}
+
+bool linkAsking(char *name)
+{
+    if (!s_askUntil)
+        return false;
+    macName(s_askMac, name);
+    return true;
+}
+
+const char *linkNote() { return s_note; }
+
+bool linkSlaveReading(float &v, float &i, bool &on)
+{
+    if (s_role != LinkRole::MASTER || !linkConnected())
+        return false;
+    v = s_peerState.v;
+    i = s_peerState.i;
+    on = s_peerState.on;
+    return true;
+}
 
 String linkDiag()
 {
