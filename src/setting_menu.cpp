@@ -1176,32 +1176,29 @@ void SettingMenu(lv_obj_t *parent)
         }
     }, 300, nullptr);
 
-    // Version/About/Sidebar
-    lv_obj_t *sub_software_info_page = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
-    section = lv_menu_section_create(sub_software_info_page);
-
+    // About: a "Software information" button shows the splash until a tap,
+    // then the About page is still there; the version is shown below it
+    lv_obj_t *sub_about_page = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
+    section = lv_menu_section_create(sub_about_page);
+    {
+        lv_obj_t *b = lv_obj_get_child(create_button_item(section, [](lv_event_t *) {
+            spiQuietAcquire();
+            splashShow();
+            spiQuietEnd();
+            lv_obj_invalidate(lv_scr_act());
+        }, "Software information"), 0);
+        lv_obj_set_width(b, LV_PCT(100));
+    }
     char version_text[48];
     snprintf(version_text, sizeof(version_text), "Version %s", SOFTWARE_VERSION);
     create_text(section, nullptr, version_text, 1, nullptr);
-
-    lv_obj_t *sub_about_page = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
-    section = lv_menu_section_create(sub_about_page);
-    auto *itm = create_text(section, nullptr, "Software information", 1, nullptr);
-    lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_software_info_page);
-    // ...and the ARASH splash, until a tap
-    lv_obj_add_event_cb(itm, [](lv_event_t *) {
-        spiQuietAcquire();
-        splashShow();
-        spiQuietEnd();
-        lv_obj_invalidate(lv_scr_act());
-    }, LV_EVENT_CLICKED, nullptr);
 
     // Root page + items
     lv_obj_t *root_page = lv_menu_page_create(PowerSupply.gui.setting_menu, nullptr);
     lv_obj_set_style_pad_hor(root_page, lv_obj_get_style_pad_left(lv_menu_get_main_header(PowerSupply.gui.setting_menu), 0), 0);
     section = lv_menu_section_create(root_page);
 
-    itm = create_text(section, nullptr, "Display", 1, nullptr);
+    lv_obj_t *itm = create_text(section, nullptr, "Display", 1, nullptr);
     lv_menu_set_load_page_event(PowerSupply.gui.setting_menu, itm, sub_display);
 
     itm = create_text(section, nullptr, "Graph", 1, nullptr);
