@@ -166,14 +166,40 @@ static void fetchTask(void *)
                 }
             }
         }
-        else if (!s_abort && http.begin("http://ip-api.com/json/?fields=lat,lon,city") && http.GET() == 200)
+        else
         {
-            const String b = http.getString();
-            numAfter(b, "\"lat\":", lat);
-            numAfter(b, "\"lon\":", lon);
-            const int i = b.indexOf("\"city\":\"");
-            if (i >= 0)
-                city = b.substring(i + 8, b.indexOf('"', i + 8));
+            // Location from the public IP: ~3 s, so it is saved and looked up
+            // again only every 10th boot (the boot waits at most 4.5 s)
+            Preferences p;
+            p.begin("my-app", true);
+            uint8_t age = p.getUChar("wx_ipage", 255);
+            if (age < 10)
+                lat = p.getFloat("wx_iplat", NAN), lon = p.getFloat("wx_iplon", NAN), city = p.getString("wx_ipcity", "");
+            p.end();
+            if (!isnan(lat) && !isnan(lon) && age < 10)
+            {
+                p.begin("my-app", false);
+                p.putUChar("wx_ipage", age + 1);
+                p.end();
+            }
+            else if (!s_abort && http.begin("http://ip-api.com/json/?fields=lat,lon,city") && http.GET() == 200)
+            {
+                const String b = http.getString();
+                numAfter(b, "\"lat\":", lat);
+                numAfter(b, "\"lon\":", lon);
+                const int i = b.indexOf("\"city\":\"");
+                if (i >= 0)
+                    city = b.substring(i + 8, b.indexOf('"', i + 8));
+                if (!isnan(lat) && !isnan(lon))
+                {
+                    p.begin("my-app", false);
+                    p.putFloat("wx_iplat", lat);
+                    p.putFloat("wx_iplon", lon);
+                    p.putString("wx_ipcity", city);
+                    p.putUChar("wx_ipage", 0);
+                    p.end();
+                }
+            }
         }
         http.end();
         if (!s_abort && !isnan(lat) && !isnan(lon))

@@ -437,7 +437,7 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Syntax:** `:SYST:WEAT:AUTO <0|1>`, `:SYST:WEAT:AUTO?`
 
 ### :SYSTem:WEATher:CITY - Fixed Location
-**Description:** Use this city instead of the IP location (ISP's city is often wrong). Geocoded via open-meteo at the next boot, then cached. `""` = back to IP location.
+**Description:** Use this city instead of the IP location (ISP's city is often wrong). Geocoded via open-meteo at the next boot, then cached. `""` = back to IP location (ip-api.com), which is saved and looked up again every 10th boot.
 **Syntax:** `:SYST:WEAT:CITY "<name>"`, `:SYST:WEAT:CITY?`
 
 ### :SYSTem:WEATher:FETCh - Fetch Now
