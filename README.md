@@ -1,4 +1,4 @@
-# ESP32-S3 Precision Power Supply
+# FANOOS: ESP32-S3 Precision Power Supply
 
 <div align="center">
 
@@ -13,6 +13,19 @@
 [Features](#-features) • [Hardware](#-hardware-specifications) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Development](#-development)
 
 </div>
+
+## The name
+
+**FANOOS** (فانوس) means *lantern*. It is made from the names of girls executed in Iran's prisons in the 1980s, in letter order:
+
+- **FA**temeh: Fatemeh Mesbah, Fatemeh Sajedi and Fatemeh Jabbarzadeh Ansari, reported to have been 13
+- **N**asrin: Nasrin Nouri Mani, reported to have been 15
+- m**O**na: Mona Mahmudnizhad, 17, hanged in Shiraz on June 18, 1983, with nine other Bahá'í women
+- **S**hahla: Shahla Ghorbani, reported to have been 13
+
+And for every girl whose name was never recorded.
+
+Mona's case is widely documented. The other ages come from reports that independent records have not confirmed.
 
 ---
 

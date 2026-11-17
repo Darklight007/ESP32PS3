@@ -3,10 +3,10 @@
 // Boot splash: drawn straight with TFT_eSPI right after the display starts
 // (LVGL isn't running yet); LVGL's first frame paints over it. FANOOS 3206:
 // "lantern", built from the names of girls executed in Iran's prisons in the
-// 1980s: FAtemeh (Mesbah, Sajedi, Jabbarzadeh Ansari, reported 13), mOna
-// (Mahmudnizhad, 17, Shiraz 1983), Nasrin (Nouri Mani, reported 15) and
-// Shahla (Ghorbani, reported 13), and every girl whose name was never
-// recorded. Night sky with
+// 1980s, in letter order FA + N + O(O) + S: FAtemeh (Mesbah, Sajedi,
+// Jabbarzadeh Ansari, reported 13), Nasrin (Nouri Mani, reported 15), mOna
+// (Mahmudnizhad, 17, Shiraz 1983) and Shahla (Ghorbani, reported 13), and
+// every girl whose name was never recorded (README: "The name"). Night sky with
 // Orion (the three belt stars in a line), Damavand over a dark sea, a
 // fishing boat, the local weather (weather.cpp) and a progress bar that
 // setup() advances. The still scene is drawn once into a PSRAM sprite; the
@@ -2081,10 +2081,6 @@ void splashBegin()
     g->drawString("MODEL 3206 - 0-32V 0-6A 24-bit", 112, 62);
     g->setTextColor(dayText ? g->color565(20, 44, 80) : g->color565(90, 115, 140));
     g->drawString(SOFTWARE_VERSION, 112, 74);
-    // the dedication: the girls the name is made of
-    g->setTextColor(dayText ? g->color565(40, 36, 70) : g->color565(150, 120, 150));
-    g->drawString("for Fatemeh, Mona, Nasrin, Shahla", 112, 88);
-    g->drawString("and every girl never named", 112, 98);
     g->setTextDatum(TL_DATUM);
     for (int k = 0; k < kBg; k++)
     {
