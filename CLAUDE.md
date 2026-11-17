@@ -201,6 +201,9 @@ Frame cost is dominated by how many pixels are invalidated, so frequently-changi
 - Stress test: `tools/stress/stress.py <s> [seed] [all|ui|heavy|fuzz] [--heap]` (`--heap`: `DIAG:HEAP?` after every action) (random pages, FUN, load analyser, tracer, link with link_sim, splash, screenshots, fuzz; reports crashes with decoded backtraces, hangs, RAM, Main fps).
 - Profile with `DISP:SAMPRUN` then `DISP:SAMP?` (Core 1 program-counter samples; resolve with addr2line on firmware.elf). Needs 24 KB internal RAM: now answers "ERR no memory" (~11 KB free); time code with micros() instead.
 
+### Splash Scene
+`boot_splash.cpp`: night, twilight or day from the sun (`weatherSun()`, `SYST:WEAT:SUN`). The still scene is kept in a PSRAM sprite and reused (~50 ms) until weather, sun (0.5 deg) or the weather line changes; a rebuild is ~0.25 s (sky/sea per-row, nebula cached in PSRAM). `DISP:SPLASH:SHOT?` hex comes back byte-swapped: swap each pixel when decoding. Keep new build tables in PSRAM: internal RAM is ~9 KB free.
+
 ### USB Serial After a Reset
 A host that keeps sending through a reset (the phone bridge) left a packet in the USB-serial FIFO; `HWCDC::begin()` clears its interrupt, so SCPI input stayed dead until a re-plug. `initializeSerial()` empties the FIFO after `begin()`. While the splash shows, `scpiParser.serviceWhileHeld()` answers queries (a polling bridge would otherwise close it at once); a non-query closes it, then runs. A key pressed while the splash shows only closes it (`g_splashUp`, input_device.cpp): holding Home there used to reach HOLD = `ESP.restart()`.
 

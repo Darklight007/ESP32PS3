@@ -451,6 +451,28 @@ void SCPIParser::executeCommand(const String& command)
             else { String c = paramPart; c.trim(); c.replace("\"", ""); weatherSetCity(c); sendResponse("OK, reboot to fetch"); }
         }
         else if (cmdPart.indexOf("FORC") > 0) { weatherForce(paramPart.toInt()); sendResponse("OK"); }
+        else if (cmdPart.indexOf("SUN") > 0)
+        {
+            // SYST:WEAT:SUN? -> alt,az,live|forced|unknown,utc ; SYST:WEAT:SUN alt[,az] | LIVE
+            if (cmdPart.endsWith("?"))
+            {
+                float alt = NAN, az = NAN;
+                const bool ok = weatherSun(alt, az);
+                char b[80];
+                snprintf(b, sizeof b, "%.2f,%.2f,%s,%ld", alt, az, !ok ? "unknown" : weatherSunForced() ? "forced" : "live", (long)time(nullptr));
+                sendResponse(b);
+            }
+            else
+            {
+                String a = paramPart;
+                a.trim();
+                a.toUpperCase();
+                const int comma = a.indexOf(',');
+                if (a.startsWith("LIV") || !a.length()) weatherForceSun(NAN, NAN);
+                else weatherForceSun(a.toFloat(), comma > 0 ? a.substring(comma + 1).toFloat() : NAN);
+                sendResponse("OK");
+            }
+        }
         else sendResponse(weatherInfo());
         return;
     }

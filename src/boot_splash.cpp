@@ -128,14 +128,101 @@ static void nebula(int x, int y, float &r, float &g, float &b)
     const float k = std::max(0.0f, 1 - dust);
     r *= k, g *= k, b *= k;
 }
-// Sky plus nebula at a pixel, 0xRRGGBB (stars and their redraws use this)
+// ─── Daylight ───────────────────────────────────────────────────────────────
+// The real sun (weather.cpp: clock + place) sets the scene: night (as it
+// was), twilight (indigo to orange, the sun on the horizon) or day (blue sky,
+// sunlit sea and snow). Weights from the sun's altitude; the sun's azimuth
+// puts it on screen, looking toward the equator (east left in the north).
+static WxKind s_wx = WX_CLEAR;
+struct Light
+{
+    float night = 1, twi = 0, day = 0, alt = -30, sx = -999, sy = 999, over = 0, low = 1;
+    bool known = false;
+    float farR, farG, farB, nearR, nearG, nearB, mirror; // sea colours
+};
+static Light s_L;
+static float smooth01(float e0, float e1, float v)
+{
+    const float t = std::max(0.0f, std::min(1.0f, (v - e0) / (e1 - e0)));
+    return t * t * (3 - 2 * t);
+}
+static uint32_t lerpC(uint32_t a, uint32_t b, float t)
+{
+    t = std::max(0.0f, std::min(1.0f, t));
+    uint32_t r = 0;
+    for (int sh = 0; sh <= 16; sh += 8)
+        r |= (uint32_t)lroundf(((a >> sh) & 255) + t * ((int)((b >> sh) & 255) - (int)((a >> sh) & 255))) << sh;
+    return r;
+}
+// a colour for night / twilight / day, mixed by the light now
+static uint32_t pal3(uint32_t n, uint32_t tw, uint32_t d)
+{
+    const Light &L = s_L;
+    float r = 0, g = 0, b = 0;
+    auto acc = [&](uint32_t c, float w) { r += w * ((c >> 16) & 255), g += w * ((c >> 8) & 255), b += w * (c & 255); };
+    acc(n, L.night), acc(tw, L.twi), acc(d, L.day);
+    return (uint32_t)std::min(255L, lroundf(r)) << 16 | (uint32_t)std::min(255L, lroundf(g)) << 8 | (uint32_t)std::min(255L, lroundf(b));
+}
+static bool isDay() { return s_L.day + 0.5f * s_L.twi > 0.55f; }
+static float starVis() { return s_L.known ? s_L.night : 1.0f; }
+
+// Sky colour of row y without nebula and sun glow (floats 0..255)
+static void skyRowBase(int y, float &r, float &g, float &b)
+{
+    const Light &L = s_L;
+    r = g = b = 0;
+    const float t = std::max(0.0f, std::min(1.0f, (float)y / kHorizon));
+    auto acc = [&](uint32_t c, float w) { r += w * ((c >> 16) & 255), g += w * ((c >> 8) & 255), b += w * (c & 255); };
+    if (L.night > 0.001f)
+    {
+        const uint32_t s0 = skyRgb(y), s1 = skyRgb(y + 1); // integer per row: smooth with the next
+        r += L.night * (((s0 >> 16) & 255) + ((s1 >> 16) & 255)) / 2.0f;
+        g += L.night * (((s0 >> 8) & 255) + ((s1 >> 8) & 255)) / 2.0f;
+        b += L.night * ((s0 & 255) + (s1 & 255)) / 2.0f;
+    }
+    const bool storm = s_wx == WX_THUNDER, snow = s_wx == WX_SNOW;
+    if (L.twi > 0.001f) // indigo above, mauve, orange at the horizon
+    {
+        uint32_t c = t < 0.6f ? lerpC(0x161E48, 0x6A4E80, t / 0.6f) : lerpC(0x6A4E80, 0xEE9050, (t - 0.6f) / 0.4f);
+        c = lerpC(c, lerpC(0x2A2834, 0x5A4C56, t), L.over * 0.85f);
+        acc(c, L.twi);
+    }
+    if (L.day > 0.001f) // deep blue overhead, pale at the horizon; grey when overcast
+    {
+        uint32_t c = lerpC(0x2A62C2, 0xB0D2EE, powf(t, 1.6f));
+        const uint32_t grey = storm ? lerpC(0x4C545E, 0x707882, t) : snow ? lerpC(0xA4ACB6, 0xCED4DA, t) : lerpC(0x828C98, 0xAAB2BC, t);
+        c = lerpC(c, grey, L.over);
+        acc(c, L.day);
+    }
+}
+// Sky colour at a pixel, floats 0..255 (+ nebula at night, sun glow by day)
+static void skyF(int x, int y, float &r, float &g, float &b)
+{
+    const Light &L = s_L;
+    skyRowBase(y, r, g, b);
+    if (L.night > 0.001f)
+    {
+        float nr, ng, nb;
+        nebula(x, y, nr, ng, nb);
+        r += L.night * nr, g += L.night * ng, b += L.night * nb;
+    }
+    if (L.known && L.twi + L.day > 0.02f) // glow round the sun, and along the horizon at dusk
+    {
+        const float dx = x - L.sx, dy = y - L.sy, k = 1 - 0.85f * L.over;
+        const float halo = expf(-(dx * dx + dy * dy) / (2 * 38.0f * 38.0f)) * (0.45f * L.day + 0.6f * L.twi) * k;
+        const uint32_t warm = lerpC(0xFFF0D0, 0xFF9440, L.low);
+        r += halo * ((warm >> 16) & 255) * 0.8f, g += halo * ((warm >> 8) & 255) * 0.8f, b += halo * (warm & 255) * 0.8f;
+        const float band = expf(-dx * dx / (2 * 110.0f * 110.0f)) * expf(-(kHorizon - y) / 24.0f) * L.twi * k * 0.55f;
+        r += band * 255, g += band * 120, b += band * 50;
+    }
+}
+// Sky at a pixel, 0xRRGGBB (stars and their redraws use this)
 static uint32_t skyAt(int x, int y)
 {
     float r, g, b;
-    nebula(x, y, r, g, b);
-    const uint32_t s = skyRgb(y);
-    auto add = [](int c, float v) { return (uint32_t)std::min(255, c + (int)v); };
-    return add((s >> 16) & 255, r) << 16 | add((s >> 8) & 255, g) << 8 | add(s & 255, b);
+    skyF(x, y, r, g, b);
+    auto c = [](float v) { return (uint32_t)std::max(0, std::min(255, (int)v)); };
+    return c(r) << 16 | c(g) << 8 | c(b);
 }
 
 // Ordered (Bayer 4x4) dither to RGB565: dark gradients have only a few
@@ -156,13 +243,19 @@ static uint16_t dith(float r, float g, float b, int x, int y)
 static void rgbOf(uint32_t c, float &r, float &g, float &b) { r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255; }
 static uint16_t s_row[320];
 static TFT_eSPI *g_fwd();
+static TFT_eSprite *s_bgSpr = nullptr; // the still scene (below)
 static void pushRow(int y)
 {
     TFT_eSPI *t = g_fwd();
-    if (t != &tft) // sprite: plain stores
+    if (t != &tft) // sprite: straight into its buffer (stored byte-swapped, as drawPixel does)
     {
-        for (int x = 0; x < 320; x++)
-            t->drawPixel(x, y, s_row[x]);
+        uint16_t *buf = s_bgSpr ? (uint16_t *)s_bgSpr->getPointer() : nullptr;
+        if (buf)
+            for (int x = 0; x < 320; x++)
+                buf[y * 320 + x] = (uint16_t)((s_row[x] >> 8) | (s_row[x] << 8));
+        else
+            for (int x = 0; x < 320; x++)
+                t->drawPixel(x, y, s_row[x]);
         return;
     }
     const bool sw = tft.getSwapBytes();
@@ -175,7 +268,6 @@ static bool s_barShown = false;
 
 // Still scene: built in a PSRAM sprite (g points at it), pushed once, kept
 // as the source for restoring pixels behind moving things.
-static TFT_eSprite *s_bgSpr = nullptr;
 static TFT_eSPI *g = &tft;
 static TFT_eSPI *g_fwd() { return g; }
 static uint16_t oceanPix(int x, int y);
@@ -291,6 +383,22 @@ static int s_bx = -1000, s_by = 0; // boat now (rain/snow keep off it)
 static void boatErase(int bx, int by) { restoreRect(bx - 9, by - 12, 20, 21); }
 static void boatDraw(int bx, int by, int flick)
 {
+    if (isDay()) // by day: red hull, white gunwale and wheelhouse, lamps off
+    {
+        const uint16_t hull = mix(0x7A2018, 0, 0), white = mix(0xE4E8EC, 0, 0), dark = mix(0x2A3038, 0, 0);
+        tft.drawFastHLine(bx - 7, by - 2, 15, white);
+        tft.drawFastHLine(bx + 7, by - 3, 2, white);
+        tft.drawFastHLine(bx - 7, by - 1, 15, hull);
+        tft.drawFastHLine(bx - 5, by, 12, hull);
+        tft.fillRect(bx - 5, by - 5, 4, 3, white);
+        tft.drawFastHLine(bx - 6, by - 6, 6, dark);
+        tft.drawPixel(bx - 4, by - 4, mix(0x283848, 0, 0));
+        tft.drawFastVLine(bx + 2, by - 11, 9, dark);
+        tft.drawLine(bx + 2, by - 10, bx + 8, by - 3, mix(0x606870, 0, 0));
+        tft.drawLine(bx + 2, by - 10, bx - 6, by - 3, mix(0x606870, 0, 0));
+        tft.drawFastHLine(bx - 4, by + 1, 10, mix(lerpC(pal3(0, 0, 0x1C4F80), 0, 0.3f), 0, 0)); // its shadow on the water
+        return;
+    }
     const uint16_t hull = 0x0000, rim = mix(0x10243C, 0, 0), rig = mix(0x0A1828, 0, 0);
     // lamp reflection: short broken warm dashes
     for (int k = 0; k < 3; k++)
@@ -317,6 +425,7 @@ static void boatDraw(int bx, int by, int flick)
 // Wave crests: short light dashes drifting slowly
 struct Wave { float x; int16_t y, len; float v; };
 static constexpr int kWaves = 34;
+static uint32_t s_waveLo = 0x03183A, s_waveHi = 0x3A70A8; // crest colours (light)
 static Wave s_wave[kWaves];
 static int16_t s_waveDrawn[kWaves];
 static bool inBoatBox(int x0, int x1, int y, int bx, int by)
@@ -325,7 +434,6 @@ static bool inBoatBox(int x0, int x1, int y, int bx, int by)
 }
 
 // ─── Weather ────────────────────────────────────────────────────────────────
-static WxKind s_wx = WX_CLEAR;
 static bool s_shootOk = true;
 struct Blob { int16_t cx, cy, rx, ry; float w; };
 static constexpr int kMaxBlobs = 22;
@@ -387,7 +495,9 @@ static void cloudsDraw()
 {
     if (!s_nBlob || !s_bgSpr)
         return;
-    const uint32_t core = s_wx == WX_CLOUD ? 0x0E1626 : 0x0C1220, rim = s_wx == WX_CLOUD ? 0x2E4262 : 0x223048;
+    const bool cl = s_wx == WX_CLOUD, storm = s_wx == WX_THUNDER;
+    const uint32_t core = pal3(cl ? 0x0E1626 : 0x0C1220, cl ? 0x3A3048 : 0x2E2A36, cl ? 0xC2CCD8 : storm ? 0x4A525C : 0x707A86);
+    const uint32_t rim = pal3(cl ? 0x2E4262 : 0x223048, cl ? 0xF2A070 : 0x8A6A68, cl ? 0xFFFFFF : storm ? 0x7A828C : 0xA6AEB8);
     float cr, cg, cb, rr, rg, rb;
     rgbOf(core, cr, cg, cb);
     rgbOf(rim, rr, rg, rb);
@@ -419,12 +529,13 @@ static void fogDraw()
 {
     if (s_wx != WX_FOG || !s_bgSpr)
         return;
+    const uint32_t fogC = pal3(0x1C2A3C, 0x6A5A68, 0xC8D0D8);
     for (int y = kHorizon - 46; y < 214; y++)
         for (int x = 0; x < 320; x++)
         {
             const float d = (y - kHorizon) / (y < kHorizon ? 20.0f : 34.0f);
             const float drift = 0.75f + 0.25f * sinf(x * 0.035f + y * 0.11f) * sinf(x * 0.011f - y * 0.05f);
-            blendPix(x, y, 0x1C2A3C, 0.85f * expf(-d * d) * drift);
+            blendPix(x, y, fogC, 0.85f * expf(-d * d) * drift);
         }
 }
 
@@ -577,11 +688,12 @@ template <typename R> static void weatherFrame(R &rnd)
                 const int lx = (int)d.x, ly = (int)d.y;
                 d.lx = lx, d.ly = ly;
                 const float a = 0.6f + 0.12f * d.len;
-                putPix(lx, ly, 0xC8D2E2, a);
+                const uint32_t fc = isDay() ? 0xFFFFFF : 0xC8D2E2;
+                putPix(lx, ly, fc, a);
                 if (d.len >= 2)
-                    putPix(lx + 1, ly, 0xC8D2E2, a * 0.8f);
+                    putPix(lx + 1, ly, fc, a * 0.8f);
                 if (d.len == 3)
-                    putPix(lx, ly + 1, 0xC8D2E2, a * 0.8f), putPix(lx + 1, ly + 1, 0xC8D2E2, a * 0.6f);
+                    putPix(lx, ly + 1, fc, a * 0.8f), putPix(lx + 1, ly + 1, fc, a * 0.6f);
                 continue;
             }
             const float slope = s_wind * (0.85f + 0.12f * d.layer);
@@ -1282,7 +1394,9 @@ template <typename R> static void trafficFrame(R &rnd)
             lifePix(X - dir * 2, Yp, 0xFFFFFF, 1);
         break;
     }
-    case SATELLITE: // a faint steady point drifting across
+    case SATELLITE: // a faint steady point drifting across (not in daylight)
+        if (starVis() < 0.5f)
+            break;
         lifePix(X, Y + (int)(x * 0.15f), 0xD0D8E8, 0.55f + 0.3f * ((now / 2500) % 2));
         break;
     }
@@ -1299,7 +1413,7 @@ static const Pine kPines[] = {{6, 200, 40}, {17, 210, 28}, {27, 222, 18}, {314, 
 static float s_sway[6] = {0};
 template <typename Plot> static void pineDraw(const Pine &t, int ti, float sway, Plot plot)
 {
-    const uint16_t land = 0x0000, snow = mix(0x3A4860, 0, 0);
+    const uint16_t land = mix(pal3(0x000000, 0x06080A, 0x14261A), 0, 0), snow = mix(pal3(0x3A4860, 0x8C7C88, 0xE8EEF4), 0, 0);
     const bool snowy = s_wx == WX_SNOW;
     const int h = t.h, trunk = std::max(2, h / 8), crown = h - trunk;
     for (int y = t.base - trunk; y <= t.base; y++)
@@ -1452,7 +1566,7 @@ static void twinkleTask(void *)
                     for (int i = 0; i < w.len; i++)
                     {
                         const float e = 1.0f - fabsf(2.0f * i / (w.len - 1) - 1.0f); // bright middle
-                        tft.drawPixel(nx + i, w.y, mix(0x03183A, 0x3A70A8, (0.25f + 0.3f * near) * (0.4f + 0.6f * e)));
+                        tft.drawPixel(nx + i, w.y, mix(s_waveLo, s_waveHi, (0.25f + 0.3f * near) * (0.4f + 0.6f * e)));
                     }
                 }
             }
@@ -1589,8 +1703,12 @@ void splashEnd()
 // where Arash shot from, lower peaks fading out before Orion
 static float ridgeBase(int x);
 static int ridgeSmooth(int x) { return std::min(kHorizon, (int)lroundf(ridgeBase(x))); }
+static int16_t *s_ridge = nullptr; // ridgeY per column (the sea's mirror asks per pixel), PSRAM
+static bool s_ridgeOk = false;
 static int ridgeY(int x)
 {
+    if (s_ridgeOk && x >= 0 && x < 320)
+        return s_ridge[x];
     const float best = ridgeBase(x);
     // a little roughness on the slopes
     const int j = ((x * 37) ^ (x * 11 >> 2)) % 3;
@@ -1621,15 +1739,51 @@ static float ridgeBase(int x)
 static bool behindMountain(int x, int y) { return x >= 0 && x < 320 && y >= ridgeY(x) - 2; }
 static uint16_t oceanPix(int x, int y)
 {
+    const Light &L = s_L;
     const int d = y - kHorizon;
     const float f = std::min(1.0f, d / 70.0f);
-    float ra, ga, ba, rb, gb, bb;
-    rgbOf(0x020C1C, ra, ga, ba);
-    rgbOf(kFloor, rb, gb, bb);
     const int shift = (int)(2.0f * sinf(d * 0.9f));
     const int sx = std::max(0, std::min(319, x + shift));
-    const float k = (kHorizon - ridgeY(sx)) * 0.9f > d ? 0.35f : 1.0f; // mirrored mountain
-    return dith((ra + f * (rb - ra)) * k, (ga + f * (gb - ga)) * k, (ba + f * (bb - ba)) * k, x, y);
+    const float k = (kHorizon - ridgeY(sx)) * 0.9f > d ? L.mirror : 1.0f; // mirrored mountain
+    return dith((L.farR + f * (L.nearR - L.farR)) * k, (L.farG + f * (L.nearG - L.farG)) * k, (L.farB + f * (L.nearB - L.farB)) * k, x, y);
+}
+// the light now: weights, the sun on screen, sea colours
+static void lightSetup()
+{
+    Light L;
+    float alt, az;
+    if (weatherSun(alt, az))
+    {
+        L.known = true;
+        L.alt = alt;
+        L.day = smooth01(2, 12, alt);
+        L.night = 1 - smooth01(-14, -3, alt);
+        L.twi = std::max(0.0f, 1 - L.day - L.night);
+        L.low = 1 - smooth01(2, 22, alt);
+        const float facing = weatherLat() < 0 ? 0 : 180; // toward the equator
+        const float rel = fmodf(az - facing + 540, 360) - 180;
+        L.sx = 160 + rel * 1.9f, L.sy = kHorizon - alt * 1.1f; // a flat arc: high sun stays below the title
+    }
+    L.over = s_wx == WX_THUNDER ? 1.0f : s_wx == WX_RAIN || s_wx == WX_SNOW ? 0.85f : s_wx == WX_FOG ? 0.6f : s_wx == WX_CLOUD ? 0.2f : 0.0f;
+    s_L = L;
+    const uint32_t far = pal3(0x020C1C, lerpC(0xC07458, 0x4E4450, L.over), lerpC(0x5A92C4, 0x84909A, L.over));
+    const uint32_t near = pal3(kFloor, lerpC(0x1A2042, 0x1E1E28, L.over), lerpC(0x1A4C80, 0x3A4856, L.over));
+    rgbOf(far, s_L.farR, s_L.farG, s_L.farB);
+    rgbOf(near, s_L.nearR, s_L.nearG, s_L.nearB);
+    s_L.mirror = 0.35f * L.night + 0.6f * L.twi + 0.78f * L.day;
+    s_waveLo = pal3(0x03183A, 0x1E2440, lerpC(0x2A5E8C, 0x4A5866, L.over));
+    s_waveHi = pal3(0x3A70A8, 0xD89070, 0xE6F0F8);
+    if (!s_ridgeOk)
+    {
+        int16_t *t = (int16_t *)heap_caps_malloc(320 * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+        if (t)
+        {
+            for (int x = 0; x < 320; x++)
+                t[x] = ridgeY(x);
+            s_ridge = t;
+            s_ridgeOk = true;
+        }
+    }
 }
 
 void splashBegin()
@@ -1637,7 +1791,8 @@ void splashBegin()
     const uint32_t tBegin = millis();
     s_wx = weatherKind();
     cloudsSetup(s_wx);
-    s_shootOk = s_wx == WX_CLEAR || s_wx == WX_CLOUD;
+    lightSetup();
+    s_shootOk = (s_wx == WX_CLEAR || s_wx == WX_CLOUD) && starVis() > 0.6f;
     s_bx = -1000;
     if (!s_bgSpr) // the still scene, in PSRAM (TFT_eSprite picks internal RAM while DMA is on)
     {
@@ -1653,22 +1808,93 @@ void splashBegin()
             s_bgSpr = nullptr;
         }
     }
+    // The still scene is kept (PSRAM) and shown again at once while nothing
+    // it shows has changed: weather, sun (0.5 deg steps), the weather line
+    char key[96];
+    snprintf(key, sizeof key, "%d|%d|%d|%d|%.0f|%s", (int)s_wx, s_L.known ? (int)lroundf(s_L.alt * 2) : -999,
+             (int)lroundf(s_L.sx / 3), (int)weatherHasData(), weatherTemp(), weatherCity());
+    static char s_key[96] = "";
+    const bool reuse = s_bgSpr && !strcmp(key, s_key);
+    strlcpy(s_key, s_bgSpr ? key : "", sizeof s_key);
     g = s_bgSpr ? (TFT_eSPI *)s_bgSpr : &tft;
-    // Sky: black, then deep navy, a dark teal glow only near the horizon
-    for (int y = 0; y < kHorizon; y++)
+    if (!reuse)
     {
-        float r, g, b;
-        rgbOf(skyRgb(y), r, g, b);
-        // skyRgb is integer per row; smooth it with the next row
-        float r2, g2, b2;
-        rgbOf(skyRgb(y + 1), r2, g2, b2);
-        for (int x = 0; x < 320; x++)
+    // Sky: night (black to deep navy, nebulae), twilight or day (sun glow).
+    // Same sum as skyF(), fast: the gradient once per row, the nebula from a
+    // cache (it never changes), the glow as x-table times y-factor.
+    {
+        static uint8_t *s_neb = nullptr; // nebula, x 180..319, y 0..139, RGB
+        static bool s_nebOk = false;
+        const bool night = s_L.night > 0.001f;
+        if (night && !s_nebOk)
         {
-            float nr, ng, nb;
-            nebula(x, y, nr, ng, nb);
-            s_row[x] = dith((r + r2) / 2 + nr, (g + g2) / 2 + ng, (b + b2) / 2 + nb, x, y);
+            if (!s_neb)
+                s_neb = (uint8_t *)heap_caps_malloc(140 * 140 * 3, MALLOC_CAP_SPIRAM);
+            if (s_neb)
+            {
+                for (int y = 0; y < 140; y++)
+                    for (int x = 180; x < 320; x++)
+                    {
+                        float nr, ng, nb;
+                        nebula(x, y, nr, ng, nb);
+                        uint8_t *q = s_neb + (y * 140 + x - 180) * 3;
+                        q[0] = (uint8_t)std::min(255.0f, nr), q[1] = (uint8_t)std::min(255.0f, ng), q[2] = (uint8_t)std::min(255.0f, nb);
+                    }
+                s_nebOk = true;
+            }
         }
-        pushRow(y);
+        const Light &L = s_L;
+        const bool glow = L.known && L.twi + L.day > 0.02f;
+        float *gx = (float *)heap_caps_malloc(2 * 320 * sizeof(float), MALLOC_CAP_SPIRAM), *bx = gx ? gx + 320 : nullptr;
+        const bool glow2 = glow && gx; // (internal RAM is short: tables in PSRAM)
+        const float k = 1 - 0.85f * L.over, hAmp = (0.45f * L.day + 0.6f * L.twi) * k * 0.8f;
+        const uint32_t warm = lerpC(0xFFF0D0, 0xFF9440, L.low);
+        const float wr = ((warm >> 16) & 255) * hAmp, wg = ((warm >> 8) & 255) * hAmp, wb = (warm & 255) * hAmp;
+        if (glow2)
+            for (int x = 0; x < 320; x++)
+            {
+                const float dx = x - L.sx;
+                gx[x] = expf(-dx * dx / (2 * 38.0f * 38.0f));
+                bx[x] = expf(-dx * dx / (2 * 110.0f * 110.0f)) * L.twi * k * 0.55f;
+            }
+        for (int y = 0; y < kHorizon; y++)
+        {
+            float r0, g0, b0;
+            skyRowBase(y, r0, g0, b0);
+            const float dy = y - L.sy, gy = glow2 ? expf(-dy * dy / (2 * 38.0f * 38.0f)) : 0, by = glow2 ? expf(-(kHorizon - y) / 24.0f) : 0;
+            for (int x = 0; x < 320; x++)
+            {
+                float r = r0, gg = g0, b = b0;
+                if (night && s_neb && x >= 180 && y < 140)
+                {
+                    const uint8_t *q = s_neb + (y * 140 + x - 180) * 3;
+                    r += L.night * q[0], gg += L.night * q[1], b += L.night * q[2];
+                }
+                if (glow2)
+                {
+                    const float h = gx[x] * gy, bd = bx[x] * by;
+                    r += h * wr + bd * 255, gg += h * wg + bd * 120, b += h * wb + bd * 50;
+                }
+                s_row[x] = dith(r, gg, b, x, y);
+            }
+            pushRow(y);
+        }
+        free(gx);
+    }
+    // The sun: a soft-edged disk, white-gold high up, orange-red low
+    if (s_L.known && s_L.twi + s_L.day > 0.05f && s_L.sy < kHorizon + 8 && s_L.over < 0.95f)
+    {
+        const uint32_t core = lerpC(0xFFFCF0, 0xFF8C40, s_L.low);
+        const float rad = 6.5f, vis = 1 - 0.8f * s_L.over;
+        for (int y = (int)s_L.sy - 10; y <= (int)s_L.sy + 10; y++)
+            for (int x = (int)s_L.sx - 10; x <= (int)s_L.sx + 10; x++)
+            {
+                if (x < 0 || x >= 320 || y < 0 || y >= kHorizon)
+                    continue;
+                const float d = sqrtf((x - s_L.sx) * (x - s_L.sx) + (y - s_L.sy) * (y - s_L.sy));
+                const float a = std::max(0.0f, std::min(1.0f, rad + 0.5f - d)) + 0.3f * std::max(0.0f, 1 - (d - rad) / 4);
+                blendPix(x, y, core, std::min(1.0f, a) * vis);
+            }
     }
     // Faint background stars (fixed seed: the same sky every boot), not
     // behind the title, which a twinkle redraw would chip
@@ -1682,10 +1908,11 @@ void splashBegin()
         if (nearUfo(x, y) || behindMountain(x, y))
             continue;
         const bool overcast = s_wx == WX_RAIN || s_wx == WX_SNOW || s_wx == WX_THUNDER;
-        const bool hidden = overcast || cloudA(x, y) > 0.12f;
-        s_bg[k++] = {(int16_t)x, (int16_t)y, (uint8_t)(hidden ? 255 : 0), b, tint};
+        const float sv = starVis(); // fade out in twilight, none by day
+        const bool hidden = overcast || cloudA(x, y) > 0.12f || sv < 0.25f;
+        s_bg[k++] = {(int16_t)x, (int16_t)y, (uint8_t)(hidden ? 255 : 0), b * sv, tint};
         if (!hidden)
-            g->drawPixel(x, y, mix(skyAt(x, y), tint, b));
+            g->drawPixel(x, y, mix(skyAt(x, y), tint, b * sv));
     }
     // Orion, as seen in the sky: Betelgeuse (orange) top-left, Bellatrix
     // top-right, the belt Alnitak-Alnilam-Mintaka in a line, Saiph and Rigel
@@ -1707,7 +1934,12 @@ void splashBegin()
         const S &o = orion[k];
         s_orion[k] = {(int16_t)(222 + (int)(84 * o.x)), (int16_t)(70 + (int)(58 * o.y)),
                       (uint8_t)(o.b > 0.8f ? 4 : o.b > 0.5f ? 3 : 2), o.b, o.tint};
-        star(s_orion[k].x, s_orion[k].y, s_orion[k].halo, o.b, o.tint);
+        if (starVis() < 0.5f)
+        {
+            s_orion[k].halo = 0; // daylight: not drawn, no twinkle
+            continue;
+        }
+        star(s_orion[k].x, s_orion[k].y, s_orion[k].halo, o.b * starVis(), o.tint);
         if (cloudA(s_orion[k].x, s_orion[k].y) > 0.08f)
             s_orion[k].halo = 0; // behind a cloud or veil: no twinkle (its redraw would cut a hole)
     }
@@ -1719,8 +1951,9 @@ void splashBegin()
         const int r = ridgeY(x);
         if (r >= kHorizon)
             continue;
-        g->drawFastVLine(x, r, kHorizon - r, mix(0x010306, 0, 0)); // near black
-        g->drawPixel(x, r, mix(0x0A1220, 0, 0)); // faint rim
+        // near black at night, dusk-purple, hazy blue by day (farther peaks paler)
+        g->drawFastVLine(x, r, kHorizon - r, mix(pal3(0x010306, 0x2A2236, x < 76 ? 0x4E5E76 : 0x6A7C96), 0, 0));
+        g->drawPixel(x, r, mix(pal3(0x0A1220, 0xD08A6A, x < 76 ? 0x8494AA : 0x92A2B8), 0, 0)); // lit rim
         // snow cap: on the smooth ridge (no rock roughness), down to a gently
         // ragged line, fading with height; left (moonlit) slope lighter
         const int base = s_wx == WX_SNOW ? 123 : 114; // snow over the upper third of the cone
@@ -1754,7 +1987,7 @@ void splashBegin()
                 v *= 0.6f;                                                // a scattered dark rock
             if (y == rs)
                 v = std::min(1.0f, v * 1.2f + 0.06f);                      // soft skyline edge
-            g->drawPixel(x, y, mix(0x010306, 0x6E7C96, v));
+            g->drawPixel(x, y, mix(pal3(0x010306, 0x2A2236, 0x56606C), pal3(0x6E7C96, 0xF4B4A0, 0xF6F8FC), v)); // alpenglow at dusk
         }
     }
     // Ocean: deep navy at the horizon to near black, with the mountains
@@ -1766,26 +1999,56 @@ void splashBegin()
         {
             const int d = y - kHorizon;
             const float f = std::min(1.0f, d / 70.0f);
-            const uint16_t sea = mix(0x020C1C, kFloor, f);
-            for (int x = 0; x < 320; x++)
-                s_row[x] = oceanPix(x, y);
+            const uint32_t seaC = (uint32_t)s_L.farR << 16 | (uint32_t)s_L.farG << 8 | (uint32_t)s_L.farB;
+            const uint32_t seaN = (uint32_t)s_L.nearR << 16 | (uint32_t)s_L.nearG << 8 | (uint32_t)s_L.nearB;
+            const uint16_t sea = mix(seaC, seaN, f);
+            { // = oceanPix(), with the row's colours and ripple shift worked out once
+                const Light &L = s_L;
+                const float r1 = L.farR + f * (L.nearR - L.farR), g1 = L.farG + f * (L.nearG - L.farG), b1 = L.farB + f * (L.nearB - L.farB);
+                const int shift = (int)(2.0f * sinf(d * 0.9f));
+                for (int x = 0; x < 320; x++)
+                {
+                    const int sx = std::max(0, std::min(319, x + shift));
+                    const float m = (kHorizon - ridgeY(sx)) * 0.9f > d ? L.mirror : 1.0f;
+                    s_row[x] = dith(r1 * m, g1 * m, b1 * m, x, y);
+                }
+            }
+            // the sun's glitter path: sparkles, wider and sparser nearer
+            if (s_L.known && s_L.alt > -3 && s_L.over < 0.9f && s_L.sx > -60 && s_L.sx < 380)
+            {
+                const float half = 3 + d * (0.25f + 0.25f * s_L.low), dens = std::min(1.0f, (s_L.alt + 3) / 4) * (1 - s_L.over) * (0.55f + 0.45f * s_L.low); // high sun: narrower, softer
+                const uint32_t gl = lerpC(0xFFF8E8, 0xFF9C50, s_L.low);
+                for (int x = std::max(0, (int)(s_L.sx - 2 * half)); x < std::min(320, (int)(s_L.sx + 2 * half) + 1); x++)
+                {
+                    const float u = (x - s_L.sx) / half, w = expf(-u * u * 1.5f);
+                    const uint32_t hh = (uint32_t)(x * 2654435761u ^ y * 40503u) >> 9;
+                    if ((hh & 255) < 255 * w * 0.6f * dens)
+                    {
+                        float r, gg, b, tr, tg, tb;
+                        rgb565(s_row[x], r, gg, b);
+                        rgbOf(gl, tr, tg, tb);
+                        const float a = (0.35f + 0.55f * w) * dens;
+                        s_row[x] = dith(r + a * (tr - r), gg + a * (tg - gg), b + a * (tb - b), x, y);
+                    }
+                }
+            }
             pushRow(y);
             // glints: short dim dashes, longer nearer the viewer
             if (rn() % 3 == 0)
             {
                 const int len = 2 + d / 12 + rn() % 4;
-                g->drawFastHLine(rn() % 320, y, len, mix(sea, 0x1E4A78, 0.35f + 0.3f * (1 - f)));
+                g->drawFastHLine(rn() % 320, y, len, mix(sea, pal3(0x1E4A78, 0xE0A070, 0xD8E8F4), (0.35f + 0.3f * (1 - f)) * (isDay() ? 0.6f : 1)));
             }
         }
         // Rigel's reflection: a broken line under it
-        for (int y = kHorizon + 2; y < kHorizon + 40; y += 3)
+        for (int y = kHorizon + 2; starVis() >= 0.5f && y < kHorizon + 40; y += 3)
             g->drawFastHLine(297 - 1 + (int)(1.5f * sinf(y)), y, 3, mix(0x02101E, 0x5070A0, 0.5f * (1.0f - (y - kHorizon) / 40.0f)));
     }
     fogDraw();
     // Shores: dark land, then pines (drawn by treesCompose, which the
     // wind animation redraws; the tree-free shore is kept for it)
     {
-        const uint16_t land = 0x0000;
+        const uint16_t land = mix(pal3(0x000000, 0x06080A, 0x1A2416), 0, 0);
         g->fillTriangle(0, 186, 0, 240, 32, 240, land);
         g->fillTriangle(0, 186, 30, 205, 32, 240, land);
         g->fillTriangle(320, 180, 320, 240, 288, 240, land);
@@ -1796,7 +2059,8 @@ void splashBegin()
     g->setTextFont(4);
     g->setTextDatum(MC_DATUM);
     const char *title = "A R A S H";
-    const uint16_t glow = g->color565(4, 34, 70);
+    const bool dayText = isDay(); // bright sky: white letters with a navy glow, dark small lines
+    const uint16_t glow = dayText ? g->color565(8, 30, 70) : g->color565(4, 34, 70);
     for (int dx = -2; dx <= 2; dx += 2)
         for (int dy = -2; dy <= 2; dy += 2)
             if (dx || dy)
@@ -1804,15 +2068,15 @@ void splashBegin()
                 g->setTextColor(glow);
                 g->drawString(title, 112 + dx, 22 + dy);
             }
-    g->setTextColor(g->color565(70, 175, 235));
+    g->setTextColor(dayText ? g->color565(250, 252, 255) : g->color565(70, 175, 235));
     g->drawString(title, 112, 22);
     g->setTextFont(2);
-    g->setTextColor(g->color565(70, 230, 170));
+    g->setTextColor(dayText ? g->color565(255, 240, 170) : g->color565(70, 230, 170));
     g->drawString("PRECISION POWER SUPPLY", 112, 46);
     g->setTextFont(1);
-    g->setTextColor(g->color565(60, 140, 160));
+    g->setTextColor(dayText ? g->color565(10, 34, 70) : g->color565(60, 140, 160));
     g->drawString("MODEL 3206 - 0-32V 0-6A 24-bit", 112, 62);
-    g->setTextColor(g->color565(90, 115, 140));
+    g->setTextColor(dayText ? g->color565(20, 44, 80) : g->color565(90, 115, 140));
     g->drawString(SOFTWARE_VERSION, 112, 74);
     g->setTextDatum(TL_DATUM);
     for (int k = 0; k < kBg; k++)
@@ -1828,12 +2092,14 @@ void splashBegin()
         char b[48];
         snprintf(b, sizeof b, "%s  %.0f C  %s", weatherCity(), weatherTemp(), nm[s_wx]);
         g->setTextFont(1);
-        g->setTextColor(mix(0x30506A, 0, 0));
+        const uint32_t wc = isDay() ? 0xD8E6F0 : 0x30506A;
+        g->setTextColor(mix(wc, 0, 0));
         g->drawString(b, 3, 230);
         // a small degree ring before the C
         const int cx = 3 + g->textWidth(b) - g->textWidth(String(" C  ") + nm[s_wx]) + 2;
-        g->drawCircle(cx, 231, 1, mix(0x30506A, 0, 0));
+        g->drawCircle(cx, 231, 1, mix(wc, 0, 0));
     }
+    } // !reuse
     if (s_bgSpr)
         s_bgSpr->pushSprite(0, 0);
     g = &tft;
@@ -1842,7 +2108,7 @@ void splashBegin()
     s_barShown = !s_noBar;
     if (!s_noBar)
     {
-        tft.fillRect(kBarX - 6, kBarY - 15, kBarW + 12, 26, mix(kFloor, kFloor, 0));
+        tft.fillRect(kBarX - 6, kBarY - 15, kBarW + 12, 26, tft.color565(s_L.nearR, s_L.nearG, s_L.nearB));
         tft.fillRect(kBarX + 2, kBarY + 2, kBarW - 4, 4, tft.color565(2, 22, 32));
         tft.drawRoundRect(kBarX, kBarY, kBarW, 8, 4, tft.color565(0, 140, 170));
         splashProgress(2, "Starting");
@@ -1946,12 +2212,7 @@ static void freeScene()
 {
     if (s_task)
         return; // still drawing
-    if (s_bgSpr)
-    {
-        s_bgSpr->deleteSprite();
-        delete s_bgSpr;
-        s_bgSpr = nullptr;
-    }
+    // the still scene stays (PSRAM, 150 KB): the next splash reuses it
     s_bx = -1000;
 }
 static void splashStop()

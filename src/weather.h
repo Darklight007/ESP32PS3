@@ -17,3 +17,9 @@ void weatherSetAuto(bool on); // fetch at boot (NVS wx_auto, default on)
 bool weatherAuto();
 void weatherSetCity(const String &name); // fixed city, "" = IP location
 String weatherUserCity();
+// Sun for the splash: the clock is set from the weather server's Date header
+// (kept over soft resets), the place is the weather location. False: unknown.
+bool weatherSun(float &altDeg, float &azDeg);
+void weatherForceSun(float altDeg, float azDeg); // NAN = live
+bool weatherSunForced();
+float weatherLat();

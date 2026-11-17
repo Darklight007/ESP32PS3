@@ -432,6 +432,10 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Description:** `-1` live, `0` clear, `1` cloudy, `2` rain, `3` snow, `4` fog, `5` storm. Saved.
 **Syntax:** `:SYST:WEAT:FORC <n>`
 
+### :SYSTem:WEATher:SUN - Sun Position (Splash Daylight)
+**Description:** The splash shows night, twilight (dusk/dawn colours) or day from the real sun: the clock is set from the weather server's `Date` header (kept over soft resets, lost on power-off until the next fetch), the place is the weather location. `?` returns `alt,az,live|forced|unknown,utc_seconds` (degrees, azimuth from north). Set `alt[,az]` to preview a sun position, `LIVE` to go back (not saved).
+**Syntax:** `:SYST:WEAT:SUN?`, `:SYST:WEAT:SUN <alt>[,<az>]`, `:SYST:WEAT:SUN LIVE`
+
 ### :SYSTem:WEATher:AUTO - Fetch at Boot
 **Description:** `1` (default) fetch at boot (~1.4 s, overlapped with display start; boot ~0.7 s longer), `0` never use WiFi. After 'no wifi' the next 5 boots skip the fetch.
 **Syntax:** `:SYST:WEAT:AUTO <0|1>`, `:SYST:WEAT:AUTO?`

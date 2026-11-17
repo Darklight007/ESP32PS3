@@ -5,6 +5,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
+#include <sys/time.h>
 
 extern const char *ssid;     // OTA.h
 extern const char *password; // OTA.h
@@ -17,6 +18,8 @@ static char s_city[24] = "";
 static char s_status[48] = "idle";
 static volatile bool s_busy = false;
 static volatile bool s_abort = false; // boot deadline hit: stop, radio off
+static float s_lat = NAN, s_lon = NAN; // weather location (sun position)
+static float s_fAlt = NAN, s_fAz = NAN; // SYST:WEAT:SUN override
 
 static WxKind kindOfCode(int c)
 {
@@ -45,6 +48,10 @@ static void load()
     s_temp = p.getFloat("wx_temp", NAN);
     s_force = p.getInt("wx_force", -1);
     String c = p.getString("wx_city", "");
+    // sun position: the last weather location (older saves: user or IP place)
+    const char *la = p.isKey("wx_lat") ? "wx_lat" : p.isKey("wx_ulat") ? "wx_ulat" : p.isKey("wx_iplat") ? "wx_iplat" : nullptr;
+    if (la)
+        s_lat = p.getFloat(la, NAN), s_lon = p.getFloat(!strcmp(la, "wx_lat") ? "wx_lon" : !strcmp(la, "wx_ulat") ? "wx_ulon" : "wx_iplon", NAN);
     p.end();
     strlcpy(s_city, c.c_str(), sizeof s_city);
     s_kind = kindOfCode(s_code);
@@ -64,6 +71,30 @@ static bool numAfter(const String &s, const char *key, float &v)
         return false;
     v = s.substring(i + strlen(key)).toFloat();
     return true;
+}
+
+// "Mon, 17 Nov 2026 07:23:11 GMT" -> system clock (UTC). The RTC keeps it
+// over soft resets; a power cycle loses it until the next fetch.
+static void setClockFromHttpDate(const String &d)
+{
+    static const char *const mon[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    char m[4] = "";
+    int day, year, hh, mm, ss;
+    const int c = d.indexOf(',');
+    if (c < 0 || sscanf(d.c_str() + c + 1, " %d %3s %d %d:%d:%d", &day, m, &year, &hh, &mm, &ss) != 6)
+        return;
+    int mi = -1;
+    for (int k = 0; k < 12; k++)
+        if (!strcmp(m, mon[k]))
+            mi = k;
+    if (mi < 0 || year < 2024)
+        return;
+    // days since 1970-01-01 (civil from days, proleptic Gregorian)
+    const int y = year - (mi < 2), era = y / 400, yoe = y - era * 400;
+    const int mp = (mi + 10) % 12, doy = (153 * mp + 2) / 5 + day - 1, doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    const int64_t days = (int64_t)era * 146097 + doe - 719468;
+    struct timeval tv = {(time_t)(days * 86400 + hh * 3600 + mm * 60 + ss), 0};
+    settimeofday(&tv, nullptr);
 }
 
 static void fetchTask(void *)
@@ -210,8 +241,10 @@ static void fetchTask(void *)
                      "http://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=weather_code,temperature_2m",
                      lat, lon);
             float code = NAN, temp = NAN;
-            if (http.begin(url) && http.GET() == 200)
+            static const char *hdrs[] = {"Date"};
+            if (http.begin(url) && (http.collectHeaders(hdrs, 1), http.GET() == 200))
             {
+                setClockFromHttpDate(http.header("Date"));
                 const String b = http.getString();
                 const int cur = b.indexOf("\"current\":{");
                 if (cur >= 0)
@@ -228,8 +261,11 @@ static void fetchTask(void *)
                 s_temp = temp;
                 strlcpy(s_city, city.c_str(), sizeof s_city);
                 s_kind = kindOfCode(s_code);
+                s_lat = lat, s_lon = lon;
                 Preferences p;
                 p.begin("my-app", false);
+                if (!p.isKey("wx_lat") || p.getFloat("wx_lat", NAN) != lat || p.getFloat("wx_lon", NAN) != lon)
+                    p.putFloat("wx_lat", lat), p.putFloat("wx_lon", lon);
                 p.putInt("wx_code", s_code);
                 p.putFloat("wx_temp", s_temp);
                 p.putString("wx_city", s_city);
@@ -385,4 +421,43 @@ String weatherUserCity()
     String c = p.isKey("wx_ucity") ? p.getString("wx_ucity", "") : String();
     p.end();
     return c;
+}
+
+// Sun position (NOAA low-precision formulas, ~0.5 deg): altitude above the
+// horizon and azimuth from north, clockwise
+bool weatherSun(float &altDeg, float &azDeg)
+{
+    if (!isnan(s_fAlt))
+    {
+        altDeg = s_fAlt, azDeg = isnan(s_fAz) ? 200 : s_fAz;
+        return true;
+    }
+    if (s_kind < 0)
+        load();
+    const time_t now = time(nullptr);
+    if (now < 1700000000 || isnan(s_lat) || isnan(s_lon))
+        return false;
+    const double R = M_PI / 180, n = now / 86400.0 + 2440587.5 - 2451545.0;
+    const double L = fmod(280.460 + 0.9856474 * n, 360), g = fmod(357.528 + 0.9856003 * n, 360) * R;
+    const double lam = (L + 1.915 * sin(g) + 0.020 * sin(2 * g)) * R, eps = (23.439 - 0.0000004 * n) * R;
+    const double ra = atan2(cos(eps) * sin(lam), cos(lam)), dec = asin(sin(eps) * sin(lam));
+    const double gmst = fmod(280.46061837 + 360.98564736629 * n, 360);
+    double H = fmod(gmst + s_lon - ra / R, 360);
+    if (H > 180)
+        H -= 360;
+    if (H < -180)
+        H += 360;
+    H *= R;
+    const double lat = s_lat * R;
+    altDeg = asin(sin(lat) * sin(dec) + cos(lat) * cos(dec) * cos(H)) / R;
+    azDeg = fmod(atan2(sin(H), cos(H) * sin(lat) - tan(dec) * cos(lat)) / R + 180 + 360, 360);
+    return true;
+}
+void weatherForceSun(float altDeg, float azDeg) { s_fAlt = altDeg, s_fAz = azDeg; }
+bool weatherSunForced() { return !isnan(s_fAlt); }
+float weatherLat()
+{
+    if (s_kind < 0)
+        load();
+    return s_lat;
 }
