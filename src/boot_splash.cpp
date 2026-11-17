@@ -1,9 +1,12 @@
 #include "scpi_parser.h" // splashShow(): answer queries while shown
 #include "psu_link.h"
 // Boot splash: drawn straight with TFT_eSPI right after the display starts
-// (LVGL isn't running yet); LVGL's first frame paints over it. ARASH 3206:
-// named for Arash the Archer, who gave his life to the arrow that set the
-// border of Iran. Night sky with
+// (LVGL isn't running yet); LVGL's first frame paints over it. FANOOS 3206:
+// "lantern", built from the names of girls executed in Iran's prisons in the
+// 1980s: FAtemeh (Mesbah, Sajedi, Jabbarzadeh Ansari, reported 13), mOna
+// (Mahmudnizhad, 17, Shiraz 1983), Nasrin (Nouri Mani, reported 15) and
+// Shahla (Ghorbani, reported 13), and every girl whose name was never
+// recorded. Night sky with
 // Orion (the three belt stars in a line), Damavand over a dark sea, a
 // fishing boat, the local weather (weather.cpp) and a progress bar that
 // setup() advances. The still scene is drawn once into a PSRAM sprite; the
@@ -1700,7 +1703,7 @@ void splashEnd()
 }
 
 // Mountain ridge (top y at column x; kHorizon = none): Damavand on the left,
-// where Arash shot from, lower peaks fading out before Orion
+// the old legend's mountain, lower peaks fading out before Orion
 static float ridgeBase(int x);
 static int ridgeSmooth(int x) { return std::min(kHorizon, (int)lroundf(ridgeBase(x))); }
 static int16_t *s_ridge = nullptr; // ridgeY per column (the sea's mirror asks per pixel), PSRAM
@@ -2058,7 +2061,7 @@ void splashBegin()
     // Name with a glow (dim offset copies, then the bright core)
     g->setTextFont(4);
     g->setTextDatum(MC_DATUM);
-    const char *title = "A R A S H";
+    const char *title = "F A N O O S";
     const bool dayText = isDay(); // bright sky: white letters with a navy glow, dark small lines
     const uint16_t glow = dayText ? g->color565(8, 30, 70) : g->color565(4, 34, 70);
     for (int dx = -2; dx <= 2; dx += 2)
@@ -2078,6 +2081,10 @@ void splashBegin()
     g->drawString("MODEL 3206 - 0-32V 0-6A 24-bit", 112, 62);
     g->setTextColor(dayText ? g->color565(20, 44, 80) : g->color565(90, 115, 140));
     g->drawString(SOFTWARE_VERSION, 112, 74);
+    // the dedication: the girls the name is made of
+    g->setTextColor(dayText ? g->color565(40, 36, 70) : g->color565(150, 120, 150));
+    g->drawString("for Fatemeh, Mona, Nasrin, Shahla", 112, 88);
+    g->drawString("and every girl never named", 112, 98);
     g->setTextDatum(TL_DATUM);
     for (int k = 0; k < kBg; k++)
     {
