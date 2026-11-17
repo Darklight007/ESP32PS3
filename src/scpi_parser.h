@@ -80,6 +80,13 @@ public:
     void executeCommand(const String& command);
 
     /**
+     * @brief Serial service while the main loop is held (splash): answers
+     * queries at once, returns true on any other command (kept, run by
+     * process() once the caller is done) so the caller can close.
+     */
+    bool serviceWhileHeld();
+
+    /**
      * @brief Add error to error queue
      * @param error Error code from SCPIError enum
      * @param description Optional custom error description

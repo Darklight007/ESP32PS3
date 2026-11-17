@@ -442,6 +442,7 @@ bool loadLearn(const String &name)
     if (!nm.length())
         nm = "Load " + String(slot + 1);
     strncpy(f.name, nm.c_str(), sizeof f.name - 1);
+    f.name[sizeof f.name - 1] = 0; // a long name: strncpy leaves it unterminated
     s_lib.e[slot] = f;
     lib_save();
     return true;

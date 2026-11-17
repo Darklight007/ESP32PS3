@@ -1,3 +1,5 @@
+#include "scpi_parser.h" // splashShow(): answer queries while shown
+#include "psu_link.h"
 // Boot splash: drawn straight with TFT_eSPI right after the display starts
 // (LVGL isn't running yet); LVGL's first frame paints over it. ARASH 3206:
 // named for Arash the Archer, who gave his life to the arrow that set the
@@ -427,9 +429,15 @@ static void fogDraw()
 }
 
 // Rain, snow, lightning: drawn over the screen, erased from the scene sprite
-struct Drop { float x, y, vx, vy; int16_t yEnd, lx, ly; uint8_t len, splash; };
-static constexpr int kDrops = 90;
+// Rain: three depth layers of thin, faint motion-blurred streaks (anti-aliased
+// over two columns, tapered at both ends), slanted by a gusting wind and
+// thinned in passing curtains. Far drops ring the sea near the horizon,
+// nearer ones further down, the nearest fall past the camera.
+struct Drop { float x, y, vy, lx, ly, ls, a; int16_t yEnd; uint8_t len, layer, dark; };
+static constexpr int kDrops = 200;
 static Drop *s_drop = nullptr; // PSRAM
+static float s_wind = -0.2f;   // streak slope dx/dy now
+static uint32_t s_wxT = 0;     // weather frame count
 static bool skipPix(int x, int y)
 {
     if (x < 0 || x >= 320 || y < 0 || y >= 240)
@@ -452,80 +460,147 @@ static void unPix(int x, int y)
     if (!skipPix(x, y))
         tft.drawPixel(x, y, bgPix(x, y));
 }
+// a rain pixel: lighter than a dark background, darker than a bright one
+// (and darker for the "shadow" streaks)
+static void rainPix(int x, int y, float a, bool dark)
+{
+    if (a < 0.012f || skipPix(x, y))
+        return;
+    float r, gg, b;
+    rgb565(bgPix(x, y), r, gg, b);
+    const float lum = 0.3f * r + 0.59f * gg + 0.11f * b;
+    float tr, tg, tb;
+    if (dark || lum > 120)
+        tr = r * 0.45f, tg = gg * 0.47f, tb = b * 0.52f;
+    else
+        tr = 165, tg = 180, tb = 204;
+    tft.drawPixel(x, y, tft.color565(r + a * (tr - r), gg + a * (tg - gg), b + a * (tb - b)));
+}
+static void streak(const Drop &d, float x, float y, float slope, bool draw, float curtain)
+{
+    const int n = d.len, y0 = (int)y;
+    for (int i = 0; i < n; i++)
+    {
+        const float px = x - slope * i;
+        const int ix = (int)floorf(px), py = y0 - i;
+        if (!draw)
+        {
+            unPix(ix, py), unPix(ix + 1, py);
+            continue;
+        }
+        const float u = (i + 0.5f) / n; // head 0 .. tail 1
+        const float f = px - ix, a = d.a * curtain * sinf(3.14159f * (0.15f + 0.85f * u));
+        rainPix(ix, py, a * (1 - f), d.dark), rainPix(ix + 1, py, a * f, d.dark);
+    }
+}
+static float rainCurtain(float x)
+{
+    const float t = (float)s_wxT;
+    return 0.5f + 0.5f * sinf(x * 0.021f - t * 0.045f + 0.8f * sinf(t * 0.013f + x * 0.007f));
+}
 template <typename R> static void dropSpawn(Drop &d, R &rnd, bool first)
 {
     const bool snow = s_wx == WX_SNOW;
-    d.x = rnd() % 360 - 20;
-    d.y = first ? (float)(rnd() % 240) : -(float)(rnd() % 40);
-    d.vy = snow ? 0.5f + (rnd() % 60) / 100.0f : 6.5f + (rnd() % 30) / 10.0f;
-    d.vx = snow ? 0 : -1.4f;
-    d.len = snow ? 1 + rnd() % 3 : 4 + rnd() % 3; // snow: 1 dot, 2 wide, 2x2
-    d.yEnd = snow ? 240 : kHorizon + 2 + rnd() % 80;
-    d.lx = -100, d.splash = 0;
+    auto fr = [&]() { return (rnd() % 1000) / 1000.0f; };
+    d.lx = -1000;
+    if (snow)
+    {
+        d.x = rnd() % 360 - 20;
+        d.y = first ? (float)(rnd() % 240) : -(float)(rnd() % 40);
+        d.vy = 0.5f + (rnd() % 60) / 100.0f;
+        d.len = 1 + rnd() % 3; // 1 dot, 2 wide, 2x2
+        d.yEnd = 240, d.layer = 0, d.dark = 0, d.a = 1;
+        return;
+    }
+    const int r = rnd() % 100;
+    d.layer = r < 45 ? 0 : r < 83 ? 1 : 2;
+    switch (d.layer)
+    {
+    case 0: // far: short, slow, faint, rings near the horizon
+        d.vy = 5.5f + 1.5f * fr(), d.len = 3 + rnd() % 3, d.a = 0.10f + 0.08f * fr();
+        d.yEnd = kHorizon + 2 + rnd() % 13;
+        break;
+    case 1:
+        d.vy = 9 + 3 * fr(), d.len = 7 + rnd() % 5, d.a = 0.13f + 0.09f * fr();
+        d.yEnd = kHorizon + 14 + rnd() % 50;
+        break;
+    default: // near the lens: long, quick, barely there, off the bottom
+        d.vy = 17 + 7 * fr(), d.len = 16 + rnd() % 11, d.a = 0.06f + 0.07f * fr();
+        d.yEnd = 270;
+        break;
+    }
+    d.dark = rnd() % 100 < (d.layer == 2 ? 30 : 12);
+    d.x = -10 + fr() * 420; // the wind carries them left
+    d.y = first ? fr() * 240 : -(float)(rnd() % 50);
 }
 static void dropErase(const Drop &d)
 {
-    if (d.lx <= -100)
+    if (d.lx <= -1000)
         return;
     if (s_wx == WX_SNOW)
     {
-        unPix(d.lx, d.ly);
+        const int lx = (int)d.lx, ly = (int)d.ly;
+        unPix(lx, ly);
         if (d.len >= 2)
-            unPix(d.lx + 1, d.ly);
+            unPix(lx + 1, ly);
         if (d.len == 3)
-            unPix(d.lx, d.ly + 1), unPix(d.lx + 1, d.ly + 1);
+            unPix(lx, ly + 1), unPix(lx + 1, ly + 1);
         return;
     }
-    for (int i = 0; i < d.len; i++)
-        unPix(d.lx + (i * 14) / 65, d.ly - i);
+    streak(d, d.lx, d.ly, d.ls, false, 0);
 }
 static void rainHit(float x, int y, bool droplet); // after the water physics
 template <typename R> static void weatherFrame(R &rnd)
 {
-    static uint32_t t = 0;
-    t++;
+    const uint32_t t = ++s_wxT;
     if ((s_wx == WX_RAIN || s_wx == WX_THUNDER || s_wx == WX_SNOW) && s_drop)
     {
-        const bool snow = s_wx == WX_SNOW;
-        for (int k = 0; k < kDrops; k++)
+        const bool snow = s_wx == WX_SNOW, storm = s_wx == WX_THUNDER;
+        const int active = snow ? 90 : storm ? kDrops : 150;
+        // gusting wind: slant swings slowly, with quicker flurries
+        s_wind = (storm ? -0.30f : -0.18f) - 0.09f * sinf(t * 0.011f) - 0.04f * sinf(t * 0.047f + 1.3f);
+        for (int k = 0; k < active; k++) // erase all first: no drop cuts another
+            dropErase(s_drop[k]);
+        for (int k = 0; k < active; k++)
         {
             Drop &d = s_drop[k];
-            if (d.splash) // ripple of the last frame
+            d.lx = -1000;
+            if (snow)
             {
-                for (int i = -2; i <= 2; i++)
-                    unPix(d.lx + i, d.ly);
-                dropSpawn(d, rnd, false);
-                continue;
-            }
-            dropErase(d);
-            d.y += d.vy;
-            d.x += snow ? 0.35f * sinf(t * 0.07f + k) : d.vx;
-            if (d.y >= d.yEnd)
-            {
-                if (!snow && d.yEnd > kHorizon) // a ring on the water
+                d.y += d.vy;
+                d.x += 0.35f * sinf(t * 0.07f + k);
+                if (d.y >= d.yEnd)
                 {
-                    // a tiny ring spreading where the drop hits (drawn with the
-                    // sea life), now and then a rebound droplet; nearer = bigger
-                    rainHit(d.x, d.yEnd, rnd() % 5 == 0);
                     dropSpawn(d, rnd, false);
                     continue;
                 }
+                const int lx = (int)d.x, ly = (int)d.y;
+                d.lx = lx, d.ly = ly;
+                const float a = 0.6f + 0.12f * d.len;
+                putPix(lx, ly, 0xC8D2E2, a);
+                if (d.len >= 2)
+                    putPix(lx + 1, ly, 0xC8D2E2, a * 0.8f);
+                if (d.len == 3)
+                    putPix(lx, ly + 1, 0xC8D2E2, a * 0.8f), putPix(lx + 1, ly + 1, 0xC8D2E2, a * 0.6f);
+                continue;
+            }
+            const float slope = s_wind * (0.85f + 0.12f * d.layer);
+            d.y += d.vy;
+            d.x += slope * d.vy;
+            if (d.y >= d.yEnd)
+            {
+                if (d.layer < 2 && d.x >= 0 && d.x < 320) // a tiny ring, now and then a rebound droplet
+                    rainHit(d.x, d.yEnd, d.layer == 1 && rnd() % 6 == 0);
                 dropSpawn(d, rnd, false);
                 continue;
             }
-            d.lx = (int)d.x, d.ly = (int)d.y;
-            if (snow)
+            if (d.x < -40 || d.x > 440)
             {
-                const float a = 0.6f + 0.12f * d.len;
-                putPix(d.lx, d.ly, 0xC8D2E2, a);
-                if (d.len >= 2)
-                    putPix(d.lx + 1, d.ly, 0xC8D2E2, a * 0.8f);
-                if (d.len == 3)
-                    putPix(d.lx, d.ly + 1, 0xC8D2E2, a * 0.8f), putPix(d.lx + 1, d.ly + 1, 0xC8D2E2, a * 0.6f);
+                dropSpawn(d, rnd, false);
+                continue;
             }
-            else
-                for (int i = 0; i < d.len; i++) // streak, fainter tail
-                    putPix(d.lx + (i * 14) / 65, d.ly - i, 0x8CA8D8, 0.6f - 0.07f * i);
+            d.lx = d.x, d.ly = d.y, d.ls = slope;
+            streak(d, d.x, d.y, slope, true, 0.35f + 0.65f * rainCurtain(d.x));
         }
     }
     if (s_wx == WX_THUNDER) // a bolt every few seconds: on, on, off, on, gone
@@ -644,7 +719,7 @@ static void ring(float x, float y, float r, uint32_t c, float a) // a ripple on 
 // Units: px and seconds; s_sc scales with distance (far = small and slow).
 struct Particle { float x, y, vx, vy, sy, life, a; uint32_t c; };
 struct Ripple { float x, y, r0, rMax, life, age, a; };
-static constexpr int kParts = 72, kRips = 40;
+static constexpr int kParts = 72, kRips = 96;
 static Particle *s_part = nullptr; // PSRAM
 static Ripple *s_rip = nullptr;
 static uint32_t s_physSeed = 0x9E3779B9;
@@ -658,10 +733,20 @@ static bool physInit()
     return s_part && s_rip;
 }
 // a ring that spreads like a capillary wave: fast at first, slowing (r ~ sqrt t), fading
-static void rippleAdd(float x, float y, float a, float rMax, float life)
+static void rippleAdd(float x, float y, float a, float rMax, float life, bool onlyFree = false)
 {
     if (!physInit())
         return;
+    if (onlyFree) // rain: never steals a creature's ring
+    {
+        for (int i = 0; i < kRips; i++)
+            if (s_rip[i].age >= s_rip[i].life)
+            {
+                s_rip[i] = {x, y, 0.4f, rMax, life, 0, a};
+                return;
+            }
+        return;
+    }
     int k = 0;
     for (int i = 0; i < kRips; i++)
         if (s_rip[i].age >= s_rip[i].life) { k = i; break; }
@@ -730,13 +815,13 @@ static void physStep(float dt)
 static void rainHit(float x, int y, bool droplet)
 {
     const float sc = 0.45f + (y - kHorizon) / 85.0f; // nearer = bigger
-    rippleAdd(x, y, 0.35f, 2.5f * sc + 1, 0.35f + 0.15f * sc);
+    rippleAdd(x, y, 0.16f + 0.1f * sc, 2.2f * sc + 0.8f, 0.3f + 0.15f * sc, true);
     if (!droplet || !s_part)
         return;
     for (int k = 0; k < kParts; k++)
         if (s_part[k].life <= 0)
         {
-            s_part[k] = {x, (float)y, (frand() - 0.5f) * 8, -(14 + 10 * frand()) * sc, (float)y, 0.6f, 1, 0x9CB8DC};
+            s_part[k] = {x, (float)y, (frand() - 0.5f) * 8, -(10 + 8 * frand()) * sc, (float)y, 0.45f, 1, 0x8CA4C4};
             break;
         }
 }
@@ -1549,6 +1634,7 @@ static uint16_t oceanPix(int x, int y)
 
 void splashBegin()
 {
+    const uint32_t tBegin = millis();
     s_wx = weatherKind();
     cloudsSetup(s_wx);
     s_shootOk = s_wx == WX_CLEAR || s_wx == WX_CLOUD;
@@ -1805,6 +1891,7 @@ void splashBegin()
         s_task = s_prev = xTaskCreateStaticPinnedToCore(twinkleTask, "twinkle", 4096, nullptr, 1, s_stack, s_tcb, 0);
     if (s_lock && !s_task)
         Serial.println("[SPLASH] animation task not started");
+    ESP_LOGI("SPLASH", "scene built in %lu ms", (unsigned long)(millis() - tBegin));
 }
 
 void splashProgress(int pct, const char *what)
@@ -1831,8 +1918,8 @@ void splashProgress(int pct, const char *what)
         xSemaphoreGive(s_lock);
 }
 
-// Settings > About > Software information: the splash again, until a tap
-// or any key (no timeout). Caller holds the display (spiQuietAcquire) and
+// Settings > About > Software information: the splash again, until a tap,
+// any key or a serial command (no timeout). Caller holds the display (spiQuietAcquire) and
 // repaints LVGL afterwards. Keys come from Task_ADC's scan (g_keyPressCount).
 extern volatile uint32_t g_keyPressCount;
 static bool touchedNow()
@@ -1876,38 +1963,50 @@ static void splashStop()
         delay(5);
     freeScene();
 }
+extern volatile bool g_splashUp;
 void splashShow()
 {
+    g_splashUp = true; // keys only close it (input_device.cpp)
+    linkHold(true);
     s_noBar = true;
     splashBegin();
     s_noBar = false;
     // the tap that opened it: wait for its release first
+    // linkService(): a linked partner must keep hearing from this unit
     const uint32_t t0 = millis();
     while (touchedNow() && millis() - t0 < 3000)
-        delay(20);
-    delay(150);
+        delay(20), linkService();
+    for (int k = 0; k < 8; k++)
+        delay(20), linkService();
+    // SCPI queries (a polling phone bridge) are answered meanwhile; any other
+    // command closes it and then runs, so a remote client is never locked out
     const uint32_t keys = g_keyPressCount;
-    while (!touchedNow() && g_keyPressCount == keys)
+    while (!touchedNow() && g_keyPressCount == keys && !scpiParser.serviceWhileHeld())
     {
         esp_task_wdt_reset();
         delay(20);
+        linkService();
     }
     const uint32_t t1 = millis();
     while (touchedNow() && millis() - t1 < 3000)
-        delay(20);
+        delay(20), linkService();
     splashStop();
+    linkHold(false);
+    g_splashUp = false;
 }
 
 // DISP:SPLASH:SHOT? [ms]: show the splash, wait, read the LCD back (MISO)
 // and send it like DISP:SHOT?: 240 lines of 320 RGB565 hex, then END.
 void splashShot(uint32_t waitMs, bool show)
 {
+    linkHold(true);
     if (show)
     {
         s_noBar = true;
         splashBegin();
         s_noBar = false;
-        delay(waitMs);
+        for (const uint32_t t0 = millis(); millis() - t0 < waitMs;)
+            delay(10), linkService();
     }
     else
         tft.dmaWait(); // DISP:LCD?: what the panel holds now
@@ -1937,9 +2036,11 @@ void splashShot(uint32_t waitMs, bool show)
         Serial.write((const uint8_t *)line, sizeof line);
         Serial.flush();
         esp_task_wdt_reset();
+        linkService();
     }
     Serial.println("END");
     free(fb);
     if (show)
         splashStop();
+    linkHold(false);
 }

@@ -250,3 +250,71 @@ double monitorMinChanges(double currentValue, double currentTimeMicros)
     lastValue = currentValue;
     return fabs(startStableTime - currentTimeMicros);
 }
+
+// DIAG:OBJ? <hex address>: which widget lives there (UI objects get the same
+// addresses every boot, so a crash dump's object pointer can be named later).
+static const char *className(const lv_obj_t *o)
+{
+    for (const class_map_t *m = class_map; m->class_p; m++)
+        if (lv_obj_get_class(o) == m->class_p)
+            return m->class_name;
+    return "?";
+}
+static lv_obj_t *findObj(lv_obj_t *o, uintptr_t addr, int depth)
+{
+    if ((uintptr_t)o == addr)
+        return o;
+    if (depth > 40)
+        return nullptr;
+    const uint32_t n = lv_obj_get_child_cnt(o);
+    for (uint32_t i = 0; i < n; i++)
+        if (lv_obj_t *f = findObj(lv_obj_get_child(o, i), addr, depth + 1))
+            return f;
+    return nullptr;
+}
+String diagObjInfo(uintptr_t addr)
+{
+    lv_disp_t *d = lv_disp_get_default();
+    lv_obj_t *hit = nullptr;
+    for (uint32_t s = 0; d && !hit && s < d->screen_cnt; s++)
+        hit = findObj(d->screens[s], addr, 0);
+    if (!hit && d)
+        hit = findObj(d->top_layer, addr, 0);
+    if (!hit && d)
+        hit = findObj(d->sys_layer, addr, 0);
+    if (!hit)
+        return "not found";
+    String r;
+    char b[96];
+    for (lv_obj_t *o = hit; o; o = lv_obj_get_parent(o))
+    {
+        snprintf(b, sizeof b, "%s#%d(%d,%d %dx%d)", className(o), o->parent ? (int)lv_obj_get_index(o) : -1,
+                 (int)o->coords.x1, (int)o->coords.y1, (int)lv_obj_get_width(o), (int)lv_obj_get_height(o));
+        if (r.length())
+            r += " < ";
+        r += b;
+    }
+    snprintf(b, sizeof b, " | children %u at %p", (unsigned)lv_obj_get_child_cnt(hit),
+             hit->spec_attr ? (void *)hit->spec_attr->children : nullptr);
+    return r + b;
+}
+// DIAG:OBJS?: every widget: address depth class (x,y wxh)
+static void dumpObj(lv_obj_t *o, int depth, String &r)
+{
+    char b[80];
+    snprintf(b, sizeof b, "%p %d %s (%d,%d %dx%d)\n", (void *)o, depth, className(o), (int)o->coords.x1,
+             (int)o->coords.y1, (int)lv_obj_get_width(o), (int)lv_obj_get_height(o));
+    r += b;
+    const uint32_t n = lv_obj_get_child_cnt(o);
+    for (uint32_t i = 0; i < n && depth < 40; i++)
+        dumpObj(lv_obj_get_child(o, i), depth + 1, r);
+}
+String diagObjDump()
+{
+    String r;
+    r.reserve(60000);
+    lv_disp_t *d = lv_disp_get_default();
+    for (uint32_t s = 0; d && s < d->screen_cnt; s++)
+        dumpObj(d->screens[s], 0, r);
+    return r;
+}

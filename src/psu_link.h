@@ -8,7 +8,9 @@
 enum class LinkRole : uint8_t { OFF = 0, MASTER = 1, SLAVE = 2, READY = 3 }; // READY: radio on, not linked
 
 void linkBegin();                 // setup(): load NVS, start the radio if enabled
-void linkLoop();                  // main loop (Core 1)
+void linkLoop();
+void linkHold(bool on); // around sections that hold the main loop: keeps the partner fed
+void linkService(); // call from long blocking loops on Core 1 (splash, screenshots)                  // main loop (Core 1)
 void linkEnable(bool on);         // radio on (READY or the saved link) / off
 bool linkEnabled();
 LinkRole linkRole();

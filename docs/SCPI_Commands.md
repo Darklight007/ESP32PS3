@@ -306,7 +306,7 @@ FGEN
 
 ### :OUTPut:STATe - Output Enable/Disable
 **Description:** Enable or disable the power supply output
-**Syntax:** `:OUTP:STAT <state>` or `:OUTP:STAT?`
+**Syntax:** `:OUTP:STAT <state>` or `:OUTP:STAT?` (`:STAT` may be left out: `:OUTP ON`, `:OUTP?`)
 **Parameters:**
 - `ON` or `1` - Enable output
 - `OFF` or `0` - Disable output
@@ -475,6 +475,14 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Description:** For each child of the current page: size, position and the ms it adds to a full repaint (hides it, times 3 frames, shows it again). Takes several seconds.
 **Syntax:** `:DISP:PROF?`
 
+### DIAG:HEAP? / DIAG:OBJ? / DIAG:OBJS? - Memory Debugging
+**Description:** `DIAG:HEAP?` checks every heap (1 ok, 0 corrupt; details on the log). `DIAG:OBJ? <hex>` names the widget at an address (with its parents); UI widgets get the same addresses every boot, so a crash dump's object pointer can be looked up later. `DIAG:OBJS?` lists every widget: address, depth, class, position and size.
+**Syntax:** `DIAG:HEAP?`, `DIAG:OBJ? 3d88c46c`, `DIAG:OBJS?`
+
+### DIAG:HANG - Hold the Main Loop (test)
+**Description:** Holds the main loop for up to 10 s (watchdog fed). For tests: a linked partner must lose the link and turn its output off after ~1.8 s.
+**Syntax:** `DIAG:HANG <ms>`
+
 ### DIAG:ADC:FAST - ADC Cycle Speed-Ups
 **Description:** Bit mask, default 7; set 0 to compare noise or speed against the old cycle. Not saved. Ignored parts in low-noise mode (rate 0).
 - 1 - start the next conversion before reading the finished result
@@ -500,7 +508,7 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Syntax:** `:DIAG:NOTOUCH <0|1>`
 
 ### :DISPlay:PAGE - Show a Page
-**Syntax:** `:DISP:PAGE <0-4>[,<sub-tab>]` (0 Stats, 1 Graph, 2 Main, 3 Utility, 4 Setting; the sub-tab applies to Utility), `:DISP:PAGE?`
+**Syntax:** `:DISP:PAGE <0-5>[,<sub-tab>]` (0 Stats, 1 Graph, 2 Main, 3 Utility, 4 Setting, 5 Splash (same as `:DISP:SPLASH`); the sub-tab applies to Utility; `:DISP:PAGE?` still reports the page under the splash), `:DISP:PAGE?`
 
 ### :DISPlay:HIST:FIT - Re-centre the Histogram
 **Description:** Same as the stats-reset key on the Stats page: histogram window = mean ±6σ for V and I, statistics cleared.
@@ -519,7 +527,7 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Syntax:** `:DISP:SHOT?`
 
 ### :DISPlay:SPLASH - Show the Splash
-**Description:** Shows the animated splash until a tap or key press, like About > Software information. Replies `OK` first; the main loop (SCPI too) waits while it is shown.
+**Description:** Shows the animated splash until a tap, key press or a non-query command (that command then runs normally), like About. Queries (`MEAS:*?`, `OUTP:STAT?`, ...) are answered while it shows; display reads (`DISP:SHOT?` etc.) close it. `:DISP:SPLASH?` returns 1 while shown; `:DISP:SPLASH:CLOSE` closes it > Software information. Replies `OK` first; the main loop (SCPI too) waits while it is shown. A PSU link stays up meanwhile (as during `DISP:SHOT?` and `DISP:SPLASH:SHOT?`): a timer keeps sending, so the partner doesn't turn its output off.
 **Syntax:** `:DISP:SPLASH`
 
 ### :DISPlay:SPLASH:SHOT? - Splash Screenshot

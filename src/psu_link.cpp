@@ -20,6 +20,7 @@
 #include <esp_event.h>
 #include <esp_heap_caps.h>
 #include <esp_mac.h>
+#include <esp_timer.h>
 #include <cmath>
 #include <cstring>
 
@@ -56,6 +57,7 @@ namespace
     bool s_hasPeer = false;
     float s_ratio = 100;
     bool s_radio = false;
+    LinkRole s_peerRole = LinkRole::READY; // role with the saved partner (kept while the radio is off)
     uint32_t s_saveAt = 0;
     bool s_ovr = false, s_ovrOn = false; // linkOverride()
     float s_ovrV = 0, s_ovrI = 0;
@@ -100,6 +102,7 @@ namespace
         p.putBytes("peer", s_peer, 6);
         p.putBool("hasPeer", s_hasPeer);
         p.putFloat("ratio", s_ratio);
+        p.putUChar("prole", (uint8_t)s_peerRole);
         p.end();
     }
 
@@ -208,10 +211,11 @@ namespace
     {
         if (!s_radio)
             return;
+        s_radio = false; // the link timer (Core 0) stops sending first
+        delay(3);
         esp_now_deinit();
         esp_wifi_stop();
         esp_wifi_deinit();
-        s_radio = false;
         radioReserve();
     }
 
@@ -230,6 +234,28 @@ namespace
     bool outputOn() { return PowerSupply.getStatus() != DEVICE::OFF; }
     bool outputArmed() { return outputOn() || lv_obj_has_state(PowerSupply.powerSwitch.btn, LV_STATE_CHECKED); }
 
+    volatile uint32_t s_sentMs = 0; // last STATE/STATUS sent from the main loop
+    void sendState(bool fromLoop = true)
+    {
+        if (fromLoop)
+            s_sentMs = millis();
+        if (s_ovr)
+            send(s_peer, STATE, s_ovrOn, 0, s_ovrV, s_ovrI);
+        else
+            send(s_peer, STATE, outputArmed(), 0, (float)(vSet() * s_ratio / 100.0),
+                 (float)(iSet() * s_ratio / 100.0));
+    }
+    void sendStatus(bool fromLoop = true)
+    {
+        if (fromLoop)
+            s_sentMs = millis();
+        float iMeas = PowerSupply.Current.measured.value;
+        if (PowerSupply.mA_Active)
+            iMeas /= 1000.0f;
+        send(s_peer, STATUS, outputOn(), PowerSupply.mA_Active ? 1 : 0, PowerSupply.Voltage.measured.value, iMeas);
+    }
+
+
     void outputSet(bool on)
     {
         if (on && !outputArmed())
@@ -244,7 +270,7 @@ namespace
             esp_now_del_peer(s_peer);
         memcpy(s_peer, mac, 6);
         s_hasPeer = true;
-        s_role = role;
+        s_role = s_peerRole = role;
         s_lastRx = 0;
         addPeer(mac);
         save();
@@ -252,7 +278,7 @@ namespace
 
     void dropPeer()
     {
-        if (s_hasPeer && esp_now_is_peer_exist(s_peer))
+        if (s_radio && s_hasPeer && esp_now_is_peer_exist(s_peer)) // radio off: ESP-NOW isn't up
             esp_now_del_peer(s_peer);
         s_hasPeer = false;
         s_lastRx = 0;
@@ -319,6 +345,11 @@ namespace
             }
             return;
         case PAIR_REQ: // someone wants this unit to follow it: ask the user
+            if (s_role == LinkRole::SLAVE && s_hasPeer && memcmp(mac, s_peer, 6) == 0)
+            {
+                send(mac, PAIR_ACK); // our own master asked again: already following it
+                return;
+            }
             memcpy(s_inMac, mac, 6);
             s_inUntil = millis() + kAskMs;
             return;
@@ -354,11 +385,7 @@ namespace
         if (s_role == LinkRole::SLAVE && p.type == STATE)
         {
             slaveApply(p, first);
-            float iMeas = PowerSupply.Current.measured.value;
-            if (PowerSupply.mA_Active)
-                iMeas /= 1000.0f;
-            send(s_peer, STATUS, outputOn(), PowerSupply.mA_Active ? 1 : 0,
-                 PowerSupply.Voltage.measured.value, iMeas);
+            sendStatus();
         }
     }
 
@@ -409,6 +436,10 @@ void linkBegin()
         s_role = LinkRole::OFF;
     s_hasPeer = p.getBool("hasPeer", false) && p.getBytes("peer", s_peer, 6) == 6;
     s_ratio = std::clamp(p.getFloat("ratio", 100), 1.0f, 100.0f);
+    // unknown (saved by older firmware with the radio off): READY, never a guess
+    s_peerRole = (LinkRole)p.getUChar("prole", (uint8_t)s_role);
+    if (s_peerRole != LinkRole::MASTER && s_peerRole != LinkRole::SLAVE)
+        s_peerRole = LinkRole::READY;
     p.end();
     if ((s_role == LinkRole::MASTER || s_role == LinkRole::SLAVE) && !s_hasPeer)
         s_role = LinkRole::READY;
@@ -416,9 +447,12 @@ void linkBegin()
         radioStart();
 }
 
+static volatile uint32_t s_loopMs = 0; // main loop last seen (link timer's hang check)
+static void linkTimerOn();
 void linkLoop()
 {
     const uint32_t now = millis();
+    s_loopMs = now;
     if (s_saveAt && (int32_t)(now - s_saveAt) >= 0)
     {
         s_saveAt = 0;
@@ -453,14 +487,9 @@ void linkLoop()
     {
         lastSend = now;
         if (s_role == LinkRole::MASTER && s_hasPeer)
-        {
-            if (s_ovr)
-                send(s_peer, STATE, s_ovrOn, 0, s_ovrV, s_ovrI);
-            else
-                send(s_peer, STATE, outputArmed(), 0, (float)(vSet() * s_ratio / 100.0),
-                     (float)(iSet() * s_ratio / 100.0));
-        }
+            sendState();
     }
+    linkTimerOn(); // stand-in sender while this loop is held
 
     const bool conn = linkConnected();
     if (s_wasConnected && !conn)
@@ -486,15 +515,72 @@ void linkLoop()
         mismatchSince = 0;
 }
 
+// Stand-in sender: an esp_timer callback (no task or stack of its own) sends
+// the master's STATE / the slave's STATUS while the main loop hasn't for
+// 60 ms. A page switch at ADC rate 0 (~450 ms frame), an FFT, starting FUN
+// or the splash held the loop >300 ms: the partner saw the link lost and
+// turned its output off (a held slave stopped answering: the master turned
+// off). Normally the main loop sends (Core 1): sending from the timer
+// (Core 0) all the time doubled the ADC's late reads.
+// Hang safety: nothing is sent once the main loop hasn't run for 1.5 s,
+// unless inside linkHold() (splash, screenshots: the loop is held on purpose).
+static esp_timer_handle_t s_linkTimer = nullptr;
+static volatile int s_holdDepth = 0;
+static void linkTick(void *)
+{
+    if (!s_radio || !s_hasPeer)
+        return;
+    const uint32_t now = millis();
+    if (now - s_sentMs < 60)
+        return; // the main loop is sending
+    if (!s_holdDepth && now - s_loopMs > 1500)
+        return; // main loop hung: go silent, the partner turns off
+    if (s_role == LinkRole::MASTER)
+        sendState(false);
+    else if (s_role == LinkRole::SLAVE)
+        sendStatus(false);
+}
+static void linkTimerOn()
+{
+    if (!s_linkTimer)
+    {
+        const esp_timer_create_args_t a = {.callback = linkTick, .arg = nullptr, .dispatch_method = ESP_TIMER_TASK,
+                                           .name = "link", .skip_unhandled_events = true};
+        if (esp_timer_create(&a, &s_linkTimer) != ESP_OK)
+            return;
+    }
+    if (!esp_timer_is_active(s_linkTimer))
+        esp_timer_start_periodic(s_linkTimer, kSendMs * 1000);
+}
+void linkHold(bool on)
+{
+    if (on)
+        s_holdDepth++;
+    else if (s_holdDepth > 0 && --s_holdDepth == 0)
+        s_lastRx = millis(); // the partner's packets waited in the queue meanwhile
+}
+
+// From code that holds the main loop for a while (splash, screenshots): handles
+// the partner's packets meanwhile (a slave keeps following its master).
+void linkService()
+{
+    static bool busy = false;
+    if (busy)
+        return;
+    busy = true;
+    linkLoop();
+    busy = false;
+}
+
 void linkEnable(bool on)
 {
     if (on == linkEnabled())
         return;
     if (on)
     {
-        s_role = s_hasPeer ? s_role : LinkRole::READY;
-        if (s_role == LinkRole::OFF)
-            s_role = LinkRole::READY;
+        // radio back on: the saved partner and this unit's role with it
+        // (turning it off used to forget the role: no reconnect until re-paired)
+        s_role = s_hasPeer ? s_peerRole : LinkRole::READY;
         if (!radioStart())
             s_role = LinkRole::OFF;
     }

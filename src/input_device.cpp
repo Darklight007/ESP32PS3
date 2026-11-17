@@ -25,8 +25,32 @@ void IRAM_ATTR CurrentEnc(void *) { encoder2Flag++; }
 
 // ===== Keypad processing =====
 volatile uint32_t g_keyPressCount = 0; // any key press (splash: close on a key)
+volatile bool g_splashUp = false;      // splashShow() running
+// A key pressed while the splash shows only closes it: its events are dropped
+// until every key is up again. Otherwise the Home key used to close it, held
+// a moment while the screen came back, reached HOLD = ESP.restart().
+static bool s_eatKeys = false, s_keysDown = false;
 void getKeys() {
     if (kpd.getKeys()) {
+        bool anyDown = false;
+        for (int i = 0; i < LIST_MAX; i++)
+            if (kpd.key[i].kstate == PRESSED || kpd.key[i].kstate == HOLD)
+                anyDown = true;
+        if (s_eatKeys && !g_splashUp && !s_keysDown)
+            s_eatKeys = false; // released before the splash was gone: this is a new key
+        if (g_splashUp || s_eatKeys) {
+            for (int i = 0; i < LIST_MAX; i++)
+                if (kpd.key[i].stateChanged && kpd.key[i].kstate == PRESSED) {
+                    g_keyPressCount++;
+                    s_eatKeys = true;
+                }
+            if (!g_splashUp && !anyDown)
+                s_eatKeys = false;
+            s_keysDown = anyDown;
+            msg = "done!";
+            return;
+        }
+        s_keysDown = anyDown;
         for (int i = 0; i < LIST_MAX; i++) {
             if (kpd.key[i].stateChanged) {
                 lowNoisePause(); // keypad in use: full-speed UI (spi_quiet.h)

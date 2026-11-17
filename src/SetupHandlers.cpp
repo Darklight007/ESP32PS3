@@ -7,6 +7,7 @@
 #include "error_handler.h" // startup failure reporting (createTasks)
 #include "disp_perf.h"     // DISP:FPS frame-rate meter
 #include "calib_cc_limit.h"
+#include "hal/usb_serial_jtag_ll.h" // initializeSerial(): unjam the RX FIFO after a reset
 #include "calib_rate_match.h"  // ccLimitLoad()
 // #include "calib_inl_zc.h"  // Include zero-current INL calibration for startup rebuild
 
@@ -64,6 +65,16 @@ void initializeSerial()
     // buffer when the 20 ms timeout below hit; must be set before begin()
     Serial.setTxBufferSize(1024);
     Serial.begin(115200);
+    // A host that kept sending through a reset (the phone bridge polls 5x/s)
+    // left a packet in the USB-serial FIFO. begin() clears its "received"
+    // interrupt, so that packet was never read and the host could never send
+    // again: SCPI input dead until a USB re-plug. Empty the FIFO (stale
+    // bytes from before the reset) so the next packet raises the interrupt.
+    {
+        uint8_t junk[64];
+        for (int k = 0; k < 16 && usb_serial_jtag_ll_rxfifo_data_available(); k++)
+            usb_serial_jtag_ll_read_rxfifo(junk, sizeof junk);
+    }
     // Native USB CDC: once plugged in, the core's TX timeout becomes 100 ms. With
     // the cable in but no program reading the port, the TX buffer fills and every
     // print then blocks 100 ms - a once-per-second debug print froze the digits

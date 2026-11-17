@@ -98,7 +98,7 @@ namespace
 
     void plotPoint(int c, int k)
     {
-        if (!s_chart)
+        if (!s_chart || c < 0 || c >= kMaxCurves || k < 0 || k >= (int)lv_chart_get_point_count(s_chart))
             return;
         const Pt &p = pt(c, k);
         const lv_coord_t x = (lv_coord_t)lroundf(std::clamp(p.vce / s_cfg.vceMax, 0.0f, 1.0f) * 1000);
@@ -372,6 +372,11 @@ namespace
             s_dds[s_nDd++] = {dd, c};
         lv_obj_add_event_cb(dd, [](lv_event_t *e) {
             const Choice *c = (const Choice *)lv_event_get_user_data(e);
+            if (tracerBusy()) // settings are fixed while tracing
+            {
+                lv_dropdown_set_selected(lv_event_get_target(e), nearest(c));
+                return;
+            }
             const float v = c->vals[lv_dropdown_get_selected(lv_event_get_target(e))];
             if (c->target)
                 *c->target = v;
@@ -493,16 +498,70 @@ String tracerStatus()
     return String(b);
 }
 
+// "%.4e" / "%.4f" without newlib's printf (~25 us a call: the CSV of 640
+// points took 92 ms and stalled the display)
+static char *putU(char *o, unsigned long v, int minDigits = 1)
+{
+    char t[12];
+    int n = 0;
+    do
+        t[n++] = '0' + v % 10, v /= 10;
+    while (v);
+    while (n < minDigits)
+        t[n++] = '0';
+    while (n)
+        *o++ = t[--n];
+    return o;
+}
+static char *fmtE4(char *o, float v)
+{
+    if (!(v == v) || v > 3e38f || v < -3e38f)
+        return (memcpy(o, "nan", 3), o + 3);
+    if (v < 0)
+        *o++ = '-', v = -v;
+    int e = 0;
+    long m = 0;
+    if (v > 0)
+    {
+        e = (int)floorf(log10f(v));
+        m = lroundf(v / powf(10.0f, (float)e) * 1e4f);
+        if (m >= 100000)
+            m /= 10, e++;
+        else if (m < 10000)
+            m *= 10, e--;
+    }
+    o = putU(o, m / 10000), *o++ = '.';
+    o = putU(o, m % 10000, 4), *o++ = 'e', *o++ = e < 0 ? '-' : '+';
+    return putU(o, e < 0 ? -e : e, 2);
+}
+static char *fmtF4(char *o, float v)
+{
+    if (v < 0)
+        *o++ = '-', v = -v;
+    const long m = lroundf(v * 1e4f);
+    o = putU(o, m / 10000), *o++ = '.';
+    return putU(o, m % 10000, 4);
+}
+
 String tracerData()
 {
     String r = "curve,ib_A,vce_V,ic_A,ib_pt_A";
     if (!s_pts)
         return r;
+    int n = 0;
+    for (int c = 0; c < kMaxCurves; c++)
+        n += s_nPts[c];
+    r.reserve(32 + n * 46); // grown line by line it was copied ~600 times
     char b[80];
     for (int c = 0; c < kMaxCurves; c++)
         for (int k = 0; k < s_nPts[c]; k++)
         {
-            snprintf(b, sizeof(b), "\n%d,%.4e,%.4f,%.4e,%.4e", c + 1, s_ib[c], pt(c, k).vce, pt(c, k).ic, pt(c, k).ib);
+            char *o = b;
+            *o++ = '\n', o = putU(o, c + 1), *o++ = ',';
+            o = fmtE4(o, s_ib[c]), *o++ = ',';
+            o = fmtF4(o, pt(c, k).vce), *o++ = ',';
+            o = fmtE4(o, pt(c, k).ic), *o++ = ',';
+            *fmtE4(o, pt(c, k).ib) = 0;
             r += b;
         }
     return r;

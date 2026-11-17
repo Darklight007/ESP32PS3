@@ -1,3 +1,4 @@
+#include <esp_task_wdt.h>
 #include "curve_tracer.h"
 #include "psu_link.h"
 #include "weather.h"
@@ -92,8 +93,69 @@ void SCPIParser::init()
     Serial.println("Send *IDN? for identification");
 }
 
+static String s_txPend; // long replies, see sendResponse()
+static size_t s_txPos = 0;
+static void pumpTx();
+static String s_held; // command that closed the splash, run after it
+
+// Queries that only read state are safe while the splash owns the display;
+// anything else (setters, display reads) closes it first.
+static bool safeWhileHeld(const String &line)
+{
+    String u = line;
+    u.toUpperCase();
+    if (u.indexOf("SHOT") >= 0 || u.indexOf("CHECK") >= 0 || u.indexOf("LCD") >= 0 || u.indexOf("SAMP") >= 0)
+        return false;
+    int from = 0;
+    while (true)
+    {
+        const int semi = u.indexOf(';', from);
+        const String part = u.substring(from, semi < 0 ? u.length() : semi);
+        if (part.indexOf('?') < 0)
+            return false;
+        if (semi < 0)
+            return true;
+        from = semi + 1;
+    }
+}
+
+bool SCPIParser::serviceWhileHeld()
+{
+    if (s_held.length())
+        return true;
+    while (Serial.available() > 0)
+    {
+        const char c = Serial.read();
+        if (c == '\n' || c == '\r')
+        {
+            if (cmdBufferPos == 0)
+                continue;
+            cmdBuffer[cmdBufferPos] = '\0';
+            String cmd(cmdBuffer);
+            cmdBufferPos = 0;
+            if (!safeWhileHeld(cmd))
+            {
+                s_held = cmd;
+                return true;
+            }
+            executeCommand(cmd);
+            continue;
+        }
+        if (cmdBufferPos < CMD_BUFFER_SIZE - 1)
+            cmdBuffer[cmdBufferPos++] = c;
+        else
+        {
+            addError(ERR_COMMAND_ERROR, "Command too long");
+            cmdBufferPos = 0;
+        }
+    }
+    pumpTx();
+    return false;
+}
+
 void SCPIParser::process()
 {
+    pumpTx();
     while (Serial.available() > 0)
     {
         char c = Serial.read();
@@ -105,8 +167,15 @@ void SCPIParser::process()
             {
                 cmdBuffer[cmdBufferPos] = '\0';
                 String cmd(cmdBuffer);
+                cmdBufferPos = 0; // before: serviceWhileHeld() may collect the next line
                 executeCommand(cmd);
-                cmdBufferPos = 0;
+                // a command held back by the splash runs now, before later input
+                while (s_held.length())
+                {
+                    String h = s_held;
+                    s_held = "";
+                    executeCommand(h);
+                }
             }
             continue;
         }
@@ -127,6 +196,10 @@ void SCPIParser::process()
 
 void SCPIParser::executeCommand(const String& command)
 {
+    // a queued long reply goes out first: some commands print directly
+    // (screenshots), and replies must stay in order (up to ~0.5 s)
+    for (const uint32_t t0 = millis(); s_txPos < s_txPend.length() && millis() - t0 < 500;)
+        pumpTx(), delay(1);
     String cmd = command;
     trimWhitespace(cmd);
 
@@ -220,6 +293,8 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("STAT") > 0) cmd_OUTP_STAT(paramPart);
         else if (cmdPart.indexOf("PROT:CLE") > 0) cmd_OUTP_PROT_CLE();
         else if (cmdPart.indexOf("PROT:TRIP?") > 0) cmd_OUTP_PROT_TRIP_Q();
+        else if (cmdPart == "OUTP?" || cmdPart == "OUTPUT?") cmd_OUTP_STAT_Q(); // [:STATe] is optional
+        else if (cmdPart == "OUTP" || cmdPart == "OUTPUT") cmd_OUTP_STAT(paramPart);
         else addError(ERR_UNDEFINED_HEADER);
         return;
     }
@@ -279,12 +354,17 @@ void SCPIParser::executeCommand(const String& command)
         {
             float v[8];
             const int n = sscanf(paramPart.c_str(), "%f,%f,%f,%f,%f,%f,%f,%f", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7]);
-            if (n >= 5)
+            // clamped (NaN -> low end); refused while a trace runs (its arrays are sized at start)
+            auto cl = [](float x, float lo, float hi) { return x >= lo ? (x <= hi ? x : hi) : lo; };
+            if (n >= 5 && tracerBusy())
+                sendResponse("busy");
+            else if (n >= 5)
             {
-                c.vceMax = v[0], c.icMax = v[1], c.pMax = v[2], c.ibStep = v[3], c.curves = (int)v[4];
-                if (n >= 6) c.points = (int)v[5];
-                if (n >= 7) c.vbMax = v[6];
-                if (n >= 8) c.settleMs = (int)v[7];
+                c.vceMax = cl(v[0], 0.5f, 32), c.icMax = cl(v[1], 0.001f, 6.5f), c.pMax = cl(v[2], 0.01f, 200);
+                c.ibStep = cl(v[3], 1e-7f, 0.1f), c.curves = (int)cl(v[4], 1, 10);
+                if (n >= 6) c.points = (int)cl(v[5], 5, 64);
+                if (n >= 7) c.vbMax = cl(v[6], 0.5f, 32);
+                if (n >= 8) c.settleMs = (int)cl(v[7], 10, 5000);
                 sendResponse("OK");
             }
             else
@@ -317,6 +397,35 @@ void SCPIParser::executeCommand(const String& command)
             lv_obj_scroll_to_y(lv_obj_get_parent(page), paramPart.substring(comma + 1).toInt(), LV_ANIM_OFF);
         }
         sendResponse(itm ? "OK" : "no item");
+        return;
+    }
+    // DIAG:HEAP?: heap integrity (1 ok, 0 corrupt: details on the log). For
+    // stress tests: an overrun into the next block breaks its header.
+    if (cmdPart.startsWith("DIAG:HEAP?"))
+    {
+        sendResponse(heap_caps_check_integrity_all(true) ? "1" : "0");
+        return;
+    }
+    if (cmdPart.startsWith("DIAG:OBJS?"))
+    {
+        String diagObjDump();
+        sendResponse(diagObjDump());
+        return;
+    }
+    if (cmdPart.startsWith("DIAG:OBJ?"))
+    {
+        String diagObjInfo(uintptr_t addr);
+        sendResponse(diagObjInfo((uintptr_t)strtoul(paramPart.c_str(), nullptr, 16)));
+        return;
+    }
+    // DIAG:HANG ms: hold the main loop (tests: a linked partner must switch off)
+    if (cmdPart.startsWith("DIAG:HANG"))
+    {
+        const long ms = constrain(paramPart.toInt(), 0L, 10000L);
+        sendResponse("OK");
+        Serial.flush();
+        for (const uint32_t t0 = millis(); millis() - t0 < (uint32_t)ms;)
+            esp_task_wdt_reset(), delay(5);
         return;
     }
     if (cmdPart.startsWith("DIAG:NOTOUCH"))
@@ -601,11 +710,21 @@ void SCPIParser::executeCommand(const String& command)
             sendResponse(String(Tabs::getCurrentPage()));
         else if (cmdPart.indexOf("PAGE") > 0)
         {
-            // 0 Stats, 1 Graph, 2 Main, 3 Utility, 4 Setting
+            // 0 Stats, 1 Graph, 2 Main, 3 Utility, 4 Setting, 5 Splash
             // optional ",n": Utility sub-tab (page 3)
             const int pg = paramPart.toInt();
             const int comma = paramPart.indexOf(',');
-            if (pg < 0 || pg > 4) addError(ERR_DATA_OUT_OF_RANGE);
+            if (pg < 0 || pg > 5) addError(ERR_DATA_OUT_OF_RANGE);
+            else if (pg == 5)
+            {
+                // splash until a tap, key or the next serial command (like DISP:SPLASH)
+                sendResponse("OK");
+                Serial.flush();
+                spiQuietAcquire();
+                splashShow();
+                spiQuietEnd();
+                lv_obj_invalidate(lv_scr_act());
+            }
             else
             {
                 Tabs::setCurrentPage(pg);
@@ -690,6 +809,13 @@ void SCPIParser::executeCommand(const String& command)
             splashShot(0, false);
             spiQuietEnd();
         }
+        else if (cmdPart.endsWith("SPLASH?"))
+        {
+            extern volatile bool g_splashUp;
+            sendResponse(g_splashUp ? "1" : "0");
+        }
+        else if (cmdPart.endsWith("SPLASH:CLOSE") || cmdPart.endsWith("SPLASH:CLOS"))
+            sendResponse("OK"); // a non-query: the splash closed before this runs
         else if (cmdPart.endsWith("SPLASH"))
         {
             // show the splash until a tap or key, like About > Software
@@ -716,6 +842,7 @@ void SCPIParser::executeCommand(const String& command)
             // lines of 320 RGB565 pixels as hex (high byte first), then END.
             extern lv_color_t *buf[2];
             extern int g_drawMode;
+            linkHold(true); // seconds of USB output: keep a linked partner fed
             const int mode = g_drawMode;
             g_drawMode = 0; // full frame into the PSRAM buffer, so it can be read back
             lv_obj_invalidate(lv_scr_act());
@@ -737,8 +864,10 @@ void SCPIParser::executeCommand(const String& command)
                 Serial.flush();
                 if (y % 8 == 7)
                     delay(2);
+                linkService();
             }
             Serial.println("END");
+            linkHold(false);
         }
         else if (cmdPart.indexOf("AREA") > 0)
         {
@@ -1953,9 +2082,37 @@ void SCPIParser::addError(SCPIError error, const char* description)
     statusByte |= 0x04;
 }
 
+// Long replies (TRAC:DATA?, LOAD:DET?, SYST:LOG? ...) are queued (PSRAM: a
+// String this big is malloc'ed there) and sent a USB buffer at a time from
+// process(), so the main loop and the display don't wait for the host.
+static void pumpTx()
+{
+    while (s_txPos < s_txPend.length())
+    {
+        const int room = Serial.availableForWrite();
+        if (room <= 0)
+            return;
+        const size_t n = std::min((size_t)room, s_txPend.length() - s_txPos);
+        const size_t w = Serial.write((const uint8_t *)s_txPend.c_str() + s_txPos, n);
+        if (w == 0)
+            return;
+        s_txPos += w;
+    }
+    s_txPend = String(); // frees it
+    s_txPos = 0;
+}
 void SCPIParser::sendResponse(const String& response)
 {
-    Serial.println(response);
+    if (s_txPos >= s_txPend.length() && response.length() < 600)
+    {
+        Serial.println(response);
+        return;
+    }
+    if (s_txPend.length() - s_txPos + response.length() > 400000) // nobody reading: drop
+        return;
+    s_txPend += response;
+    s_txPend += "\r\n";
+    pumpTx();
 }
 
 void SCPIParser::trimWhitespace(String& str)

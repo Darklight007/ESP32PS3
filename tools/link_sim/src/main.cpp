@@ -227,7 +227,11 @@ void loop()
     if (role == MASTER && hasPeer && !mute && now - lastSend >= 20) { lastSend = now; send(peer, STATE, mOn, mV, mI); }
     static bool lost = false;
     const bool isLost = hasPeer && lastRx && now - lastRx > 300;
-    if (isLost && !lost) out("link lost\n");
+    if (isLost && !lost)
+    {
+        out("link lost\n");
+        if (role == SLAVE && sOn) { sOn = false; out("slave output OFF (link lost)\n"); } // like the PSU
+    }
     lost = isLost;
     delay(1);
 }
