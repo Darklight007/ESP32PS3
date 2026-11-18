@@ -2261,7 +2261,7 @@ void splashShow()
 
 // DISP:SPLASH:SHOT? [ms]: show the splash, wait, read the LCD back (MISO)
 // and send it like DISP:SHOT?: 240 lines of 320 RGB565 hex, then END.
-void splashShot(uint32_t waitMs, bool show)
+void splashShot(uint32_t waitMs, bool show, bool hiFirst)
 {
     linkHold(true);
     if (show)
@@ -2290,7 +2290,9 @@ void splashShot(uint32_t waitMs, bool show)
         const uint16_t *row = fb + y * 320;
         for (int x = 0; x < 320; x++)
         {
-            const uint16_t v = row[x];
+            uint16_t v = row[x];
+            if (hiFirst)
+                v = (uint16_t)(v << 8 | v >> 8); // readRect() gives it byte-swapped
             line[4 * x] = hex[v >> 12];
             line[4 * x + 1] = hex[(v >> 8) & 15];
             line[4 * x + 2] = hex[(v >> 4) & 15];

@@ -512,7 +512,7 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Syntax:** `:DIAG:NOTOUCH <0|1>`
 
 ### :DISPlay:PAGE - Show a Page
-**Syntax:** `:DISP:PAGE <0-5>[,<sub-tab>]` (0 Stats, 1 Graph, 2 Main, 3 Utility, 4 Setting, 5 Splash (same as `:DISP:SPLASH`); the sub-tab applies to Utility; `:DISP:PAGE?` still reports the page under the splash), `:DISP:PAGE?`
+**Syntax:** `:DISP:PAGE <0-5>[,<sub-tab>]` (0 Stats, 1 Graph, 2 Main, 3 Utility, 4 Setting, 5 Splash (same as `:DISP:SPLASH`); the sub-tab applies to Utility; `:DISP:PAGE?` reports 5 while the splash shows), `:DISP:PAGE?`
 
 ### :DISPlay:HIST:FIT - Re-centre the Histogram
 **Description:** Same as the stats-reset key on the Stats page: histogram window = mean ±6σ for V and I, statistics cleared.
@@ -531,11 +531,11 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Syntax:** `:DISP:SHOT?`
 
 ### :DISPlay:SPLASH - Show the Splash
-**Description:** Shows the animated splash until a tap, key press or a non-query command (that command then runs normally), like About. Queries (`MEAS:*?`, `OUTP:STAT?`, ...) are answered while it shows; display reads (`DISP:SHOT?` etc.) close it. `:DISP:SPLASH?` returns 1 while shown; `:DISP:SPLASH:CLOSE` closes it > Software information. Replies `OK` first; the main loop (SCPI too) waits while it is shown. A PSU link stays up meanwhile (as during `DISP:SHOT?` and `DISP:SPLASH:SHOT?`): a timer keeps sending, so the partner doesn't turn its output off.
+**Description:** Shows the animated splash until a tap, key press or a non-query command (that command then runs normally), like About. Queries (`MEAS:*?`, `OUTP:STAT?`, ...) are answered while it shows, and so are `DISP:SHOT?`/`DISP:LCD?` (they read the splash off the panel, no redraw); `DISP:CHECK?` and `DISP:SAMP*` close it. `:DISP:SPLASH?` returns 1 while shown; `:DISP:SPLASH:CLOSE` closes it. Replies `OK` first; the main loop (SCPI too) waits while it is shown. A PSU link stays up meanwhile (as during `DISP:SHOT?` and `DISP:SPLASH:SHOT?`): a timer keeps sending, so the partner doesn't turn its output off.
 **Syntax:** `:DISP:SPLASH`
 
 ### :DISPlay:SPLASH:SHOT? - Splash Screenshot
-**Description:** Shows the splash (no progress bar), waits `ms` (default 800), reads the whole frame back from the LCD and sends it like `:DISP:SHOT?`. The splash is drawn outside LVGL, so `:DISP:SHOT?` can't see it.
+**Description:** Shows the splash (no progress bar), waits `ms` (default 800), reads the whole frame back from the LCD and sends it like `:DISP:SHOT?` (but byte-swapped: swap each pixel). If the splash already shows, it just reads it. While the splash shows, `:DISP:SHOT?` also reads it from the panel, in the normal byte order.
 **Syntax:** `:DISP:SPLASH:SHOT? [ms]`
 
 ### :DISPlay:AREA - Redraw Time of One Rectangle

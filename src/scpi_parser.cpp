@@ -97,6 +97,7 @@ static String s_txPend; // long replies, see sendResponse()
 static size_t s_txPos = 0;
 static void pumpTx();
 static String s_held; // command that closed the splash, run after it
+extern volatile bool g_splashUp; // splashShow() running (input_device.cpp)
 
 // Queries that only read state are safe while the splash owns the display;
 // anything else (setters, display reads) closes it first.
@@ -104,7 +105,8 @@ static bool safeWhileHeld(const String &line)
 {
     String u = line;
     u.toUpperCase();
-    if (u.indexOf("SHOT") >= 0 || u.indexOf("CHECK") >= 0 || u.indexOf("LCD") >= 0 || u.indexOf("SAMP") >= 0)
+    // screenshots (SHOT?, LCD?) read the panel as the splash shows it
+    if (u.indexOf("CHECK") >= 0 || u.indexOf("SAMP") >= 0)
         return false;
     int from = 0;
     while (true)
@@ -729,7 +731,9 @@ void SCPIParser::executeCommand(const String& command)
             sendResponse("OK");
         }
         else if (cmdPart.indexOf("PAGE?") > 0)
-            sendResponse(String(Tabs::getCurrentPage()));
+        {
+            sendResponse(g_splashUp ? "5" : String(Tabs::getCurrentPage()));
+        }
         else if (cmdPart.indexOf("PAGE") > 0)
         {
             // 0 Stats, 1 Graph, 2 Main, 3 Utility, 4 Setting, 5 Splash
@@ -827,13 +831,15 @@ void SCPIParser::executeCommand(const String& command)
         else if (cmdPart.indexOf("LCD?") > 0)
         {
             // what the panel really shows (GRAM over MISO), not LVGL's buffer
-            spiQuietAcquire();
+            const bool up = g_splashUp; // the splash already holds the SPI slot
+            if (!up)
+                spiQuietAcquire();
             splashShot(0, false);
-            spiQuietEnd();
+            if (!up)
+                spiQuietEnd();
         }
         else if (cmdPart.endsWith("SPLASH?"))
         {
-            extern volatile bool g_splashUp;
             sendResponse(g_splashUp ? "1" : "0");
         }
         else if (cmdPart.endsWith("SPLASH:CLOSE") || cmdPart.endsWith("SPLASH:CLOS"))
@@ -853,11 +859,19 @@ void SCPIParser::executeCommand(const String& command)
         {
             // Splash screenshot read back from the LCD; optional wait in ms
             const long ms = paramPart.length() ? paramPart.toInt() : 800;
-            spiQuietAcquire();
-            splashShot(ms < 0 ? 0 : ms > 20000 ? 20000 : ms);
-            spiQuietEnd();
-            lv_obj_invalidate(lv_scr_act());
+            if (g_splashUp)
+                splashShot(0, false); // already showing: read it as it is
+            else
+            {
+                spiQuietAcquire();
+                splashShot(ms < 0 ? 0 : ms > 20000 ? 20000 : ms);
+                spiQuietEnd();
+                lv_obj_invalidate(lv_scr_act());
+            }
         }
+        else if (cmdPart.indexOf("SHOT?") > 0 && g_splashUp)
+            splashShot(0, false, true); // splash drawn straight to the panel, not by LVGL: read
+                                        // the panel back, same format (high byte first), no redraw
         else if (cmdPart.indexOf("SHOT?") > 0)
         {
             // Screenshot: full repaint into the full-screen buffer, then 240
