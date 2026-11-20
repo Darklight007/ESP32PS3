@@ -838,6 +838,8 @@ void SCPIParser::executeCommand(const String& command)
             if (!up)
                 spiQuietEnd();
         }
+        else if (cmdPart.indexOf("SPLASH:LIFE") > 0)
+            sendResponse(splashLife(paramPart.length() ? paramPart.toInt() : -1));
         else if (cmdPart.endsWith("SPLASH?"))
         {
             sendResponse(g_splashUp ? "1" : "0");

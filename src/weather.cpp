@@ -19,6 +19,7 @@ static char s_status[48] = "idle";
 static volatile bool s_busy = false;
 static volatile bool s_abort = false; // boot deadline hit: stop, radio off
 static float s_lat = NAN, s_lon = NAN; // weather location (sun position)
+static int32_t s_utcOff = INT32_MIN;    // local time offset, s (open-meteo, DST included)
 static float s_fAlt = NAN, s_fAz = NAN; // SYST:WEAT:SUN override
 
 static WxKind kindOfCode(int c)
@@ -52,6 +53,7 @@ static void load()
     const char *la = p.isKey("wx_lat") ? "wx_lat" : p.isKey("wx_ulat") ? "wx_ulat" : p.isKey("wx_iplat") ? "wx_iplat" : nullptr;
     if (la)
         s_lat = p.getFloat(la, NAN), s_lon = p.getFloat(!strcmp(la, "wx_lat") ? "wx_lon" : !strcmp(la, "wx_ulat") ? "wx_ulon" : "wx_iplon", NAN);
+    s_utcOff = p.getInt("wx_utco", INT32_MIN);
     p.end();
     strlcpy(s_city, c.c_str(), sizeof s_city);
     s_kind = kindOfCode(s_code);
@@ -238,14 +240,15 @@ static void fetchTask(void *)
             strlcpy(s_status, "weather", sizeof s_status);
             char url[160];
             snprintf(url, sizeof url,
-                     "http://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=weather_code,temperature_2m",
+                     "http://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=weather_code,temperature_2m&timezone=auto",
                      lat, lon);
-            float code = NAN, temp = NAN;
+            float code = NAN, temp = NAN, off = NAN;
             static const char *hdrs[] = {"Date"};
             if (http.begin(url) && (http.collectHeaders(hdrs, 1), http.GET() == 200))
             {
                 setClockFromHttpDate(http.header("Date"));
                 const String b = http.getString();
+                numAfter(b, "\"utc_offset_seconds\":", off);
                 const int cur = b.indexOf("\"current\":{");
                 if (cur >= 0)
                 {
@@ -268,6 +271,8 @@ static void fetchTask(void *)
                     p.putFloat("wx_lat", lat), p.putFloat("wx_lon", lon);
                 p.putInt("wx_code", s_code);
                 p.putFloat("wx_temp", s_temp);
+                if (!isnan(off) && (int32_t)off != p.getInt("wx_utco", INT32_MIN))
+                    p.putInt("wx_utco", s_utcOff = (int32_t)off);
                 p.putString("wx_city", s_city);
                 p.end();
                 snprintf(s_status, sizeof s_status, "ok %lus", (unsigned long)((millis() - t0) / 1000));
@@ -451,6 +456,22 @@ bool weatherSun(float &altDeg, float &azDeg)
     const double lat = s_lat * R;
     altDeg = asin(sin(lat) * sin(dec) + cos(lat) * cos(dec) * cos(H)) / R;
     azDeg = fmod(atan2(sin(H), cos(H) * sin(lat) - tan(dec) * cos(lat)) / R + 180 + 360, 360);
+    return true;
+}
+// Local time: the clock (set from the weather server) plus the location's
+// UTC offset; before an offset is known, one from the longitude (no DST)
+bool weatherLocalTime(struct tm &t)
+{
+    if (s_kind < 0)
+        load();
+    time_t now = time(nullptr);
+    if (now < 1700000000)
+        return false;
+    if (s_utcOff != INT32_MIN)
+        now += s_utcOff;
+    else if (!isnan(s_lon))
+        now += (time_t)lroundf(s_lon / 15) * 3600;
+    gmtime_r(&now, &t);
     return true;
 }
 void weatherForceSun(float altDeg, float azDeg) { s_fAlt = altDeg, s_fAz = azDeg; }

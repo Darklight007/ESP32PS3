@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <time.h>
 
 // Local weather for the splash (weather.cpp)
 enum WxKind { WX_CLEAR, WX_CLOUD, WX_RAIN, WX_SNOW, WX_FOG, WX_THUNDER, WX_COUNT };
@@ -23,3 +24,4 @@ bool weatherSun(float &altDeg, float &azDeg);
 void weatherForceSun(float altDeg, float azDeg); // NAN = live
 bool weatherSunForced();
 float weatherLat();
+bool weatherLocalTime(struct tm &t); // false: clock not set yet

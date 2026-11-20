@@ -25,7 +25,7 @@ class Port:
         while self.alive:
             try:
                 if self.s is None:
-                    self.s = serial.Serial(self.path, 115200, timeout=0.2)
+                    self.s = serial.Serial(self.path, 115200, timeout=0.2, write_timeout=1)  # a board not reading must not block forever
                 d = self.s.read(65536)
             except Exception:
                 self.s = None; time.sleep(0.3); continue
@@ -39,7 +39,10 @@ class Port:
                     self.crashes.append((time.time(), m.group(0)))
     def write(self, c):
         if self is globals().get('psu'): log.write(f'\n>w {c[:160]!r}\n')
+        if getattr(self, 'dead', False): return
         for _ in range(20):
+            if self is not globals().get('psu') and _ >= 2:  # link_sim not reading (needs RESET): skip it
+                self.dead = True; event(f'{self.path[-20:]} not responding: link_sim skipped (press its RESET)'); return
             try:
                 if self.s: self.s.write(c.encode() + b'\n'); return
             except Exception: self.s = None
@@ -222,6 +225,12 @@ event(f'start mode={mode} seed={seed} mem={mem()} fps={f}')
 lastReport = time.time()
 while time.time() - t0 < dur:
     a = random.choice(pool); name = a.__name__
+    el = time.time() - t0
+    # one-line live status (watch -n1 cat tools/stress/status.txt)
+    try: open('status.txt', 'w').write(f'{time.strftime("%H:%M:%S")}  {el:4.0f}/{dur:.0f}s ({100*el/dur:3.0f}%)  action #{stats["actions"]+1}: {name}  '
+                                      f'last cmd: {recent[-1] if recent else "-"}\n'
+                                      f'hangs={stats["hangs"]} crashes={stats["crashes"]} reboots={stats["reboots"]} minFps={stats["minFps"]} minFree={stats["minFree"]}\n')
+    except Exception: pass
     try: a()
     except Exception as e: event(f'harness error in {name}: {e}')
     stats['actions'] += 1; counts[name] += 1
@@ -233,7 +242,7 @@ while time.time() - t0 < dur:
         if r:
             stats['minFps'] = min(stats['minFps'], r[0])
             if r[0] < 30 and r[1] > 200: event(f'main page slow: fps={r} after {list(recent)[-5:]}')
-    if time.time() - lastReport > 300:
+    if time.time() - lastReport > 30:
         lastReport = time.time(); event(f'progress {stats}')
 setup(); cmd('LINK:ENAB 0', 1); cmd('DISP:PAGE 2', 0.5)
 event(f'DONE {stats} {dict(counts)}')

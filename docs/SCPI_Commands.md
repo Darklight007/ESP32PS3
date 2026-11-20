@@ -534,6 +534,10 @@ VOLT:MIN 0;MAX 32.768;CURR:MIN 0;MAX 5.000
 **Description:** Shows the animated splash until a tap, key press or a non-query command (that command then runs normally), like About. Queries (`MEAS:*?`, `OUTP:STAT?`, ...) are answered while it shows, and so are `DISP:SHOT?`/`DISP:LCD?` (they read the splash off the panel, no redraw); `DISP:CHECK?` and `DISP:SAMP*` close it. `:DISP:SPLASH?` returns 1 while shown; `:DISP:SPLASH:CLOSE` closes it. Replies `OK` first; the main loop (SCPI too) waits while it is shown. A PSU link stays up meanwhile (as during `DISP:SHOT?` and `DISP:SPLASH:SHOT?`): a timer keeps sending, so the partner doesn't turn its output off.
 **Syntax:** `:DISP:SPLASH`
 
+### :DISPlay:SPLASH:LIFE? - Splash Sea Life (test)
+**Syntax:** `:DISP:SPLASH:LIFE? [n]`
+**Description:** While the splash shows, brings creature `n` up next (0 dolphins, 1 whale, 2 octopus, 3 serpent, 4 jellyfish, 5 shark, 6 fish, 7 turtle, 8 manta, 9 seal, 10 gulls, 11 flying fish, 12 kraken; -1 none). A query, so the splash stays. Returns the animation frame period since the last call: `avg_ms,max_ms,frames` (~49 ms expected).
+
 ### :DISPlay:SPLASH:SHOT? - Splash Screenshot
 **Description:** Shows the splash (no progress bar), waits `ms` (default 800), reads the whole frame back from the LCD and sends it like `:DISP:SHOT?` (but byte-swapped: swap each pixel). If the splash already shows, it just reads it. While the splash shows, `:DISP:SHOT?` also reads it from the panel, in the normal byte order.
 **Syntax:** `:DISP:SPLASH:SHOT? [ms]`

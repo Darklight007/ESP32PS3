@@ -946,10 +946,12 @@ static float bobUp(float t, float h, float w = 7.5f, float tau = 0.6f)
     return h * (1 - expf(-t / tau) * cosf(w * t));
 }
 
+static volatile int s_lifeAsk = -1;         // DISP:SPLASH:LIFE: this creature next
+static volatile uint32_t s_frMax = 0, s_frSum = 0, s_frN = 0; // frame period, ms
 template <typename R> static void seaLifeFrame(R &rnd)
 {
     enum { DOLPHINS, WHALE, OCTOPUS, SERPENT, JELLY, SHARK, FISHES, TURTLE, MANTA, SEAL, GULLS, FLYFISH, KRAKEN, KINDS };
-    static const uint32_t durs[KINDS] = {1900, 5200, 4200, 9000, 4500, 7000, 2600, 5000, 1700, 4500, 22000, 2200, 4800};
+    static const uint32_t durs[KINDS] = {1900, 5200, 4200, 9000, 6000, 11000, 2600, 5000, 1700, 4500, 22000, 2200, 4800};
     static int kind = -1, dir = 1, x0 = 0, y0 = 0;
     static uint32_t t0 = 0, next = 0, dur = 0, showSeen = 0, seed = 1;
     const uint32_t now = millis();
@@ -958,6 +960,13 @@ template <typename R> static void seaLifeFrame(R &rnd)
         showSeen = s_showMs, kind = -1, s_life.n = 0, next = now + 2000 + rnd() % 3000;
     listErase(s_life);
     static uint32_t lastT = 0;
+    if (lastT && now - lastT < 1000)
+    {
+        const uint32_t d = now - lastT;
+        s_frSum += d, s_frN++;
+        if (d > s_frMax)
+            s_frMax = d;
+    }
     const float dt = lastT ? std::min(0.15f, (now - lastT) / 1000.0f) : 0.05f;
     lastT = now;
     {
@@ -966,12 +975,16 @@ template <typename R> static void seaLifeFrame(R &rnd)
         s_sc = sc;
     }
     static float prevP = -1;
+    if (s_lifeAsk >= 0 && s_lifeAsk < KINDS)
+        kind = -1, next = now;
     if (kind < 0)
     {
         if ((int32_t)(now - next) < 0)
             return;
         prevP = -1;
         kind = rnd() % KINDS;
+        if (s_lifeAsk >= 0)
+            kind = s_lifeAsk % KINDS, s_lifeAsk = -1;
         dur = durs[kind];
         y0 = kind == SERPENT || kind == KRAKEN ? kHorizon + 8 + rnd() % 26 : kHorizon + 10 + rnd() % 66;
         s_sc = 0.45f + (y0 - kHorizon) / 85.0f; // far = small
@@ -1098,24 +1111,33 @@ template <typename R> static void seaLifeFrame(R &rnd)
         }
         break;
     }
-    case JELLY: // a glowing bell pulsing under the surface, trailing threads
+    case JELLY: // a faint bell pulsing below the surface, trailing threads
     {
-        const float pulse = 0.75f + 0.25f * sinf(now * 0.008f), jy = y0 + 4 - 4 * p;
+        // seen through the water: dim, sea-tinted, never above the surface
+        // line; a soft glow at night, a pale shape by day
+        const float pulse = 0.85f + 0.15f * sinf(now * 0.004f), top = y0 + 2 + 5 * s;
+        const float jy = top + 4 * s * pulse + 2 * s * sinf(PI_ * p);
+        const uint32_t bell = isDay() ? 0xB8D8E0 : 0x3CC8B0, thread = isDay() ? 0x90B8C4 : 0x2A9A88;
+        const float a0 = (isDay() ? 0.22f : 0.30f) * fade;
         for (int a = 0; a < 24; a++)
         {
             const float t = a / 24.0f * 6.28318f;
-            if (sinf(t) <= 0.2f)
-                lp(x0 + cosf(t) * 6 * s * pulse, jy + sinf(t) * 4 * s * pulse, 0x40FFD0, 0.6f * fade);
+            const float y = jy + sinf(t) * 4 * s * pulse;
+            if (sinf(t) <= 0.2f && y > y0 + 1)
+                lp(x0 + cosf(t) * 6 * s * pulse, y, bell, a0);
         }
         for (int k = -2; k <= 2; k++)
             for (int y = 1; y < (int)(8 * s); y++)
-                lp(x0 + k * 2 * s + sinf(y * 0.6f + now * 0.006f + k), jy + y, 0x20C0A0, 0.4f * fade);
+                lp(x0 + k * 2 * s + 0.8f * sinf(y * 0.6f + now * 0.003f + k), jy + y, thread, a0 * 0.6f * (1 - y / (8 * s)));
         break;
     }
     case SHARK: // fin speed pulses with each tail beat; a V (Kelvin) wake trails it
     {
-        const float v = 26 * s, beat = 1.6f;                          // px/s, tail beats/s
-        const float xs = v * (tS + 0.12f / (2 * PI_ * beat) * sinf(2 * PI_ * beat * tS) * 6);
+        // slow cruise: about a pixel per frame up close; the tail beat only
+        // nudges the speed (+-15%), the fin edges are drawn with sub-pixel
+        // coverage so it glides instead of hopping a pixel at a time
+        const float v = 11 * s, beat = 0.9f;                          // px/s, tail beats/s
+        const float xs = v * (tS + 0.15f / (2 * PI_ * beat) * sinf(2 * PI_ * beat * tS));
         const float fx = x0 + dir * (xs - v * dur / 2000.0f), h = 6 * s * std::min(1.0f, fade * 3);
         const float yaw = 0.6f * sinf(2 * PI_ * beat * tS);           // the fin sways a little
         // dorsal fin swept back: the leading edge (at fx, the front) slopes up
@@ -1123,16 +1145,24 @@ template <typename R> static void seaLifeFrame(R &rnd)
         for (int y = 0; y < (int)h; y++)
         {
             const float front = 0.75f * y + 0.05f * yaw * y, back = 0.9f * h - 0.15f * y;
-            for (int x = (int)front; x <= (int)back; x++)
-                lp(fx - dir * x, y0 - y, 0x1A2230, 0.95f);
+            if (back < front)
+                continue;
+            // the row spans [a, b] on screen; each pixel gets its coverage
+            const float a = dir > 0 ? fx - back : fx + front, b = dir > 0 ? fx - front : fx + back;
+            for (int px = (int)floorf(a - 0.5f); px <= (int)ceilf(b + 0.5f); px++)
+            {
+                const float cov = std::min(b + 0.5f, px + 0.5f) - std::max(a - 0.5f, px - 0.5f);
+                if (cov > 0.05f)
+                    lifePix(px, (int)(y0 - y), 0x1A2230, 0.95f * std::min(1.0f, cov));
+            }
         }
         const float L = 22 * s; // wake arms at ~19.5 deg, flattened by the view
         for (int i = 2; i < (int)L; i++)
         {
             const float a = 0.5f * fade * (1 - i / L);
             const float spread = i * 0.354f * 0.35f;
-            lp(fx - dir * i, y0 + 0.5f - spread, 0x8CA8C8, a * 0.6f);
-            lp(fx - dir * i, y0 + 0.5f + spread, 0x8CA8C8, a);
+            lp(fx - dir * i, y0 + 0.5f - spread, 0x8CA8C8, a * 0.45f);
+            lp(fx - dir * i, y0 + 0.5f + spread, 0x8CA8C8, a * 0.75f);
         }
         break;
     }
@@ -1481,6 +1511,49 @@ static void treesInit()
         s_sway[i] = 0, pineDraw(kPines[i], i, 0, [&](int x, int y, uint16_t c) { if (x >= 0 && x < 320) g->drawPixel(x, y, c); });
 }
 // Wind: a slow swell plus gusts; each tree has its own phase and stiffness
+// Date and time, small, bottom right (not during the boot progress bar).
+// Drawn into the scene sprite too, so rain or snow passing over it puts it
+// back; the clean box under it is kept to redraw it each minute.
+static constexpr int kClkW = 110, kClkH = 9, kClkX = 320 - 3 - kClkW, kClkY = 230;
+static uint16_t *s_clkBg = nullptr; // PSRAM, the scene under the box
+static bool s_clkBgOk = false;      // false after a scene build
+static void clockFrame()
+{
+    static int lastMin = -1;
+    static uint32_t showSeen = 0;
+    if (s_barShown || !s_bgSpr)
+        return;
+    struct tm t;
+    if (!weatherLocalTime(t))
+        return;
+    const int m = t.tm_yday * 1440 + t.tm_hour * 60 + t.tm_min;
+    if (m == lastMin && showSeen == s_showMs && s_clkBgOk)
+        return;
+    lastMin = m, showSeen = s_showMs;
+    if (!s_clkBg)
+        s_clkBg = (uint16_t *)heap_caps_malloc(kClkW * kClkH * 2, MALLOC_CAP_SPIRAM);
+    if (!s_clkBg)
+        return;
+    if (!s_clkBgOk) // first time on a fresh scene: keep what is under the box
+        for (int y = 0; y < kClkH; y++)
+            for (int x = 0; x < kClkW; x++)
+                s_clkBg[y * kClkW + x] = s_bgSpr->readPixel(kClkX + x, kClkY + y);
+    s_clkBgOk = true;
+    for (int y = 0; y < kClkH; y++)
+        for (int x = 0; x < kClkW; x++)
+            s_bgSpr->drawPixel(kClkX + x, kClkY + y, s_clkBg[y * kClkW + x]);
+    static const char *const wd[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    static const char *const mo[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    char b[24];
+    snprintf(b, sizeof b, "%s %d %s  %02d:%02d", wd[t.tm_wday % 7], t.tm_mday, mo[t.tm_mon % 12], t.tm_hour, t.tm_min);
+    s_bgSpr->setTextFont(1);
+    s_bgSpr->setTextDatum(TL_DATUM);
+    const uint32_t wc = isDay() ? 0xD8E6F0 : 0x30506A; // like the weather line
+    s_bgSpr->setTextColor(mix(wc, 0, 0));
+    s_bgSpr->drawString(b, 320 - 3 - s_bgSpr->textWidth(b), kClkY);
+    restoreRect(kClkX, kClkY, kClkW, kClkH);
+}
+
 static void treesFrame()
 {
     static uint32_t last = 0;
@@ -1644,6 +1717,7 @@ static void twinkleTask(void *)
             if (o.halo)
                 star(o.x, o.y, o.halo, o.b * (0.55f + (rnd() % 100) / 160.0f), o.tint);
             treesFrame();
+            clockFrame();
             trafficFrame(rnd);
             seaLifeFrame(rnd);
             weatherFrame(rnd);
@@ -1820,6 +1894,8 @@ void splashBegin()
     const bool reuse = s_bgSpr && !strcmp(key, s_key);
     strlcpy(s_key, s_bgSpr ? key : "", sizeof s_key);
     g = s_bgSpr ? (TFT_eSPI *)s_bgSpr : &tft;
+    if (!reuse)
+        s_clkBgOk = false; // the box under the clock is clean again
     if (!reuse)
     {
     // Sky: night (black to deep navy, nebulae), twilight or day (sun glow).
@@ -2157,7 +2233,10 @@ void splashBegin()
         delay(30);
     s_task = nullptr;
     if (s_lock && s_stack && s_tcb)
-        s_task = s_prev = xTaskCreateStaticPinnedToCore(twinkleTask, "twinkle", 4096, nullptr, 1, s_stack, s_tcb, 0);
+        // Core 0 at boot (setup() runs on Core 1). Opened later (About, DISP:PAGE 5)
+        // Core 1: the main loop only waits there, while on Core 0 Task_ADC (same
+        // priority) took most of the time and frames came 120-250 ms apart
+        s_task = s_prev = xTaskCreateStaticPinnedToCore(twinkleTask, "twinkle", 4096, nullptr, 1, s_stack, s_tcb, s_noBar ? 1 : 0);
     if (s_lock && !s_task)
         Serial.println("[SPLASH] animation task not started");
     ESP_LOGI("SPLASH", "scene built in %lu ms", (unsigned long)(millis() - tBegin));
@@ -2257,6 +2336,17 @@ void splashShow()
     splashStop();
     linkHold(false);
     g_splashUp = false;
+}
+
+// DISP:SPLASH:LIFE? [n] (a query, so the splash stays): creature n next (0 dolphins ... 4 jelly, 5 shark);
+// returns the frame period since the last call: "avg_ms,max_ms,frames"
+String splashLife(int kind)
+{
+    char b[40];
+    snprintf(b, sizeof b, "%.1f,%lu,%lu", s_frN ? (float)s_frSum / s_frN : 0.0f, (unsigned long)s_frMax, (unsigned long)s_frN);
+    s_frSum = s_frN = s_frMax = 0;
+    s_lifeAsk = kind;
+    return b;
 }
 
 // DISP:SPLASH:SHOT? [ms]: show the splash, wait, read the LCD back (MISO)
